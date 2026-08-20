@@ -23,17 +23,23 @@ export async function GET(req: NextRequest) {
     }
 
     client.setCredentials(tokens);
-    const { data } = await google.oauth2({ version: 'v2', auth: client }).userinfo.get();
 
-    await saveRefreshToken(tokens.refresh_token, data.email ?? '');
+    // Lấy email từ Gmail API thay vì endpoint userinfo.
+    // userinfo cần scope riêng mà hệ thống không xin; gmail.readonly đã đủ
+    // để đọc địa chỉ của chính hộp thư vừa cấp quyền.
+    const gmail = google.gmail({ version: 'v1', auth: client });
+    const { data: profile } = await gmail.users.getProfile({ userId: 'me' });
+    const email = profile.emailAddress ?? '';
+
+    await saveRefreshToken(tokens.refresh_token, email);
 
     await writeAudit({
       actorId: null,
-      actorEmail: data.email ?? 'admin',
+      actorEmail: email || 'admin',
       action: 'google.connect',
       entity: 'app_settings',
       entityId: 'google_oauth',
-      note: `Kết nối hộp thư ${data.email}`,
+      note: `Kết nối hộp thư ${email}`,
     });
 
     return NextResponse.redirect(new URL('/settings?ok=da_ket_noi', req.url));
