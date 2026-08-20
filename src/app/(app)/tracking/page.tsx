@@ -81,7 +81,7 @@ export default async function TrackingPage({
                       <td>
                         {r.link_file_bang_ke ? (
                           <a href={r.link_file_bang_ke} target="_blank" rel="noreferrer"
-                             className="mono text-[var(--teal-deep)] no-underline">
+                             className="mono text-[var(--violet-deep)] no-underline">
                             v{r.version_bang_ke} ↗
                           </a>
                         ) : <span className="text-[var(--muted)]">—</span>}

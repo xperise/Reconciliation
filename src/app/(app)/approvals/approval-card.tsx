@@ -85,7 +85,7 @@ export function ApprovalCard({ row }: { row: any }) {
 
         {row.link_file_bang_ke && (
           <a href={row.link_file_bang_ke} target="_blank" rel="noreferrer"
-             className="text-sm font-semibold text-[var(--teal-deep)] no-underline inline-block">
+             className="text-sm font-semibold text-[var(--violet-deep)] no-underline inline-block">
             Mở bảng kê đã gửi (bản {row.version_bang_ke}) ↗
           </a>
         )}

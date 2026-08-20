@@ -98,7 +98,7 @@ export function WorkflowCard({ wf, laAdmin }: { wf: any; laAdmin: boolean }) {
         </div>
 
         {thongBao && (
-          <p className="text-sm bg-[var(--teal-wash)] text-[var(--teal-deep)] px-3 py-2 rounded-md m-0">
+          <p className="text-sm bg-[var(--violet-soft)] text-[var(--violet-deep)] px-3 py-2 rounded-md m-0">
             {thongBao}
           </p>
         )}

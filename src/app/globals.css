@@ -3,196 +3,222 @@
 @tailwind utilities;
 
 /* =====================================================================
-   Hệ màu lấy từ chính email xperise gửi khách (#03A695) để giao diện nội
-   bộ và thư khách nhận được nói cùng một ngôn ngữ hình ảnh.
+   Workstream palette — ink rêu đậm #12281A + violet gradient accent
+   Giống hệt dashboard Workstream: canvas xám-xanh, card trắng với shadow
+   tinh tế, focus ring violet, hover row violet-soft.
    ===================================================================== */
 :root {
-  --ink:        #10221F;
-  --ink-soft:   #334743;
-  --muted:      #6B7F7B;
-  --paper:      #F4F7F6;
-  --surface:    #FFFFFF;
-  --line:       #DFE7E5;
-  --line-soft:  #EDF2F1;
+  --canvas:        #F4F6F8;
+  --surface:       #FFFFFF;
+  --surface-2:     #F8FAFB;
+  --line:          #E3E8EC;
+  --line-soft:     #EDF1F4;
 
-  --teal:       #03A695;
-  --teal-deep:  #0D4F48;
-  --teal-wash:  #EAF7F5;
+  --ink:           #12281A;
+  --ink-2:         #46564C;
+  --ink-3:         #8A968F;
 
-  --amber:      #B76E0B;
-  --amber-wash: #FDF3E3;
-  --red:        #B5382B;
-  --red-wash:   #FCEEEC;
-  --violet:     #5B43A8;
-  --violet-wash:#F0EDFA;
-  --slate-wash: #EEF1F1;
+  --violet:        #A855F7;
+  --violet-deep:   #7E22CE;
+  --violet-soft:   #F3E8FF;
+  --violet-mid:    #E4CDFB;
+
+  --teal:          #0D9488;
+  --teal-soft:     #D6F1EC;
+
+  --amber:         #EA8C0B;
+  --amber-soft:    #FDF0DC;
+
+  --red:           #E11D48;
+  --red-soft:      #FDE7EC;
+
+  --r:    14px;
+  --r-sm: 9px;
+  --shadow: 0 1px 2px rgba(18,40,26,.04), 0 10px 26px -18px rgba(18,40,26,.22);
 }
 
 * { box-sizing: border-box; }
 
 html, body {
-  margin: 0;
-  padding: 0;
-  background: var(--paper);
+  margin: 0; padding: 0;
+  background: var(--canvas);
   color: var(--ink);
-  font-family: var(--font-body), system-ui, sans-serif;
+  font-family: var(--font-body), "Be Vietnam Pro", system-ui, sans-serif;
+  font-size: 14px;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Chữ số dạng bảng để cột ngày và số tiền thẳng hàng khi cuộn */
-.tnum { font-variant-numeric: tabular-nums; }
+/* --- Focus violet (Workstream style) -------------------------------- */
+:focus-visible {
+  outline: 3px solid rgba(168,85,247,.32);
+  outline-offset: 2px;
+}
 
+/* --- Typography helpers --------------------------------------------- */
+.tnum { font-variant-numeric: tabular-nums; }
 .mono {
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-mono), "JetBrains Mono", ui-monospace, monospace;
   font-size: 0.8125rem;
   letter-spacing: -0.01em;
 }
-
-/* --- Nhãn nhỏ phía trên tiêu đề, mã hóa loại thông tin --------------- */
 .eyebrow {
-  font-size: 0.6875rem;
+  display: block;
+  font-size: 10.5px;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: .12em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--ink-3);
 }
 
-/* --- Thẻ ------------------------------------------------------------ */
+/* --- Card ----------------------------------------------------------- */
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
 }
 
-/* --- Nút ------------------------------------------------------------ */
+/* --- Buttons -------------------------------------------------------- */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.95rem;
-  border-radius: 7px;
+  gap: .45rem;
+  padding: .45rem .9rem;
+  border-radius: var(--r-sm);
   border: 1px solid var(--line);
   background: var(--surface);
-  color: var(--ink);
+  color: var(--ink-2);
   font-family: inherit;
-  font-size: 0.875rem;
+  font-size: .8125rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+  transition: background .12s, border-color .12s, filter .12s, color .12s;
+  white-space: nowrap;
 }
-.btn:hover:not(:disabled) { background: var(--line-soft); }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.btn-primary {
-  background: var(--teal);
-  border-color: var(--teal);
-  color: #fff;
+.btn:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--ink);
+  border-color: #CBD5D0;
 }
-.btn-primary:hover:not(:disabled) { background: var(--teal-deep); border-color: var(--teal-deep); }
-.btn-danger { border-color: var(--red); color: var(--red); }
-.btn-danger:hover:not(:disabled) { background: var(--red-wash); }
-.btn-sm { padding: 0.3rem 0.65rem; font-size: 0.8125rem; }
+.btn:disabled { opacity: .42; cursor: not-allowed; }
 
-/* --- Trường nhập ---------------------------------------------------- */
+/* Violet gradient — nút hành động chính */
+.btn-primary {
+  background: linear-gradient(135deg, var(--violet) 0%, var(--violet-deep) 100%);
+  border: 0;
+  color: #fff;
+  box-shadow: 0 6px 16px -8px rgba(126,34,206,.6);
+}
+.btn-primary:hover:not(:disabled) { filter: brightness(1.07); color: #fff; }
+
+.btn-danger  { border-color: var(--red);  color: var(--red); }
+.btn-danger:hover:not(:disabled)  { background: var(--red-soft);   border-color: #F6C7D1; }
+
+.btn-sm { padding: .3rem .65rem; font-size: .75rem; }
+
+/* --- Form fields ---------------------------------------------------- */
 .field {
   width: 100%;
-  padding: 0.5rem 0.7rem;
+  padding: .48rem .7rem;
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: var(--r-sm);
   background: var(--surface);
   color: var(--ink);
   font-family: inherit;
-  font-size: 0.875rem;
+  font-size: .875rem;
 }
 .field:focus {
-  outline: 2px solid var(--teal);
-  outline-offset: -1px;
-  border-color: var(--teal);
-}
-.label {
-  display: block;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--ink-soft);
-  margin-bottom: 0.3rem;
+  outline: none;
+  border-color: var(--violet);
+  box-shadow: 0 0 0 3px rgba(168,85,247,.15);
 }
 
-/* --- Bảng dữ liệu --------------------------------------------------- */
-.tbl { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.label {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 6px;
+}
+
+/* --- Table ---------------------------------------------------------- */
+.tbl { width: 100%; border-collapse: collapse; font-size: .875rem; }
 .tbl thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
+  position: sticky; top: 0; z-index: 1;
   background: var(--surface);
   text-align: left;
-  padding: 0.6rem 0.75rem;
-  font-size: 0.6875rem;
+  padding: .55rem .75rem;
+  font-size: 10.5px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: .09em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--ink-3);
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
 }
 .tbl tbody td {
-  padding: 0.65rem 0.75rem;
+  padding: .6rem .75rem;
   border-bottom: 1px solid var(--line-soft);
   vertical-align: middle;
 }
-.tbl tbody tr:hover { background: var(--teal-wash); }
+/* hover violet-soft — giống Workstream */
+.tbl tbody tr:hover { background: var(--violet-soft); }
 .tbl tbody tr:last-child td { border-bottom: none; }
 
-/* --- Huy hiệu trạng thái -------------------------------------------- */
+/* --- Badges --------------------------------------------------------- */
 .badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.2rem 0.55rem;
+  gap: .3rem;
+  padding: .18rem .52rem;
   border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: .72rem;
+  font-weight: 700;
   white-space: nowrap;
+  letter-spacing: .01em;
 }
-.badge-teal   { background: var(--teal-wash);   color: var(--teal-deep); }
-.badge-amber  { background: var(--amber-wash);  color: var(--amber); }
-.badge-red    { background: var(--red-wash);    color: var(--red); }
-.badge-violet { background: var(--violet-wash); color: var(--violet); }
-.badge-slate  { background: var(--slate-wash);  color: var(--ink-soft); }
+.badge-violet { background: var(--violet-soft); color: var(--violet-deep); border: 1px solid var(--violet-mid); }
+.badge-teal   { background: var(--teal-soft);   color: #0A5C52; }
+.badge-amber  { background: var(--amber-soft);  color: #7A5A12; }
+.badge-red    { background: var(--red-soft);    color: #9F122E; }
+.badge-slate  { background: var(--surface-2);   color: var(--ink-2); border: 1px solid var(--line); }
 
-/* =====================================================================
-   Thanh escalate — mỗi dòng tracking hiện đường ray L1 → L2 → L3 để đọc
-   được mức độ leo thang trong một cái liếc, thay vì đối chiếu hai cột số.
-   ===================================================================== */
+/* --- Escalate rail -------------------------------------------------- */
 .rail { display: inline-flex; align-items: center; gap: 3px; }
 .rail-seg {
-  width: 22px;
-  height: 5px;
+  width: 20px; height: 5px;
   border-radius: 2px;
   background: var(--line);
 }
-.rail-seg[data-on='1']  { background: var(--teal); }
-.rail-seg[data-on='2']  { background: var(--amber); }
-.rail-seg[data-on='3']  { background: var(--red); }
-.rail-loop {
-  margin-left: 5px;
-  font-size: 0.6875rem;
-  font-weight: 700;
-  color: var(--muted);
-}
+.rail-seg[data-on='1'] { background: var(--teal); }
+.rail-seg[data-on='2'] { background: var(--amber); }
+.rail-seg[data-on='3'] { background: var(--red); }
+.rail-loop { margin-left: 5px; font-size: .6875rem; font-weight: 700; color: var(--ink-3); }
 
-/* --- Trạng thái rỗng ------------------------------------------------ */
+/* --- Empty state ---------------------------------------------------- */
 .empty {
   padding: 3rem 1.5rem;
   text-align: center;
-  color: var(--muted);
-  font-size: 0.875rem;
+  color: var(--ink-3);
+  font-size: .875rem;
 }
-.empty strong { display: block; color: var(--ink); font-size: 0.9375rem; margin-bottom: 0.35rem; }
+.empty strong { display: block; color: var(--ink); font-size: .9375rem; margin-bottom: .35rem; }
 
-/* --- Tôn trọng thiết lập giảm chuyển động --------------------------- */
+/* --- Guide page: callout blocks ------------------------------------- */
+.callout {
+  border-radius: var(--r-sm);
+  padding: 12px 16px;
+  font-size: .8125rem;
+  line-height: 1.6;
+}
+.callout-violet { background: var(--violet-soft); border-left: 3px solid var(--violet); color: var(--violet-deep); }
+.callout-amber  { background: var(--amber-soft);  border-left: 3px solid var(--amber);  color: #7A5A12; }
+.callout-teal   { background: var(--teal-soft);   border-left: 3px solid var(--teal);   color: #0A5C52; }
+.callout-red    { background: var(--red-soft);    border-left: 3px solid var(--red);    color: #9F122E; }
+
 @media (prefers-reduced-motion: reduce) {
-  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
-
-/* --- Tiêu điểm bàn phím luôn nhìn thấy được ------------------------- */
-:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }

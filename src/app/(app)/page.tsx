@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 function Metric({ label, value, sub, tone }: {
   label: string; value: string | number; sub?: string; tone?: 'teal' | 'amber' | 'red';
 }) {
-  const color = tone === 'red' ? 'var(--red)' : tone === 'amber' ? 'var(--amber)' : 'var(--teal-deep)';
+  const color = tone === 'red' ? 'var(--red)' : tone === 'amber' ? 'var(--amber)' : 'var(--violet-deep)';
   return (
     <div className="card p-4">
       <p className="eyebrow m-0">{label}</p>
@@ -66,7 +66,7 @@ export default async function Dashboard() {
         <section className="card overflow-hidden">
           <div className="px-4 py-3 border-b border-[var(--line)] flex items-center justify-between">
             <h2 className="text-sm font-bold m-0">Kỳ chưa chốt, trễ nhiều nhất trước</h2>
-            <Link href="/tracking" className="text-xs font-semibold text-[var(--teal-deep)] no-underline">
+            <Link href="/tracking" className="text-xs font-semibold text-[var(--violet-deep)] no-underline">
               Xem tất cả
             </Link>
           </div>
@@ -112,7 +112,7 @@ export default async function Dashboard() {
           <section className="card overflow-hidden">
             <div className="px-4 py-3 border-b border-[var(--line)] flex items-center justify-between">
               <h2 className="text-sm font-bold m-0">Workflow</h2>
-              <Link href="/workflows" className="text-xs font-semibold text-[var(--teal-deep)] no-underline">
+              <Link href="/workflows" className="text-xs font-semibold text-[var(--violet-deep)] no-underline">
                 Cấu hình
               </Link>
             </div>

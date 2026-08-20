@@ -135,8 +135,8 @@ export function UploadPanel({ groups }: { groups: { id: string; ten_nhom: string
           tabIndex={0}
           className="border-2 border-dashed rounded-lg px-4 py-8 text-center cursor-pointer transition-colors"
           style={{
-            borderColor: keo ? 'var(--teal)' : 'var(--line)',
-            background: keo ? 'var(--teal-wash)' : 'transparent',
+            borderColor: keo ? 'var(--violet)' : 'var(--line)',
+            background: keo ? 'var(--violet-soft)' : 'transparent',
           }}
         >
           {file ? (
@@ -182,7 +182,7 @@ export function UploadPanel({ groups }: { groups: { id: string; ten_nhom: string
           </p>
         )}
         {ketQua && (
-          <p className="text-sm text-[var(--teal-deep)] bg-[var(--teal-wash)] px-3 py-2 rounded-md m-0">
+          <p className="text-sm text-[var(--violet-deep)] bg-[var(--violet-soft)] px-3 py-2 rounded-md m-0">
             {ketQua}
           </p>
         )}
