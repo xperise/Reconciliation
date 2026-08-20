@@ -1,44 +1,21 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { google } from 'googleapis';
-import { oauthClient, saveRefreshToken } from '@/lib/google/auth';
-import { writeAudit } from '@/lib/audit';
+import { NextResponse } from 'next/server';
+import { currentUser } from '@/lib/supabase/server';
+import { consentUrl } from '@/lib/google/auth';
+import crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(req: NextRequest) {
-  const code = req.nextUrl.searchParams.get('code');
-  const state = req.nextUrl.searchParams.get('state');
-  const expected = req.cookies.get('g_state')?.value;
-
-  if (!code || !state || state !== expected) {
-    return NextResponse.redirect(new URL('/settings?loi=state_khong_khop', req.url));
+/** Bắt đầu luồng cấp quyền Google. Chỉ admin bấm được. */
+export async function GET() {
+  const user = await currentUser();
+  if (user?.role !== 'admin') {
+    return NextResponse.json({ error: 'Chỉ admin được kết nối Google.' }, { status: 403 });
   }
 
-  try {
-    const client = oauthClient();
-    const { tokens } = await client.getToken(code);
-
-    if (!tokens.refresh_token) {
-      return NextResponse.redirect(new URL('/settings?loi=thieu_refresh_token', req.url));
-    }
-
-    client.setCredentials(tokens);
-    const { data } = await google.oauth2({ version: 'v2', auth: client }).userinfo.get();
-
-    await saveRefreshToken(tokens.refresh_token, data.email ?? '');
-
-    await writeAudit({
-      actorId: null,
-      actorEmail: data.email ?? 'admin',
-      action: 'google.connect',
-      entity: 'app_settings',
-      entityId: 'google_oauth',
-      note: `Kết nối hộp thư ${data.email}`,
-    });
-
-    return NextResponse.redirect(new URL('/settings?ok=da_ket_noi', req.url));
-  } catch (err) {
-    console.error('[google callback]', err);
-    return NextResponse.redirect(new URL('/settings?loi=doi_token_that_bai', req.url));
-  }
+  const state = crypto.randomBytes(16).toString('hex');
+  const res = NextResponse.redirect(consentUrl(state));
+  res.cookies.set('g_state', state, {
+    httpOnly: true, secure: true, sameSite: 'none', maxAge: 600, path: '/',
+  });
+  return res;
 }
