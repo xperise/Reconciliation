@@ -265,3 +265,4 @@ src/app/(app)/      Các trang sau khi đăng nhập
 src/app/api/        Cron, chạy workflow thủ công, OAuth Google
 src/app/actions.ts  Server action cho mọi thao tác ghi dữ liệu
 ```
+
