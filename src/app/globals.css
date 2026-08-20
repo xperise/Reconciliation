@@ -1,0 +1,198 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =====================================================================
+   Hệ màu lấy từ chính email xperise gửi khách (#03A695) để giao diện nội
+   bộ và thư khách nhận được nói cùng một ngôn ngữ hình ảnh.
+   ===================================================================== */
+:root {
+  --ink:        #10221F;
+  --ink-soft:   #334743;
+  --muted:      #6B7F7B;
+  --paper:      #F4F7F6;
+  --surface:    #FFFFFF;
+  --line:       #DFE7E5;
+  --line-soft:  #EDF2F1;
+
+  --teal:       #03A695;
+  --teal-deep:  #0D4F48;
+  --teal-wash:  #EAF7F5;
+
+  --amber:      #B76E0B;
+  --amber-wash: #FDF3E3;
+  --red:        #B5382B;
+  --red-wash:   #FCEEEC;
+  --violet:     #5B43A8;
+  --violet-wash:#F0EDFA;
+  --slate-wash: #EEF1F1;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Chữ số dạng bảng để cột ngày và số tiền thẳng hàng khi cuộn */
+.tnum { font-variant-numeric: tabular-nums; }
+
+.mono {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.8125rem;
+  letter-spacing: -0.01em;
+}
+
+/* --- Nhãn nhỏ phía trên tiêu đề, mã hóa loại thông tin --------------- */
+.eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* --- Thẻ ------------------------------------------------------------ */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+/* --- Nút ------------------------------------------------------------ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.95rem;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+.btn:hover:not(:disabled) { background: var(--line-soft); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-primary {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #fff;
+}
+.btn-primary:hover:not(:disabled) { background: var(--teal-deep); border-color: var(--teal-deep); }
+.btn-danger { border-color: var(--red); color: var(--red); }
+.btn-danger:hover:not(:disabled) { background: var(--red-wash); }
+.btn-sm { padding: 0.3rem 0.65rem; font-size: 0.8125rem; }
+
+/* --- Trường nhập ---------------------------------------------------- */
+.field {
+  width: 100%;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.875rem;
+}
+.field:focus {
+  outline: 2px solid var(--teal);
+  outline-offset: -1px;
+  border-color: var(--teal);
+}
+.label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin-bottom: 0.3rem;
+}
+
+/* --- Bảng dữ liệu --------------------------------------------------- */
+.tbl { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.tbl thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.tbl tbody td {
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--line-soft);
+  vertical-align: middle;
+}
+.tbl tbody tr:hover { background: var(--teal-wash); }
+.tbl tbody tr:last-child td { border-bottom: none; }
+
+/* --- Huy hiệu trạng thái -------------------------------------------- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge-teal   { background: var(--teal-wash);   color: var(--teal-deep); }
+.badge-amber  { background: var(--amber-wash);  color: var(--amber); }
+.badge-red    { background: var(--red-wash);    color: var(--red); }
+.badge-violet { background: var(--violet-wash); color: var(--violet); }
+.badge-slate  { background: var(--slate-wash);  color: var(--ink-soft); }
+
+/* =====================================================================
+   Thanh escalate — mỗi dòng tracking hiện đường ray L1 → L2 → L3 để đọc
+   được mức độ leo thang trong một cái liếc, thay vì đối chiếu hai cột số.
+   ===================================================================== */
+.rail { display: inline-flex; align-items: center; gap: 3px; }
+.rail-seg {
+  width: 22px;
+  height: 5px;
+  border-radius: 2px;
+  background: var(--line);
+}
+.rail-seg[data-on='1']  { background: var(--teal); }
+.rail-seg[data-on='2']  { background: var(--amber); }
+.rail-seg[data-on='3']  { background: var(--red); }
+.rail-loop {
+  margin-left: 5px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+/* --- Trạng thái rỗng ------------------------------------------------ */
+.empty {
+  padding: 3rem 1.5rem;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+.empty strong { display: block; color: var(--ink); font-size: 0.9375rem; margin-bottom: 0.35rem; }
+
+/* --- Tôn trọng thiết lập giảm chuyển động --------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* --- Tiêu điểm bàn phím luôn nhìn thấy được ------------------------- */
+:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
