@@ -15,7 +15,7 @@ export async function GET() {
   const state = crypto.randomBytes(16).toString('hex');
   const res = NextResponse.redirect(consentUrl(state));
   res.cookies.set('g_state', state, {
-    httpOnly: true, secure: true, sameSite: 'lax', maxAge: 600, path: '/',
+    httpOnly: true, secure: true, sameSite: 'none', maxAge: 600, path: '/',
   });
   return res;
 }
