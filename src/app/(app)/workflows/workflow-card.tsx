@@ -1,8 +1,10 @@
 'use client';
-import { useState, useTransition } from 'react';
+import { useState, useEffect, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { luuLichWorkflow } from '@/app/actions';
 
 export function WorkflowCard({ wf, laAdmin }: { wf: any; laAdmin: boolean }) {
+  const router = useRouter();
   const [enabled, setEnabled] = useState(wf.enabled);
   const [kind, setKind] = useState<'daily' | 'interval'>(wf.schedule_kind);
   const [hhmm, setHhmm] = useState(wf.run_at_hhmm ?? '08:00');
@@ -10,14 +12,24 @@ export function WorkflowCard({ wf, laAdmin }: { wf: any; laAdmin: boolean }) {
   const [thongBao, setThongBao] = useState('');
   const [dangChay, start] = useTransition();
 
+  // Khi máy chủ trả về dữ liệu mới, kéo state cục bộ theo. Không có đoạn này
+  // thì ô nhập giữ giá trị cũ và người dùng tưởng lưu bị mất.
+  useEffect(() => {
+    setEnabled(wf.enabled);
+    setKind(wf.schedule_kind);
+    setHhmm(wf.run_at_hhmm ?? '08:00');
+    setPhut(wf.interval_minutes ?? 5);
+  }, [wf.enabled, wf.schedule_kind, wf.run_at_hhmm, wf.interval_minutes]);
+
   function luu() {
     setThongBao('');
     start(async () => {
       try {
-        await luuLichWorkflow(wf.key, {
+        const kq = await luuLichWorkflow(wf.key, {
           enabled, schedule_kind: kind, run_at_hhmm: hhmm, interval_minutes: Number(phut),
         });
-        setThongBao('Đã lưu lịch chạy.');
+        setThongBao(kq?.xacNhan ?? 'Đã lưu lịch chạy.');
+        router.refresh();
       } catch (e) {
         setThongBao(e instanceof Error ? e.message : 'Không lưu được.');
       }

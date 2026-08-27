@@ -24,6 +24,20 @@ type Hang = {
   ketQua?: string;
 };
 
+/**
+ * Ba lựa chọn người dùng nhìn thấy, nhưng chỉ hai giá trị lưu xuống database.
+ * "Bảng kê" và "Bảng kê chỉnh sửa" cùng là kind 'bang_ke', khác nhau ở số bản
+ * mà hệ thống tự tăng. Tách ra ở đây vì với kế toán đó là hai việc khác nhau:
+ * một cái gửi lần đầu, một cái gửi sau khi khách yêu cầu sửa.
+ */
+type LoaiChon = 'bang_ke' | 'bang_ke_sua' | 'hstt';
+
+const LOAI: { v: LoaiChon; nhan: string; mo_ta: string }[] = [
+  { v: 'bang_ke', nhan: 'Bảng kê', mo_ta: 'Bản gửi lần đầu của kỳ' },
+  { v: 'bang_ke_sua', nhan: 'Bảng kê chỉnh sửa', mo_ta: 'Bản sửa sau khi khách có ý kiến' },
+  { v: 'hstt', nhan: 'Hồ sơ thanh toán', mo_ta: 'Chứng từ gửi sau khi chốt bảng kê' },
+];
+
 export function UploadPanel({ groups, macDinhKind, tieuDe }: {
   groups: { id: string; ten_nhom: string; ma_he_thong: string }[];
   macDinhKind?: FileKind;
@@ -34,7 +48,8 @@ export function UploadPanel({ groups, macDinhKind, tieuDe }: {
 
   const [groupId, setGroupId] = useState('');
   const [ky, setKy] = useState(kyMacDinh());
-  const [kind, setKind] = useState<FileKind>(macDinhKind ?? 'bang_ke');
+  const [loai, setLoai] = useState<LoaiChon>(macDinhKind === 'hstt' ? 'hstt' : 'bang_ke');
+  const kind: FileKind = loai === 'hstt' ? 'hstt' : 'bang_ke';
   const [guiNgay, setGuiNgay] = useState(true);
   const [hang, setHang] = useState<Hang[]>([]);
   const [keo, setKeo] = useState(false);
@@ -126,12 +141,11 @@ export function UploadPanel({ groups, macDinhKind, tieuDe }: {
     router.refresh();
   }
 
-  const NHAN_KIND: Record<FileKind, string> = {
-    bang_ke: 'Bảng kê', hstt: 'Hồ sơ thanh toán',
-  };
+  const nhanLoai = LOAI.find((l) => l.v === loai)?.nhan ?? 'tệp';
 
   const cuPhap = nhom
-    ? `${nhom.ma_he_thong}_${ky}${kind === 'hstt' ? '_HSTT' : ''}`
+    ? `${nhom.ma_he_thong}_${ky}${
+        loai === 'hstt' ? '_HSTT' : loai === 'bang_ke_sua' ? '_v2' : ''}`
     : 'MÃ_Kỳ';
 
   const sanSang = groupId && hang.some((h) => h.trangThai !== 'xong') && !dangChay;
@@ -166,13 +180,23 @@ export function UploadPanel({ groups, macDinhKind, tieuDe }: {
           </div>
           <div>
             <label className="label" htmlFor="up-loai">Loại tệp</label>
-            <select id="up-loai" className="field" value={kind}
-                    onChange={(e) => setKind(e.target.value as FileKind)}>
-              <option value="bang_ke">Bảng kê</option>
-              <option value="hstt">Hồ sơ thanh toán</option>
+            <select id="up-loai" className="field" value={loai}
+                    onChange={(e) => setLoai(e.target.value as LoaiChon)}>
+              {LOAI.map((l) => <option key={l.v} value={l.v}>{l.nhan}</option>)}
             </select>
+            <p className="text-[11px] text-[var(--ink-3)] mt-1 mb-0 leading-snug">
+              {LOAI.find((l) => l.v === loai)?.mo_ta}
+            </p>
           </div>
         </div>
+
+        {loai === 'bang_ke_sua' && (
+          <div className="callout callout-high">
+            Bản chỉnh sửa dùng khi khách đã xem bản trước và yêu cầu sửa. Hệ thống
+            tự đánh số bản tiếp theo và đặt lại đồng hồ SLA của khách kể từ lúc gửi.
+            Nếu kỳ này chưa từng gửi bản nào, hãy chọn <strong>Bảng kê</strong>.
+          </div>
+        )}
 
         {/* Nhắc cú pháp — hệ thống không bắt buộc, nhưng đặt tên thống nhất
             giúp tra cứu về sau và khớp với hồ sơ lưu ngoài hệ thống */}
@@ -289,7 +313,7 @@ export function UploadPanel({ groups, macDinhKind, tieuDe }: {
             </header>
             <div className="modal-bd">
               <p className="callout callout-high m-0 mb-3">
-                Bạn đã gửi {NHAN_KIND[kind]} cho <strong>{nhom?.ten_nhom}</strong> kỳ{' '}
+                Bạn đã gửi {nhanLoai} cho <strong>{nhom?.ten_nhom}</strong> kỳ{' '}
                 <strong>{ky}</strong> vào ngày{' '}
                 <strong>{new Date(hoiGuiLai.ngay).toLocaleDateString('vi-VN')}</strong>
                 {' '}(tệp {hoiGuiLai.tenTep}, bản {hoiGuiLai.ban}).

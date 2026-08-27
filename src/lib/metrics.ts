@@ -140,6 +140,7 @@ export async function loadDashboard(loc: BoLoc): Promise<DashboardData> {
       sub: daChot.length ? `${zeroTouch}/${daChot.length} kỳ đã chốt không phải sửa` : 'chưa có kỳ nào chốt',
       tone: zeroTouchPct === null ? 'neutral' : zeroTouchPct >= 70 ? 'stable' : zeroTouchPct >= 40 ? 'high' : 'critical',
       meter: zeroTouchPct === null ? undefined : zeroTouchPct / 100,
+      href: `/tracking?ky=${ky}&loc=da_chot`,
     },
     {
       key: 'turnaround',
@@ -149,6 +150,7 @@ export async function loadDashboard(loc: BoLoc): Promise<DashboardData> {
       sub: turnarounds.length ? `trung bình trên ${turnarounds.length} kỳ đã chốt` : 'chưa đủ dữ liệu',
       tone: avgTurnaround === null ? 'neutral' : avgTurnaround <= 5 ? 'stable' : avgTurnaround <= 10 ? 'high' : 'critical',
       meter: avgTurnaround === null ? undefined : Math.min(avgTurnaround / 15, 1),
+      href: `/tracking?ky=${ky}&loc=da_chot`,
     },
     {
       key: 'cashflow_risk',
@@ -158,7 +160,7 @@ export async function loadDashboard(loc: BoLoc): Promise<DashboardData> {
       sub: active.length ? `${quaHan.length}/${active.length} kỳ đang xử lý bị quá hạn` : 'không có kỳ đang xử lý',
       tone: riskPct === null ? 'neutral' : riskPct === 0 ? 'stable' : riskPct <= 20 ? 'high' : 'critical',
       meter: riskPct === null ? undefined : riskPct / 100,
-      href: '/tracking?loc=qua_han',
+      href: `/tracking?ky=${ky}&loc=qua_han`,
     },
   ];
 
@@ -245,6 +247,7 @@ export async function loadDashboard(loc: BoLoc): Promise<DashboardData> {
         : 'chưa đủ dữ liệu',
       tone: gioTong === 0 ? 'neutral' : gioNoiBo > gioKhach ? 'critical' : 'stable',
       meter: gioTong > 0 ? gioNoiBo / gioTong : undefined,
+      href: `/tracking?ky=${ky}&loc=cho_noi_bo`,
     },
     {
       key: 'bottleneck',
@@ -255,6 +258,7 @@ export async function loadDashboard(loc: BoLoc): Promise<DashboardData> {
       tone: bottleneck[0] ? 'high' : 'neutral',
       meter: bottleneck[0] && bottleneck[0].gio > 0
         ? Math.min(bottleneck[0].gio / 72, 1) : undefined,
+      href: bottleneck[0] ? `/tracking?ky=${ky}&status=${bottleneck[0].status}` : undefined,
     },
     {
       key: 'sla_delta',
@@ -264,6 +268,7 @@ export async function loadDashboard(loc: BoLoc): Promise<DashboardData> {
       sub: slaCompare.length ? `trên ${slaCompare.length} kỳ so với cam kết` : 'chưa đủ dữ liệu',
       tone: lechTb === null ? 'neutral' : lechTb <= 0 ? 'stable' : lechTb <= 2 ? 'high' : 'critical',
       meter: lechTb === null ? undefined : Math.min(Math.abs(lechTb) / 5, 1),
+      href: `/tracking?ky=${ky}&loc=da_chot`,
     },
   ];
 
@@ -296,7 +301,7 @@ export async function loadDashboard(loc: BoLoc): Promise<DashboardData> {
       sub: active.length ? `trong ${active.length} kỳ đang xử lý` : 'không có kỳ đang xử lý',
       tone: atRisk.length === 0 ? 'stable' : atRisk.length <= 3 ? 'high' : 'critical',
       meter: active.length ? atRisk.length / active.length : undefined,
-      href: '/tracking?loc=can_han',
+      href: `/tracking?ky=${ky}&loc=can_han`,
     },
     {
       key: 'escalation',
@@ -306,7 +311,7 @@ export async function loadDashboard(loc: BoLoc): Promise<DashboardData> {
       sub: kyRows.length ? `${xuLyTay}/${kyRows.length} kỳ hệ thống phải dừng` : 'chưa có kỳ nào',
       tone: escalationPct === null ? 'neutral' : escalationPct === 0 ? 'stable' : escalationPct <= 5 ? 'high' : 'critical',
       meter: escalationPct === null ? undefined : escalationPct / 100,
-      href: '/tracking?status=can_xu_ly_tay',
+      href: `/tracking?ky=${ky}&status=can_xu_ly_tay`,
     },
     {
       key: 'rework',
@@ -316,7 +321,7 @@ export async function loadDashboard(loc: BoLoc): Promise<DashboardData> {
       sub: kyRows.length ? `${soLanSua} lượt sửa trên ${kyRows.length} bảng kê` : 'chưa có kỳ nào',
       tone: reworkRate === null ? 'neutral' : reworkRate < 0.5 ? 'stable' : reworkRate < 1 ? 'high' : 'critical',
       meter: reworkRate === null ? undefined : Math.min(reworkRate, 1),
-      href: '/tracking?status=can_chinh_sua',
+      href: `/tracking?ky=${ky}&status=can_chinh_sua`,
     },
   ];
 

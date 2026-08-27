@@ -9,7 +9,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 export function Filters({ kyOptions, statusOptions, dem }: {
   kyOptions: string[];
   statusOptions: [string, string][];
-  dem: { qua_han: number; can_han: number; xu_ly_tay: number };
+  dem: { qua_han: number; can_han: number; xu_ly_tay: number;
+         cho_noi_bo: number; da_chot: number };
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -34,9 +35,17 @@ export function Filters({ kyOptions, statusOptions, dem }: {
                 data-on={params.get('loc') === 'can_han'} data-zero={dem.can_han === 0}>
             Cận hạn 24 giờ <span className="chip-count">{dem.can_han}</span>
           </Link>
+          <Link href="/tracking?loc=cho_noi_bo" className="chip"
+                data-on={params.get('loc') === 'cho_noi_bo'} data-zero={dem.cho_noi_bo === 0}>
+            Chờ nội bộ xử lý <span className="chip-count">{dem.cho_noi_bo}</span>
+          </Link>
           <Link href="/tracking?status=can_xu_ly_tay" className="chip"
                 data-on={params.get('status') === 'can_xu_ly_tay'} data-zero={dem.xu_ly_tay === 0}>
             Cần xử lý tay <span className="chip-count">{dem.xu_ly_tay}</span>
+          </Link>
+          <Link href="/tracking?loc=da_chot" className="chip"
+                data-on={params.get('loc') === 'da_chot'} data-zero={dem.da_chot === 0}>
+            Đã chốt <span className="chip-count">{dem.da_chot}</span>
           </Link>
         </div>
         {coLoc && (

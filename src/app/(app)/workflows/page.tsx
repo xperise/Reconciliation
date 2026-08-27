@@ -15,6 +15,17 @@ export default async function WorkflowsPage() {
     supabaseAdmin().from('workflow_runs').select('*').order('started_at', { ascending: false }).limit(40),
   ]);
 
+  // Chẩn đoán nhịp đồng hồ: nếu có workflow đang bật mà nhiều phút rồi không
+  // lượt nào chạy, gần như chắc chắn không có cron nào gọi tới ứng dụng.
+  const dangBat = (schedules ?? []).filter((w) => w.enabled);
+  const chayGanNhat = (schedules ?? [])
+    .map((w) => w.last_run_at).filter(Boolean)
+    .sort().reverse()[0] as string | undefined;
+  const phutTuLanCuoi = chayGanNhat
+    ? Math.floor((Date.now() - new Date(chayGanNhat).getTime()) / 60000)
+    : null;
+  const cronImLang = dangBat.length > 0 && (phutTuLanCuoi === null || phutTuLanCuoi > 10);
+
   return (
     <>
       <PageHeader
@@ -22,6 +33,43 @@ export default async function WorkflowsPage() {
         title="Workflow"
         description="Bốn tiến trình chạy nền. Đổi giờ ở đây có hiệu lực ngay, không cần triển khai lại mã nguồn."
       />
+
+      {cronImLang && (
+        <section className="card mb-4" data-status="critical">
+          <div className="card-pad">
+            <p className="eyebrow" style={{ color: 'var(--critical)' }}>Nhịp đồng hồ không hoạt động</p>
+            <h2 className="card-title mt-0.5 mb-1.5">
+              Có {dangBat.length} workflow đang bật nhưng không lượt nào chạy
+              {phutTuLanCuoi === null ? ' bao giờ' : ` trong ${phutTuLanCuoi} phút qua`}
+            </h2>
+            <p className="text-[12.5px] text-[var(--ink-2)] m-0 mb-2.5 leading-relaxed">
+              Cờ &quot;Đang bật&quot; chỉ là giá trị trong cơ sở dữ liệu. Phải có một
+              dịch vụ bên ngoài gọi vào địa chỉ dưới đây mỗi phút thì hệ thống mới
+              biết đã tới giờ chạy gì.
+            </p>
+            <div className="callout callout-critical">
+              <p className="m-0 mb-1.5"><strong>Cách khắc phục</strong></p>
+              <p className="m-0 mb-1">
+                1. Vào <span className="mono">cron-job.org</span>, tạo một cronjob mới.
+              </p>
+              <p className="m-0 mb-1">
+                2. URL:{' '}
+                <span className="mono">
+                  {(process.env.NEXT_PUBLIC_APP_URL ?? '') + '/api/cron/tick'}
+                </span>
+              </p>
+              <p className="m-0">
+                3. Lịch chọn Custom, điền <span className="mono">* * * * *</span> để gọi mỗi phút.
+              </p>
+            </div>
+            <p className="text-[11.5px] text-[var(--ink-3)] mt-2.5 mb-0 leading-relaxed">
+              Gói Vercel Hobby không cho khai cron mỗi phút trong tệp cấu hình, nên
+              dùng dịch vụ ngoài là cách phù hợp. Nhịp một phút chỉ để hỏi xem có gì
+              tới hạn không — WF1 và WF4 vẫn chỉ chạy đúng một lần mỗi ngày.
+            </p>
+          </div>
+        </section>
+      )}
 
       {!laAdmin && (
         <p className="callout callout-accent mb-4">

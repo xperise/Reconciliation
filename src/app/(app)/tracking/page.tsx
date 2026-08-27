@@ -43,7 +43,16 @@ export default async function TrackingPage({ searchParams }: {
 
   // Bộ lọc phái sinh, tính trên ngày nên phải lọc sau khi lấy dữ liệu
   const DONE = ['da_chot', 'hoan_tat_cho_thanh_toan', 'mac_dinh_chap_thuan', 'da_gui_ho_so_thanh_toan'];
-  if (searchParams.loc === 'qua_han') {
+  const CHO_NOI_BO = ['cho_file_da_nhac_noi_bo', 'cho_duyet_phan_loai',
+    'can_chinh_sua', 'cho_ho_so_thanh_toan'];
+
+  if (searchParams.loc === 'da_chot') {
+    rows = rows.filter((r) => DONE.includes(r.status));
+  } else if (searchParams.loc === 'cho_noi_bo') {
+    rows = rows.filter((r) => CHO_NOI_BO.includes(r.status));
+  } else if (searchParams.loc === 'dang_xu_ly') {
+    rows = rows.filter((r) => !DONE.includes(r.status) && r.status !== 'can_xu_ly_tay');
+  } else if (searchParams.loc === 'qua_han') {
     rows = rows.filter((r) => r.han_chap_nhan && !DONE.includes(r.status)
       && daysBetween(r.han_chap_nhan, today) > 0);
   } else if (searchParams.loc === 'can_han') {
@@ -64,6 +73,8 @@ export default async function TrackingPage({ searchParams }: {
       return con >= 0 && con <= 1;
     }).length,
     xu_ly_tay: (raw ?? []).filter((r: any) => r.status === 'can_xu_ly_tay').length,
+    cho_noi_bo: (raw ?? []).filter((r: any) => CHO_NOI_BO.includes(r.status)).length,
+    da_chot: (raw ?? []).filter((r: any) => DONE.includes(r.status)).length,
   };
 
   return (

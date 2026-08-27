@@ -431,12 +431,15 @@ export async function luuLichWorkflow(key: string, form: {
 
   const { data: before } = await sb.from('workflow_schedules').select('*').eq('key', key).single();
 
-  await sb.from('workflow_schedules').update({
+  const { data: sau, error } = await sb.from('workflow_schedules').update({
     enabled: form.enabled,
     schedule_kind: form.schedule_kind,
     run_at_hhmm: form.schedule_kind === 'daily' ? (form.run_at_hhmm || '08:00') : null,
     interval_minutes: form.schedule_kind === 'interval' ? (form.interval_minutes || 5) : null,
-  }).eq('key', key);
+  }).eq('key', key).select('enabled, schedule_kind, run_at_hhmm, interval_minutes').single();
+
+  if (error) throw new Error(`Không ghi được lịch: ${error.message}`);
+  if (!sau) throw new Error('Không tìm thấy workflow này trong cơ sở dữ liệu.');
 
   await writeAudit({
     actorId: user.id, actorEmail: user.email,
@@ -445,6 +448,16 @@ export async function luuLichWorkflow(key: string, form: {
   });
 
   revalidatePath('/workflows');
+
+  // Đọc lại từ database rồi mới báo thành công, để không bao giờ nói "đã lưu"
+  // trong khi thực tế chưa ghi được gì
+  return {
+    xacNhan: sau.enabled
+      ? (sau.schedule_kind === 'daily'
+          ? `Đã lưu: bật, chạy ${sau.run_at_hhmm} hằng ngày.`
+          : `Đã lưu: bật, chạy mỗi ${sau.interval_minutes} phút.`)
+      : 'Đã lưu: workflow đang tắt.',
+  };
 }
 
 // =====================================================================

@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { useEffect, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { Bell } from './bell';
@@ -44,6 +45,15 @@ export function Shell({ role, email, userId, soChoDuyet, thongBao, children }: {
 }) {
   const path = usePathname();
   const router = useRouter();
+
+  // Next giữ lại kết quả trang đã tải trong bộ nhớ trình duyệt, nên chuyển tab
+  // qua lại vẫn thấy số cũ. Với công cụ vận hành thì đó là sai. Mỗi lần đổi
+  // đường dẫn, buộc lấy lại dữ liệu từ máy chủ.
+  const lanDau = useRef(true);
+  useEffect(() => {
+    if (lanDau.current) { lanDau.current = false; return; }
+    router.refresh();
+  }, [path, router]);
 
   const isOn = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));
 

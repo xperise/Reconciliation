@@ -55,21 +55,33 @@ export default async function AuditPage() {
           <p className="eyebrow">Hệ thống</p>
           <h2 className="card-title mt-0.5">Chuyển trạng thái tự động</h2>
           <p className="card-note m-0 mt-1">
-            Cột giờ chờ cho biết kỳ đó nằm lại trạng thái cũ bao lâu — đây là nguồn tính nút thắt cổ chai.
+            Giờ chờ đo từ lúc kỳ bước vào trạng thái cũ tới lúc rời khỏi nó. Hai cột thời
+            điểm đầu bảng cho phép bạn tự kiểm chứng con số.
           </p>
         </div>
         <div className="overflow-x-auto" style={{ maxHeight: '60vh' }}>
           <table className="tbl">
             <thead>
               <tr>
-                <th>Thời điểm</th><th>Nhóm</th><th>Kỳ</th>
+                <th>Vào trạng thái cũ lúc</th><th>Chuyển lúc</th>
+                <th>Nhóm</th><th>Kỳ</th>
                 <th>Từ trạng thái</th><th>Sang trạng thái</th>
-                <th className="text-right">Giờ chờ</th><th>Nguyên nhân trễ</th>
+                <th className="text-right">Giờ chờ</th>
               </tr>
             </thead>
             <tbody>
-              {(statusLog ?? []).map((r) => (
+              {(statusLog ?? []).map((r) => {
+                // Mốc vào trạng thái cũ suy ra từ chính số giờ đã chờ, để
+                // người đọc kiểm chứng được con số thay vì phải tin
+                const vaoLuc = r.gio_o_status_cu != null
+                  ? new Date(new Date(r.created_at).getTime()
+                      - Number(r.gio_o_status_cu) * 3600_000)
+                  : null;
+                return (
                 <tr key={r.id}>
+                  <td className="mono text-[12px] whitespace-nowrap text-[var(--ink-3)]">
+                    {vaoLuc ? gio(vaoLuc.toISOString()) : '—'}
+                  </td>
                   <td className="mono text-[12px] whitespace-nowrap">{gio(r.created_at)}</td>
                   <td className="text-[12.5px] font-semibold">{r.ten_nhom}</td>
                   <td className="mono text-[12px]">{r.ky_doi_soat}</td>
@@ -79,17 +91,19 @@ export default async function AuditPage() {
                       : <span className="pill pill-neutral">khởi tạo</span>}
                   </td>
                   <td><StatusBadge status={r.status_moi as TrackingStatus} /></td>
-                  <td className="text-right mono text-[12px]"
+                  <td className="text-right mono text-[12px] whitespace-nowrap"
+                      title={vaoLuc ? `Nằm ở trạng thái cũ từ ${gio(vaoLuc.toISOString())}` : ''}
                       style={Number(r.gio_o_status_cu) > 48
                         ? { color: 'var(--critical)', fontWeight: 600 } : undefined}>
-                    {r.gio_o_status_cu ?? '—'}
-                  </td>
-                  <td className="text-[12px] text-[var(--ink-3)]">
-                    {r.nguyen_nhan_tre === 'internal' ? 'Nội bộ'
-                      : r.nguyen_nhan_tre === 'customer' ? 'Khách hàng' : '—'}
+                    {r.gio_o_status_cu != null
+                      ? (Number(r.gio_o_status_cu) >= 24
+                          ? `${(Number(r.gio_o_status_cu) / 24).toFixed(1)} ngày`
+                          : `${r.gio_o_status_cu} giờ`)
+                      : '—'}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
           {!statusLog?.length && (
