@@ -6,9 +6,10 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { writeAudit } from '@/lib/audit';
 import { nowInVN, addDays } from '@/lib/period';
 import { sendMail } from '@/lib/google/gmail';
-import { refSubject, tplMacDinhChot } from '@/lib/email-templates';
+import { refSubject, tplMacDinhChot, tplNhacChuanBiHstt } from '@/lib/email-templates';
 import { TrackingStatus, FileKind } from '@/lib/types';
 import { buildPath, nextVersion, removeFile, previewUrl } from '@/lib/storage';
+import { pushNotify } from '@/lib/notify';
 import { guiTepChoKhach } from '@/workflows/wf3-gui-tep';
 
 async function requireRole(...roles: string[]) {
@@ -18,16 +19,25 @@ async function requireRole(...roles: string[]) {
   return user;
 }
 
+/** Tên hiển thị của người thao tác, rơi về email khi chưa khai họ tên. */
+function tenNguoi(u: { full_name?: string | null; email: string }): string {
+  return u.full_name?.trim() || u.email;
+}
+
 // =====================================================================
 // Duyệt phản hồi khách — thay cho nút bấm trong email của bản n8n
 // =====================================================================
 
-export type QuyetDinh = 'dong_y' | 'can_sua' | 'tu_choi';
+export type QuyetDinh = 'dong_y' | 'can_sua' | 'tu_choi' | 'bo_qua';
 
 export async function duyetPhanHoi(trackingId: string, quyetDinh: QuyetDinh, ghiChu: string) {
   const user = await requireRole('admin', 'ke_toan');
   const sb = supabaseAdmin();
   const today = nowInVN().isoDate;
+
+  if (quyetDinh === 'tu_choi' && !ghiChu?.trim()) {
+    throw new Error('Từ chối bắt buộc phải ghi lý do, vì hệ thống sẽ dừng và người sau cần biết vì sao.');
+  }
 
   const { data: row } = await sb
     .from('tracking').select('*, billing_groups!inner(*)').eq('id', trackingId).single();
@@ -35,12 +45,17 @@ export async function duyetPhanHoi(trackingId: string, quyetDinh: QuyetDinh, ghi
 
   const g = (row as any).billing_groups;
   const before = { status: row.status, ket_qua_duyet: row.ket_qua_duyet };
+  const canHstt = Boolean(g.ho_so_thanh_toan?.trim());
+
   let next: TrackingStatus;
   let extra: Record<string, unknown> = {};
 
-  if (quyetDinh === 'dong_y') {
-    // Có yêu cầu hồ sơ thanh toán thì còn một chặng nữa, không thì xong.
-    const canHstt = Boolean(g.ho_so_thanh_toan?.trim());
+  if (quyetDinh === 'bo_qua') {
+    // Khách mới báo đã nhận, chưa có ý kiến thực chất. Trả kỳ về đúng trạng
+    // thái trước đó để đồng hồ SLA chạy tiếp, không coi như đã xử lý xong.
+    next = 'da_gui_bang_ke';
+    extra = { ket_qua_duyet: 'bo_qua' };
+  } else if (quyetDinh === 'dong_y') {
     next = canHstt ? 'cho_ho_so_thanh_toan' : 'hoan_tat_cho_thanh_toan';
     extra = {
       ngay_chot: today,
@@ -54,7 +69,6 @@ export async function duyetPhanHoi(trackingId: string, quyetDinh: QuyetDinh, ghi
     extra = {
       ngay_bat_dau_cho_file: today,
       ngay_remind_cuoi: null,
-      // Đồng hồ nội bộ chạy, đồng hồ khách tạm dừng cho tới khi gửi bản mới
       han_chap_nhan: addDays(today, g.sla_phan_hoi_dieu_chinh ?? 2),
     };
   } else {
@@ -65,18 +79,73 @@ export async function duyetPhanHoi(trackingId: string, quyetDinh: QuyetDinh, ghi
     status: next,
     ket_qua_duyet: quyetDinh,
     nguoi_duyet: user.id,
-    ghi_chu: ghiChu?.trim() ? `${row.ghi_chu ?? ''}\n[Kế toán] ${ghiChu.trim()}`.trim() : row.ghi_chu,
+    ngay_duyet: new Date().toISOString(),
+    ghi_chu: ghiChu?.trim()
+      ? `${row.ghi_chu ?? ''}\n[${tenNguoi(user)}] ${ghiChu.trim()}`.trim()
+      : row.ghi_chu,
     ...extra,
   }).eq('id', trackingId);
+
+  const NHAN_QD: Record<string, string> = {
+    dong_y: 'Đồng ý — chốt bảng kê',
+    can_sua: 'Cần sửa — chờ bản mới',
+    tu_choi: 'Từ chối — chuyển xử lý tay',
+    bo_qua: 'Bỏ qua — giữ nguyên trạng thái',
+  };
 
   await writeAudit({
     actorId: user.id, actorEmail: user.email,
     action: 'approval.decide', entity: 'tracking', entityId: trackingId,
-    before, after: { status: next, ket_qua_duyet: quyetDinh }, note: ghiChu,
+    before, after: { status: next, ket_qua_duyet: quyetDinh },
+    note: `${tenNguoi(user)} duyệt ${row.ten_nhom} ${row.ky_doi_soat}: `
+      + `${NHAN_QD[quyetDinh] ?? quyetDinh}`
+      + (ghiChu?.trim() ? ` — ${ghiChu.trim()}` : ''),
   });
+
+  // Chốt xong mà khách cần hồ sơ thanh toán thì báo kế toán ngay, kèm danh
+  // mục giấy tờ lấy từ Master Data, để không phải nhớ hay tra lại.
+  let nhacHstt: string | null = null;
+  if (quyetDinh === 'dong_y' && canHstt && g.email_ke_toan) {
+    try {
+      const mail = tplNhacChuanBiHstt(
+        g.ten_nhom, row.ky_doi_soat, g.ho_so_thanh_toan,
+        g.sla_hstt ?? null, process.env.NEXT_PUBLIC_APP_URL ?? '');
+      await sendMail({
+        to: g.email_ke_toan,
+        cc: g.email_pm ?? undefined,
+        ...mail,
+        threadId: row.internal_thread_id ?? undefined,
+      });
+      nhacHstt = g.ho_so_thanh_toan;
+    } catch (e) {
+      console.error('[duyet] không gửi được thư nhắc HSTT:', e);
+    }
+  }
+
+  if (quyetDinh === 'dong_y' && canHstt) {
+    await pushNotify({
+      tieuDe: `${row.ten_nhom} ${row.ky_doi_soat} cần hồ sơ thanh toán`,
+      noiDung: `Giấy tờ cần chuẩn bị: ${g.ho_so_thanh_toan}`,
+      muc: 'canh_bao', lienKet: '/hstt',
+      roles: ['admin', 'ke_toan'],
+      entity: 'tracking', entityId: trackingId,
+    });
+  }
+  if (quyetDinh === 'can_sua') {
+    await pushNotify({
+      tieuDe: `${row.ten_nhom} ${row.ky_doi_soat} chờ bản chỉnh sửa`,
+      noiDung: 'Tải bản mới lên ở mục Tệp bảng kê, hệ thống gửi cho khách ngay.',
+      muc: 'canh_bao', lienKet: '/files',
+      roles: ['admin', 'ke_toan'],
+      entity: 'tracking', entityId: trackingId,
+    });
+  }
 
   revalidatePath('/approvals');
   revalidatePath('/tracking');
+  revalidatePath('/hstt');
+
+  return { status: next, canHstt, hoSo: g.ho_so_thanh_toan ?? null, nhacHstt };
 }
 
 /** Kết thúc một kỳ đã hết vòng escalate: chốt mặc định và báo khách. */
@@ -247,6 +316,106 @@ export async function luuNhomDoiSoat(groupId: string | null, form: Record<string
   revalidatePath('/master-data');
 }
 
+/**
+ * Sửa đúng một ô trong lưới Master Data.
+ *
+ * Danh sách cột cho phép sửa được liệt kê tường minh chứ không nhận bừa tên
+ * cột từ trình duyệt — nếu không, một request tự chế có thể ghi vào cột bất kỳ.
+ */
+const O_SUA_DUOC = {
+  ma_he_thong: 'text', ten_nhom: 'text',
+  ngung_hop_tac: 'bool',
+  diem_gmv: 'int', diem_company_size: 'int', diem_tranh_chap: 'int', diem_phuc_tap: 'int',
+  nhom_escalate: 'int',
+  ngay_gui_bang_ke_hd: 'int', ngay_gui_bang_ke_thuc_te: 'int',
+  sla_chap_nhan_hd: 'int', sla_chap_nhan_thuc_te: 'int',
+  sla_phan_hoi_dieu_chinh: 'int', sla_ky_bien_ban: 'int', sla_hstt: 'int',
+  payment_term: 'int',
+  email_l1: 'text', email_l2: 'text', email_l3: 'text',
+  email_ke_toan: 'text', email_pm: 'text', email_high_level: 'text', email_cc: 'text',
+  ho_so_thanh_toan: 'text', ghi_chu: 'text',
+} as const;
+
+export type OMasterData = keyof typeof O_SUA_DUOC;
+
+export async function capNhatO(groupId: string, cot: OMasterData, giaTri: unknown) {
+  const user = await requireRole('admin', 'ke_toan');
+  const kieu = O_SUA_DUOC[cot];
+  if (!kieu) throw new Error(`Không sửa được cột "${cot}".`);
+
+  const sb = supabaseAdmin();
+  let v: unknown;
+
+  if (kieu === 'bool') {
+    v = Boolean(giaTri);
+  } else if (kieu === 'int') {
+    const s = String(giaTri ?? '').trim();
+    if (s === '') v = null;
+    else {
+      const n = Number(s);
+      if (!Number.isFinite(n)) throw new Error('Giá trị phải là số.');
+      v = Math.trunc(n);
+    }
+  } else {
+    const s = String(giaTri ?? '').trim();
+    v = s === '' ? null : s;
+  }
+
+  // Hai cột này là khoá nghiệp vụ, không cho để trống
+  if ((cot === 'ma_he_thong' || cot === 'ten_nhom') && !v) {
+    throw new Error(cot === 'ma_he_thong'
+      ? 'Mã hệ thống không được để trống.'
+      : 'Tên nhóm không được để trống.');
+  }
+  if (cot === 'nhom_escalate' && v !== null && ![1, 2, 3].includes(v as number)) {
+    throw new Error('Nhóm escalate chỉ nhận 1, 2 hoặc 3.');
+  }
+
+  const { data: before } = await sb
+    .from('billing_groups').select(`id, ${cot}`).eq('id', groupId).single();
+
+  const { error } = await sb.from('billing_groups').update({ [cot]: v }).eq('id', groupId);
+  if (error) {
+    if (error.code === '23505') throw new Error('Mã hệ thống này đã tồn tại ở nhóm khác.');
+    throw new Error(error.message);
+  }
+
+  await writeAudit({
+    actorId: user.id, actorEmail: user.email,
+    action: 'billing_group.update', entity: 'billing_groups', entityId: groupId,
+    before, after: { [cot]: v },
+    note: `Sửa ô ${cot}`,
+  });
+
+  revalidatePath('/master-data');
+  return { ok: true, giaTri: v };
+}
+
+/** Xoá một nhóm chưa từng phát sinh kỳ đối soát nào. */
+export async function xoaNhom(groupId: string) {
+  const user = await requireRole('admin');
+  const sb = supabaseAdmin();
+
+  const { count } = await sb.from('tracking')
+    .select('id', { count: 'exact', head: true }).eq('group_id', groupId);
+  if (count && count > 0) {
+    throw new Error(`Nhóm này đã có ${count} kỳ đối soát nên không xoá được. `
+      + 'Dùng "Ngưng hợp tác" để workflow bỏ qua.');
+  }
+
+  const { data: before } = await sb.from('billing_groups').select('*').eq('id', groupId).single();
+  const { error } = await sb.from('billing_groups').delete().eq('id', groupId);
+  if (error) throw new Error(error.message);
+
+  await writeAudit({
+    actorId: user.id, actorEmail: user.email,
+    action: 'billing_group.delete', entity: 'billing_groups', entityId: groupId,
+    before, note: `Xoá nhóm ${before?.ma_he_thong ?? ''}`,
+  });
+
+  revalidatePath('/master-data');
+}
+
 // =====================================================================
 // Cấu hình workflow
 // =====================================================================
@@ -356,6 +525,8 @@ export async function ghiNhanTep(input: {
   sizeBytes: number;
   guiNgay: boolean;
   ghiChu?: string;
+  /** Người dùng đã xác nhận muốn gửi dù loại tệp này từng gửi rồi. */
+  chapNhanGuiLai?: { lyDo: string };
 }) {
   const user = await requireRole('admin', 'ke_toan');
   const sb = supabaseAdmin();
@@ -394,6 +565,19 @@ export async function ghiNhanTep(input: {
   if (input.guiNgay) {
     try {
       const r = await guiTepChoKhach(file.id);
+      if (r.sent) {
+        const { data: tr } = await sb.from('tracking').select('id')
+          .eq('group_id', input.groupId).eq('ky_doi_soat', input.ky).maybeSingle();
+        await sb.from('send_log').insert({
+          file_id: file.id, tracking_id: tr?.id ?? null,
+          ma_he_thong: g!.ma_he_thong, ky_doi_soat: input.ky,
+          kind: input.kind, version: input.version, file_name: input.fileName,
+          den: (r.mail as any)?.den ?? null, cc: (r.mail as any)?.cc ?? null,
+          la_gui_lai: Boolean(input.chapNhanGuiLai),
+          ly_do_gui_lai: input.chapNhanGuiLai?.lyDo ?? null,
+          nguoi_gui: user.id, nguon: 'thu_cong',
+        });
+      }
       ketQua = r.message;
       if (r.sent) {
         await writeAudit({
@@ -412,16 +596,86 @@ export async function ghiNhanTep(input: {
   return { ketQua };
 }
 
-/** Gửi tay một tệp đã lưu nhưng chưa gửi. */
-export async function guiTepNgay(fileId: string) {
+/**
+ * Kiểm tra xem loại tệp này đã từng gửi cho khách chưa.
+ * Dùng để hỏi lại trước khi gửi trùng, thay vì lặng lẽ gửi lần hai.
+ */
+export async function kiemTraDaGui(groupId: string, ky: string, kind: FileKind) {
+  await requireRole('admin', 'ke_toan');
+  const { data } = await supabaseAdmin()
+    .from('statement_files')
+    .select('file_name, version, sent_at')
+    .eq('group_id', groupId).eq('ky_doi_soat', ky).eq('kind', kind)
+    .not('sent_at', 'is', null)
+    .order('sent_at', { ascending: false })
+    .limit(1).maybeSingle();
+
+  if (!data) return { daGui: false as const };
+  return {
+    daGui: true as const,
+    ngay: data.sent_at as string,
+    tenTep: data.file_name as string,
+    ban: data.version as number,
+  };
+}
+
+/** Gửi tay một tệp đã lưu. Gửi lại phải nêu lý do. */
+export async function guiTepNgay(fileId: string, guiLai?: { lyDo: string }) {
   const user = await requireRole('admin', 'ke_toan');
+  const sb = supabaseAdmin();
+
+  const { data: file } = await sb
+    .from('statement_files').select('*').eq('id', fileId).maybeSingle();
+  if (!file) throw new Error('Không tìm thấy tệp.');
+
+  const daGuiTruoc = Boolean(file.sent_at);
+  if (daGuiTruoc && !guiLai?.lyDo?.trim()) {
+    throw new Error('Tệp này đã gửi rồi. Muốn gửi lại phải nêu lý do.');
+  }
+
+  // Cho gửi lại bằng cách xoá dấu đã gửi, nhưng lưu lại dấu vết ở send_log
+  if (daGuiTruoc) {
+    await sb.from('statement_files').update({ sent_at: null }).eq('id', fileId);
+  }
+
   const r = await guiTepChoKhach(fileId);
+
+  if (r.sent) {
+    const { data: tr } = await sb.from('tracking').select('id')
+      .eq('group_id', file.group_id).eq('ky_doi_soat', file.ky_doi_soat).maybeSingle();
+
+    await sb.from('send_log').insert({
+      file_id: fileId,
+      tracking_id: tr?.id ?? null,
+      ma_he_thong: file.ma_he_thong,
+      ky_doi_soat: file.ky_doi_soat,
+      kind: file.kind,
+      version: file.version,
+      file_name: file.file_name,
+      den: (r.mail as any)?.den ?? null,
+      cc: (r.mail as any)?.cc ?? null,
+      la_gui_lai: daGuiTruoc,
+      ly_do_gui_lai: guiLai?.lyDo?.trim() ?? null,
+      nguoi_gui: user.id,
+      nguon: 'thu_cong',
+    });
+  } else if (daGuiTruoc) {
+    // Gửi hỏng thì trả lại dấu đã gửi cũ, không để tệp thành "chưa gửi"
+    await sb.from('statement_files').update({ sent_at: file.sent_at }).eq('id', fileId);
+  }
+
   await writeAudit({
     actorId: user.id, actorEmail: user.email,
-    action: 'file.send', entity: 'statement_files', entityId: fileId, note: r.message,
+    action: daGuiTruoc ? 'file.resend' : 'file.send',
+    entity: 'statement_files', entityId: fileId,
+    note: daGuiTruoc
+      ? `${tenNguoi(user)} GỬI LẠI ${file.file_name} (${file.ky_doi_soat}) — ${guiLai!.lyDo.trim()}`
+      : `${tenNguoi(user)}: ${r.message}`,
   });
+
   revalidatePath('/files');
   revalidatePath('/tracking');
+  revalidatePath('/hstt');
   return r;
 }
 
@@ -448,9 +702,42 @@ export async function xoaTep(fileId: string) {
 }
 
 /** Liên kết xem tạm cho người dùng nội bộ, sống 5 phút. */
-export async function xemTep(storagePath: string) {
+export async function xemTep(storagePath: string, fileName?: string) {
   await requireRole('admin', 'ke_toan', 'pm', 'high_level');
-  const url = await previewUrl(storagePath);
+  const url = await previewUrl(storagePath, 300, fileName);
   if (!url) throw new Error('Không mở được tệp.');
   return url;
+}
+
+// =====================================================================
+// Thông báo
+// =====================================================================
+
+export async function danhDauDaDoc(notiId: string) {
+  const user = await requireRole('admin', 'ke_toan', 'pm', 'high_level');
+  const sb = supabaseAdmin();
+
+  const { data } = await sb.from('notifications')
+    .select('da_doc_boi').eq('id', notiId).maybeSingle();
+  const cu: string[] = data?.da_doc_boi ?? [];
+  if (cu.includes(user.id)) return;
+
+  await sb.from('notifications')
+    .update({ da_doc_boi: [...cu, user.id] }).eq('id', notiId);
+}
+
+export async function danhDauDocHet() {
+  const user = await requireRole('admin', 'ke_toan', 'pm', 'high_level');
+  const sb = supabaseAdmin();
+
+  const { data } = await sb.from('notifications')
+    .select('id, da_doc_boi').order('created_at', { ascending: false }).limit(100);
+
+  for (const n of data ?? []) {
+    const cu: string[] = n.da_doc_boi ?? [];
+    if (!cu.includes(user.id)) {
+      await sb.from('notifications').update({ da_doc_boi: [...cu, user.id] }).eq('id', n.id);
+    }
+  }
+  revalidatePath('/');
 }

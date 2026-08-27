@@ -11,6 +11,15 @@ const DANG_CHO_KHACH: TrackingStatus[] = [
   'da_nhan_phan_hoi',
   'can_chinh_sua',
   'da_gui_ho_so_thanh_toan',
+  // Hai trạng thái dưới không chờ khách trả lời nữa, nhưng thread vẫn phải
+  // còn sống để các bước sau nối tiếp được. Quét luôn để phát hiện mất thread.
+  'cho_duyet_phan_loai',
+  'cho_ho_so_thanh_toan',
+];
+
+/** Trạng thái mà phản hồi mới của khách cần đẩy lại hàng chờ duyệt. */
+const NHAN_PHAN_HOI_MOI: TrackingStatus[] = [
+  'da_gui_bang_ke', 'da_nhan_phan_hoi', 'can_chinh_sua', 'da_gui_ho_so_thanh_toan',
 ];
 
 /**
@@ -76,6 +85,10 @@ export async function runWf2(): Promise<RunResult> {
 
       if (!latest) { note('Khách chưa trả lời.'); continue; }
       if (latest.id === row.message_id) { note('Không có phản hồi mới.'); continue; }
+      if (!NHAN_PHAN_HOI_MOI.includes(row.status)) {
+        note('Thread còn sống, trạng thái hiện tại không nhận phản hồi mới.');
+        continue;
+      }
 
       const cls = await classifyReply(latest.body || latest.snippet);
 

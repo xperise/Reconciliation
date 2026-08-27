@@ -119,9 +119,17 @@ export function OverrideForm({ row }: { row: any }) {
                   <div className="field mono" style={{ background: 'var(--surface-2)', color: 'var(--ink-3)' }}>
                     {row.ngay_remind_cuoi ?? 'chưa nhắc'}
                   </div>
-                  <label className="flex items-center gap-2 text-[12px] mt-2 cursor-pointer">
-                    <input type="checkbox" checked={!!f.reset_remind} onChange={set('reset_remind')} />
-                    Cho phép nhắc lại ngay hôm nay
+                  <label className="flex items-start gap-2 text-[12px] mt-2 cursor-pointer">
+                    <input type="checkbox" className="mt-0.5"
+                           checked={!!f.reset_remind} onChange={set('reset_remind')} />
+                    <span>
+                      Cho phép nhắc lại ngay hôm nay
+                      <span className="block text-[11px] text-[var(--ink-3)] leading-snug mt-0.5">
+                        Bình thường mỗi kỳ chỉ nhận tối đa một thư nhắc mỗi ngày.
+                        Tick ô này để xoá mốc chặn, dùng khi vừa sửa xong lỗi và
+                        muốn workflow chạy lại ngay thay vì đợi sang hôm sau.
+                      </span>
+                    </span>
                   </label>
                 </div>
               </div>

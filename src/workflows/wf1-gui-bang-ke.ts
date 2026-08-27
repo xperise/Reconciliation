@@ -52,7 +52,7 @@ export async function runWf1(): Promise<RunResult> {
     try {
       // --- 1. Kỳ này đã xử lý chưa -------------------------------------
       const { data: existing } = await sb
-        .from('tracking').select('id, status')
+        .from('tracking').select('id, status, ngay_remind_cuoi')
         .eq('group_id', g.id).eq('ky_doi_soat', ky).maybeSingle();
 
       if (existing && STATUS_WF1_SKIP.includes(existing.status as TrackingStatus)) {
@@ -90,6 +90,16 @@ export async function runWf1(): Promise<RunResult> {
 
       if (!file) {
         const reason = 'Chưa có ai tải bảng kê của kỳ này lên hệ thống.';
+
+        // Hôm nay đã nhắc rồi thì thôi. Chạy tay WF1 nhiều lần trong ngày là
+        // chuyện bình thường khi kiểm thử, không có lý do gì để kế toán nhận
+        // cùng một thư khẩn vài lần.
+        if (existing?.status === 'cho_file_da_nhac_noi_bo'
+            && (existing as any).ngay_remind_cuoi === today) {
+          note('Chưa có tệp, nhưng hôm nay đã nhắc nội bộ rồi.');
+          continue;
+        }
+
         const mail = tplThieuFile(g.ten_nhom, ky, appUrl);
         if (g.email_ke_toan) {
           await sendMail({ to: g.email_ke_toan, cc: g.email_pm ?? undefined, ...mail });
@@ -100,6 +110,7 @@ export async function runWf1(): Promise<RunResult> {
           { ...baseRow,
             status: 'cho_file_da_nhac_noi_bo' as TrackingStatus,
             ngay_bat_dau_cho_file: today,
+            ngay_remind_cuoi: today,
             ghi_chu: `WF1: ${reason}` },
           { onConflict: 'group_id,ky_doi_soat' },
         );
@@ -110,7 +121,7 @@ export async function runWf1(): Promise<RunResult> {
 
       // --- 4. Gửi cho khách --------------------------------------------
       const buffer = await downloadFile(file.storage_path);
-      const link = await signedUrl(file.storage_path);
+      const link = await signedUrl(file.storage_path, file.file_name);
 
       const ccList = [g.email_ke_toan, g.email_cc].filter(Boolean).join(',') || undefined;
       const subject = refSubject(g.ten_nhom, ky);

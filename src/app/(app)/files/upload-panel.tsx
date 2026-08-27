@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabaseBrowser } from '@/lib/supabase/client';
-import { xinChoLuuTep, ghiNhanTep } from '@/app/actions';
+import { xinChoLuuTep, ghiNhanTep, kiemTraDaGui } from '@/app/actions';
 import { FileKind } from '@/lib/types';
 
 const DUOI_HOP_LE = ['.xlsx', '.xls', '.docx', '.doc', '.pdf', '.zip'];
@@ -17,88 +17,138 @@ function kyMacDinh(): string {
   return `T${String(m).padStart(2, '0')}.${y}`;
 }
 
-export function UploadPanel({ groups }: { groups: { id: string; ten_nhom: string; ma_he_thong: string }[] }) {
+type Hang = {
+  id: string;
+  file: File;
+  trangThai: 'cho' | 'dang' | 'xong' | 'loi';
+  ketQua?: string;
+};
+
+export function UploadPanel({ groups, macDinhKind, tieuDe }: {
+  groups: { id: string; ten_nhom: string; ma_he_thong: string }[];
+  macDinhKind?: FileKind;
+  tieuDe?: string;
+}) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [groupId, setGroupId] = useState('');
   const [ky, setKy] = useState(kyMacDinh());
-  const [kind, setKind] = useState<FileKind>('bang_ke');
+  const [kind, setKind] = useState<FileKind>(macDinhKind ?? 'bang_ke');
   const [guiNgay, setGuiNgay] = useState(true);
-  const [file, setFile] = useState<File | null>(null);
+  const [hang, setHang] = useState<Hang[]>([]);
   const [keo, setKeo] = useState(false);
-  const [tienDo, setTienDo] = useState<string | null>(null);
-  const [ketQua, setKetQua] = useState('');
+  const [dangChay, setDangChay] = useState(false);
   const [loi, setLoi] = useState('');
+
+  // Hỏi lại khi loại tệp này đã từng gửi cho khách
+  const [hoiGuiLai, setHoiGuiLai] = useState<
+    { ngay: string; tenTep: string; ban: number } | null>(null);
+  const [chacChan, setChacChan] = useState(false);
+  const [lyDo, setLyDo] = useState('');
 
   const nhom = groups.find((g) => g.id === groupId);
 
-  function nhanTep(f: File | undefined) {
-    setLoi(''); setKetQua('');
-    if (!f) return;
-
-    const duoi = '.' + (f.name.split('.').pop() ?? '').toLowerCase();
-    if (!DUOI_HOP_LE.includes(duoi)) {
-      setLoi(`Định dạng ${duoi} không nhận. Chỉ nhận ${DUOI_HOP_LE.join(', ')}.`);
-      return;
+  function themTep(list: FileList | null) {
+    setLoi('');
+    if (!list) return;
+    const moi: Hang[] = [];
+    for (const f of Array.from(list)) {
+      const duoi = '.' + (f.name.split('.').pop() ?? '').toLowerCase();
+      if (!DUOI_HOP_LE.includes(duoi)) {
+        setLoi(`Bỏ qua "${f.name}" — định dạng ${duoi} không nhận.`);
+        continue;
+      }
+      if (f.size > GIOI_HAN) {
+        setLoi(`Bỏ qua "${f.name}" — nặng ${(f.size / 1048576).toFixed(1)} MB, vượt 50 MB.`);
+        continue;
+      }
+      moi.push({ id: `${f.name}-${f.size}-${Math.random()}`, file: f, trangThai: 'cho' });
     }
-    if (f.size > GIOI_HAN) {
-      setLoi(`Tệp nặng ${(f.size / 1048576).toFixed(1)} MB, vượt giới hạn 50 MB.`);
-      return;
-    }
-    setFile(f);
+    setHang((p) => [...p, ...moi]);
   }
 
-  async function taiLen() {
-    if (!file || !groupId) return;
-    setLoi(''); setKetQua('');
+  async function batDau() {
+    if (!groupId || hang.length === 0) return;
 
-    try {
-      setTienDo('Đang chuẩn bị…');
-      const cho = await xinChoLuuTep(groupId, ky, kind, file.name);
-
-      setTienDo('Đang tải tệp lên…');
-      const { error } = await supabaseBrowser()
-        .storage.from('bang-ke')
-        .upload(cho.path, file, { contentType: file.type || undefined, upsert: false });
-
-      if (error) throw new Error(error.message);
-
-      setTienDo(guiNgay ? 'Đang gửi cho khách…' : 'Đang lưu…');
-      const { ketQua: kq } = await ghiNhanTep({
-        groupId, ky, kind,
-        version: cho.version,
-        storagePath: cho.path,
-        fileName: file.name,
-        mimeType: file.type || 'application/octet-stream',
-        sizeBytes: file.size,
-        guiNgay,
-      });
-
-      setKetQua(kq);
-      setFile(null);
-      if (inputRef.current) inputRef.current.value = '';
-      router.refresh();
-    } catch (e) {
-      setLoi(e instanceof Error ? e.message : 'Tải lên thất bại.');
-    } finally {
-      setTienDo(null);
+    // Chỉ hỏi khi thực sự định gửi cho khách ngay
+    if (guiNgay && !hoiGuiLai) {
+      const kt = await kiemTraDaGui(groupId, ky, kind);
+      if (kt.daGui) {
+        setHoiGuiLai({ ngay: kt.ngay, tenTep: kt.tenTep, ban: kt.ban });
+        return;
+      }
     }
+    await chay();
   }
 
-  const sanSang = Boolean(file && groupId && !tienDo);
+  async function chay() {
+    setDangChay(true);
+    setLoi('');
+
+    for (const h of hang) {
+      if (h.trangThai === 'xong') continue;
+      setHang((p) => p.map((x) => x.id === h.id ? { ...x, trangThai: 'dang' } : x));
+
+      try {
+        const cho = await xinChoLuuTep(groupId, ky, kind, h.file.name);
+
+        const { error } = await supabaseBrowser()
+          .storage.from('bang-ke')
+          .upload(cho.path, h.file, { contentType: h.file.type || undefined, upsert: false });
+        if (error) throw new Error(error.message);
+
+        const { ketQua } = await ghiNhanTep({
+          groupId, ky, kind,
+          version: cho.version,
+          storagePath: cho.path,
+          fileName: h.file.name,
+          mimeType: h.file.type || 'application/octet-stream',
+          sizeBytes: h.file.size,
+          guiNgay,
+          chapNhanGuiLai: hoiGuiLai ? { lyDo: lyDo.trim() } : undefined,
+        });
+
+        setHang((p) => p.map((x) => x.id === h.id
+          ? { ...x, trangThai: 'xong', ketQua } : x));
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Tải lên thất bại.';
+        setHang((p) => p.map((x) => x.id === h.id
+          ? { ...x, trangThai: 'loi', ketQua: msg } : x));
+      }
+    }
+
+    setDangChay(false);
+    setHoiGuiLai(null);
+    setChacChan(false);
+    setLyDo('');
+    if (inputRef.current) inputRef.current.value = '';
+    router.refresh();
+  }
+
+  const NHAN_KIND: Record<FileKind, string> = {
+    bang_ke: 'Bảng kê', hstt: 'Hồ sơ thanh toán',
+  };
+
+  const cuPhap = nhom
+    ? `${nhom.ma_he_thong}_${ky}${kind === 'hstt' ? '_HSTT' : ''}`
+    : 'MÃ_Kỳ';
+
+  const sanSang = groupId && hang.some((h) => h.trangThai !== 'xong') && !dangChay;
+  const soXong = hang.filter((h) => h.trangThai === 'xong').length;
 
   return (
     <div className="card overflow-hidden">
-      <div className="px-4 py-3 border-b border-[var(--line)]">
-        <h2 className="text-sm font-bold m-0">Tải tệp lên</h2>
-        <p className="text-xs text-[var(--ink-3)] mt-0.5 mb-0">
-          Chọn nhóm và kỳ, hệ thống tự đánh số phiên bản. Tên tệp đặt thế nào cũng được.
+      <div className="card-hd">
+        <p className="eyebrow">Tải lên</p>
+        <h2 className="card-title mt-0.5">{tieuDe ?? 'Tải tệp lên'}</h2>
+        <p className="card-note m-0 mt-1">
+          Chọn nhóm và kỳ, hệ thống tự đánh số bản. Kéo nhiều tệp cùng lúc cũng được.
         </p>
       </div>
 
-      <div className="p-4 space-y-4">
-        <div className="grid sm:grid-cols-3 gap-3">
+      <div className="card-pad flex flex-col gap-4">
+        <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))' }}>
           <div>
             <label className="label" htmlFor="up-nhom">Nhóm đối soát</label>
             <select id="up-nhom" className="field" value={groupId}
@@ -124,73 +174,155 @@ export function UploadPanel({ groups }: { groups: { id: string; ten_nhom: string
           </div>
         </div>
 
-        {/* --- Vùng kéo thả --- */}
+        {/* Nhắc cú pháp — hệ thống không bắt buộc, nhưng đặt tên thống nhất
+            giúp tra cứu về sau và khớp với hồ sơ lưu ngoài hệ thống */}
+        <div className="callout callout-accent">
+          <strong>Gợi ý đặt tên tệp: </strong>
+          <span className="mono">{cuPhap}.xlsx</span>
+          <span className="block mt-1 opacity-80">
+            Hệ thống không bắt buộc theo cú pháp này vì nhóm và kỳ bạn đã chọn ở trên.
+            Đặt đúng chỉ để tiện đối chiếu với hồ sơ lưu ngoài. Bản chỉnh sửa lần sau
+            hệ thống tự đánh số bản 2, bản 3.
+          </span>
+        </div>
+
+        {/* Vùng kéo thả */}
         <div
           onDragOver={(e) => { e.preventDefault(); setKeo(true); }}
           onDragLeave={() => setKeo(false)}
-          onDrop={(e) => { e.preventDefault(); setKeo(false); nhanTep(e.dataTransfer.files[0]); }}
+          onDrop={(e) => { e.preventDefault(); setKeo(false); themTep(e.dataTransfer.files); }}
           onClick={() => inputRef.current?.click()}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click(); }}
-          role="button"
-          tabIndex={0}
-          className="border-2 border-dashed rounded-lg px-4 py-8 text-center cursor-pointer transition-colors"
-          style={{
-            borderColor: keo ? 'var(--accent)' : 'var(--line)',
-            background: keo ? 'var(--accent-soft)' : 'transparent',
-          }}
+          role="button" tabIndex={0}
+          className="drop-zone" data-on={keo}
         >
-          {file ? (
-            <>
-              <p className="text-sm font-semibold m-0">{file.name}</p>
-              <p className="text-xs text-[var(--ink-3)] mt-1 mb-0 tnum">
-                {(file.size / 1048576).toFixed(2)} MB · bấm để chọn tệp khác
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="text-sm font-semibold m-0">Kéo tệp vào đây hoặc bấm để chọn</p>
-              <p className="text-xs text-[var(--ink-3)] mt-1 mb-0">
-                {DUOI_HOP_LE.join(' · ')} — tối đa 50 MB
-              </p>
-            </>
-          )}
-          <input ref={inputRef} type="file" className="hidden"
+          <p className="text-[13px] font-semibold m-0">Kéo tệp vào đây hoặc bấm để chọn</p>
+          <p className="text-[11.5px] text-[var(--ink-3)] mt-1 mb-0">
+            {DUOI_HOP_LE.join(' · ')} — tối đa 50 MB mỗi tệp, chọn được nhiều tệp
+          </p>
+          <input ref={inputRef} type="file" className="hidden" multiple
                  accept={DUOI_HOP_LE.join(',')}
-                 onChange={(e) => nhanTep(e.target.files?.[0])} />
+                 onChange={(e) => themTep(e.target.files)} />
         </div>
 
-        <label className="flex items-start gap-2 text-sm">
+        {/* Hàng đợi */}
+        {hang.length > 0 && (
+          <div className="card overflow-hidden">
+            <table className="tbl">
+              <thead>
+                <tr><th>Tệp</th><th className="text-right">Dung lượng</th><th>Trạng thái</th><th></th></tr>
+              </thead>
+              <tbody>
+                {hang.map((h) => (
+                  <tr key={h.id}>
+                    <td className="text-[12.5px] max-w-[280px] truncate" title={h.file.name}>
+                      {h.file.name}
+                    </td>
+                    <td className="text-right mono text-[12px] text-[var(--ink-3)]">
+                      {(h.file.size / 1048576).toFixed(2)} MB
+                    </td>
+                    <td>
+                      <span className={`pill ${
+                        h.trangThai === 'xong' ? 'pill-stable'
+                          : h.trangThai === 'loi' ? 'pill-critical'
+                          : h.trangThai === 'dang' ? 'pill-watch' : 'pill-neutral'}`}>
+                        {h.trangThai === 'xong' ? 'Xong'
+                          : h.trangThai === 'loi' ? 'Lỗi'
+                          : h.trangThai === 'dang' ? 'Đang chạy' : 'Chờ'}
+                      </span>
+                      {h.ketQua && (
+                        <span className="sub" style={h.trangThai === 'loi'
+                          ? { color: 'var(--critical)' } : undefined}>{h.ketQua}</span>
+                      )}
+                    </td>
+                    <td className="text-right">
+                      {!dangChay && h.trangThai !== 'xong' && (
+                        <button className="btn btn-sm"
+                                onClick={() => setHang((p) => p.filter((x) => x.id !== h.id))}>
+                          Bỏ
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <label className="flex items-start gap-2 text-[13px] cursor-pointer">
           <input type="checkbox" checked={guiNgay} className="mt-0.5"
                  onChange={(e) => setGuiNgay(e.target.checked)} />
           <span>
             Gửi cho khách ngay sau khi tải lên
-            <span className="block text-xs text-[var(--ink-3)]">
-              Bỏ chọn nếu muốn kiểm tra lại trước. Tệp sẽ nằm ở mục chờ gửi.
+            <span className="block text-[11.5px] text-[var(--ink-3)]">
+              Bỏ chọn nếu muốn kiểm tra lại trước. Tệp sẽ nằm ở mục chờ gửi và
+              bạn bấm Gửi trên từng dòng.
             </span>
           </span>
         </label>
 
-        {nhom && (
-          <p className="text-xs text-[var(--ink-3)] m-0">
-            Sẽ lưu vào <span className="mono">{nhom.ma_he_thong}/{ky}/</span>
-          </p>
-        )}
+        {loi && <p role="alert" className="callout callout-critical m-0">{loi}</p>}
 
-        {loi && (
-          <p role="alert" className="text-sm text-[var(--critical)] bg-[var(--critical-soft)] px-3 py-2 rounded-[var(--r-sm)] m-0">
-            {loi}
-          </p>
-        )}
-        {ketQua && (
-          <p className="text-sm text-[var(--accent-deep)] bg-[var(--accent-soft)] px-3 py-2 rounded-[var(--r-sm)] m-0">
-            {ketQua}
-          </p>
-        )}
-
-        <button className="btn btn-primary" onClick={taiLen} disabled={!sanSang}>
-          {tienDo ?? (guiNgay ? 'Tải lên và gửi cho khách' : 'Tải lên')}
-        </button>
+        <div className="flex items-center gap-3">
+          <button className="btn btn-primary" onClick={batDau} disabled={!sanSang}>
+            {dangChay ? 'Đang xử lý…'
+              : guiNgay
+                ? `Tải lên và gửi ${hang.length > 1 ? `${hang.length} tệp` : ''}`
+                : `Tải lên ${hang.length > 1 ? `${hang.length} tệp` : ''}`}
+          </button>
+          {soXong > 0 && !dangChay && (
+            <button className="btn" onClick={() => setHang([])}>Xoá danh sách</button>
+          )}
+        </div>
       </div>
+
+      {/* Hỏi lại khi đã gửi loại tệp này rồi */}
+      {hoiGuiLai && (
+        <div className="modal-scrim" onClick={(e) => {
+          if (e.target === e.currentTarget) { setHoiGuiLai(null); setChacChan(false); setLyDo(''); }
+        }}>
+          <div className="modal-box" style={{ maxWidth: 520 }} role="dialog" aria-modal="true">
+            <header className="modal-hd">
+              <p className="eyebrow" style={{ color: 'var(--high)' }}>Xác nhận gửi lại</p>
+              <h2 className="card-title mt-0.5">Khách này đã nhận rồi</h2>
+            </header>
+            <div className="modal-bd">
+              <p className="callout callout-high m-0 mb-3">
+                Bạn đã gửi {NHAN_KIND[kind]} cho <strong>{nhom?.ten_nhom}</strong> kỳ{' '}
+                <strong>{ky}</strong> vào ngày{' '}
+                <strong>{new Date(hoiGuiLai.ngay).toLocaleDateString('vi-VN')}</strong>
+                {' '}(tệp {hoiGuiLai.tenTep}, bản {hoiGuiLai.ban}).
+                Bạn có chắc chắn muốn gửi lại?
+              </p>
+
+              <label className="label" htmlFor="ly-do-gui-lai">Lý do gửi lại — bắt buộc</label>
+              <textarea id="ly-do-gui-lai" className="field" rows={2} value={lyDo}
+                        onChange={(e) => setLyDo(e.target.value)}
+                        placeholder="Ví dụ: khách báo không nhận được, hoặc số liệu bản trước sai" />
+
+              <label className="flex items-start gap-2 text-[13px] mt-3 cursor-pointer">
+                <input type="checkbox" checked={chacChan} className="mt-0.5"
+                       onChange={(e) => setChacChan(e.target.checked)} />
+                <span>Tôi chắc chắn muốn gửi lại cho khách hàng này.</span>
+              </label>
+
+              <p className="text-[11.5px] text-[var(--ink-3)] mt-3 mb-0 leading-relaxed">
+                Thao tác này được ghi vào Nhật ký và mục Theo dõi kỳ, kèm tên bạn và lý do.
+              </p>
+            </div>
+            <footer className="modal-ft">
+              <button className="btn" onClick={() => {
+                setHoiGuiLai(null); setChacChan(false); setLyDo('');
+              }}>Bỏ qua</button>
+              <button className="btn btn-primary" disabled={!chacChan || !lyDo.trim()}
+                      onClick={chay}>
+                Xác nhận gửi lại
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

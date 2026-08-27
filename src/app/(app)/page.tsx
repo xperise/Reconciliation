@@ -3,7 +3,9 @@ import { loadDashboard, execSummary, Metric } from '@/lib/metrics';
 import { currentPeriod, nowInVN, daysBetween } from '@/lib/period';
 import { StatusBadge } from '@/components/StatusBadge';
 import { SlaRail } from '@/components/SlaRail';
-import { TrackingStatus } from '@/lib/types';
+import { STATUS_LABEL, TrackingStatus } from '@/lib/types';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { DashFilters } from './dash-filters';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,14 +57,32 @@ function Tier({ eyebrow, title, note, metrics }: {
   );
 }
 
-export default async function Dashboard() {
-  const ky = currentPeriod();
-  const d = await loadDashboard(ky);
+export default async function Dashboard({ searchParams }: {
+  searchParams: { ky?: string; nhom?: string; status?: string };
+}) {
+  const sb = supabaseAdmin();
+  const ky = searchParams.ky || currentPeriod();
+
+  const [{ data: kyList }, { data: nhomList }] = await Promise.all([
+    sb.from('tracking').select('ky_doi_soat').order('ky_doi_soat', { ascending: false }),
+    sb.from('billing_groups').select('id, ten_nhom, ma_he_thong').order('ten_nhom'),
+  ]);
+  const kyOptions = Array.from(new Set((kyList ?? []).map((r) => r.ky_doi_soat)));
+
+  const d = await loadDashboard({
+    ky, nhom: searchParams.nhom, status: searchParams.status,
+  });
   const today = nowInVN().isoDate;
   const gioMax = d.bottleneck[0]?.gio || 1;
 
   return (
     <>
+      <DashFilters
+        kyOptions={kyOptions.length ? kyOptions : [ky]}
+        nhomOptions={(nhomList ?? []).map((g: any) => ({ id: g.id, ten: `${g.ten_nhom} (${g.ma_he_thong})` }))}
+        statusOptions={Object.entries(STATUS_LABEL)}
+      />
+
       {/* ---- Tóm tắt điều hành ---- */}
       <section className="exec mb-4">
         <p className="eyebrow mb-1.5">Tóm tắt kỳ {ky}</p>

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Be_Vietnam_Pro, JetBrains_Mono, Fraunces } from 'next/font/google';
+import { Be_Vietnam_Pro, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 
 // Be Vietnam Pro dựng riêng cho dấu tiếng Việt — dấu ngã và dấu hỏi không
@@ -19,14 +19,9 @@ const mono = JetBrains_Mono({
   display: 'swap',
 });
 
-// Chỉ dùng cho đúng một chỗ: câu tóm tắt điều hành trên Dashboard. Dùng thêm
-// chỗ khác là mất tín hiệu "đây là diễn giải, không phải số liệu thô".
-const display = Fraunces({
-  subsets: ['vietnamese', 'latin'],
-  weight: ['500'],
-  variable: '--font-display',
-  display: 'swap',
-});
+// Không dùng font serif cho câu tóm tắt nữa. Fraunces dựng dấu tiếng Việt sai
+// — "chốt" hiện thành "chô't" vì dấu sắc không chồng lên dấu mũ. Câu tóm tắt
+// chuyển sang dùng chính Be Vietnam Pro, phân biệt bằng cỡ chữ và màu nền.
 
 export const metadata: Metadata = {
   title: 'Đối soát bảng kê — xperise',
@@ -35,7 +30,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="vi" className={`${ui.variable} ${mono.variable} ${display.variable}`}>
+    <html lang="vi" className={`${ui.variable} ${mono.variable}`}>
       <body>{children}</body>
     </html>
   );

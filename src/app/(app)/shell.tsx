@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabaseBrowser } from '@/lib/supabase/client';
+import { Bell } from './bell';
 
 const LOGO = 'https://files.uts.network/email_assets/xperise_alt_fulllogo%402x.png';
 
@@ -16,6 +17,7 @@ const NHOM: Nhom[] = [
     muc: [
       { href: '/files', label: 'Tệp bảng kê' },
       { href: '/approvals', label: 'Chờ duyệt', badge: true },
+      { href: '/hstt', label: 'Chờ hồ sơ thanh toán' },
       { href: '/tracking', label: 'Theo dõi kỳ' },
       { href: '/audit', label: 'Nhật ký' },
     ],
@@ -36,8 +38,9 @@ const VAI_TRO: Record<string, string> = {
   admin: 'Quản trị', ke_toan: 'Kế toán', pm: 'PM', high_level: 'Cấp quản lý',
 };
 
-export function Shell({ role, email, soChoDuyet, children }: {
-  role: string; email: string; soChoDuyet: number; children: React.ReactNode;
+export function Shell({ role, email, userId, soChoDuyet, thongBao, children }: {
+  role: string; email: string; userId: string; soChoDuyet: number;
+  thongBao: any[]; children: React.ReactNode;
 }) {
   const path = usePathname();
   const router = useRouter();
@@ -61,12 +64,13 @@ export function Shell({ role, email, soChoDuyet, children }: {
         <span className="topbar-div" />
         <span className="topbar-name">Đối soát bảng kê</span>
 
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-3 no-print">
+          <Bell items={thongBao} userId={userId} />
           <div className="text-right leading-tight hidden sm:block">
             <div className="text-[11.5px] text-[var(--ink-2)] font-semibold">{email}</div>
             <div className="text-[10.5px] text-[var(--ink-3)]">{VAI_TRO[role] ?? role}</div>
           </div>
-          <button onClick={dangXuat} className="btn btn-sm no-print">Đăng xuất</button>
+          <button onClick={dangXuat} className="btn btn-sm">Đăng xuất</button>
         </div>
       </header>
 

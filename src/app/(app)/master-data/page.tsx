@@ -1,14 +1,17 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { currentUser } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/PageHeader';
-import { MasterTable } from './table';
+import { MasterGrid } from './grid';
 
 export const dynamic = 'force-dynamic';
 
 export default async function MasterDataPage() {
-  const { data } = await supabaseAdmin()
-    .from('billing_groups')
-    .select('*, customers(count)')
-    .order('ten_nhom');
+  const [user, { data }] = await Promise.all([
+    currentUser(),
+    supabaseAdmin().from('billing_groups').select('*').order('ten_nhom'),
+  ]);
+
+  const laKeToan = user?.role === 'admin' || user?.role === 'ke_toan';
 
   return (
     <>
@@ -17,7 +20,7 @@ export default async function MasterDataPage() {
         title="Master Data"
         description="Nguồn thông tin cho toàn bộ hệ thống: gửi cho ai, ngày nào, SLA bao nhiêu, escalate tới cấp mấy."
       />
-      <MasterTable groups={data ?? []} />
+      <MasterGrid rows={data ?? []} laKeToan={laKeToan} />
     </>
   );
 }

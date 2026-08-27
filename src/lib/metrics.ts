@@ -68,7 +68,10 @@ function fmtDays(v: number | null): string {
   return v === null ? '—' : `${v.toFixed(1)}`;
 }
 
-export async function loadDashboard(ky: string): Promise<DashboardData> {
+export type BoLoc = { ky: string; nhom?: string; status?: string };
+
+export async function loadDashboard(loc: BoLoc): Promise<DashboardData> {
+  const ky = loc.ky;
   const sb = supabaseAdmin();
   const today = nowInVN().isoDate;
 
@@ -83,7 +86,9 @@ export async function loadDashboard(ky: string): Promise<DashboardData> {
   const groups = (groupRes.data ?? []) as any[];
   const groupById = new Map(groups.map((g) => [g.id, g]));
 
-  const kyRows = all.filter((r) => r.ky_doi_soat === ky);
+  let kyRows = all.filter((r) => r.ky_doi_soat === ky);
+  if (loc.nhom) kyRows = kyRows.filter((r) => r.group_id === loc.nhom);
+  if (loc.status) kyRows = kyRows.filter((r) => r.status === loc.status);
   const daChot = kyRows.filter((r) => DONE.includes(r.status));
   const active = kyRows.filter((r) => !DONE.includes(r.status) && r.status !== 'can_xu_ly_tay');
 
@@ -162,7 +167,15 @@ export async function loadDashboard(ky: string): Promise<DashboardData> {
   // =====================================================================
 
   const kyTrackingIds = new Set(kyRows.map((r) => r.id));
-  const kyLogs = logs.filter((l) => kyTrackingIds.has(l.tracking_id) && l.gio_o_status_cu != null);
+
+  // Chỉ lấy log trong 45 ngày gần nhất. Một dòng tracking bị bỏ quên từ đợt
+  // thử nghiệm trước sẽ sinh ra con số hàng trăm giờ và bóp méo toàn bộ phần
+  // phân tích, dù thực tế kỳ hiện tại mới chạy được vài tiếng.
+  const gioiHan = new Date(Date.now() - 45 * 86_400_000).toISOString();
+  const kyLogs = logs.filter((l) =>
+    kyTrackingIds.has(l.tracking_id)
+    && l.gio_o_status_cu != null
+    && l.created_at >= gioiHan);
 
   // 4. Rò rỉ thời gian nội bộ
   const gioNoiBo = kyLogs

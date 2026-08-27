@@ -40,7 +40,7 @@ function shell(title: string, bodyHtml: string, ctaUrl?: string, ctaLabel?: stri
 
 export function tplBangKe(nhomKh: string, ky: string, fileLink: string): string {
   return shell(
-    `Bảng kê dịch vụ kỳ ${ky}, ${periodInWords(ky)}`,
+    `Bảng kê dịch vụ ${periodInWords(ky)}`,
     `<p style="margin:0 0 16px;">Thân gửi <strong>${nhomKh}</strong>,</p>
      <p style="margin:0 0 16px;">xperise xin gửi lời cảm ơn chân thành đến Quý doanh nghiệp đã lựa chọn
      sử dụng dịch vụ của chúng tôi. Dưới đây là bảng kê dịch vụ mà Quý doanh nghiệp đã sử dụng trong kỳ
@@ -58,7 +58,7 @@ export function tplBangKe(nhomKh: string, ky: string, fileLink: string): string 
 
 export function tplBangKeSuaDoi(nhomKh: string, ky: string, version: number, fileLink: string): string {
   return shell(
-    `Bảng kê kỳ ${ky} — bản cập nhật ${version}`,
+    `Bảng kê ${periodInWords(ky)} — bản cập nhật ${version}`,
     `<p style="margin:0 0 16px;">Kính gửi <strong>${nhomKh}</strong>,</p>
      <p style="margin:0 0 16px;">xperise kính gửi bảng kê kỳ <strong>${ky}</strong> đã được cập nhật
      theo trao đổi và yêu cầu điều chỉnh của Quý khách.</p>
@@ -71,7 +71,7 @@ export function tplBangKeSuaDoi(nhomKh: string, ky: string, version: number, fil
 
 export function tplHoSoThanhToan(nhomKh: string, ky: string, fileLink: string): string {
   return shell(
-    `Hồ sơ thanh toán kỳ ${ky}`,
+    `Hồ sơ thanh toán ${periodInWords(ky)}`,
     `<p style="margin:0 0 16px;">Kính gửi <strong>${nhomKh}</strong>,</p>
      <p style="margin:0 0 16px;">xperise kính gửi Quý khách hàng hồ sơ thanh toán kỳ <strong>${ky}</strong>.</p>
      <p style="margin:0;">Kính đề nghị Quý khách hàng thực hiện thanh toán theo thời gian đã thỏa thuận
@@ -217,5 +217,28 @@ export function tplThreadMat(nhomKh: string, ky: string, threadId: string, appUr
         'Hệ thống đã chuyển dòng này sang "Cần xử lý tay". Vui lòng tìm lại thread trên Gmail và cập nhật lại Thread_ID, hoặc xử lý ngoài hệ thống.',
       ],
       `${appUrl}/tracking`),
+  };
+}
+
+export function tplNhacChuanBiHstt(
+  nhomKh: string, ky: string, hoSo: string, slaNgay: number | null, appUrl: string,
+) {
+  const muc = hoSo.split(/[,;]/).map((x) => x.trim()).filter(Boolean);
+  return {
+    subject: `[CHUẨN BỊ HSTT] ${nhomKh} ${ky} — đã chốt bảng kê`,
+    html: internalShell('CHUẨN BỊ HỒ SƠ', TEAL,
+      `${nhomKh} đã chốt bảng kê ${ky}, cần chuẩn bị hồ sơ thanh toán`,
+      [
+        'Theo Master Data, khách này yêu cầu các giấy tờ sau:',
+        `<ul style="margin:0 0 6px;padding-left:20px;">${
+          muc.map((m) => `<li style="margin-bottom:4px;"><strong>${m}</strong></li>`).join('')
+        }</ul>`,
+        slaNgay
+          ? `Thời hạn theo thỏa thuận là <strong>${slaNgay} ngày</strong> kể từ hôm nay.`
+          : 'Vui lòng chuẩn bị và tải lên sớm nhất có thể.',
+        'Mở mục <strong>Chờ hồ sơ thanh toán</strong> trên hệ thống, chọn đúng nhóm và kỳ, '
+          + 'chọn loại tệp <strong>Hồ sơ thanh toán</strong> rồi tải lên. Hệ thống gửi cho khách ngay sau đó.',
+      ],
+      `${appUrl}/hstt`),
   };
 }

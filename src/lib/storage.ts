@@ -50,9 +50,16 @@ export async function downloadFile(storagePath: string): Promise<Buffer> {
 }
 
 /** Liên kết có chữ ký để chèn vào nút "Xem bảng kê" trong email khách. */
-export async function signedUrl(storagePath: string): Promise<string> {
+/**
+ * Liên kết ký cho khách. Truyền tên tệp gốc vào tham số download để trình
+ * duyệt lưu đúng tên kế toán đã đặt — nếu không, tệp bị lưu theo đường dẫn
+ * trong kho và biến thành "v1_mtb1x2_TEST_GROUP".
+ */
+export async function signedUrl(storagePath: string, fileName?: string): Promise<string> {
   const { data, error } = await supabaseAdmin()
-    .storage.from(BUCKET).createSignedUrl(storagePath, SIGNED_URL_TTL);
+    .storage.from(BUCKET)
+    .createSignedUrl(storagePath, SIGNED_URL_TTL,
+      fileName ? { download: fileName } : undefined);
   if (error || !data) {
     throw new Error(`Không tạo được liên kết cho ${storagePath}: ${error?.message ?? ''}`);
   }
@@ -60,9 +67,12 @@ export async function signedUrl(storagePath: string): Promise<string> {
 }
 
 /** Liên kết ngắn hạn cho người dùng nội bộ bấm xem trên website. */
-export async function previewUrl(storagePath: string, seconds = 300): Promise<string | null> {
+export async function previewUrl(
+  storagePath: string, seconds = 300, fileName?: string,
+): Promise<string | null> {
   const { data } = await supabaseAdmin()
-    .storage.from(BUCKET).createSignedUrl(storagePath, seconds);
+    .storage.from(BUCKET)
+    .createSignedUrl(storagePath, seconds, fileName ? { download: fileName } : undefined);
   return data?.signedUrl ?? null;
 }
 

@@ -105,7 +105,7 @@ export async function guiTepChoKhach(
   }
 
   const buffer = await downloadFile(file.storage_path);
-  const link = await signedUrl(file.storage_path);
+  const link = await signedUrl(file.storage_path, file.file_name);
   const cc = [group.email_ke_toan, group.email_cc].filter(Boolean).join(',') || undefined;
 
   const laHstt = file.kind === 'hstt';
