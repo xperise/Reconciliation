@@ -3,6 +3,7 @@ import { readThread, ourAddress, threadExists, sendMail } from '@/lib/google/gma
 import { classifyReply } from '@/lib/ai';
 import { tplKhachYeuCauSua, tplThreadMat } from '@/lib/email-templates';
 import { RunResult, TrackingStatus } from '@/lib/types';
+import { MailLog } from '@/lib/mail-log';
 
 /** Trạng thái mà khách còn có thể phản hồi thêm. */
 const DANG_CHO_KHACH: TrackingStatus[] = [
@@ -30,6 +31,7 @@ export async function runWf2(): Promise<RunResult> {
   const sb = supabaseAdmin();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
   const detail: unknown[] = [];
+  const mails = new MailLog();
   let ok = 0;
   let failed = 0;
 
@@ -56,6 +58,8 @@ export async function runWf2(): Promise<RunResult> {
         const mail = tplThreadMat(row.ten_nhom, row.ky_doi_soat, row.thread_id, appUrl);
         if (g.email_ke_toan) {
           await sendMail({ to: g.email_ke_toan, cc: g.email_pm ?? undefined, ...mail });
+          mails.ghi({ nhom: row.ten_nhom, ky: row.ky_doi_soat, loai: 'Cảnh báo mất thread',
+            den: g.email_ke_toan, cc: g.email_pm ?? undefined, tieu_de: mail.subject });
         }
         await sb.from('tracking').update({
           status: 'can_xu_ly_tay',
@@ -105,6 +109,8 @@ export async function runWf2(): Promise<RunResult> {
         if (!row.internal_thread_id) {
           await sb.from('tracking').update({ internal_thread_id: sent.threadId }).eq('id', row.id);
         }
+        mails.ghi({ nhom: row.ten_nhom, ky: row.ky_doi_soat, loai: 'Báo kế toán duyệt',
+          den: g.email_ke_toan, cc: g.email_pm ?? undefined, tieu_de: mail.subject });
       }
 
       ok += 1;
@@ -121,8 +127,9 @@ export async function runWf2(): Promise<RunResult> {
     ok,
     failed,
     summary: ok
-      ? `Nhận ${ok} phản hồi mới của khách.`
+      ? `Nhận ${ok} phản hồi mới của khách. ${mails.tomTat()}`
       : 'Không có phản hồi mới.',
     detail,
+    mails: mails.all,
   };
 }

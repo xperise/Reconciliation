@@ -3,6 +3,7 @@ import { currentPeriod, isDueToday, nowInVN, addDays } from '@/lib/period';
 import { latestUnsent, downloadFile, signedUrl, mimeFor } from '@/lib/storage';
 import { sendMail } from '@/lib/google/gmail';
 import { refSubject, tplBangKe, tplThieuEmailL1, tplThieuFile } from '@/lib/email-templates';
+import { MailLog } from '@/lib/mail-log';
 import {
   BillingGroup, RunResult, STATUS_WF1_SKIP, TrackingStatus,
   effectiveDueDay, effectiveSlaChapNhan,
@@ -27,6 +28,7 @@ export async function runWf1(): Promise<RunResult> {
   const today = nowInVN().isoDate;
 
   const detail: unknown[] = [];
+  const mails = new MailLog();
   let ok = 0;
   let failed = 0;
 
@@ -70,6 +72,8 @@ export async function runWf1(): Promise<RunResult> {
         const mail = tplThieuEmailL1(g.ten_nhom, ky, appUrl);
         if (g.email_ke_toan) {
           await sendMail({ to: g.email_ke_toan, cc: g.email_pm ?? undefined, ...mail });
+          mails.ghi({ nhom: g.ten_nhom, ky, loai: 'Cảnh báo thiếu email',
+            den: g.email_ke_toan, cc: g.email_pm ?? undefined, tieu_de: mail.subject });
         }
         await sb.from('tracking').upsert(
           { ...baseRow, status: 'can_xu_ly_tay' as TrackingStatus,
@@ -89,6 +93,8 @@ export async function runWf1(): Promise<RunResult> {
         const mail = tplThieuFile(g.ten_nhom, ky, appUrl);
         if (g.email_ke_toan) {
           await sendMail({ to: g.email_ke_toan, cc: g.email_pm ?? undefined, ...mail });
+          mails.ghi({ nhom: g.ten_nhom, ky, loai: 'Nhắc nội bộ thiếu tệp',
+            den: g.email_ke_toan, cc: g.email_pm ?? undefined, tieu_de: mail.subject });
         }
         await sb.from('tracking').upsert(
           { ...baseRow,
@@ -106,10 +112,12 @@ export async function runWf1(): Promise<RunResult> {
       const buffer = await downloadFile(file.storage_path);
       const link = await signedUrl(file.storage_path);
 
+      const ccList = [g.email_ke_toan, g.email_cc].filter(Boolean).join(',') || undefined;
+      const subject = refSubject(g.ten_nhom, ky);
       const sent = await sendMail({
         to: g.email_l1,
-        cc: [g.email_ke_toan, g.email_cc].filter(Boolean).join(',') || undefined,
-        subject: refSubject(g.ten_nhom, ky),
+        cc: ccList,
+        subject,
         html: tplBangKe(g.ten_nhom, ky, link),
         attachments: [{
           filename: file.file_name,
@@ -138,6 +146,9 @@ export async function runWf1(): Promise<RunResult> {
         { onConflict: 'group_id,ky_doi_soat' },
       );
 
+      mails.ghi({ nhom: g.ten_nhom, ky, loai: 'Bảng kê',
+        den: g.email_l1, cc: ccList, tieu_de: subject });
+
       ok += 1;
       note('Đã gửi bảng kê.', { file: file.file_name, threadId: sent.threadId });
     } catch (err) {
@@ -150,7 +161,9 @@ export async function runWf1(): Promise<RunResult> {
     ok,
     failed,
     summary: `Kỳ ${ky}: gửi thành công ${ok}/${dueToday.length} nhóm`
-      + (failed ? `, ${failed} nhóm cần xử lý.` : '.'),
+      + (failed ? `, ${failed} nhóm cần xử lý` : '')
+      + (mails.count ? `. Thư đã gửi: ${mails.tomTat()}` : '.'),
     detail,
+    mails: mails.all,
   };
 }

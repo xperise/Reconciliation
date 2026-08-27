@@ -1,224 +1,312 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* ==========================================================================
+   DENSE DASHBOARD — DESIGN TOKENS
+   Copy whole. Change ONLY the "BRAND ACCENT" block per project.
+   ========================================================================== */
 
-/* =====================================================================
-   Workstream palette — ink rêu đậm #12281A + violet gradient accent
-   Giống hệt dashboard Workstream: canvas xám-xanh, card trắng với shadow
-   tinh tế, focus ring violet, hover row violet-soft.
-   ===================================================================== */
 :root {
-  --canvas:        #F4F6F8;
-  --surface:       #FFFFFF;
-  --surface-2:     #F8FAFB;
-  --line:          #E3E8EC;
-  --line-soft:     #EDF1F4;
+  /* --- Neutral scale: keep as-is across projects ------------------------ */
+  --canvas:      #F4F6F8;   /* page background — never pure white */
+  --surface:     #FFFFFF;   /* cards, modals, table body */
+  --surface-2:   #F8FAFB;   /* table headers, inset panels, hover rows */
+  --line:        #E3E8EC;   /* real borders */
+  --line-soft:   #EDF1F4;   /* row separators, internal dividers */
 
-  --ink:           #12281A;
-  --ink-2:         #46564C;
-  --ink-3:         #8A968F;
+  /* --- Ink: three levels is enough. A fourth invites mush -------------- */
+  --ink:         #12281A;   /* headings, key figures. TINT WITH THE BRAND HUE */
+  --ink-2:       #46564C;   /* body text */
+  --ink-3:       #8A968F;   /* labels, captions, axes, placeholders */
 
-  --violet:        #A855F7;
-  --violet-deep:   #7E22CE;
-  --violet-soft:   #F3E8FF;
-  --violet-mid:    #E4CDFB;
+  /* --- BRAND ACCENT: the only block to change --------------------------
+     Requirements:
+       - `accent` must be bright enough to read as clickable on white
+       - `accent-deep` ~20% darker, for hover and gradient ends
+       - `accent-soft` a pale tint for chip backgrounds and hover fills
+     Derive from the client logo. If the brand colour is very dark, use it
+     for --ink above and pick a brighter sibling here. Buttons in near-black
+     read as disabled.                                                      */
+  --accent:      #A855F7;
+  --accent-deep: #7E22CE;
+  --accent-soft: #F3E8FF;
 
-  --teal:          #0D9488;
-  --teal-soft:     #D6F1EC;
+  /* --- Status: exactly four. Each has a solid and a soft tint ----------
+     Solid = text/icon/marker colour. Soft = chip or zone background.
+     Resist adding a fifth; ambiguity is what a fifth level really means.   */
+  --critical:      #E11D48;  --critical-soft: #FDE7EC;
+  --high:          #EA8C0B;  --high-soft:     #FDF0DC;
+  --watch:         #A855F7;  --watch-soft:    #F3E8FF;
+  --stable:        #0D9488;  --stable-soft:   #D6F1EC;
 
-  --amber:         #EA8C0B;
-  --amber-soft:    #FDF0DC;
-
-  --red:           #E11D48;
-  --red-soft:      #FDE7EC;
-
+  /* --- Shape ------------------------------------------------------------
+     Two radii only. Cards use --r, everything inside uses --r-sm.
+     Pills and avatars use 999px.                                           */
   --r:    14px;
   --r-sm: 9px;
-  --shadow: 0 1px 2px rgba(18,40,26,.04), 0 10px 26px -18px rgba(18,40,26,.22);
+
+  /* --- Elevation --------------------------------------------------------
+     Two layers: a 1px contact shadow plus a wide, very soft lift.
+     Tint the shadow with the ink hue, never pure black — black shadows on a
+     tinted canvas look dirty.                                              */
+  --shadow:    0 1px 2px rgba(18,40,26,.04), 0 10px 26px -18px rgba(18,40,26,.24);
+  --shadow-lg: 0 24px 60px -28px rgba(18,40,26,.38);
+
+  /* --- Type -------------------------------------------------------------
+     UI face: a humanist sans with good small-size legibility and full
+       diacritic coverage (Be Vietnam Pro, Inter, Source Sans 3).
+     Mono face: for every digit on the page.
+     Display face (optional): a serif for ONE editorial element only —
+       the executive summary. Using it anywhere else breaks the effect.     */
+  --font-ui:      "Be Vietnam Pro", system-ui, -apple-system, sans-serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-display: "Fraunces", Georgia, serif;
 }
 
+/* Global baseline */
 * { box-sizing: border-box; }
 
-html, body {
-  margin: 0; padding: 0;
+body {
+  margin: 0;
   background: var(--canvas);
   color: var(--ink);
-  font-family: var(--font-body), "Be Vietnam Pro", system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
 }
 
-/* --- Focus violet (Workstream style) -------------------------------- */
-:focus-visible {
-  outline: 3px solid rgba(168,85,247,.32);
-  outline-offset: 2px;
+/* Every number on the page goes through this. */
+.mono, .num, .kpi-num, td .num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
-/* --- Typography helpers --------------------------------------------- */
-.tnum { font-variant-numeric: tabular-nums; }
-.mono {
-  font-family: var(--font-mono), "JetBrains Mono", ui-monospace, monospace;
-  font-size: 0.8125rem;
-  letter-spacing: -0.01em;
+/* Respect the OS reduced-motion setting. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: .001ms !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================================================
+   XPERISE — lớp thành phần dựng trên bộ token ở trên
+   ========================================================================== */
+
+/* --- Type scale: chín cỡ, không thêm cỡ thứ mười --------------------- */
 .eyebrow {
   display: block;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--ink-3);
+  font-size: 10px; font-weight: 700; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--ink-3);
 }
-
-/* --- Card ----------------------------------------------------------- */
-.card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  box-shadow: var(--shadow);
-}
-
-/* --- Buttons -------------------------------------------------------- */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: .45rem;
-  padding: .45rem .9rem;
-  border-radius: var(--r-sm);
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--ink-2);
-  font-family: inherit;
-  font-size: .8125rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background .12s, border-color .12s, filter .12s, color .12s;
-  white-space: nowrap;
-}
-.btn:hover:not(:disabled) {
-  background: var(--surface-2);
-  color: var(--ink);
-  border-color: #CBD5D0;
-}
-.btn:disabled { opacity: .42; cursor: not-allowed; }
-
-/* Violet gradient — nút hành động chính */
-.btn-primary {
-  background: linear-gradient(135deg, var(--violet) 0%, var(--violet-deep) 100%);
-  border: 0;
-  color: #fff;
-  box-shadow: 0 6px 16px -8px rgba(126,34,206,.6);
-}
-.btn-primary:hover:not(:disabled) { filter: brightness(1.07); color: #fff; }
-
-.btn-danger  { border-color: var(--red);  color: var(--red); }
-.btn-danger:hover:not(:disabled)  { background: var(--red-soft);   border-color: #F6C7D1; }
-
-.btn-sm { padding: .3rem .65rem; font-size: .75rem; }
-
-/* --- Form fields ---------------------------------------------------- */
-.field {
-  width: 100%;
-  padding: .48rem .7rem;
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--surface);
-  color: var(--ink);
-  font-family: inherit;
-  font-size: .875rem;
-}
-.field:focus {
-  outline: none;
-  border-color: var(--violet);
-  box-shadow: 0 0 0 3px rgba(168,85,247,.15);
-}
-
+.card-title { font-size: 16px; font-weight: 700; letter-spacing: -.01em; margin: 0; }
+.card-note  { font-size: 12px; color: var(--ink-3); }
 .label {
   display: block;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-  margin-bottom: 6px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-3); margin-bottom: 5px;
 }
 
-/* --- Table ---------------------------------------------------------- */
-.tbl { width: 100%; border-collapse: collapse; font-size: .875rem; }
+/* --- Topbar & tabs ---------------------------------------------------- */
+.topbar {
+  position: sticky; top: 0; z-index: 40;
+  background: var(--surface); border-bottom: 1px solid var(--line);
+  padding: 11px 24px; display: flex; align-items: center; gap: 14px;
+}
+.topbar-logo { height: 21px; width: auto; display: block; }
+.topbar-div  { width: 1px; height: 20px; background: var(--line); }
+.topbar-name { font-size: 13px; font-weight: 700; letter-spacing: -.01em; }
+
+.tabs {
+  position: sticky; top: 44px; z-index: 39;
+  background: var(--surface); border-bottom: 1px solid var(--line);
+  padding: 0 24px; display: flex; gap: 2px; overflow-x: auto;
+}
+.tab {
+  appearance: none; background: none; border: 0; cursor: pointer;
+  font-family: inherit; font-size: 13px; font-weight: 600; color: var(--ink-3);
+  padding: 10px 14px; border-bottom: 2px solid transparent;
+  white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; gap: 7px;
+}
+.tab:hover { color: var(--ink-2); }
+.tab[data-active='true'] { color: var(--accent-deep); border-bottom-color: var(--accent); }
+
+.page { max-width: 1460px; margin: 0 auto; padding: 20px 24px 48px; }
+
+/* --- Card ------------------------------------------------------------- */
+.card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r); box-shadow: var(--shadow);
+}
+.card-pad { padding: 18px 20px 20px; }
+.card-hd  { padding: 14px 20px; border-bottom: 1px solid var(--line); }
+.card[data-status='critical'] { border-left: 4px solid var(--critical); }
+.card[data-status='high']     { border-left: 4px solid var(--high); }
+.card[data-status='watch']    { border-left: 4px solid var(--watch); }
+.card[data-status='stable']   { border-left: 4px solid var(--stable); }
+
+/* --- KPI strip -------------------------------------------------------- */
+.kpi {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r); padding: 13px 15px 15px;
+  display: flex; flex-direction: column; gap: 4px;
+  text-align: left; font-family: inherit; width: 100%;
+}
+button.kpi { cursor: pointer; transition: transform .12s, box-shadow .12s; }
+button.kpi:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+.kpi-label { font-size: 9.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.kpi-num   { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 26px; font-weight: 600; line-height: 1.05; }
+.kpi-sub   { font-size: 11px; color: var(--ink-3); line-height: 1.35; }
+.kpi-meter { height: 3px; border-radius: 2px; background: var(--line-soft); overflow: hidden; margin-top: 2px; }
+.kpi-meter > i { display: block; height: 100%; border-radius: 2px; }
+
+/* --- Executive summary banner ---------------------------------------- */
+.exec {
+  border: 1px solid var(--line); border-left: 4px solid var(--accent);
+  border-radius: var(--r); padding: 16px 20px 18px;
+  background: linear-gradient(105deg, #F7F2FE 0%, #F4F8FB 46%, #F2FAF8 100%);
+}
+.exec-text {
+  font-family: var(--font-display);
+  font-size: 20px; font-weight: 500; letter-spacing: -.005em;
+  line-height: 1.5; max-width: 74ch; margin: 0; color: var(--ink);
+}
+
+/* --- Pills ------------------------------------------------------------ */
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
+  white-space: nowrap;
+}
+.pill-dot::before { content: ''; width: 6px; height: 6px; border-radius: 999px; background: currentColor; flex: none; }
+.pill-critical { background: var(--critical-soft); color: var(--critical); }
+.pill-high     { background: var(--high-soft);     color: var(--high); }
+.pill-watch    { background: var(--watch-soft);    color: var(--watch); }
+.pill-stable   { background: var(--stable-soft);   color: var(--stable); }
+.pill-neutral  { background: var(--surface-2);     color: var(--ink-2); border: 1px solid var(--line); }
+
+/* Chip lọc bấm được */
+.chip {
+  appearance: none; font-family: inherit; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; font-weight: 600; padding: 4px 11px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--line); color: var(--ink-2);
+  text-decoration: none;
+}
+.chip:hover { background: var(--surface-2); }
+.chip[data-on='true'] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-deep); }
+.chip[data-zero='true'] { opacity: .45; }
+.chip-count { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* --- Buttons ---------------------------------------------------------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  font-family: inherit; font-size: 12.5px; font-weight: 600;
+  padding: 7px 14px; border-radius: var(--r-sm);
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink-2);
+  cursor: pointer; white-space: nowrap;
+  transition: background .12s, border-color .12s, filter .12s;
+}
+.btn:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); border-color: #CBD5D0; }
+.btn:disabled { opacity: .42; cursor: not-allowed; }
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-deep) 100%);
+  border: 0; color: #fff; box-shadow: 0 6px 16px -9px rgba(126,34,206,.65);
+}
+.btn-primary:hover:not(:disabled) { filter: brightness(1.07); color: #fff; }
+.btn-danger { border-color: var(--critical); color: var(--critical); }
+.btn-danger:hover:not(:disabled) { background: var(--critical-soft); }
+.btn-sm { padding: 4px 9px; font-size: 11.5px; }
+
+/* --- Form fields ------------------------------------------------------ */
+.field {
+  width: 100%; padding: 6px 9px;
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--ink);
+  font-family: inherit; font-size: 13px;
+}
+.field:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(168,85,247,.15); }
+:focus-visible { outline: 3px solid rgba(168,85,247,.32); outline-offset: 2px; }
+
+/* --- Data table ------------------------------------------------------- */
+.tbl { width: 100%; border-collapse: collapse; }
 .tbl thead th {
   position: sticky; top: 0; z-index: 1;
-  background: var(--surface);
-  text-align: left;
-  padding: .55rem .75rem;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: .09em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-  border-bottom: 1px solid var(--line);
-  white-space: nowrap;
+  background: var(--surface-2); text-align: left; white-space: nowrap;
+  padding: 8px 11px; font-size: 10px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-3); border-bottom: 1px solid var(--line);
 }
-.tbl tbody td {
-  padding: .6rem .75rem;
-  border-bottom: 1px solid var(--line-soft);
-  vertical-align: middle;
-}
-/* hover violet-soft — giống Workstream */
-.tbl tbody tr:hover { background: var(--violet-soft); }
+.tbl tbody td { padding: 11px; font-size: 13px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+.tbl tbody tr:hover { background: var(--surface-2); }
 .tbl tbody tr:last-child td { border-bottom: none; }
+.tbl .sub { display: block; font-size: 11.5px; color: var(--ink-3); }
 
-/* --- Badges --------------------------------------------------------- */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: .3rem;
-  padding: .18rem .52rem;
-  border-radius: 999px;
-  font-size: .72rem;
-  font-weight: 700;
-  white-space: nowrap;
-  letter-spacing: .01em;
+/* --- Progress badge: [▓▓▓░░|] --------------------------------------- */
+.prog { display: inline-flex; align-items: center; gap: 6px; }
+.prog-track {
+  width: 34px; height: 6px; border-radius: 3px;
+  background: var(--line-soft); position: relative; overflow: hidden; flex: none;
 }
-.badge-violet { background: var(--violet-soft); color: var(--violet-deep); border: 1px solid var(--violet-mid); }
-.badge-teal   { background: var(--teal-soft);   color: #0A5C52; }
-.badge-amber  { background: var(--amber-soft);  color: #7A5A12; }
-.badge-red    { background: var(--red-soft);    color: #9F122E; }
-.badge-slate  { background: var(--surface-2);   color: var(--ink-2); border: 1px solid var(--line); }
+.prog-fill { position: absolute; inset: 0 auto 0 0; border-radius: 3px; }
+.prog-tick { position: absolute; top: -1px; bottom: -1px; width: 1.5px; background: var(--ink-3); }
+.prog-txt  { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 11px; color: var(--ink-3); }
 
-/* --- Escalate rail -------------------------------------------------- */
-.rail { display: inline-flex; align-items: center; gap: 3px; }
-.rail-seg {
-  width: 20px; height: 5px;
-  border-radius: 2px;
-  background: var(--line);
-}
-.rail-seg[data-on='1'] { background: var(--teal); }
-.rail-seg[data-on='2'] { background: var(--amber); }
-.rail-seg[data-on='3'] { background: var(--red); }
-.rail-loop { margin-left: 5px; font-size: .6875rem; font-weight: 700; color: var(--ink-3); }
+/* --- Empty state ------------------------------------------------------ */
+.empty { padding: 44px 20px; text-align: center; font-size: 12.5px; color: var(--ink-3); }
+.empty strong { display: block; color: var(--ink); font-size: 13.5px; margin-bottom: 5px; font-weight: 600; }
 
-/* --- Empty state ---------------------------------------------------- */
-.empty {
-  padding: 3rem 1.5rem;
-  text-align: center;
-  color: var(--ink-3);
-  font-size: .875rem;
+/* --- Modal: chuỗi flex phải đủ mắt xích mới cuộn được ---------------- */
+.modal-scrim {
+  position: fixed; inset: 0; z-index: 60; background: rgba(18,40,26,.38);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
 }
-.empty strong { display: block; color: var(--ink); font-size: .9375rem; margin-bottom: .35rem; }
+.modal-box {
+  background: var(--surface); border-radius: var(--r); box-shadow: var(--shadow-lg);
+  width: 100%; max-width: 860px;
+  max-height: calc(100dvh - 48px);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.modal-hd, .modal-ft { flex: 0 0 auto; }
+.modal-hd { padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.modal-bd { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 18px 20px; }
+.modal-ft { padding: 13px 20px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 8px; }
 
-/* --- Guide page: callout blocks ------------------------------------- */
-.callout {
-  border-radius: var(--r-sm);
-  padding: 12px 16px;
-  font-size: .8125rem;
-  line-height: 1.6;
+/* --- Toast ------------------------------------------------------------ */
+.toast {
+  position: fixed; right: 20px; bottom: 20px; z-index: 70;
+  background: var(--ink); color: #fff; font-size: 12.5px; font-weight: 500;
+  padding: 11px 16px; border-radius: var(--r-sm); box-shadow: var(--shadow-lg);
+  animation: toast-up .18s ease-out;
 }
-.callout-violet { background: var(--violet-soft); border-left: 3px solid var(--violet); color: var(--violet-deep); }
-.callout-amber  { background: var(--amber-soft);  border-left: 3px solid var(--amber);  color: #7A5A12; }
-.callout-teal   { background: var(--teal-soft);   border-left: 3px solid var(--teal);   color: #0A5C52; }
-.callout-red    { background: var(--red-soft);    border-left: 3px solid var(--red);    color: #9F122E; }
+.toast[data-kind='ok']  { background: #0B6B60; }
+.toast[data-kind='err'] { background: #9F122E; }
+@keyframes toast-up { from { transform: translateY(8px); opacity: 0 } to { transform: none; opacity: 1 } }
 
-@media (prefers-reduced-motion: reduce) {
-  * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+/* --- Callout (trang Hướng dẫn) --------------------------------------- */
+.callout { border-radius: var(--r-sm); padding: 11px 15px; font-size: 12.5px; line-height: 1.6; }
+.callout-accent   { background: var(--accent-soft);   border-left: 3px solid var(--accent);   color: var(--accent-deep); }
+.callout-high     { background: var(--high-soft);     border-left: 3px solid var(--high);     color: #7A5A12; }
+.callout-stable   { background: var(--stable-soft);   border-left: 3px solid var(--stable);   color: #0A5C52; }
+.callout-critical { background: var(--critical-soft); border-left: 3px solid var(--critical); color: #9F122E; }
+
+/* --- Responsive: ba điểm ngắt, không hơn ----------------------------- */
+@media (max-width: 1200px) {
+  .page { padding: 16px 16px 40px; }
 }
+@media (max-width: 760px) {
+  .page { padding: 12px 12px 32px; }
+  .topbar-name { display: none; }
+}
+
+/* --- Print ------------------------------------------------------------ */
+@media print {
+  .topbar, .tabs, .no-print { display: none !important; }
+  .page { max-width: none; padding: 0; }
+  .card { box-shadow: none; break-inside: avoid; }
+}
+
+/* Lưới hai cột 5:7 của dashboard — minmax(0,…) để bảng bên trong co được */
+.dash-split { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
+@media (max-width: 1200px) { .dash-split { grid-template-columns: minmax(0, 1fr); } }

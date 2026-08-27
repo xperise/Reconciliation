@@ -68,7 +68,9 @@ export async function executeWorkflow(
       items_ok: result.ok,
       items_failed: result.failed,
       summary: result.summary,
-      detail: result.detail as any,
+      // Gộp cả diễn biến từng nhóm lẫn danh sách thư đã gửi, để màn hình
+      // Lịch sử chạy trả lời được câu "lượt này đã gửi thư gì cho ai".
+      detail: { buoc: result.detail, mails: result.mails ?? [] } as any,
     }).eq('id', runId);
 
     await sb.from('workflow_schedules')

@@ -1,20 +1,23 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { nowInVN, daysBetween } from '@/lib/period';
 import { PageHeader } from '@/components/PageHeader';
 import { StatusBadge } from '@/components/StatusBadge';
 import { SlaRail } from '@/components/SlaRail';
-import { FilterBar } from '@/components/Toolbar';
 import { STATUS_LABEL, TrackingStatus } from '@/lib/types';
 import { OverrideForm } from './override-form';
+import { RowDetail } from './row-detail';
+import { Filters } from './filters';
 
 export const dynamic = 'force-dynamic';
 
-export default async function TrackingPage({
-  searchParams,
-}: { searchParams: { ky?: string; status?: string; nhom?: string } }) {
+export default async function TrackingPage({ searchParams }: {
+  searchParams: { ky?: string; status?: string; nhom?: string; loc?: string };
+}) {
   const sb = supabaseAdmin();
+  const today = nowInVN().isoDate;
 
   let q = sb.from('tracking')
-    .select('*, billing_groups!inner(nhom_escalate)')
+    .select('*, billing_groups!inner(nhom_escalate, ma_he_thong)')
     .order('ky_doi_soat', { ascending: false })
     .order('ten_nhom');
 
@@ -22,72 +25,95 @@ export default async function TrackingPage({
   if (searchParams.status) q = q.eq('status', searchParams.status);
   if (searchParams.nhom) q = q.ilike('ten_nhom', `%${searchParams.nhom}%`);
 
-  const [{ data: rows }, { data: kyList }] = await Promise.all([
-    q.limit(300),
+  const [{ data: raw }, { data: kyList }, { data: phapNhan }] = await Promise.all([
+    q.limit(400),
     sb.from('tracking').select('ky_doi_soat').order('ky_doi_soat', { ascending: false }),
+    sb.from('customers').select('group_id, ten_khach_hang, ten_viet_tat, code'),
   ]);
 
-  const kyOptions = Array.from(new Set((kyList ?? []).map((r) => r.ky_doi_soat)))
-    .map((k) => ({ value: k, label: k }));
+  // Gắn pháp nhân vào từng nhóm để hiện được cột Tên khách hàng và Code
+  const byGroup = new Map<string, any[]>();
+  for (const c of phapNhan ?? []) {
+    const arr = byGroup.get(c.group_id) ?? [];
+    arr.push(c);
+    byGroup.set(c.group_id, arr);
+  }
+
+  let rows = (raw ?? []) as any[];
+
+  // Bộ lọc phái sinh, tính trên ngày nên phải lọc sau khi lấy dữ liệu
+  const DONE = ['da_chot', 'hoan_tat_cho_thanh_toan', 'mac_dinh_chap_thuan', 'da_gui_ho_so_thanh_toan'];
+  if (searchParams.loc === 'qua_han') {
+    rows = rows.filter((r) => r.han_chap_nhan && !DONE.includes(r.status)
+      && daysBetween(r.han_chap_nhan, today) > 0);
+  } else if (searchParams.loc === 'can_han') {
+    rows = rows.filter((r) => {
+      if (!r.han_chap_nhan || DONE.includes(r.status)) return false;
+      const con = daysBetween(today, r.han_chap_nhan);
+      return con >= 0 && con <= 1;
+    });
+  }
+
+  const kyOptions = Array.from(new Set((kyList ?? []).map((r) => r.ky_doi_soat)));
+  const dem = {
+    qua_han: (raw ?? []).filter((r: any) => r.han_chap_nhan && !DONE.includes(r.status)
+      && daysBetween(r.han_chap_nhan, today) > 0).length,
+    can_han: (raw ?? []).filter((r: any) => {
+      if (!r.han_chap_nhan || DONE.includes(r.status)) return false;
+      const con = daysBetween(today, r.han_chap_nhan);
+      return con >= 0 && con <= 1;
+    }).length,
+    xu_ly_tay: (raw ?? []).filter((r: any) => r.status === 'can_xu_ly_tay').length,
+  };
 
   return (
     <>
       <PageHeader
         eyebrow="Nhật ký vận hành"
         title="Theo dõi kỳ"
-        description="Mỗi dòng là một nhóm khách trong một kỳ. Thanh màu cho biết đã nhắc tới cấp nào và lặp mấy vòng."
+        description="Mỗi dòng là một nhóm khách trong một kỳ. Bấm vào dòng để xem đủ trường, bấm Can thiệp để sửa."
       />
 
-      <div className="card p-4 mb-4">
-        <FilterBar fields={[
-          { name: 'ky', label: 'Kỳ đối soát', options: kyOptions },
-          { name: 'status', label: 'Trạng thái',
-            options: Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label })) },
-          { name: 'nhom', label: 'Tên nhóm' },
-        ]} />
-      </div>
+      <Filters kyOptions={kyOptions} statusOptions={Object.entries(STATUS_LABEL)} dem={dem} />
 
       <div className="card overflow-hidden">
-        {rows?.length ? (
+        {rows.length ? (
           <div className="overflow-x-auto">
             <table className="tbl">
               <thead>
                 <tr>
-                  <th>Nhóm</th><th>Kỳ</th><th>Trạng thái</th><th>Escalate</th>
-                  <th>Hạn xác nhận</th><th>Gửi gần nhất</th><th>File</th><th></th>
+                  <th>Nhóm / Mã</th>
+                  <th>Kỳ</th>
+                  <th>Trạng thái</th>
+                  <th>Escalate</th>
+                  <th className="text-right">Hạn chấp nhận</th>
+                  <th className="text-right">Gửi gần nhất</th>
+                  <th className="text-right">Ngày chốt</th>
+                  <th>Bảng kê</th>
+                  <th>Kết quả duyệt</th>
+                  <th className="no-print"></th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r: any) => {
-                  const treHan = r.han_chap_nhan && new Date(r.han_chap_nhan) < new Date()
-                    && !['da_chot', 'hoan_tat_cho_thanh_toan', 'mac_dinh_chap_thuan'].includes(r.status);
+                {rows.map((r) => {
+                  const tre = r.han_chap_nhan && !DONE.includes(r.status)
+                    ? daysBetween(r.han_chap_nhan, today) : null;
                   return (
-                    <tr key={r.id}>
-                      <td className="font-semibold whitespace-nowrap">
-                        {r.ten_nhom}
-                        <span className="mono text-[var(--muted)] block text-[0.6875rem]">{r.ma_he_thong}</span>
-                      </td>
-                      <td className="mono whitespace-nowrap">{r.ky_doi_soat}</td>
-                      <td><StatusBadge status={r.status as TrackingStatus} /></td>
-                      <td>
-                        <SlaRail level={r.escalate_level} loops={r.so_vong_remind}
-                                 maxLevel={r.billing_groups.nhom_escalate === 1 ? 2 : 3} />
-                      </td>
-                      <td className="tnum whitespace-nowrap"
-                          style={treHan ? { color: 'var(--red)', fontWeight: 600 } : undefined}>
-                        {r.han_chap_nhan ?? '—'}
-                      </td>
-                      <td className="tnum whitespace-nowrap text-[var(--muted)]">{r.ngay_gui_gan_nhat ?? '—'}</td>
-                      <td>
-                        {r.link_file_bang_ke ? (
-                          <a href={r.link_file_bang_ke} target="_blank" rel="noreferrer"
-                             className="mono text-[var(--violet-deep)] no-underline">
-                            v{r.version_bang_ke} ↗
-                          </a>
-                        ) : <span className="text-[var(--muted)]">—</span>}
-                      </td>
-                      <td className="text-right"><OverrideForm row={r} /></td>
-                    </tr>
+                    <RowDetail
+                      key={r.id}
+                      row={r}
+                      phapNhan={byGroup.get(r.group_id) ?? []}
+                      tre={tre}
+                      action={<OverrideForm row={r} />}
+                      badge={<StatusBadge status={r.status as TrackingStatus} />}
+                      rail={
+                        <SlaRail
+                          level={r.escalate_level}
+                          loops={r.so_vong_remind}
+                          maxLevel={r.billing_groups.nhom_escalate === 1 ? 2 : 3}
+                        />
+                      }
+                    />
                   );
                 })}
               </tbody>
@@ -95,8 +121,14 @@ export default async function TrackingPage({
           </div>
         ) : (
           <p className="empty">
-            <strong>Chưa có dòng nào khớp bộ lọc.</strong>
-            Dòng tracking được tạo tự động khi workflow gửi bảng kê đầu tiên của kỳ.
+            <strong>
+              {searchParams.ky || searchParams.status || searchParams.nhom || searchParams.loc
+                ? 'Không có dòng nào khớp bộ lọc.'
+                : 'Chưa có kỳ đối soát nào.'}
+            </strong>
+            {searchParams.ky || searchParams.status || searchParams.nhom || searchParams.loc
+              ? 'Thử bỏ bớt điều kiện lọc.'
+              : 'Dòng tracking được tạo khi workflow gửi bảng kê đầu tiên của kỳ.'}
           </p>
         )}
       </div>

@@ -92,7 +92,7 @@ export function UploadPanel({ groups }: { groups: { id: string; ten_nhom: string
     <div className="card overflow-hidden">
       <div className="px-4 py-3 border-b border-[var(--line)]">
         <h2 className="text-sm font-bold m-0">Tải tệp lên</h2>
-        <p className="text-xs text-[var(--muted)] mt-0.5 mb-0">
+        <p className="text-xs text-[var(--ink-3)] mt-0.5 mb-0">
           Chọn nhóm và kỳ, hệ thống tự đánh số phiên bản. Tên tệp đặt thế nào cũng được.
         </p>
       </div>
@@ -135,21 +135,21 @@ export function UploadPanel({ groups }: { groups: { id: string; ten_nhom: string
           tabIndex={0}
           className="border-2 border-dashed rounded-lg px-4 py-8 text-center cursor-pointer transition-colors"
           style={{
-            borderColor: keo ? 'var(--violet)' : 'var(--line)',
-            background: keo ? 'var(--violet-soft)' : 'transparent',
+            borderColor: keo ? 'var(--accent)' : 'var(--line)',
+            background: keo ? 'var(--accent-soft)' : 'transparent',
           }}
         >
           {file ? (
             <>
               <p className="text-sm font-semibold m-0">{file.name}</p>
-              <p className="text-xs text-[var(--muted)] mt-1 mb-0 tnum">
+              <p className="text-xs text-[var(--ink-3)] mt-1 mb-0 tnum">
                 {(file.size / 1048576).toFixed(2)} MB · bấm để chọn tệp khác
               </p>
             </>
           ) : (
             <>
               <p className="text-sm font-semibold m-0">Kéo tệp vào đây hoặc bấm để chọn</p>
-              <p className="text-xs text-[var(--muted)] mt-1 mb-0">
+              <p className="text-xs text-[var(--ink-3)] mt-1 mb-0">
                 {DUOI_HOP_LE.join(' · ')} — tối đa 50 MB
               </p>
             </>
@@ -164,25 +164,25 @@ export function UploadPanel({ groups }: { groups: { id: string; ten_nhom: string
                  onChange={(e) => setGuiNgay(e.target.checked)} />
           <span>
             Gửi cho khách ngay sau khi tải lên
-            <span className="block text-xs text-[var(--muted)]">
+            <span className="block text-xs text-[var(--ink-3)]">
               Bỏ chọn nếu muốn kiểm tra lại trước. Tệp sẽ nằm ở mục chờ gửi.
             </span>
           </span>
         </label>
 
         {nhom && (
-          <p className="text-xs text-[var(--muted)] m-0">
+          <p className="text-xs text-[var(--ink-3)] m-0">
             Sẽ lưu vào <span className="mono">{nhom.ma_he_thong}/{ky}/</span>
           </p>
         )}
 
         {loi && (
-          <p role="alert" className="text-sm text-[var(--red)] bg-[var(--red-wash)] px-3 py-2 rounded-md m-0">
+          <p role="alert" className="text-sm text-[var(--critical)] bg-[var(--critical-soft)] px-3 py-2 rounded-[var(--r-sm)] m-0">
             {loi}
           </p>
         )}
         {ketQua && (
-          <p className="text-sm text-[var(--violet-deep)] bg-[var(--violet-soft)] px-3 py-2 rounded-md m-0">
+          <p className="text-sm text-[var(--accent-deep)] bg-[var(--accent-soft)] px-3 py-2 rounded-[var(--r-sm)] m-0">
             {ketQua}
           </p>
         )}

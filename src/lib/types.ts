@@ -161,4 +161,6 @@ export type RunResult = {
   failed: number;
   summary: string;
   detail: unknown[];
+  /** Danh sách thư đã gửi trong lượt chạy, hiện ở Lịch sử chạy. */
+  mails?: unknown[];
 };

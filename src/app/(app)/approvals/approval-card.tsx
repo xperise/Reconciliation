@@ -48,7 +48,7 @@ export function ApprovalCard({ row }: { row: any }) {
       <header className="px-4 py-3 border-b border-[var(--line)] flex flex-wrap items-center justify-between gap-2">
         <div>
           <span className="font-bold">{row.ten_nhom}</span>
-          <span className="mono text-[var(--muted)] ml-2">{row.ky_doi_soat}</span>
+          <span className="mono text-[var(--ink-3)] ml-2">{row.ky_doi_soat}</span>
         </div>
         <span className={`badge ${hetVong ? 'badge-red' : 'badge-violet'}`}>
           {AI_LABEL[row.ai_de_xuat] ?? 'Cần xem xét'}
@@ -73,10 +73,10 @@ export function ApprovalCard({ row }: { row: any }) {
 
         {row.email_khach_goc && (
           <details className="text-sm">
-            <summary className="cursor-pointer font-semibold text-[var(--teal-deep)] select-none">
+            <summary className="cursor-pointer font-semibold text-[var(--accent-deep)] select-none">
               Xem nguyên văn email khách
             </summary>
-            <pre className="mt-2 p-3 bg-[var(--paper)] rounded-md text-xs leading-relaxed
+            <pre className="mt-2 p-3 bg-[var(--paper)] rounded-[var(--r-sm)] text-xs leading-relaxed
               whitespace-pre-wrap font-[inherit] max-h-72 overflow-auto m-0">
               {row.email_khach_goc}
             </pre>
@@ -85,7 +85,7 @@ export function ApprovalCard({ row }: { row: any }) {
 
         {row.link_file_bang_ke && (
           <a href={row.link_file_bang_ke} target="_blank" rel="noreferrer"
-             className="text-sm font-semibold text-[var(--violet-deep)] no-underline inline-block">
+             className="text-sm font-semibold text-[var(--accent-deep)] no-underline inline-block">
             Mở bảng kê đã gửi (bản {row.version_bang_ke}) ↗
           </a>
         )}
@@ -100,7 +100,7 @@ export function ApprovalCard({ row }: { row: any }) {
         </div>
 
         {loi && (
-          <p role="alert" className="text-sm text-[var(--red)] bg-[var(--red-wash)] px-3 py-2 rounded-md m-0">
+          <p role="alert" className="text-sm text-[var(--critical)] bg-[var(--critical-soft)] px-3 py-2 rounded-[var(--r-sm)] m-0">
             {loi}
           </p>
         )}
@@ -132,7 +132,7 @@ export function ApprovalCard({ row }: { row: any }) {
           )}
         </div>
 
-        <p className="text-xs text-[var(--muted)] m-0 leading-relaxed">
+        <p className="text-xs text-[var(--ink-3)] m-0 leading-relaxed">
           {hetVong
             ? 'Nhóm khách này không tự động chốt. Chọn một trong hai hành động để hệ thống tiếp tục.'
             : 'Chọn "Cần sửa", rồi vào trang Tệp bảng kê tải bản chỉnh sửa lên — hệ thống gửi cho khách ngay.'}

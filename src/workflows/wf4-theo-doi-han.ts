@@ -6,6 +6,7 @@ import {
   tplNhacNoiBoUpload, tplEscalateNoiBo, tplCanQuyetDinh,
 } from '@/lib/email-templates';
 import { BillingGroup, RunResult, STATUS_DONE, TrackingStatus } from '@/lib/types';
+import { MailLog } from '@/lib/mail-log';
 
 /**
  * WF4 — Theo dõi hạn phản hồi
@@ -48,6 +49,7 @@ export async function runWf4(): Promise<RunResult> {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
   const today = nowInVN().isoDate;
   const detail: unknown[] = [];
+  const mails = new MailLog();
   let ok = 0;
   let failed = 0;
 
@@ -104,6 +106,11 @@ export async function runWf4(): Promise<RunResult> {
           to, cc: cc || undefined, ...mail,
           threadId: row.internal_thread_id ?? undefined,
         });
+        mails.ghi({
+          nhom: row.ten_nhom, ky: row.ky_doi_soat,
+          loai: isEscalate ? 'Escalate nội bộ D+2' : 'Nhắc nội bộ D+1',
+          den: to, cc: cc || undefined, tieu_de: mail.subject,
+        });
 
         await sb.from('tracking').update({
           ngay_remind_cuoi: today,
@@ -130,11 +137,16 @@ export async function runWf4(): Promise<RunResult> {
         const { to, cc } = recipientsForLevel(g, next);
         if (!to) { note('Thiếu email khách để nhắc.'); failed += 1; continue; }
 
+        const subj = refSubject(row.ten_nhom, row.ky_doi_soat);
         await sendMail({
           to, cc,
-          subject: refSubject(row.ten_nhom, row.ky_doi_soat),
+          subject: subj,
           html: tplNhacKhach(row.ky_doi_soat, next, row.han_chap_nhan),
           threadId: row.thread_id ?? undefined,
+        });
+        mails.ghi({
+          nhom: row.ten_nhom, ky: row.ky_doi_soat, loai: `Nhắc khách L${next}`,
+          den: to, cc, tieu_de: subj,
         });
 
         await sb.from('tracking').update({
@@ -152,11 +164,17 @@ export async function runWf4(): Promise<RunResult> {
 
       if (nextPass < maxPasses) {
         const { to, cc } = recipientsForLevel(g, 1);
+        const subj2 = refSubject(row.ten_nhom, row.ky_doi_soat);
         await sendMail({
           to, cc,
-          subject: refSubject(row.ten_nhom, row.ky_doi_soat),
+          subject: subj2,
           html: tplNhacKhach(row.ky_doi_soat, 1, row.han_chap_nhan),
           threadId: row.thread_id ?? undefined,
+        });
+        mails.ghi({
+          nhom: row.ten_nhom, ky: row.ky_doi_soat,
+          loai: `Nhắc khách L1 (vòng ${nextPass + 1})`,
+          den: to, cc, tieu_de: subj2,
         });
 
         await sb.from('tracking').update({
@@ -172,12 +190,19 @@ export async function runWf4(): Promise<RunResult> {
 
       // --- Hết toàn bộ vòng ---
       if (autoChot) {
+        const ccChot = [g.email_l2, g.email_ke_toan, g.email_pm, g.email_cc]
+          .filter(Boolean).join(',') || undefined;
+        const subjChot = refSubject(row.ten_nhom, row.ky_doi_soat);
         await sendMail({
           to: g.email_l1!,
-          cc: [g.email_l2, g.email_ke_toan, g.email_pm, g.email_cc].filter(Boolean).join(',') || undefined,
-          subject: refSubject(row.ten_nhom, row.ky_doi_soat),
+          cc: ccChot,
+          subject: subjChot,
           html: tplMacDinhChot(row.ky_doi_soat),
           threadId: row.thread_id ?? undefined,
+        });
+        mails.ghi({
+          nhom: row.ten_nhom, ky: row.ky_doi_soat, loai: 'Thông báo chốt mặc định',
+          den: g.email_l1!, cc: ccChot, tieu_de: subjChot,
         });
 
         await sb.from('tracking').update({
@@ -196,11 +221,16 @@ export async function runWf4(): Promise<RunResult> {
       // Nhóm 2 & 3: hệ thống dừng, chuyển kế toán quyết định trên dashboard
       if (g.email_ke_toan) {
         const mail = tplCanQuyetDinh(row.ten_nhom, row.ky_doi_soat, nextPass, maxLevel, appUrl);
+        const ccQd = [g.email_pm, g.email_high_level].filter(Boolean).join(',') || undefined;
         await sendMail({
           to: g.email_ke_toan,
-          cc: [g.email_pm, g.email_high_level].filter(Boolean).join(',') || undefined,
+          cc: ccQd,
           ...mail,
           threadId: row.internal_thread_id ?? undefined,
+        });
+        mails.ghi({
+          nhom: row.ten_nhom, ky: row.ky_doi_soat, loai: 'Yêu cầu kế toán quyết định',
+          den: g.email_ke_toan, cc: ccQd, tieu_de: mail.subject,
         });
       }
 
@@ -223,7 +253,10 @@ export async function runWf4(): Promise<RunResult> {
 
   return {
     ok, failed,
-    summary: ok ? `Đã xử lý ${ok} lượt nhắc/escalate.` : 'Không có nhóm nào tới hạn nhắc.',
+    summary: ok
+      ? `Đã xử lý ${ok} lượt nhắc. ${mails.tomTat()}`
+      : 'Không có nhóm nào tới hạn nhắc.',
     detail,
+    mails: mails.all,
   };
 }

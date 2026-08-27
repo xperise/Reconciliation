@@ -33,12 +33,12 @@ export default async function SettingsPage({
       />
 
       {searchParams.ok === 'da_ket_noi' && (
-        <p className="card px-4 py-3 text-sm text-[var(--teal-deep)] bg-[var(--teal-wash)] mb-4">
+        <p className="card px-4 py-3 text-sm text-[var(--accent-deep)] bg-[var(--accent-soft)] mb-4">
           Đã kết nối tài khoản Google.
         </p>
       )}
       {searchParams.loi && (
-        <p role="alert" className="card px-4 py-3 text-sm text-[var(--red)] bg-[var(--red-wash)] mb-4">
+        <p role="alert" className="card px-4 py-3 text-sm text-[var(--critical)] bg-[var(--critical-soft)] mb-4">
           {LOI[searchParams.loi] ?? 'Kết nối thất bại.'}
         </p>
       )}
@@ -47,7 +47,7 @@ export default async function SettingsPage({
         <section className="card overflow-hidden">
           <div className="px-4 py-3 border-b border-[var(--line)]">
             <h2 className="text-sm font-bold m-0">Tài khoản Google</h2>
-            <p className="text-xs text-[var(--muted)] mt-0.5 mb-0">
+            <p className="text-xs text-[var(--ink-3)] mt-0.5 mb-0">
               Hệ thống gửi bảng kê và đọc phản hồi khách bằng tài khoản này.
             </p>
           </div>
@@ -57,7 +57,7 @@ export default async function SettingsPage({
                 <p className="text-sm m-0">
                   Đang dùng hộp thư <strong className="mono">{conn.email}</strong>
                 </p>
-                <p className="text-xs text-[var(--muted)] mt-1 mb-3">
+                <p className="text-xs text-[var(--ink-3)] mt-1 mb-3">
                   Kết nối từ {new Date(conn.connected_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}
                 </p>
                 <a href="/api/google/authorize" className="btn">Kết nối lại bằng tài khoản khác</a>
@@ -76,7 +76,7 @@ export default async function SettingsPage({
         <section className="card overflow-hidden">
           <div className="px-4 py-3 border-b border-[var(--line)]">
             <h2 className="text-sm font-bold m-0">Kho tệp</h2>
-            <p className="text-xs text-[var(--muted)] mt-0.5 mb-0">
+            <p className="text-xs text-[var(--ink-3)] mt-0.5 mb-0">
               Bảng kê và hồ sơ thanh toán lưu trong Supabase Storage, không dùng Google Drive.
             </p>
           </div>
@@ -85,7 +85,7 @@ export default async function SettingsPage({
               Đang lưu <strong className="tnum">{soTep ?? 0}</strong> tệp trong kho{' '}
               <span className="mono">bang-ke</span>.
             </p>
-            <div className="bg-[var(--paper)] rounded-md p-3 text-xs leading-relaxed">
+            <div className="bg-[var(--paper)] rounded-[var(--r-sm)] p-3 text-xs leading-relaxed">
               <p className="eyebrow m-0 mb-1.5">Cách kho tệp hoạt động</p>
               <p className="m-0 mb-1.5">
                 Kế toán tải tệp ở trang <strong>Tệp bảng kê</strong>, chọn nhóm và kỳ từ danh

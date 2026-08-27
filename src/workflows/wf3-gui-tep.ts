@@ -4,6 +4,7 @@ import { downloadFile, signedUrl, mimeFor, StatementFile } from '@/lib/storage';
 import { sendMail } from '@/lib/google/gmail';
 import { refSubject, tplBangKeSuaDoi, tplHoSoThanhToan, tplBangKe } from '@/lib/email-templates';
 import { RunResult, TrackingStatus, effectiveSlaChapNhan, BillingGroup } from '@/lib/types';
+import { MailLog } from '@/lib/mail-log';
 
 /**
  * WF3 — Gửi tệp đã tải lên
@@ -19,6 +20,7 @@ import { RunResult, TrackingStatus, effectiveSlaChapNhan, BillingGroup } from '@
 export async function runWf3(): Promise<RunResult> {
   const sb = supabaseAdmin();
   const detail: unknown[] = [];
+  const mails = new MailLog();
   let ok = 0;
   let failed = 0;
 
@@ -40,8 +42,11 @@ export async function runWf3(): Promise<RunResult> {
 
     try {
       const result = await guiTepChoKhach(file.id);
-      if (result.sent) { ok += 1; note(result.message); }
-      else { note(result.message); }
+      if (result.sent) {
+        ok += 1;
+        note(result.message);
+        if (result.mail) mails.ghi(result.mail);
+      } else { note(result.message); }
     } catch (err) {
       failed += 1;
       note('Lỗi khi gửi.', { error: err instanceof Error ? err.message : String(err) });
@@ -50,8 +55,9 @@ export async function runWf3(): Promise<RunResult> {
 
   return {
     ok, failed,
-    summary: ok ? `Đã gửi ${ok} tệp còn tồn.` : 'Không có tệp nào cần gửi lại.',
+    summary: ok ? `Đã gửi ${ok} tệp còn tồn. ${mails.tomTat()}` : 'Không có tệp nào cần gửi lại.',
     detail,
+    mails: mails.all,
   };
 }
 
@@ -63,7 +69,7 @@ export async function runWf3(): Promise<RunResult> {
  */
 export async function guiTepChoKhach(
   fileId: string,
-): Promise<{ sent: boolean; message: string }> {
+): Promise<{ sent: boolean; message: string; mail?: any }> {
   const sb = supabaseAdmin();
   const today = nowInVN().isoDate;
 
@@ -111,10 +117,18 @@ export async function guiTepChoKhach(
       ? tplBangKeSuaDoi(group.ten_nhom, file.ky_doi_soat, file.version, link)
       : tplBangKe(group.ten_nhom, file.ky_doi_soat, link);
 
+  const subject = refSubject(group.ten_nhom, file.ky_doi_soat);
+  const loaiThu = laHstt ? 'Hồ sơ thanh toán'
+    : laBanSua ? `Bảng kê bản ${file.version}` : 'Bảng kê';
+  const mailRec = {
+    nhom: group.ten_nhom, ky: file.ky_doi_soat, loai: loaiThu,
+    den: group.email_l1, cc, tieu_de: subject,
+  };
+
   const sent = await sendMail({
     to: group.email_l1,
     cc,
-    subject: refSubject(group.ten_nhom, file.ky_doi_soat),
+    subject,
     html,
     attachments: [{
       filename: file.file_name,
@@ -137,7 +151,7 @@ export async function guiTepChoKhach(
       ngay_bat_dau_cho_file: null,
     }).eq('id', tr!.id);
 
-    return { sent: true, message: `Đã gửi hồ sơ thanh toán cho ${group.ten_nhom}.` };
+    return { sent: true, message: `Đã gửi hồ sơ thanh toán cho ${group.ten_nhom}.`, mail: mailRec };
   }
 
   // Gửi bảng kê, kể cả bản đầu lẫn bản sửa, đều làm đồng hồ SLA khách chạy lại.
@@ -165,5 +179,6 @@ export async function guiTepChoKhach(
     message: laBanSua
       ? `Đã gửi bảng kê bản ${file.version} cho ${group.ten_nhom}.`
       : `Đã gửi bảng kê cho ${group.ten_nhom}.`,
+    mail: mailRec,
   };
 }

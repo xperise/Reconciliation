@@ -31,7 +31,7 @@ export default function LoginPage() {
         <div className="mb-7">
           <p className="eyebrow mb-2">xperise</p>
           <h1 className="text-2xl font-bold leading-tight m-0">Đối soát bảng kê</h1>
-          <p className="text-sm text-[var(--muted)] mt-2">
+          <p className="text-sm text-[var(--ink-3)] mt-2">
             Đăng nhập bằng tài khoản do quản trị viên cấp.
           </p>
         </div>
@@ -49,7 +49,7 @@ export default function LoginPage() {
           </div>
 
           {loi && (
-            <p role="alert" className="text-sm text-[var(--red)] bg-[var(--red-wash)] px-3 py-2 rounded-md m-0">
+            <p role="alert" className="text-sm text-[var(--critical)] bg-[var(--critical-soft)] px-3 py-2 rounded-[var(--r-sm)] m-0">
               {loi}
             </p>
           )}

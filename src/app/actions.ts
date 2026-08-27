@@ -124,10 +124,22 @@ export async function chotMacDinh(trackingId: string) {
 export async function overrideTracking(trackingId: string, patch: {
   status?: TrackingStatus;
   thread_id?: string;
+  message_id?: string;
+  internal_thread_id?: string;
+  han_chap_nhan?: string;
+  ngay_gui_gan_nhat?: string;
+  ngay_chot?: string;
+  ngay_bat_dau_cho_file?: string;
   escalate_level?: number;
   so_vong_remind?: number;
-  han_chap_nhan?: string;
+  version_bang_ke?: number;
+  link_file_bang_ke?: string;
+  link_file_hstt?: string;
+  ai_de_xuat?: string;
+  ai_pham_vi?: string;
+  ket_qua_duyet?: string;
   ghi_chu?: string;
+  ly_do?: string;
   reset_remind?: boolean;
 }) {
   const user = await requireRole('admin', 'pm', 'ke_toan');
@@ -135,19 +147,40 @@ export async function overrideTracking(trackingId: string, patch: {
 
   const { data: before } = await sb.from('tracking').select('*').eq('id', trackingId).single();
 
+  const FIELDS = [
+    'status', 'thread_id', 'message_id', 'internal_thread_id',
+    'han_chap_nhan', 'ngay_gui_gan_nhat', 'ngay_chot', 'ngay_bat_dau_cho_file',
+    'escalate_level', 'so_vong_remind', 'version_bang_ke',
+    'link_file_bang_ke', 'link_file_hstt',
+    'ai_de_xuat', 'ai_pham_vi', 'ket_qua_duyet', 'ghi_chu',
+  ] as const;
+
   const update: Record<string, unknown> = {};
-  for (const k of ['status', 'thread_id', 'escalate_level', 'so_vong_remind', 'han_chap_nhan', 'ghi_chu'] as const) {
-    if (patch[k] !== undefined && patch[k] !== '') update[k] = patch[k];
+  for (const k of FIELDS) {
+    const v = patch[k];
+    if (v !== undefined && v !== '') update[k] = v;
   }
   if (patch.reset_remind) update.ngay_remind_cuoi = null;
 
   if (Object.keys(update).length === 0) return;
 
-  await sb.from('tracking').update(update).eq('id', trackingId);
+  const { error } = await sb.from('tracking').update(update).eq('id', trackingId);
+  if (error) throw new Error(error.message);
+
+  // Chỉ ghi lại đúng những trường thực sự đổi, để nhật ký đọc được
+  const changed: Record<string, { tu: unknown; thanh: unknown }> = {};
+  for (const [k, v] of Object.entries(update)) {
+    if (before && (before as any)[k] !== v) {
+      changed[k] = { tu: (before as any)[k], thanh: v };
+    }
+  }
+
   await writeAudit({
     actorId: user.id, actorEmail: user.email,
     action: 'tracking.override', entity: 'tracking', entityId: trackingId,
-    before, after: update, note: 'Can thiệp thủ công từ giao diện.',
+    before, after: { thay_doi: changed },
+    note: patch.ly_do?.trim()
+      || `Sửa tay ${Object.keys(changed).length} trường`,
   });
 
   revalidatePath('/tracking');

@@ -46,10 +46,10 @@ export function WorkflowCard({ wf, laAdmin }: { wf: any; laAdmin: boolean }) {
       <header className="px-4 py-3 border-b border-[var(--line)] flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <span className="mono text-[var(--muted)] uppercase">{wf.key}</span>
+            <span className="mono text-[var(--ink-3)] uppercase">{wf.key}</span>
             <h2 className="text-sm font-bold m-0">{wf.ten}</h2>
           </div>
-          <p className="text-xs text-[var(--muted)] mt-1 mb-0 leading-relaxed max-w-lg">{wf.mo_ta}</p>
+          <p className="text-xs text-[var(--ink-3)] mt-1 mb-0 leading-relaxed max-w-lg">{wf.mo_ta}</p>
         </div>
         <label className="flex items-center gap-2 text-xs font-semibold whitespace-nowrap cursor-pointer">
           <input type="checkbox" checked={enabled} disabled={!laAdmin}
@@ -92,13 +92,13 @@ export function WorkflowCard({ wf, laAdmin }: { wf: any; laAdmin: boolean }) {
           )}
         </div>
 
-        <div className="text-xs text-[var(--muted)] leading-relaxed border-t border-[var(--line-soft)] pt-3">
+        <div className="text-xs text-[var(--ink-3)] leading-relaxed border-t border-[var(--line-soft)] pt-3">
           <p className="m-0">Lần chạy gần nhất: <span className="tnum">{lanCuoi}</span></p>
-          {wf.last_summary && <p className="m-0 mt-1 text-[var(--ink-soft)]">{wf.last_summary}</p>}
+          {wf.last_summary && <p className="m-0 mt-1 text-[var(--ink-2)]">{wf.last_summary}</p>}
         </div>
 
         {thongBao && (
-          <p className="text-sm bg-[var(--violet-soft)] text-[var(--violet-deep)] px-3 py-2 rounded-md m-0">
+          <p className="text-sm bg-[var(--accent-soft)] text-[var(--accent-deep)] px-3 py-2 rounded-[var(--r-sm)] m-0">
             {thongBao}
           </p>
         )}

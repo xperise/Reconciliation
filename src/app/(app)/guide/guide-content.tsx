@@ -10,7 +10,7 @@ const SECTIONS = [
     id: 'tong-quan',
     label: 'Tổng quan',
     icon: '◎',
-    color: 'violet',
+    color: 'accent',
     mo_ta: 'Hiểu cách hệ thống vận hành từ đầu tới cuối trước khi bắt đầu.',
     noi_dung: [
       {
@@ -22,6 +22,39 @@ const SECTIONS = [
           { so: '3', ten: 'Kế toán duyệt', chu_the: 'Kế toán', mo_ta: 'Vào trang Chờ duyệt, đọc tóm tắt AI + nguyên văn email khách, chọn một trong ba quyết định: Đồng ý, Cần sửa, hoặc Từ chối.' },
           { so: '4', ten: 'Hoàn tất', chu_the: 'Hệ thống tự động', mo_ta: 'Tuỳ quyết định của kế toán: chốt và chuẩn bị hồ sơ thanh toán, gửi lại bảng kê sửa (khi kế toán upload bản mới), hoặc chuyển xử lý tay.' },
         ],
+      },
+      {
+        tieu_de: 'Đọc Dashboard ba tầng',
+        mo_ta: 'Dashboard chia theo người đọc, không chia theo loại số liệu.',
+        bang: {
+          header: ['Tầng', 'Dành cho', 'Trả lời câu hỏi'],
+          rows: [
+            ['Tầng 1 — Chiến lược', 'Ban điều hành', 'Quy trình có giúp thu tiền nhanh không, tự động hoá tới đâu'],
+            ['Tầng 2 — Vận hành', 'Quản lý', 'Khâu nào đang làm chậm, lỗi thuộc nội bộ hay khách'],
+            ['Tầng 3 — Hành động', 'Vận hành hằng ngày', 'Hôm nay phải gọi ai, xử lý kỳ nào trước'],
+          ],
+        },
+        chu_y: { loai: 'accent', noi_dung: 'Ô chỉ số nào bấm được sẽ dẫn thẳng sang danh sách đã lọc sẵn. Số liệu tính lại mỗi lần mở trang, không có giá trị lưu cứng. Khi chưa đủ dữ liệu để tính, ô hiện dấu gạch chứ không đoán.' },
+      },
+      {
+        tieu_de: 'Mười chỉ số và cách tính',
+        mo_ta: '',
+        bang: {
+          header: ['Chỉ số', 'Cách tính'],
+          rows: [
+            ['Chốt tự động hoàn toàn', 'Số kỳ chốt mà chưa từng đi qua "Cần chỉnh sửa" hay "Cần xử lý tay", chia tổng số kỳ đã chốt'],
+            ['Vòng đời chốt công nợ', 'Trung bình số ngày từ lần gửi bảng kê đầu tiên tới ngày chốt'],
+            ['Rủi ro kẹt dòng tiền', 'Số kỳ quá hạn chia tổng số kỳ đang xử lý'],
+            ['Rò rỉ thời gian nội bộ', 'Tổng giờ nằm ở các trạng thái chờ nội bộ: chờ file, chờ duyệt, cần sửa, chờ HSTT'],
+            ['Nút thắt lớn nhất', 'Trạng thái có số giờ trung bình cao nhất trong kỳ'],
+            ['Lệch SLA trung bình', 'Số ngày khách thực sự dùng trừ đi SLA cam kết trong Master Data'],
+            ['Cận hạn 24 giờ', 'Kỳ chưa chốt có hạn rơi vào hôm nay hoặc ngày mai'],
+            ['Tỷ lệ phải xử lý tay', 'Số kỳ ở trạng thái "Cần xử lý tay" chia tổng số kỳ'],
+            ['Số lần sửa mỗi bảng kê', 'Tổng lượt chuyển sang "Cần chỉnh sửa" chia tổng số bảng kê'],
+            ['Thời gian chờ thuộc về ai', 'Phân bổ tổng giờ chờ giữa trạng thái nội bộ và trạng thái chờ khách'],
+          ],
+        },
+        chu_y: { loai: 'high', noi_dung: 'Chỉ số "Số lần sửa mỗi bảng kê" vượt 1 nghĩa là trung bình mỗi bảng kê phải sửa hơn một lần — dấu hiệu chất lượng dữ liệu đầu vào có vấn đề, nên soi lại khâu chuẩn bị file.' },
       },
       {
         tieu_de: 'Bốn workflow và lịch chạy',
@@ -63,14 +96,14 @@ const SECTIONS = [
     id: 'ke-toan',
     label: 'Kế toán',
     icon: '⊟',
-    color: 'teal',
+    color: 'stable',
     mo_ta: 'Tải tệp lên, duyệt phản hồi khách, và xử lý các trường hợp ngoại lệ.',
     noi_dung: [
       {
         tieu_de: 'Tải bảng kê lên (việc hằng ngày)',
         mo_ta: '',
         buoc: [
-          { so: '1', ten: 'Vào trang Tệp bảng kê', chu_the: '', mo_ta: 'Chọn menu bên trái. Ô "Tải tệp lên" ở đầu trang.' },
+          { so: '1', ten: 'Vào tab Bảng kê → Tệp bảng kê', chu_the: '', mo_ta: 'Thanh tab trên cùng chia bốn nhóm: Tổng quan, Bảng kê, Quản lý, Hỗ trợ. Ô tải tệp nằm đầu trang.' },
           { so: '2', ten: 'Chọn nhóm và kỳ', chu_the: '', mo_ta: 'Chọn từ danh sách — không cần nhớ tên thư mục hay cú pháp tên file. Kỳ mặc định là tháng trước.' },
           { so: '3', ten: 'Chọn loại tệp', chu_the: '', mo_ta: '"Bảng kê" cho lần đầu. "Hồ sơ thanh toán" khi chốt xong cần gửi HSTT. Hệ thống tự đánh số phiên bản.' },
           { so: '4', ten: 'Kéo thả tệp', chu_the: '', mo_ta: 'Nhận .xlsx .pdf .docx .zip — tối đa 50 MB. Giữ tick "Gửi cho khách ngay" để hệ thống gửi email liền sau khi upload.' },
@@ -105,7 +138,7 @@ const SECTIONS = [
     id: 'pm',
     label: 'PM',
     icon: '⊕',
-    color: 'amber',
+    color: 'high',
     mo_ta: 'Theo dõi tiến độ toàn bộ kỳ, can thiệp khi cần, và xử lý ngoại lệ.',
     noi_dung: [
       {
@@ -122,8 +155,8 @@ const SECTIONS = [
         mo_ta: 'Nút "Can thiệp" trên mỗi dòng Tracking — dành cho PM và kế toán.',
         buoc: [
           { so: '1', ten: 'Xác định vấn đề', chu_the: '', mo_ta: 'Thường gặp: Thread_ID biến mất (khách xóa email gốc), trạng thái kẹt sai, hoặc cần tạm dừng escalate.' },
-          { so: '2', ten: 'Bấm "Can thiệp"', chu_the: '', mo_ta: 'Popup nhỏ cho phép: đổi trạng thái, cập nhật Thread_ID mới, ghi lý do, reset đồng hồ nhắc, hoặc reset cấp escalate về 0.' },
-          { so: '3', ten: 'Lưu', chu_the: '', mo_ta: 'Mọi can thiệp ghi vào Nhật ký kèm tên người thực hiện. Không có gì "âm thầm" bị sửa.' },
+          { so: '2', ten: 'Bấm "Can thiệp"', chu_the: '', mo_ta: 'Cửa sổ mở ra cho sửa mọi trường: trạng thái, hạn chấp nhận, ngày gửi, ngày chốt, mốc chờ file, cấp escalate, số vòng nhắc, cả ba Thread ID, link tệp, phân loại AI và ghi chú.' },
+          { so: '3', ten: 'Ghi lý do rồi Lưu', chu_the: '', mo_ta: 'Nhật ký ghi lại đúng những trường đã đổi kèm giá trị cũ và mới. Bấm vào dòng trong Nhật ký để xem bảng so sánh.' },
         ],
         chu_y: { loai: 'amber', noi_dung: 'Nếu Thread_ID mất: vào Gmail tìm thread gốc → copy ID từ URL (phần sau #thread/) → paste vào ô Thread_ID mới.' },
       },
@@ -143,7 +176,7 @@ const SECTIONS = [
     id: 'admin',
     label: 'Quản trị',
     icon: '⊛',
-    color: 'red',
+    color: 'critical',
     mo_ta: 'Cấu hình hệ thống, quản lý người dùng và xử lý sự cố kỹ thuật.',
     noi_dung: [
       {
@@ -165,6 +198,17 @@ const SECTIONS = [
           { so: '3', ten: 'Điểm phân nhóm', chu_the: '', mo_ta: 'GMV + Quy mô + Lịch sử tranh chấp + Độ phức tạp, mỗi tiêu chí 1-3 điểm. 3-5 điểm = nhóm 1 (tự chốt), 6-9 = nhóm 2, 10-12 = nhóm 3.' },
         ],
         chu_y: { loai: 'red', noi_dung: 'Tick "Ngưng hợp tác" để workflow bỏ qua nhóm đó. Không cần xóa — dữ liệu lịch sử vẫn giữ nguyên.' },
+      },
+      {
+        tieu_de: 'Tra cứu thư đã gửi cho khách',
+        mo_ta: 'Khi khách gọi lên hỏi "sao tôi nhận hai lần" hoặc "tôi chưa nhận được gì".',
+        buoc: [
+          { so: '1', ten: 'Mở Quản lý → Workflow', chu_the: '', mo_ta: 'Kéo xuống mục Lịch sử chạy gần đây.' },
+          { so: '2', ten: 'Bấm vào dòng cần tra', chu_the: '', mo_ta: 'Cột Thư cho biết lượt đó gửi bao nhiêu thư. Bấm vào dòng để mở bảng chi tiết.' },
+          { so: '3', ten: 'Đọc bảng thư', chu_the: '', mo_ta: 'Mỗi dòng ghi loại thư, nhóm khách, kỳ, địa chỉ nhận, danh sách CC, tiêu đề và thời điểm gửi.' },
+          { so: '4', ten: 'Xem diễn biến nếu cần', chu_the: '', mo_ta: 'Phần "Diễn biến từng nhóm" giải thích vì sao nhóm nào đó bị bỏ qua hoặc lỗi.' },
+        ],
+        chu_y: { loai: 'stable', noi_dung: 'Đây là bằng chứng đối chiếu khi có tranh chấp: thư nào đã gửi, gửi lúc nào, tới địa chỉ nào.' },
       },
       {
         tieu_de: 'Xử lý sự cố workflow',
@@ -196,18 +240,23 @@ const SECTIONS = [
 // Component
 // =====================================================================
 
-const COLOR_MAP: Record<string, { pill: string; active: string; border: string }> = {
-  violet: { pill: 'badge-violet', active: 'bg-[var(--violet-soft)] text-[var(--violet-deep)]', border: 'border-[var(--violet)]' },
-  teal:   { pill: 'badge-teal',   active: 'bg-[var(--teal-soft)] text-[#0A5C52]',              border: 'border-[var(--teal)]' },
-  amber:  { pill: 'badge-amber',  active: 'bg-[var(--amber-soft)] text-[#7A5A12]',             border: 'border-[var(--amber)]' },
-  red:    { pill: 'badge-red',    active: 'bg-[var(--red-soft)] text-[#9F122E]',               border: 'border-[var(--red)]' },
+/** Màu viền và nền cho tab vai trò, lấy thẳng từ token. */
+const TONE: Record<string, { pill: string; bg: string; fg: string; border: string }> = {
+  accent:   { pill: 'pill-watch',    bg: 'var(--accent-soft)',   fg: 'var(--accent-deep)', border: 'var(--accent)' },
+  stable:   { pill: 'pill-stable',   bg: 'var(--stable-soft)',   fg: 'var(--stable)',      border: 'var(--stable)' },
+  high:     { pill: 'pill-high',     bg: 'var(--high-soft)',     fg: 'var(--high)',        border: 'var(--high)' },
+  critical: { pill: 'pill-critical', bg: 'var(--critical-soft)', fg: 'var(--critical)',    border: 'var(--critical)' },
 };
 
 const CALLOUT_MAP: Record<string, string> = {
-  violet: 'callout callout-violet',
-  amber:  'callout callout-amber',
-  teal:   'callout callout-teal',
-  red:    'callout callout-red',
+  accent:   'callout callout-accent',
+  violet:   'callout callout-accent',
+  high:     'callout callout-high',
+  amber:    'callout callout-high',
+  stable:   'callout callout-stable',
+  teal:     'callout callout-stable',
+  critical: 'callout callout-critical',
+  red:      'callout callout-critical',
 };
 
 function StepList({ buoc }: { buoc: any[] }) {
@@ -215,7 +264,7 @@ function StepList({ buoc }: { buoc: any[] }) {
     <ol className="list-none m-0 p-0 space-y-3 mt-3">
       {buoc.map((b) => (
         <li key={b.so} className="flex gap-3">
-          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[var(--violet)] text-white text-[11px] font-bold
+          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[var(--accent)] text-white text-[11px] font-bold
             flex items-center justify-center mt-0.5">
             {b.so}
           </span>
@@ -260,7 +309,7 @@ function DataTable({ bang }: { bang: { header: string[]; rows: string[][] } }) {
 export function GuideContent() {
   const [activeSection, setActiveSection] = useState('tong-quan');
   const section = SECTIONS.find((s) => s.id === activeSection)!;
-  const colors = COLOR_MAP[section.color];
+  const tone = TONE[section.color] ?? TONE.accent;
 
   return (
     <div className="flex gap-5 items-start">
@@ -272,7 +321,7 @@ export function GuideContent() {
           </div>
           <ul className="list-none m-0 p-2 space-y-0.5">
             {SECTIONS.map((s) => {
-              const c = COLOR_MAP[s.color];
+              const c = TONE[s.color] ?? TONE.accent;
               const isActive = s.id === activeSection;
               return (
                 <li key={s.id}>
@@ -281,8 +330,9 @@ export function GuideContent() {
                     className={[
                       'w-full text-left px-3 py-[7px] rounded-[var(--r-sm)] text-[13px] font-medium',
                       'flex items-center gap-2 transition-colors',
-                      isActive ? c.active : 'text-[var(--ink-2)] hover:bg-[var(--surface-2)]',
+                      'w-full text-left',
                     ].join(' ')}
+                    style={isActive ? { background: c.bg, color: c.fg } : undefined}
                   >
                     <span className="text-base leading-none">{s.icon}</span>
                     {s.label}
@@ -302,11 +352,11 @@ export function GuideContent() {
       {/* Main content */}
       <div className="flex-1 min-w-0 space-y-4">
         {/* Section header */}
-        <div className={`card overflow-hidden border-l-4 ${colors.border}`}>
+        <div className="card overflow-hidden" style={{ borderLeft: `4px solid ${tone.border}` }}>
           <div className="px-5 py-4">
             <div className="flex items-center gap-3 mb-1">
               <span className="text-2xl leading-none">{section.icon}</span>
-              <span className={`badge ${colors.pill}`}>{section.label}</span>
+              <span className={`pill ${tone.pill}`}>{section.label}</span>
             </div>
             <p className="text-[13.5px] text-[var(--ink-2)] m-0 mt-1 leading-relaxed">
               {section.mo_ta}

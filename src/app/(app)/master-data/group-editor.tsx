@@ -65,7 +65,7 @@ export function GroupEditor({ group, onClose }: { group: any | null; onClose: ()
           <h2 className="text-base font-bold m-0">
             {group ? `Sửa nhóm ${group.ten_nhom}` : 'Thêm nhóm đối soát'}
           </h2>
-          <p className="text-xs text-[var(--muted)] mt-1 mb-0">
+          <p className="text-xs text-[var(--ink-3)] mt-1 mb-0">
             Một nhóm nhận một bảng kê, một thread email và một đồng hồ SLA.
           </p>
         </header>
@@ -93,7 +93,7 @@ export function GroupEditor({ group, onClose }: { group: any | null; onClose: ()
                 </select>
               </div>
               {nhomGoiY && (
-                <p className="text-xs text-[var(--muted)] m-0 pb-2">
+                <p className="text-xs text-[var(--ink-3)] m-0 pb-2">
                   Tổng {tongDiem} điểm → khung điểm gợi ý <strong>nhóm {nhomGoiY}</strong>.
                 </p>
               )}
@@ -140,7 +140,7 @@ export function GroupEditor({ group, onClose }: { group: any | null; onClose: ()
           </label>
 
           {loi && (
-            <p role="alert" className="text-sm text-[var(--red)] bg-[var(--red-wash)] px-3 py-2 rounded-md m-0">
+            <p role="alert" className="text-sm text-[var(--critical)] bg-[var(--critical-soft)] px-3 py-2 rounded-[var(--r-sm)] m-0">
               {loi}
             </p>
           )}
