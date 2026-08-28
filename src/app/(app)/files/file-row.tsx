@@ -1,7 +1,7 @@
 'use client';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { guiTepNgay, xoaTep, xemTep } from '@/app/actions';
+import { guiLoNgay, xoaTep, xemTep } from '@/app/actions';
 
 export function FileActions({ file, laKeToan }: { file: any; laKeToan: boolean }) {
   const router = useRouter();
@@ -22,7 +22,7 @@ export function FileActions({ file, laKeToan }: { file: any; laKeToan: boolean }
     setLoi('');
     start(async () => {
       try {
-        const r = await guiTepNgay(file.id, guiLai ? { lyDo: lyDo.trim() } : undefined);
+        const r = await guiLoNgay(file.batch_id, guiLai ? { lyDo: lyDo.trim() } : undefined);
         if (!r.sent) setLoi(r.message);
         setHoiGuiLai(false); setLyDo(''); setChacChan(false);
         router.refresh();

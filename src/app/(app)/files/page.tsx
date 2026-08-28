@@ -95,7 +95,10 @@ export default async function FilesPage({ searchParams }: {
                     <tr key={f.id}>
                       <td><span className={`pill ${l.tone}`}>{l.nhan}</span></td>
                       <td className="mono text-[12px] whitespace-nowrap">{f.ma_he_thong}</td>
-                      <td className="mono text-[12px] whitespace-nowrap">{f.ky_doi_soat}</td>
+                      <td className="mono text-[12px] whitespace-nowrap">
+                        {f.ky_doi_soat}
+                        {f.dot > 1 && <span className="sub">Đợt {f.dot}</span>}
+                      </td>
                       <td className="max-w-[240px] truncate text-[12.5px]" title={f.file_name}>
                         {f.file_name}
                       </td>

@@ -1,30 +1,32 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { currentPeriod, isDueToday, nowInVN, addDays } from '@/lib/period';
-import { latestUnsent, downloadFile, signedUrl, mimeFor } from '@/lib/storage';
-import { sendMail } from '@/lib/google/gmail';
+import {
+  periodForSchedule, periodFull, isDueToday, nowInVN, addDays,
+} from '@/lib/period';
+import { latestUnsentBatch, downloadFile, signedUrl, mimeFor } from '@/lib/storage';
+import { sendMail, Attachment } from '@/lib/google/gmail';
 import { refSubject, tplBangKe, tplThieuEmailL1, tplThieuFile } from '@/lib/email-templates';
 import { MailLog } from '@/lib/mail-log';
 import {
-  BillingGroup, RunResult, STATUS_WF1_SKIP, TrackingStatus,
-  effectiveDueDay, effectiveSlaChapNhan,
+  BillingGroup, BillingSchedule, RunResult, STATUS_WF1_SKIP, TrackingStatus,
+  effectiveSlaChapNhan,
 } from '@/lib/types';
 
 /**
  * WF1 — Gửi bảng kê
  *
- * Chạy mỗi sáng. Với mỗi nhóm đối soát đến hạn gửi trong hôm nay:
- *   1. Bỏ qua nếu kỳ này đã gửi rồi (tránh gửi trùng khi chạy lại).
- *   2. Thiếu email đầu mối  → cảnh báo nội bộ, dừng nhóm đó.
- *   3. Chưa có tệp nào được tải lên → email khẩn cho kế toán, đánh dấu chờ tệp.
- *   4. Có tệp → gửi cho khách, ghi thread_id và hạn chấp nhận vào tracking.
+ * Chạy mỗi sáng, duyệt theo **lịch gửi** chứ không theo nhóm khách. Một nhóm
+ * có thể có nhiều đợt trong tháng, mỗi đợt là một lịch riêng với ngày gửi và
+ * kỳ dữ liệu riêng.
  *
- * Tệp lấy từ bảng statement_files, tức là thứ kế toán đã tải lên website và
- * gắn sẵn nhóm với kỳ. Không còn khâu dò tên file như bản chạy trên Drive.
+ * Với mỗi lịch tới hạn hôm nay:
+ *   1. Bỏ qua nếu kỳ và đợt đó đã gửi rồi.
+ *   2. Thiếu email đầu mối  → cảnh báo nội bộ, dừng lịch đó.
+ *   3. Chưa có tệp nào      → email khẩn cho kế toán, đánh dấu chờ tệp.
+ *   4. Có tệp → gửi cả lô trong một email, ghi thread và hạn chấp nhận.
  */
 export async function runWf1(): Promise<RunResult> {
   const sb = supabaseAdmin();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
-  const ky = currentPeriod();
   const today = nowInVN().isoDate;
 
   const detail: unknown[] = [];
@@ -32,28 +34,38 @@ export async function runWf1(): Promise<RunResult> {
   let ok = 0;
   let failed = 0;
 
-  const { data: groups, error } = await sb
-    .from('billing_groups').select('*').eq('ngung_hop_tac', false);
-  if (error) throw new Error(`Không đọc được nhóm đối soát: ${error.message}`);
+  const { data: lichs, error } = await sb
+    .from('billing_schedules')
+    .select('*, billing_groups!inner(*)')
+    .eq('enabled', true);
 
-  const dueToday = (groups as BillingGroup[]).filter((g) => {
-    const day = effectiveDueDay(g);
-    return day != null && isDueToday(day);
-  });
+  if (error) throw new Error(`Không đọc được lịch gửi: ${error.message}`);
 
-  if (dueToday.length === 0) {
-    return { ok: 0, failed: 0, summary: `Hôm nay không có nhóm nào đến hạn gửi bảng kê kỳ ${ky}.`, detail: [] };
+  const toiHan = (lichs ?? []).filter((l: any) =>
+    !l.billing_groups.ngung_hop_tac && isDueToday(l.ngay_gui));
+
+  if (toiHan.length === 0) {
+    return {
+      ok: 0, failed: 0,
+      summary: 'Hôm nay không có lịch gửi bảng kê nào tới hạn.',
+      detail: [],
+    };
   }
 
-  for (const g of dueToday) {
+  for (const lich of toiHan as any[]) {
+    const l = lich as BillingSchedule;
+    const g = lich.billing_groups as BillingGroup;
+    const ky = periodForSchedule(l.ky_thuoc_thang);
+    const nhanKy = periodFull(ky, l.pham_vi_nhan, l.dot);
+
     const note = (msg: string, extra: Record<string, unknown> = {}) =>
-      detail.push({ nhom: g.ma_he_thong, ky, msg, ...extra });
+      detail.push({ nhom: g.ma_he_thong, ky: nhanKy, msg, ...extra });
 
     try {
-      // --- 1. Kỳ này đã xử lý chưa -------------------------------------
+      // --- 1. Kỳ và đợt này đã xử lý chưa ------------------------------
       const { data: existing } = await sb
         .from('tracking').select('id, status, ngay_remind_cuoi')
-        .eq('group_id', g.id).eq('ky_doi_soat', ky).maybeSingle();
+        .eq('group_id', g.id).eq('ky_doi_soat', ky).eq('dot', l.dot).maybeSingle();
 
       if (existing && STATUS_WF1_SKIP.includes(existing.status as TrackingStatus)) {
         note('Bỏ qua — kỳ này đã được xử lý.', { status: existing.status });
@@ -65,45 +77,44 @@ export async function runWf1(): Promise<RunResult> {
         ma_he_thong: g.ma_he_thong,
         ten_nhom: g.ten_nhom,
         ky_doi_soat: ky,
+        dot: l.dot,
+        pham_vi_nhan: l.pham_vi_nhan,
       };
 
       // --- 2. Thiếu email đầu mối --------------------------------------
       if (!g.email_l1?.includes('@')) {
-        const mail = tplThieuEmailL1(g.ten_nhom, ky, appUrl);
+        const mail = tplThieuEmailL1(g.ten_nhom, nhanKy, appUrl);
         if (g.email_ke_toan) {
           await sendMail({ to: g.email_ke_toan, cc: g.email_pm ?? undefined, ...mail });
-          mails.ghi({ nhom: g.ten_nhom, ky, loai: 'Cảnh báo thiếu email',
+          mails.ghi({ nhom: g.ten_nhom, ky: nhanKy, loai: 'Cảnh báo thiếu email',
             den: g.email_ke_toan, cc: g.email_pm ?? undefined, tieu_de: mail.subject });
         }
         await sb.from('tracking').upsert(
           { ...baseRow, status: 'can_xu_ly_tay' as TrackingStatus,
             ghi_chu: 'WF1: thiếu email đầu mối khách hàng trong Master Data.' },
-          { onConflict: 'group_id,ky_doi_soat' },
+          { onConflict: 'group_id,ky_doi_soat,dot' },
         );
         failed += 1;
         note('Thiếu email đầu mối, đã cảnh báo nội bộ.');
         continue;
       }
 
-      // --- 3. Tìm tệp kế toán đã tải lên --------------------------------
-      const file = await latestUnsent(g.id, ky, 'bang_ke');
+      // --- 3. Tìm lô tệp kế toán đã tải lên ----------------------------
+      const lo = await latestUnsentBatch(g.id, ky, 'bang_ke', l.dot);
 
-      if (!file) {
+      if (lo.length === 0) {
         const reason = 'Chưa có ai tải bảng kê của kỳ này lên hệ thống.';
 
-        // Hôm nay đã nhắc rồi thì thôi. Chạy tay WF1 nhiều lần trong ngày là
-        // chuyện bình thường khi kiểm thử, không có lý do gì để kế toán nhận
-        // cùng một thư khẩn vài lần.
         if (existing?.status === 'cho_file_da_nhac_noi_bo'
             && (existing as any).ngay_remind_cuoi === today) {
           note('Chưa có tệp, nhưng hôm nay đã nhắc nội bộ rồi.');
           continue;
         }
 
-        const mail = tplThieuFile(g.ten_nhom, ky, appUrl);
+        const mail = tplThieuFile(g.ten_nhom, nhanKy, appUrl);
         if (g.email_ke_toan) {
           await sendMail({ to: g.email_ke_toan, cc: g.email_pm ?? undefined, ...mail });
-          mails.ghi({ nhom: g.ten_nhom, ky, loai: 'Nhắc nội bộ thiếu tệp',
+          mails.ghi({ nhom: g.ten_nhom, ky: nhanKy, loai: 'Nhắc nội bộ thiếu tệp',
             den: g.email_ke_toan, cc: g.email_pm ?? undefined, tieu_de: mail.subject });
         }
         await sb.from('tracking').upsert(
@@ -112,56 +123,81 @@ export async function runWf1(): Promise<RunResult> {
             ngay_bat_dau_cho_file: today,
             ngay_remind_cuoi: today,
             ghi_chu: `WF1: ${reason}` },
-          { onConflict: 'group_id,ky_doi_soat' },
+          { onConflict: 'group_id,ky_doi_soat,dot' },
         );
         failed += 1;
         note('Chưa có tệp, đã nhắc nội bộ.', { reason });
         continue;
       }
 
-      // --- 4. Gửi cho khách --------------------------------------------
-      const buffer = await downloadFile(file.storage_path);
-      const link = await signedUrl(file.storage_path, file.file_name);
+      // --- 4. Gửi cả lô trong một email --------------------------------
+      const attachments: Attachment[] = [];
+      for (const f of lo) {
+        attachments.push({
+          filename: f.file_name,
+          mimeType: f.mime_type ?? mimeFor(f.file_name),
+          data: await downloadFile(f.storage_path),
+        });
+      }
+      const link = await signedUrl(lo[0].storage_path, lo[0].file_name);
 
       const ccList = [g.email_ke_toan, g.email_cc].filter(Boolean).join(',') || undefined;
-      const subject = refSubject(g.ten_nhom, ky);
+      const subject = refSubject(g.ten_nhom, nhanKy);
+
       const sent = await sendMail({
         to: g.email_l1,
         cc: ccList,
         subject,
-        html: tplBangKe(g.ten_nhom, ky, link),
-        attachments: [{
-          filename: file.file_name,
-          mimeType: file.mime_type ?? mimeFor(file.file_name),
-          data: buffer,
-        }],
+        html: tplBangKe(g.ten_nhom, ky, link, l.pham_vi_nhan, lo.length),
+        attachments,
       });
 
+      const gio = new Date().toISOString();
       await sb.from('statement_files')
-        .update({ sent_at: new Date().toISOString() }).eq('id', file.id);
+        .update({ sent_at: gio }).in('id', lo.map((f) => f.id));
 
-      await sb.from('tracking').upsert(
+      const slaNgay = l.sla_chap_nhan ?? effectiveSlaChapNhan(g);
+
+      const { data: tr } = await sb.from('tracking').upsert(
         { ...baseRow,
           status: 'da_gui_bang_ke' as TrackingStatus,
           ngay_gui_gan_nhat: today,
           link_file_bang_ke: link,
-          ten_file_da_gui: file.file_name,
+          ten_file_da_gui: lo.map((f) => f.file_name).join(', '),
           thread_id: sent.threadId,
           message_id: sent.id,
-          han_chap_nhan: addDays(today, effectiveSlaChapNhan(g)),
+          han_chap_nhan: addDays(today, slaNgay),
           escalate_level: 0,
           so_vong_remind: 0,
-          version_bang_ke: file.version,
+          version_bang_ke: lo[0].version,
           ngay_bat_dau_cho_file: null,
+          ngay_remind_cuoi: null,
           ghi_chu: null },
-        { onConflict: 'group_id,ky_doi_soat' },
-      );
+        { onConflict: 'group_id,ky_doi_soat,dot' },
+      ).select('id').single();
 
-      mails.ghi({ nhom: g.ten_nhom, ky, loai: 'Bảng kê',
+      await sb.from('send_log').insert({
+        batch_id: lo[0].batch_id,
+        file_id: lo[0].id,
+        tracking_id: tr?.id ?? null,
+        ma_he_thong: g.ma_he_thong,
+        ky_doi_soat: ky,
+        dot: l.dot,
+        kind: 'bang_ke',
+        version: lo[0].version,
+        so_tep: lo.length,
+        file_name: lo.map((f) => f.file_name).join(', '),
+        den: g.email_l1,
+        cc: ccList ?? null,
+        la_gui_lai: false,
+        nguon: 'workflow',
+      });
+
+      mails.ghi({ nhom: g.ten_nhom, ky: nhanKy, loai: `Bảng kê (${lo.length} tệp)`,
         den: g.email_l1, cc: ccList, tieu_de: subject });
 
       ok += 1;
-      note('Đã gửi bảng kê.', { file: file.file_name, threadId: sent.threadId });
+      note('Đã gửi bảng kê.', { soTep: lo.length, threadId: sent.threadId });
     } catch (err) {
       failed += 1;
       note('Lỗi khi xử lý.', { error: err instanceof Error ? err.message : String(err) });
@@ -171,8 +207,8 @@ export async function runWf1(): Promise<RunResult> {
   return {
     ok,
     failed,
-    summary: `Kỳ ${ky}: gửi thành công ${ok}/${dueToday.length} nhóm`
-      + (failed ? `, ${failed} nhóm cần xử lý` : '')
+    summary: `Gửi thành công ${ok}/${toiHan.length} lịch`
+      + (failed ? `, ${failed} lịch cần xử lý` : '')
       + (mails.count ? `. Thư đã gửi: ${mails.tomTat()}` : '.'),
     detail,
     mails: mails.all,

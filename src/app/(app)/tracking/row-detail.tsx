@@ -34,7 +34,12 @@ export function RowDetail({ row, phapNhan, tre, badge, rail, action }: {
           <span className="font-semibold">{row.ten_nhom}</span>
           <span className="sub mono">{row.ma_he_thong}</span>
         </td>
-        <td className="mono text-[12px] whitespace-nowrap">{row.ky_doi_soat}</td>
+        <td className="mono text-[12px] whitespace-nowrap">
+          {row.ky_doi_soat}
+          {(row.pham_vi_nhan || row.dot > 1) && (
+            <span className="sub">{row.pham_vi_nhan || `Đợt ${row.dot}`}</span>
+          )}
+        </td>
         <td>{badge}</td>
         <td>{rail}</td>
         <td className="text-right mono text-[12px] whitespace-nowrap"
@@ -74,6 +79,8 @@ export function RowDetail({ row, phapNhan, tre, badge, rail, action }: {
               <F k="Thread ID khách" v={row.thread_id} mono />
               <F k="Message ID" v={row.message_id} mono />
               <F k="Thread ID nội bộ" v={row.internal_thread_id} mono />
+              <F k="Đợt trong tháng" v={`Đợt ${row.dot ?? 1}`} mono />
+              <F k="Phạm vi kỳ" v={row.pham_vi_nhan || 'Cả tháng'} />
               <F k="Mốc chờ file" v={row.ngay_bat_dau_cho_file} mono />
               <F k="Nhắc lần cuối" v={row.ngay_remind_cuoi} mono />
               <F k="Cấp escalate" v={`${row.escalate_level} / vòng ${row.so_vong_remind + 1}`} mono />

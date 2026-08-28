@@ -9,6 +9,8 @@ export type FileKind = 'bang_ke' | 'hstt';
 
 export type StatementFile = {
   id: string;
+  batch_id: string;
+  dot: number;
   group_id: string;
   ma_he_thong: string;
   ky_doi_soat: string;
@@ -30,6 +32,7 @@ export type StatementFile = {
  */
 export function buildPath(
   maHeThong: string, ky: string, kind: FileKind, version: number, fileName: string,
+  dot = 1,
 ): string {
   const safe = fileName
     .normalize('NFC')
@@ -37,7 +40,8 @@ export function buildPath(
     .slice(0, 120);
   const stamp = Date.now().toString(36);
   const nhan = kind === 'hstt' ? 'HSTT' : `v${version}`;
-  return `${maHeThong}/${ky}/${nhan}_${stamp}_${safe}`;
+  const thuMuc = dot > 1 ? `${ky}/dot${dot}` : ky;
+  return `${maHeThong}/${thuMuc}/${nhan}_${stamp}_${safe}`;
 }
 
 /** Tải nội dung tệp về bộ nhớ để đính kèm vào email. */
@@ -84,37 +88,60 @@ export async function removeFile(storagePath: string): Promise<void> {
  * Bản mới nhất chưa gửi của một loại tệp trong một kỳ.
  * Workflow dùng hàm này thay cho việc dò tên file trên Drive.
  */
-export async function latestUnsent(
-  groupId: string, ky: string, kind: FileKind,
-): Promise<StatementFile | null> {
-  const { data } = await supabaseAdmin()
+/**
+ * Lô tệp chưa gửi mới nhất của một kỳ.
+ *
+ * Trả về cả lô chứ không phải một tệp: một bảng kê có thể gồm nhiều tệp
+ * (bảng kê chính, phụ lục, bảng kê chi tiết) và chúng phải đi chung một email
+ * thì khách mới đối chiếu được.
+ */
+export async function latestUnsentBatch(
+  groupId: string, ky: string, kind: FileKind, dot = 1,
+): Promise<StatementFile[]> {
+  const sb = supabaseAdmin();
+
+  const { data: dau } = await sb
     .from('statement_files')
-    .select('*')
-    .eq('group_id', groupId)
-    .eq('ky_doi_soat', ky)
-    .eq('kind', kind)
+    .select('batch_id')
+    .eq('group_id', groupId).eq('ky_doi_soat', ky)
+    .eq('kind', kind).eq('dot', dot)
     .is('sent_at', null)
     .order('version', { ascending: false })
     .order('uploaded_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  return (data as StatementFile) ?? null;
+    .limit(1).maybeSingle();
+
+  if (!dau?.batch_id) return [];
+
+  const { data } = await sb
+    .from('statement_files')
+    .select('*')
+    .eq('batch_id', dau.batch_id)
+    .is('sent_at', null)
+    .order('uploaded_at');
+
+  return (data ?? []) as StatementFile[];
+}
+
+/** Toàn bộ tệp trong một lô, kể cả tệp đã gửi. */
+export async function filesInBatch(batchId: string): Promise<StatementFile[]> {
+  const { data } = await supabaseAdmin()
+    .from('statement_files').select('*')
+    .eq('batch_id', batchId).order('uploaded_at');
+  return (data ?? []) as StatementFile[];
 }
 
 /** Số phiên bản kế tiếp cho một kỳ, dùng khi kế toán tải bản chỉnh sửa lên. */
+/** Số bản kế tiếp cho một kỳ. Mọi tệp trong cùng một lô dùng chung số này. */
 export async function nextVersion(
-  groupId: string, ky: string, kind: FileKind,
+  groupId: string, ky: string, kind: FileKind, dot = 1,
 ): Promise<number> {
-  if (kind === 'hstt') return 1;
   const { data } = await supabaseAdmin()
     .from('statement_files')
     .select('version')
-    .eq('group_id', groupId)
-    .eq('ky_doi_soat', ky)
-    .eq('kind', kind)
+    .eq('group_id', groupId).eq('ky_doi_soat', ky)
+    .eq('kind', kind).eq('dot', dot)
     .order('version', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(1).maybeSingle();
   return ((data?.version as number) ?? 0) + 1;
 }
 

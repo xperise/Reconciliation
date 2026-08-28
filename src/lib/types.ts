@@ -132,6 +132,19 @@ export type Tracking = {
   version_bang_ke: number;
 };
 
+/** Một lịch gửi của nhóm khách. Một nhóm có thể có nhiều đợt trong tháng. */
+export type BillingSchedule = {
+  id: string;
+  group_id: string;
+  dot: number;
+  pham_vi_nhan: string | null;
+  ngay_gui: number;
+  ky_thuoc_thang: 'thang_nay' | 'thang_truoc';
+  sla_chap_nhan: number | null;
+  enabled: boolean;
+  ghi_chu: string | null;
+};
+
 export type FileKind = 'bang_ke' | 'hstt';
 
 export const FILE_KIND_LABEL: Record<FileKind, string> = {

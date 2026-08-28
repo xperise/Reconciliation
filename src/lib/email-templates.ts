@@ -1,4 +1,4 @@
-import { periodInWords } from './period';
+import { periodInWords, periodWordsFull } from './period';
 
 const TEAL = '#03A695';
 const LOGO = 'https://files.uts.network/email_assets/xperise_alt_fulllogo%402x.png';
@@ -38,14 +38,19 @@ function shell(title: string, bodyHtml: string, ctaUrl?: string, ctaLabel?: stri
 // Email gửi khách hàng
 // ---------------------------------------------------------------------
 
-export function tplBangKe(nhomKh: string, ky: string, fileLink: string): string {
+export function tplBangKe(
+  nhomKh: string, ky: string, fileLink: string,
+  phamVi?: string | null, soTep = 1,
+): string {
   return shell(
-    `Bảng kê dịch vụ ${periodInWords(ky)}`,
+    `Bảng kê dịch vụ ${periodWordsFull(ky, phamVi)}`,
     `<p style="margin:0 0 16px;">Thân gửi <strong>${nhomKh}</strong>,</p>
      <p style="margin:0 0 16px;">xperise xin gửi lời cảm ơn chân thành đến Quý doanh nghiệp đã lựa chọn
      sử dụng dịch vụ của chúng tôi. Dưới đây là bảng kê dịch vụ mà Quý doanh nghiệp đã sử dụng trong kỳ
-     <strong>${periodInWords(ky)}</strong>.</p>
-     <p style="margin:0;">Nhấn vào nút bên dưới để xem chi tiết bảng kê dịch vụ.</p>
+     <strong>${periodWordsFull(ky, phamVi)}</strong>.</p>
+     <p style="margin:0;">${soTep > 1
+       ? `Kỳ này gồm <strong>${soTep} tệp</strong>, tất cả được đính kèm trong email này.`
+       : 'Nhấn vào nút bên dưới để xem chi tiết bảng kê dịch vụ.'}</p>
      <div style="background:#F3FBFA;border-left:3px solid ${TEAL};padding:14px 16px;margin-top:24px;border-radius:4px;">
        <p style="margin:0 0 8px;font-weight:700;color:#0d4f48;">Lưu ý quan trọng</p>
        <p style="margin:0 0 6px;">• Quý khách vui lòng xác nhận bảng kê bằng cách trả lời trực tiếp email này.</p>

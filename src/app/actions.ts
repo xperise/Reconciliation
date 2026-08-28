@@ -10,7 +10,7 @@ import { refSubject, tplMacDinhChot, tplNhacChuanBiHstt } from '@/lib/email-temp
 import { TrackingStatus, FileKind } from '@/lib/types';
 import { buildPath, nextVersion, removeFile, previewUrl } from '@/lib/storage';
 import { pushNotify } from '@/lib/notify';
-import { guiTepChoKhach } from '@/workflows/wf3-gui-tep';
+import { guiTepChoKhach, guiLoChoKhach } from '@/workflows/wf3-gui-tep';
 
 async function requireRole(...roles: string[]) {
   const user = await currentUser();
@@ -503,6 +503,7 @@ export async function doiTrangThaiNguoiDung(userId: string, active: boolean) {
 /** Nơi sẽ cất tệp. Gọi trước khi trình duyệt tải nội dung lên kho. */
 export async function xinChoLuuTep(
   groupId: string, ky: string, kind: FileKind, fileName: string,
+  dot = 1, version?: number,
 ) {
   await requireRole('admin', 'ke_toan');
 
@@ -514,12 +515,74 @@ export async function xinChoLuuTep(
     throw new Error('Kỳ đối soát phải viết dạng T07.2026.');
   }
 
-  const version = await nextVersion(groupId, ky, kind);
+  // Tệp thứ hai trở đi trong cùng một lô dùng lại số bản của tệp đầu, để cả
+  // lô cùng một bản và đi chung một email.
+  const ban = version ?? await nextVersion(groupId, ky, kind, dot);
   return {
-    path: buildPath(g.ma_he_thong, ky, kind, version, fileName),
-    version,
+    path: buildPath(g.ma_he_thong, ky, kind, ban, fileName, dot),
+    version: ban,
     maHeThong: g.ma_he_thong,
   };
+}
+
+/**
+ * Kiểm tra trước khi tải lên, trả về những cảnh báo cần hỏi lại người dùng.
+ *
+ * Ba tình huống đáng dừng lại: loại tệp này đã gửi rồi, kỳ đã chốt mà lại
+ * định gửi bản sửa, và hồ sơ thanh toán đã gửi mà gửi tiếp.
+ */
+export async function kiemTraTruocKhiGui(
+  groupId: string, ky: string, kind: FileKind, dot = 1,
+) {
+  await requireRole('admin', 'ke_toan');
+  const sb = supabaseAdmin();
+
+  const [{ data: daGui }, { data: tr }] = await Promise.all([
+    sb.from('statement_files')
+      .select('file_name, version, sent_at')
+      .eq('group_id', groupId).eq('ky_doi_soat', ky)
+      .eq('kind', kind).eq('dot', dot)
+      .not('sent_at', 'is', null)
+      .order('sent_at', { ascending: false }).limit(1).maybeSingle(),
+    sb.from('tracking').select('status, ngay_chot, ket_qua_duyet, ten_file_hstt_da_gui')
+      .eq('group_id', groupId).eq('ky_doi_soat', ky).eq('dot', dot).maybeSingle(),
+  ]);
+
+  const CHOT = ['da_chot', 'hoan_tat_cho_thanh_toan', 'mac_dinh_chap_thuan',
+    'cho_ho_so_thanh_toan', 'da_gui_ho_so_thanh_toan'];
+
+  const canhBao: { loai: string; tieuDe: string; noiDung: string }[] = [];
+
+  if (kind === 'bang_ke' && tr && CHOT.includes(tr.status)) {
+    canhBao.push({
+      loai: 'da_chot',
+      tieuDe: 'Kỳ này đã chốt rồi',
+      noiDung: `Kỳ này đã chốt ngày ${tr.ngay_chot ?? '—'}`
+        + `${tr.ket_qua_duyet === 'dong_y' ? ' với kết quả Đồng ý' : ''}. `
+        + 'Gửi bản chỉnh sửa sẽ mở lại đồng hồ SLA và đưa kỳ về trạng thái chờ '
+        + 'khách xác nhận lại từ đầu.',
+    });
+  }
+
+  if (kind === 'hstt' && tr?.status === 'da_gui_ho_so_thanh_toan') {
+    canhBao.push({
+      loai: 'hstt_da_gui',
+      tieuDe: 'Hồ sơ thanh toán đã gửi rồi',
+      noiDung: `Đã gửi hồ sơ thanh toán cho khách này`
+        + `${tr.ten_file_hstt_da_gui ? ` (${tr.ten_file_hstt_da_gui})` : ''}.`,
+    });
+  }
+
+  if (daGui) {
+    canhBao.push({
+      loai: 'trung_loai',
+      tieuDe: 'Loại tệp này đã gửi rồi',
+      noiDung: `Bạn đã gửi ${daGui.file_name} (bản ${daGui.version}) vào ngày `
+        + `${new Date(daGui.sent_at as string).toLocaleDateString('vi-VN')}.`,
+    });
+  }
+
+  return { canhBao, coCanhBao: canhBao.length > 0 };
 }
 
 /**
@@ -531,6 +594,8 @@ export async function ghiNhanTep(input: {
   groupId: string;
   ky: string;
   kind: FileKind;
+  dot?: number;
+  batchId: string;
   version: number;
   storagePath: string;
   fileName: string;
@@ -551,6 +616,8 @@ export async function ghiNhanTep(input: {
     group_id: input.groupId,
     ma_he_thong: g!.ma_he_thong,
     ky_doi_soat: input.ky,
+    dot: input.dot ?? 1,
+    batch_id: input.batchId,
     kind: input.kind,
     version: input.version,
     storage_path: input.storagePath,
@@ -753,4 +820,158 @@ export async function danhDauDocHet() {
     }
   }
   revalidatePath('/');
+}
+
+/** Gửi cả một lô tệp cho khách. Gửi lại phải nêu lý do. */
+export async function guiLoNgay(batchId: string, guiLai?: { lyDo: string }) {
+  const user = await requireRole('admin', 'ke_toan');
+  const sb = supabaseAdmin();
+
+  const { data: lo } = await sb.from('statement_files')
+    .select('*').eq('batch_id', batchId).order('uploaded_at');
+  if (!lo?.length) throw new Error('Không tìm thấy lô tệp.');
+
+  const dau = lo[0];
+  const daGuiTruoc = lo.some((f: any) => f.sent_at);
+
+  if (daGuiTruoc) {
+    if (!guiLai?.lyDo?.trim()) throw new Error('Lô này đã gửi rồi. Muốn gửi lại phải nêu lý do.');
+    await sb.from('statement_files').update({ sent_at: null }).eq('batch_id', batchId);
+  }
+
+  const r = await guiLoChoKhach(batchId);
+
+  if (r.sent) {
+    const { data: tr } = await sb.from('tracking').select('id')
+      .eq('group_id', dau.group_id).eq('ky_doi_soat', dau.ky_doi_soat)
+      .eq('dot', dau.dot).maybeSingle();
+
+    await sb.from('send_log').insert({
+      batch_id: batchId,
+      file_id: dau.id,
+      tracking_id: tr?.id ?? null,
+      ma_he_thong: dau.ma_he_thong,
+      ky_doi_soat: dau.ky_doi_soat,
+      dot: dau.dot,
+      kind: dau.kind,
+      version: dau.version,
+      so_tep: lo.length,
+      file_name: lo.map((f: any) => f.file_name).join(', '),
+      den: (r.mail as any)?.den ?? null,
+      cc: (r.mail as any)?.cc ?? null,
+      la_gui_lai: daGuiTruoc,
+      ly_do_gui_lai: guiLai?.lyDo?.trim() ?? null,
+      nguoi_gui: user.id,
+      nguon: 'thu_cong',
+    });
+  }
+
+  await writeAudit({
+    actorId: user.id, actorEmail: user.email,
+    action: daGuiTruoc ? 'file.resend' : 'file.send',
+    entity: 'statement_files', entityId: batchId,
+    note: daGuiTruoc
+      ? `${tenNguoi(user)} GỬI LẠI ${lo.length} tệp (${dau.ky_doi_soat}) — ${guiLai!.lyDo.trim()}`
+      : `${tenNguoi(user)}: ${r.message}`,
+  });
+
+  revalidatePath('/files');
+  revalidatePath('/tracking');
+  revalidatePath('/hstt');
+  return r;
+}
+
+// =====================================================================
+// Lịch gửi bảng kê
+// =====================================================================
+
+export async function luuLichGui(input: {
+  id?: string;
+  groupId: string;
+  dot: number;
+  ngayGui: number;
+  kyThuocThang: 'thang_nay' | 'thang_truoc';
+  phamViNhan?: string;
+  slaChapNhan?: number | null;
+  enabled: boolean;
+  ghiChu?: string;
+}) {
+  const user = await requireRole('admin', 'ke_toan');
+  const sb = supabaseAdmin();
+
+  if (input.ngayGui < 1 || input.ngayGui > 31) {
+    throw new Error('Ngày gửi phải nằm trong khoảng 1 đến 31.');
+  }
+  if (input.dot < 1 || input.dot > 6) {
+    throw new Error('Số đợt phải nằm trong khoảng 1 đến 6.');
+  }
+
+  const payload = {
+    group_id: input.groupId,
+    dot: input.dot,
+    ngay_gui: input.ngayGui,
+    ky_thuoc_thang: input.kyThuocThang,
+    pham_vi_nhan: input.phamViNhan?.trim() || null,
+    sla_chap_nhan: input.slaChapNhan ?? null,
+    enabled: input.enabled,
+    ghi_chu: input.ghiChu?.trim() || null,
+  };
+
+  if (input.id) {
+    const { data: before } = await sb
+      .from('billing_schedules').select('*').eq('id', input.id).single();
+    const { error } = await sb.from('billing_schedules').update(payload).eq('id', input.id);
+    if (error) {
+      if (error.code === '23505') throw new Error(`Nhóm này đã có đợt ${input.dot}.`);
+      throw new Error(error.message);
+    }
+    await writeAudit({
+      actorId: user.id, actorEmail: user.email,
+      action: 'schedule.update', entity: 'billing_schedules', entityId: input.id,
+      before, after: payload,
+      note: `${tenNguoi(user)} sửa lịch đợt ${input.dot}, gửi ngày ${input.ngayGui}`,
+    });
+  } else {
+    const { data, error } = await sb
+      .from('billing_schedules').insert(payload).select('id').single();
+    if (error) {
+      if (error.code === '23505') throw new Error(`Nhóm này đã có đợt ${input.dot}.`);
+      throw new Error(error.message);
+    }
+    await writeAudit({
+      actorId: user.id, actorEmail: user.email,
+      action: 'schedule.create', entity: 'billing_schedules', entityId: data.id,
+      after: payload,
+      note: `${tenNguoi(user)} thêm lịch đợt ${input.dot}, gửi ngày ${input.ngayGui}`,
+    });
+  }
+
+  revalidatePath('/master-data');
+}
+
+export async function xoaLichGui(id: string) {
+  const user = await requireRole('admin', 'ke_toan');
+  const sb = supabaseAdmin();
+
+  const { data: before } = await sb
+    .from('billing_schedules').select('*').eq('id', id).single();
+  if (!before) throw new Error('Không tìm thấy lịch này.');
+
+  const { count } = await sb.from('billing_schedules')
+    .select('id', { count: 'exact', head: true }).eq('group_id', before.group_id);
+  if ((count ?? 0) <= 1) {
+    throw new Error('Mỗi nhóm phải giữ ít nhất một lịch gửi. '
+      + 'Muốn dừng gửi thì tắt lịch thay vì xoá.');
+  }
+
+  const { error } = await sb.from('billing_schedules').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+
+  await writeAudit({
+    actorId: user.id, actorEmail: user.email,
+    action: 'schedule.delete', entity: 'billing_schedules', entityId: id,
+    before, note: `${tenNguoi(user)} xoá lịch đợt ${before.dot}`,
+  });
+
+  revalidatePath('/master-data');
 }
