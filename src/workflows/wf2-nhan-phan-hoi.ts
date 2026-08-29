@@ -46,7 +46,7 @@ export async function runWf2(): Promise<RunResult> {
 
   const { data: rows, error } = await sb
     .from('tracking')
-    .select('*, billing_groups!inner(ten_nhom, email_ke_toan, email_pm)')
+    .select('*, billing_groups!inner(ten_nhom, email_ke_toan, email_pm, email_high_level)')
     .in('status', DANG_CHO_KHACH)
     .not('thread_id', 'is', null);
 
@@ -80,7 +80,22 @@ export async function runWf2(): Promise<RunResult> {
       }
 
       const messages = await readThread(row.thread_id, me);
-      const fromCustomer = messages.filter((m) => !m.isFromUs);
+
+      // Loại cả thư do người nội bộ gửi, không riêng hộp thư hệ thống.
+      // Khi kế toán hoặc PM trả lời thẳng vào thread khách, thư đó không
+      // phải phản hồi của khách hàng — coi nhầm sẽ khiến hệ thống xử lý lại
+      // và bắn thư nhắc mỗi lượt quét.
+      const noiBo = [g.email_ke_toan, g.email_pm, g.email_high_level]
+        .filter(Boolean)
+        .flatMap((v: string) => v.split(',').map((x) => x.trim().toLowerCase()))
+        .filter(Boolean);
+
+      const laNoiBo = (from: string) => {
+        const f = from.toLowerCase();
+        return noiBo.some((addr) => f.includes(addr));
+      };
+
+      const fromCustomer = messages.filter((m) => !m.isFromUs && !laNoiBo(m.from));
       const latest = fromCustomer[fromCustomer.length - 1];
 
       if (!latest) { note('Khách chưa trả lời.'); continue; }
@@ -110,8 +125,11 @@ export async function runWf2(): Promise<RunResult> {
         nguoi_duyet: null,
       }).eq('id', row.id);
 
-      // Báo kế toán có việc cần duyệt. Thread nội bộ tách khỏi thread khách.
-      if (g.email_ke_toan) {
+      // Báo kế toán một lần khi việc bước vào hàng chờ. Kỳ đã nằm sẵn ở
+      // trạng thái chờ duyệt thì không nhắc lại — WF4 lo phần nhắc theo ngày.
+      const vuaVaoHangCho = row.status !== 'cho_duyet_phan_loai';
+
+      if (g.email_ke_toan && vuaVaoHangCho) {
         const mail = tplKhachYeuCauSua(row.ten_nhom, row.ky_doi_soat, cls.tom_tat, cls.pham_vi, appUrl);
         const sent = await sendMail({
           to: g.email_ke_toan,

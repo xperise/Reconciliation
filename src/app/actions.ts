@@ -164,7 +164,7 @@ export async function chotMacDinh(trackingId: string) {
       to: g.email_l1,
       cc: [g.email_l2, g.email_ke_toan, g.email_pm].filter(Boolean).join(',') || undefined,
       subject: refSubject(row.ten_nhom, row.ky_doi_soat),
-      html: tplMacDinhChot(row.ky_doi_soat),
+      html: tplMacDinhChot(row.ky_doi_soat, row.ten_nhom),
       threadId: row.thread_id ?? undefined,
     });
   }

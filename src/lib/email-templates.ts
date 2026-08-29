@@ -78,7 +78,8 @@ export function tplHoSoThanhToan(nhomKh: string, ky: string, fileLink: string): 
   return shell(
     `Hồ sơ thanh toán ${periodInWords(ky)}`,
     `<p style="margin:0 0 16px;">Kính gửi <strong>${nhomKh}</strong>,</p>
-     <p style="margin:0 0 16px;">xperise kính gửi Quý khách hàng hồ sơ thanh toán kỳ <strong>${ky}</strong>.</p>
+     <p style="margin:0 0 16px;">xperise kính gửi Quý khách hàng hồ sơ thanh toán
+     <strong>${periodInWords(ky)}</strong>.</p>
      <p style="margin:0;">Kính đề nghị Quý khách hàng thực hiện thanh toán theo thời gian đã thỏa thuận
      trong hợp đồng.</p>
      <p style="margin:20px 0 0;">Trân trọng,<br>Team xperise.</p>`,
@@ -86,27 +87,30 @@ export function tplHoSoThanhToan(nhomKh: string, ky: string, fileLink: string): 
   );
 }
 
-export function tplNhacKhach(ky: string, level: number, hanChapNhan: string): string {
+export function tplNhacKhach(
+  ky: string, level: number, nhomKh?: string, phamVi?: string | null,
+): string {
   const capDo = level >= 3 ? ' (đã chuyển cấp quản lý)' : '';
   return shell(
-    `Nhắc xác nhận bảng kê kỳ ${ky}${capDo}`,
-    `<p style="margin:0 0 16px;">Kính gửi Quý khách hàng,</p>
-     <p style="margin:0 0 16px;">Kính đề nghị Quý khách hàng kiểm tra và phản hồi xác nhận bảng kê kỳ
-     <strong>${ky}</strong>. Hạn xác nhận theo thỏa thuận là <strong>${hanChapNhan}</strong>.</p>
+    `Nhắc xác nhận bảng kê ${periodInWords(ky)}${capDo}`,
+    `<p style="margin:0 0 16px;">Kính gửi ${nhomKh ? `<strong>${nhomKh}</strong>` : 'Quý khách hàng'},</p>
+     <p style="margin:0 0 16px;">Kính đề nghị Quý khách hàng kiểm tra và phản hồi xác nhận bảng kê
+     <strong>${periodWordsFull(ky, phamVi)}</strong>.</p>
      <p style="margin:0;">Vui lòng xác nhận bằng cách trả lời trực tiếp email này. Chân thành cảm ơn
      sự phối hợp của Quý khách hàng.</p>
      <p style="margin:20px 0 0;">Trân trọng,<br>Team xperise.</p>`,
   );
 }
 
-export function tplMacDinhChot(ky: string): string {
+export function tplMacDinhChot(ky: string, nhomKh?: string): string {
+  const w = periodInWords(ky);
   return shell(
-    `Thông báo chốt bảng kê kỳ ${ky}`,
-    `<p style="margin:0 0 16px;">Kính gửi Quý khách hàng,</p>
-     <p style="margin:0 0 16px;">Hiện tại team xperise vẫn chưa nhận được phản hồi xác nhận bảng kê kỳ
-     <strong>${ky}</strong> từ Quý khách hàng.</p>
-     <p style="margin:0 0 16px;">Theo quy định trong Hợp đồng, xperise xin thông báo bảng kê kỳ
-     <strong>${ky}</strong> đã được mặc định xác nhận theo thời gian quy định. Team xperise sẽ tiến hành
+    `Thông báo chốt bảng kê ${w}`,
+    `<p style="margin:0 0 16px;">Kính gửi ${nhomKh ? `<strong>${nhomKh}</strong>` : 'Quý khách hàng'},</p>
+     <p style="margin:0 0 16px;">Hiện tại team xperise vẫn chưa nhận được phản hồi xác nhận bảng kê
+     <strong>${w}</strong> từ Quý khách hàng.</p>
+     <p style="margin:0 0 16px;">Theo quy định trong Hợp đồng, xperise xin thông báo bảng kê
+     <strong>${w}</strong> đã được mặc định xác nhận theo thời gian quy định. Team xperise sẽ tiến hành
      các bước tiếp theo theo quy định.</p>
      <p style="margin:20px 0 0;">Trân trọng,<br>Team xperise.</p>`,
   );

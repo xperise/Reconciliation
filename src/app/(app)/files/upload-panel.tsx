@@ -29,6 +29,45 @@ function kyMacDinh(): string {
   return `T${String(m).padStart(2, '0')}.${y}`;
 }
 
+const THANG = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0'));
+
+function namQuanhDay(): number[] {
+  const nay = new Date().getFullYear();
+  return [nay - 2, nay - 1, nay, nay + 1];
+}
+
+function tachKy(ky: string): { thang: string; nam: string } {
+  const m = ky.match(/^T(\d{2})\.(\d{4})$/);
+  return m
+    ? { thang: m[1], nam: m[2] }
+    : { thang: THANG[new Date().getMonth()], nam: String(new Date().getFullYear()) };
+}
+
+/**
+ * Chọn kỳ bằng hai ô thả xuống thay vì gõ tay.
+ *
+ * Gõ tay dễ sai một ký tự mà không ai phát hiện cho tới khi khách nhận nhầm
+ * bảng kê của kỳ khác. Ràng buộc bằng danh sách thì sai đó không xảy ra được.
+ */
+function ChonKy({ ky, onChange, nho }: {
+  ky: string; onChange: (v: string) => void; nho?: boolean;
+}) {
+  const { thang, nam } = tachKy(ky);
+  const cls = nho ? 'field !py-1 !text-[12px]' : 'field';
+  return (
+    <div className="flex gap-1.5">
+      <select className={cls} value={thang} aria-label="Tháng"
+              onChange={(e) => onChange(`T${e.target.value}.${nam}`)}>
+        {THANG.map((t) => <option key={t} value={t}>Tháng {t}</option>)}
+      </select>
+      <select className={cls} value={nam} aria-label="Năm"
+              onChange={(e) => onChange(`T${thang}.${e.target.value}`)}>
+        {namQuanhDay().map((n) => <option key={n} value={n}>{n}</option>)}
+      </select>
+    </div>
+  );
+}
+
 /** Đoán nhóm khách từ tên tệp bằng cách dò mã hệ thống trong đó. */
 function doanNhom(tenTep: string, groups: Nhom[]): string {
   const t = tenTep.toUpperCase();
@@ -80,8 +119,11 @@ export function UploadPanel({ groups, macDinhKind, tieuDe }: {
   const [mdGuiNgay, setMdGuiNgay] = useState(true);
 
   // Hộp thoại cảnh báo trước khi gửi
-  const [canhBao, setCanhBao] = useState<
-    { items: { loai: string; tieuDe: string; noiDung: string }[]; nhan: string } | null>(null);
+  const [canhBao, setCanhBao] = useState<{
+    items: { loai: string; tieuDe: string; noiDung: string }[];
+    nhan: string;
+    chiDong?: string[];
+  } | null>(null);
   const [chacChan, setChacChan] = useState(false);
   const [lyDo, setLyDo] = useState('');
 
@@ -123,10 +165,13 @@ export function UploadPanel({ groups, macDinhKind, tieuDe }: {
   const khoaLo = (d: Dong) =>
     `${d.groupId}|${d.ky}|${d.dot}|${d.loai === 'hstt' ? 'hstt' : 'bang_ke'}`;
 
-  async function batDau() {
-    const canXuLy = dong.filter((d) => d.trangThai === 'cho' && d.groupId);
+  async function batDau(chiDong?: string[]) {
+    const canXuLy = dong.filter((d) =>
+      d.trangThai === 'cho' && d.groupId
+      && (!chiDong || chiDong.includes(d.id)));
+
     if (canXuLy.length === 0) {
-      setLoi('Chưa dòng nào đủ thông tin. Mỗi tệp phải chọn nhóm khách.');
+      setLoi('Chưa dòng nào đủ thông tin. Mỗi tệp phải chọn khách hàng.');
       return;
     }
 
@@ -151,20 +196,22 @@ export function UploadPanel({ groups, macDinhKind, tieuDe }: {
       }
 
       if (gom.length > 0) {
-        setCanhBao({ items: gom, nhan: ten.join(', ') });
+        setCanhBao({ items: gom, nhan: ten.join(', '), chiDong });
         return;
       }
     }
 
-    await chay();
+    await chay(chiDong);
   }
 
-  async function chay() {
+  async function chay(chiDong?: string[]) {
     setDangChay(true);
     setLoi('');
     setCanhBao(null);
 
-    const canXuLy = dong.filter((d) => d.trangThai === 'cho' && d.groupId);
+    const canXuLy = dong.filter((d) =>
+      d.trangThai === 'cho' && d.groupId
+      && (!chiDong || chiDong.includes(d.id)));
 
     // Gom thành lô trước, để các tệp cùng một bảng kê chung số bản
     const lo = new Map<string, Dong[]>();
@@ -234,7 +281,10 @@ export function UploadPanel({ groups, macDinhKind, tieuDe }: {
 
   const soCho = dong.filter((d) => d.trangThai === 'cho').length;
   const soThieuNhom = dong.filter((d) => d.trangThai === 'cho' && !d.groupId).length;
-  const sanSang = soCho > 0 && soThieuNhom === 0 && !dangChay;
+  // Cho phép chạy khi ít nhất một dòng đủ thông tin, thay vì bắt mọi dòng
+  // phải xong. Dòng thiếu khách hàng sẽ tự bị bỏ qua.
+  const soSanSang = dong.filter((d) => d.trangThai === 'cho' && d.groupId).length;
+  const sanSang = soSanSang > 0 && !dangChay;
 
   // Xem trước cách gom lô, để người dùng biết tệp nào đi chung email nào
   const xemLo = new Map<string, Dong[]>();
@@ -259,16 +309,16 @@ export function UploadPanel({ groups, macDinhKind, tieuDe }: {
         {/* Giá trị mặc định cho tệp kéo vào sau */}
         <div>
           <p className="label !mb-2">Mặc định áp cho tệp mới kéo vào</p>
-          <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(4, minmax(0,1fr))' }}>
+          <div className="grid gap-3 items-end"
+               style={{ gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1.4fr) minmax(0,1fr) auto' }}>
             <select className="field" value={mdGroup} onChange={(e) => setMdGroup(e.target.value)}
-                    aria-label="Nhóm mặc định">
-              <option value="">Đoán từ tên tệp</option>
+                    aria-label="Khách hàng mặc định">
+              <option value="">Chọn khách hàng</option>
               {groups.map((g) => (
                 <option key={g.id} value={g.id}>{g.ten_nhom} ({g.ma_he_thong})</option>
               ))}
             </select>
-            <input className="field mono" value={mdKy} aria-label="Kỳ mặc định"
-                   onChange={(e) => setMdKy(e.target.value.toUpperCase())} />
+            <ChonKy ky={mdKy} onChange={setMdKy} />
             <select className="field" value={mdLoai} aria-label="Loại mặc định"
                     onChange={(e) => setMdLoai(e.target.value as LoaiChon)}>
               {LOAI.map((l) => <option key={l.v} value={l.v}>{l.nhan}</option>)}
@@ -325,7 +375,7 @@ export function UploadPanel({ groups, macDinhKind, tieuDe }: {
                 <thead>
                   <tr>
                     <th>Tệp</th><th style={{ minWidth: 190 }}>Khách hàng</th>
-                    <th style={{ width: 110 }}>Kỳ</th>
+                    <th style={{ width: 190 }}>Kỳ bảng kê</th>
                     <th style={{ width: 160 }}>Loại</th>
                     <th style={{ width: 78 }}>Gửi ngay</th>
                     <th>Trạng thái</th><th></th>
@@ -350,9 +400,9 @@ export function UploadPanel({ groups, macDinhKind, tieuDe }: {
                         </select>
                       </td>
                       <td>
-                        <input className="field !py-1 !text-[12px] mono" value={d.ky}
-                               disabled={d.trangThai !== 'cho'}
-                               onChange={(e) => sua(d.id, { ky: e.target.value.toUpperCase() })} />
+                        {d.trangThai === 'cho'
+                          ? <ChonKy nho ky={d.ky} onChange={(v) => sua(d.id, { ky: v })} />
+                          : <span className="mono text-[12px]">{d.ky}</span>}
                       </td>
                       <td>
                         <select className="field !py-1 !text-[12px]" value={d.loai}
@@ -381,10 +431,23 @@ export function UploadPanel({ groups, macDinhKind, tieuDe }: {
                         )}
                       </td>
                       <td className="text-right">
-                        {!dangChay && d.trangThai !== 'xong' && (
+                        {!dangChay && d.trangThai === 'cho' && (
+                          <div className="flex gap-1.5 justify-end">
+                            <button className="btn btn-sm btn-primary" disabled={!d.groupId}
+                                    title="Chỉ xử lý riêng tệp này"
+                                    onClick={() => batDau([d.id])}>
+                              Xử lý
+                            </button>
+                            <button className="btn btn-sm"
+                                    onClick={() => setDong((p) => p.filter((x) => x.id !== d.id))}>
+                              Bỏ
+                            </button>
+                          </div>
+                        )}
+                        {!dangChay && d.trangThai === 'loi' && (
                           <button className="btn btn-sm"
-                                  onClick={() => setDong((p) => p.filter((x) => x.id !== d.id))}>
-                            Bỏ
+                                  onClick={() => sua(d.id, { trangThai: 'cho', ketQua: undefined })}>
+                            Thử lại
                           </button>
                         )}
                       </td>
@@ -416,16 +479,17 @@ export function UploadPanel({ groups, macDinhKind, tieuDe }: {
 
         {soThieuNhom > 0 && (
           <p className="callout callout-high m-0">
-            Còn {soThieuNhom} tệp chưa chọn khách hàng. Hệ thống không đoán được mã
-            hệ thống trong tên tệp, hãy chọn tay ở cột Khách hàng.
+            Còn {soThieuNhom} tệp chưa chọn khách hàng. Hệ thống không tìm thấy mã
+            hệ thống nào trong tên tệp, hãy chọn ở cột Khách hàng. Có thể bấm
+            <strong> Xử lý</strong> trên từng dòng đã đủ thông tin mà không cần đợi các dòng còn lại.
           </p>
         )}
 
         {loi && <p role="alert" className="callout callout-critical m-0">{loi}</p>}
 
         <div className="flex items-center gap-3">
-          <button className="btn btn-primary" onClick={batDau} disabled={!sanSang}>
-            {dangChay ? 'Đang xử lý…' : `Xử lý ${soCho} tệp`}
+          <button className="btn btn-primary" onClick={() => batDau()} disabled={!sanSang}>
+            {dangChay ? 'Đang xử lý…' : `Xử lý tất cả ${soSanSang} tệp`}
           </button>
           {dong.some((d) => d.trangThai === 'xong') && !dangChay && (
             <button className="btn" onClick={() => setDong([])}>Xoá danh sách</button>
@@ -474,7 +538,7 @@ export function UploadPanel({ groups, macDinhKind, tieuDe }: {
                 setCanhBao(null); setChacChan(false); setLyDo('');
               }}>Bỏ qua</button>
               <button className="btn btn-primary" disabled={!chacChan || !lyDo.trim()}
-                      onClick={chay}>
+                      onClick={() => chay(canhBao.chiDong)}>
                 Xác nhận và gửi
               </button>
             </footer>

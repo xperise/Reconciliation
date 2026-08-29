@@ -141,7 +141,7 @@ export async function runWf4(): Promise<RunResult> {
         await sendMail({
           to, cc,
           subject: subj,
-          html: tplNhacKhach(row.ky_doi_soat, next, row.han_chap_nhan),
+          html: tplNhacKhach(row.ky_doi_soat, next, row.ten_nhom, row.pham_vi_nhan),
           threadId: row.thread_id ?? undefined,
         });
         mails.ghi({
@@ -168,7 +168,7 @@ export async function runWf4(): Promise<RunResult> {
         await sendMail({
           to, cc,
           subject: subj2,
-          html: tplNhacKhach(row.ky_doi_soat, 1, row.han_chap_nhan),
+          html: tplNhacKhach(row.ky_doi_soat, 1, row.ten_nhom, row.pham_vi_nhan),
           threadId: row.thread_id ?? undefined,
         });
         mails.ghi({
@@ -197,7 +197,7 @@ export async function runWf4(): Promise<RunResult> {
           to: g.email_l1!,
           cc: ccChot,
           subject: subjChot,
-          html: tplMacDinhChot(row.ky_doi_soat),
+          html: tplMacDinhChot(row.ky_doi_soat, row.ten_nhom),
           threadId: row.thread_id ?? undefined,
         });
         mails.ghi({

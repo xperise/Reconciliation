@@ -84,10 +84,15 @@ export function daysBetween(fromIso: string, toIso: string): number {
   return Math.round((b - a) / 86_400_000);
 }
 
-/** 'T07.2026' -> 'tháng 07, 2026' để chèn vào email. */
+/**
+ * 'T07.2026' -> 'tháng 07/2026'.
+ *
+ * Mọi thư gửi khách đều đi qua hàm này. Mã kỳ thô là quy ước nội bộ, đưa
+ * nguyên vào thư khiến người đọc phải tự dịch.
+ */
 export function periodInWords(ky: string): string {
   const m = ky.match(/^T(\d{2})\.(\d{4})$/);
-  return m ? `tháng ${m[1]}, ${m[2]}` : ky;
+  return m ? `tháng ${m[1]}/${m[2]}` : ky;
 }
 
 /**
