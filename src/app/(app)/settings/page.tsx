@@ -3,6 +3,7 @@ import { currentUser } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { googleConnection } from '@/lib/google/auth';
 import { PageHeader } from '@/components/PageHeader';
+import { PurgeBox } from './purge-box';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,9 +20,10 @@ export default async function SettingsPage({
   const user = await currentUser();
   if (user?.role !== 'admin') redirect('/');
 
-  const [conn, { count: soTep }] = await Promise.all([
+  const [conn, { count: soTep }, { data: nhomList }] = await Promise.all([
     googleConnection(),
     supabaseAdmin().from('statement_files').select('id', { count: 'exact', head: true }),
+    supabaseAdmin().from('billing_groups').select('ma_he_thong, ten_nhom').order('ten_nhom'),
   ]);
 
   return (
@@ -97,6 +99,15 @@ export default async function SettingsPage({
               </p>
             </div>
             <a href="/files" className="btn">Mở trang tệp bảng kê</a>
+
+            <div style={{ borderTop: '1px solid var(--line-soft)', paddingTop: 14, marginTop: 4 }}>
+              <p className="eyebrow mb-1.5">Kết thúc đợt kiểm thử</p>
+              <p className="text-[12px] text-[var(--ink-3)] m-0 mb-2.5 leading-relaxed">
+                Supabase không cho xoá tệp bằng SQL, phải đi qua đây hoặc qua
+                Storage trên Dashboard.
+              </p>
+              <PurgeBox soTep={soTep ?? 0} nhomList={nhomList ?? []} />
+            </div>
           </div>
         </section>
 

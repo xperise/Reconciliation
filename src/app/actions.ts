@@ -1256,3 +1256,61 @@ export async function xinChoLuuTepTraLoi(trackingId: string, fileName: string) {
 
 // =====================================================================
 // Trả lời khách trong lúc trao đổi
+
+// =====================================================================
+// Dọn kho tệp
+// =====================================================================
+
+/**
+ * Xoá toàn bộ tệp trong kho, hoặc chỉ của một nhóm.
+ *
+ * Supabase chặn xoá thẳng bảng storage.objects bằng SQL nên phải đi qua
+ * Storage API. Hàm này gom việc đó lại một chỗ để chu kỳ kiểm thử không
+ * phải mở Dashboard thủ công mỗi lần.
+ */
+export async function donKhoTep(maHeThong?: string) {
+  const user = await requireRole('admin');
+  const sb = supabaseAdmin();
+
+  // Storage không có lệnh xoá theo tiền tố, phải liệt kê rồi xoá theo lô
+  async function xoaThuMuc(duongDan: string): Promise<number> {
+    const { data, error } = await sb.storage.from('bang-ke').list(duongDan, { limit: 1000 });
+    if (error || !data) return 0;
+
+    let dem = 0;
+    const tep: string[] = [];
+
+    for (const item of data) {
+      const con = duongDan ? `${duongDan}/${item.name}` : item.name;
+      // Thư mục trong Storage không có id; chỉ mục có id mới là tệp thật
+      if (item.id) tep.push(con);
+      else dem += await xoaThuMuc(con);
+    }
+
+    if (tep.length) {
+      const { error: loiXoa } = await sb.storage.from('bang-ke').remove(tep);
+      if (!loiXoa) dem += tep.length;
+    }
+    return dem;
+  }
+
+  const soTep = await xoaThuMuc(maHeThong ?? '');
+
+  // Dọn nốt siêu dữ liệu để hai bên không lệch nhau
+  if (maHeThong) {
+    await sb.from('statement_files').delete().eq('ma_he_thong', maHeThong);
+  } else {
+    await sb.from('statement_files').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  }
+
+  await writeAudit({
+    actorId: user.id, actorEmail: user.email,
+    action: 'storage.purge', entity: 'storage', entityId: maHeThong ?? 'toan_bo',
+    note: `${tenNguoi(user)} dọn kho tệp${maHeThong ? ` của ${maHeThong}` : ' toàn bộ'}`
+      + `, xoá ${soTep} tệp`,
+  });
+
+  revalidatePath('/files');
+  revalidatePath('/settings');
+  return { soTep };
+}
