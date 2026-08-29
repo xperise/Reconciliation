@@ -1,4 +1,4 @@
-# Đối soát bảng kê khách hàng - xperise.com
+# Đối soát bảng kê khách hàng - xperise
 
 Hệ thống thay thế bốn workflow n8n bằng một website: quản lý Master Data, theo dõi
 trạng thái từng kỳ, để kế toán duyệt phản hồi khách, và tự chạy các tiến trình nền.
