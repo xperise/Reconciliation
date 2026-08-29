@@ -372,7 +372,7 @@ export async function capNhatO(groupId: string, cot: OMasterData, giaTri: unknow
   }
 
   const { data: before } = await sb
-    .from('billing_groups').select(`id, ${cot}`).eq('id', groupId).single();
+    .from('billing_groups').select(`id, ma_he_thong, ${cot}`).eq('id', groupId).single();
 
   const { error } = await sb.from('billing_groups').update({ [cot]: v }).eq('id', groupId);
   if (error) {
@@ -380,15 +380,54 @@ export async function capNhatO(groupId: string, cot: OMasterData, giaTri: unknow
     throw new Error(error.message);
   }
 
+  // Vài cột có bản sao ở bảng khác. Sửa một chỗ mà chỗ kia đứng yên là cách
+  // nhanh nhất để hệ thống chạy theo dữ liệu cũ mà không ai biết.
+  const lanToa: string[] = [];
+
+  if (cot === 'ngung_hop_tac') {
+    await sb.from('customers').update({ ngung_hop_tac: v as boolean }).eq('group_id', groupId);
+    await sb.from('billing_schedules').update({ enabled: !(v as boolean) }).eq('group_id', groupId);
+    lanToa.push('pháp nhân trực thuộc', 'lịch gửi');
+  }
+
+  if (cot === 'ma_he_thong') {
+    await sb.from('tracking').update({ ma_he_thong: v as string }).eq('group_id', groupId);
+    await sb.from('statement_files').update({ ma_he_thong: v as string }).eq('group_id', groupId);
+    lanToa.push('các kỳ đang theo dõi', 'tệp đã tải lên');
+  }
+
+  if (cot === 'ten_nhom') {
+    await sb.from('tracking').update({ ten_nhom: v as string }).eq('group_id', groupId);
+    lanToa.push('các kỳ đang theo dõi');
+  }
+
+  // Ngày gửi và SLA thật nằm ở bảng lịch. Nhóm chỉ có một đợt thì đồng bộ
+  // sang đợt đó, để hai màn hình không nói hai con số khác nhau.
+  if (cot === 'ngay_gui_bang_ke_thuc_te' || cot === 'sla_chap_nhan_thuc_te') {
+    const { data: lichs } = await sb
+      .from('billing_schedules').select('id').eq('group_id', groupId);
+    if (lichs?.length === 1) {
+      const patch = cot === 'ngay_gui_bang_ke_thuc_te'
+        ? { ngay_gui: v as number }
+        : { sla_chap_nhan: v as number | null };
+      if (cot !== 'ngay_gui_bang_ke_thuc_te' || v != null) {
+        await sb.from('billing_schedules').update(patch).eq('id', lichs[0].id);
+        lanToa.push('lịch gửi đợt 1');
+      }
+    }
+  }
+
   await writeAudit({
     actorId: user.id, actorEmail: user.email,
     action: 'billing_group.update', entity: 'billing_groups', entityId: groupId,
     before, after: { [cot]: v },
-    note: `Sửa ô ${cot}`,
+    note: `${tenNguoi(user)} sửa ${cot} của ${before?.ma_he_thong ?? ''}`
+      + (lanToa.length ? `, đồng bộ sang ${lanToa.join(', ')}` : ''),
   });
 
   revalidatePath('/master-data');
-  return { ok: true, giaTri: v };
+  revalidatePath('/tracking');
+  return { ok: true, giaTri: v, lanToa };
 }
 
 /** Xoá một nhóm chưa từng phát sinh kỳ đối soát nào. */
@@ -971,6 +1010,75 @@ export async function xoaLichGui(id: string) {
     actorId: user.id, actorEmail: user.email,
     action: 'schedule.delete', entity: 'billing_schedules', entityId: id,
     before, note: `${tenNguoi(user)} xoá lịch đợt ${before.dot}`,
+  });
+
+  revalidatePath('/master-data');
+}
+
+// =====================================================================
+// Pháp nhân trực thuộc
+// =====================================================================
+
+export async function luuPhapNhan(input: {
+  id?: string;
+  groupId: string;
+  tenKhachHang: string;
+  tenVietTat?: string;
+  code?: string;
+  ngungHopTac?: boolean;
+  ghiChu?: string;
+}) {
+  const user = await requireRole('admin', 'ke_toan');
+  const sb = supabaseAdmin();
+
+  if (!input.tenKhachHang.trim()) throw new Error('Tên khách hàng không được để trống.');
+
+  const payload = {
+    group_id: input.groupId,
+    ten_khach_hang: input.tenKhachHang.trim(),
+    ten_viet_tat: input.tenVietTat?.trim() || null,
+    code: input.code?.trim() || null,
+    ngung_hop_tac: input.ngungHopTac ?? false,
+    ghi_chu: input.ghiChu?.trim() || null,
+  };
+
+  if (input.id) {
+    const { data: before } = await sb.from('customers').select('*').eq('id', input.id).single();
+    const { error } = await sb.from('customers').update(payload).eq('id', input.id);
+    if (error) throw new Error(error.message);
+    await writeAudit({
+      actorId: user.id, actorEmail: user.email,
+      action: 'customer.update', entity: 'customers', entityId: input.id,
+      before, after: payload,
+      note: `${tenNguoi(user)} sửa pháp nhân ${payload.ten_khach_hang}`,
+    });
+  } else {
+    const { data, error } = await sb.from('customers').insert(payload).select('id').single();
+    if (error) throw new Error(error.message);
+    await writeAudit({
+      actorId: user.id, actorEmail: user.email,
+      action: 'customer.create', entity: 'customers', entityId: data.id, after: payload,
+      note: `${tenNguoi(user)} thêm pháp nhân ${payload.ten_khach_hang}`,
+    });
+  }
+
+  revalidatePath('/master-data');
+}
+
+export async function xoaPhapNhan(id: string) {
+  const user = await requireRole('admin', 'ke_toan');
+  const sb = supabaseAdmin();
+
+  const { data: before } = await sb.from('customers').select('*').eq('id', id).single();
+  if (!before) throw new Error('Không tìm thấy pháp nhân này.');
+
+  const { error } = await sb.from('customers').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+
+  await writeAudit({
+    actorId: user.id, actorEmail: user.email,
+    action: 'customer.delete', entity: 'customers', entityId: id,
+    before, note: `${tenNguoi(user)} xoá pháp nhân ${before.ten_khach_hang}`,
   });
 
   revalidatePath('/master-data');

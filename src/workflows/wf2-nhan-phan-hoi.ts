@@ -4,6 +4,7 @@ import { classifyReply } from '@/lib/ai';
 import { tplKhachYeuCauSua, tplThreadMat } from '@/lib/email-templates';
 import { RunResult, TrackingStatus } from '@/lib/types';
 import { MailLog } from '@/lib/mail-log';
+import { pushNotify } from '@/lib/notify';
 
 /** Trạng thái mà khách còn có thể phản hồi thêm. */
 const DANG_CHO_KHACH: TrackingStatus[] = [
@@ -74,6 +75,12 @@ export async function runWf2(): Promise<RunResult> {
           status: 'can_xu_ly_tay',
           ghi_chu: `WF2: thread ${row.thread_id} không còn trên Gmail.`,
         }).eq('id', row.id);
+        await pushNotify({
+          tieuDe: `${row.ten_nhom} ${row.ky_doi_soat} — mất thread Gmail`,
+          noiDung: 'Hệ thống đã dừng kỳ này, cần tìm lại thread và cập nhật tay.',
+          muc: 'khan', lienKet: '/tracking',
+          roles: ['admin', 'ke_toan', 'pm'],
+        });
         failed += 1;
         note('Thread biến mất, đã cảnh báo và chuyển xử lý tay.');
         continue;
@@ -113,7 +120,11 @@ export async function runWf2(): Promise<RunResult> {
         ? `${row.ghi_chu ?? ''}\n[Bổ sung ${new Date().toISOString().slice(0, 10)}] ${cls.tom_tat}`.trim()
         : cls.tom_tat;
 
-      await sb.from('tracking').update({
+      // Đánh dấu đã xử lý TRƯỚC khi làm bất cứ việc gì khác, và kiểm tra lỗi.
+      // Trước đây lệnh này không kiểm tra kết quả: ghi hỏng thì message_id
+      // không đổi, lượt quét sau lại thấy "phản hồi mới" và bắn thư tiếp —
+      // mỗi phút một lần.
+      const { error: loiGhi } = await sb.from('tracking').update({
         status: 'cho_duyet_phan_loai' as TrackingStatus,
         message_id: latest.id,
         ai_de_xuat: cls.action,
@@ -124,6 +135,13 @@ export async function runWf2(): Promise<RunResult> {
         ket_qua_duyet: null,
         nguoi_duyet: null,
       }).eq('id', row.id);
+
+      if (loiGhi) {
+        failed += 1;
+        note('Không ghi được phản hồi, bỏ qua để không gửi thư trùng.',
+          { error: loiGhi.message });
+        continue;
+      }
 
       // Báo kế toán một lần khi việc bước vào hàng chờ. Kỳ đã nằm sẵn ở
       // trạng thái chờ duyệt thì không nhắc lại — WF4 lo phần nhắc theo ngày.
@@ -142,6 +160,16 @@ export async function runWf2(): Promise<RunResult> {
         }
         mails.ghi({ nhom: row.ten_nhom, ky: row.ky_doi_soat, loai: 'Báo kế toán duyệt',
           den: g.email_ke_toan, cc: g.email_pm ?? undefined, tieu_de: mail.subject });
+      }
+
+      if (vuaVaoHangCho) {
+        await pushNotify({
+          tieuDe: `${row.ten_nhom} ${row.ky_doi_soat} — khách đã phản hồi`,
+          noiDung: cls.tom_tat,
+          muc: 'canh_bao', lienKet: '/approvals',
+          roles: ['admin', 'ke_toan', 'pm'],
+          entity: 'tracking', entityId: row.id,
+        });
       }
 
       ok += 1;

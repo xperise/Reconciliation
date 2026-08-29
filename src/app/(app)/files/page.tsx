@@ -25,13 +25,19 @@ function nhanLoai(f: any): { nhan: string; tone: string } {
 export default async function FilesPage({ searchParams }: {
   searchParams: { loai?: string };
 }) {
-  const [user, { data: groups }, { data: files }] = await Promise.all([
+  const [user, { data: groups }, { data: files }, { data: dangCho }] = await Promise.all([
     currentUser(),
     supabaseAdmin().from('billing_groups')
       .select('id, ten_nhom, ma_he_thong').eq('ngung_hop_tac', false).order('ten_nhom'),
     supabaseAdmin().from('statement_files')
       .select('*, profiles(full_name, email)')
       .order('uploaded_at', { ascending: false }).limit(200),
+    // Những kỳ đang đợi kế toán tải tệp lên. Người vào trang này để tải tệp
+    // nên thấy ngay khách nào đang chờ, thay vì phải nhớ hoặc mở tab khác.
+    supabaseAdmin().from('tracking')
+      .select('id, ten_nhom, ma_he_thong, ky_doi_soat, dot, status, ngay_bat_dau_cho_file')
+      .in('status', ['chua_gui', 'cho_file_da_nhac_noi_bo', 'can_chinh_sua'])
+      .order('ngay_bat_dau_cho_file', { ascending: true }),
   ]);
 
   const laKeToan = user?.role === 'admin' || user?.role === 'ke_toan';
@@ -64,6 +70,31 @@ export default async function FilesPage({ searchParams }: {
         title="Tệp bảng kê"
         description="Tải bảng kê và hồ sơ thanh toán lên đây. Hệ thống đính kèm vào email và gửi cho khách."
       />
+
+      {laKeToan && (dangCho?.length ?? 0) > 0 && (
+        <section className="card mb-4" data-status="high">
+          <div className="card-pad">
+            <p className="eyebrow" style={{ color: 'var(--high)' }}>Đang chờ bạn</p>
+            <h2 className="card-title mt-0.5 mb-2">
+              {dangCho!.length} kỳ chưa có tệp
+            </h2>
+            <div className="flex flex-wrap gap-1.5">
+              {dangCho!.map((t: any) => (
+                <span key={t.id} className={`pill ${
+                  t.status === 'can_chinh_sua' ? 'pill-high' : 'pill-neutral'}`}>
+                  {t.ten_nhom} · {t.ky_doi_soat}
+                  {t.dot > 1 ? ` · Đợt ${t.dot}` : ''}
+                  {t.status === 'can_chinh_sua' ? ' · cần bản sửa' : ''}
+                </span>
+              ))}
+            </div>
+            <p className="card-note m-0 mt-2">
+              Chọn khách và kỳ tương ứng ở ô tải lên bên dưới. Kỳ ở trạng thái
+              cần bản sửa thì chọn loại tệp <strong>Bảng kê chỉnh sửa</strong>.
+            </p>
+          </div>
+        </section>
+      )}
 
       {laKeToan && <div className="mb-4"><UploadPanel groups={groups ?? []} /></div>}
 

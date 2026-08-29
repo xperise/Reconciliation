@@ -36,21 +36,23 @@ export async function runWf3(): Promise<RunResult> {
     return { ok: 0, failed: 0, summary: 'Không có tệp nào đang chờ gửi.', detail: [] };
   }
 
-  // Gom theo lô: nhiều tệp của cùng một bảng kê phải đi chung một email
-  const theoLo = new Map<string, StatementFile[]>();
+  // Gom theo khách–kỳ–đợt–loại, không theo lô tải lên. Kế toán tải hai lần
+  // vẫn ra hai lô, nhưng với khách thì đó là một kỳ nên phải đi chung một thư.
+  const theoKy = new Map<string, StatementFile[]>();
   for (const f of files as StatementFile[]) {
-    const arr = theoLo.get(f.batch_id) ?? [];
+    const k = `${f.group_id}|${f.ky_doi_soat}|${f.dot}|${f.kind}`;
+    const arr = theoKy.get(k) ?? [];
     arr.push(f);
-    theoLo.set(f.batch_id, arr);
+    theoKy.set(k, arr);
   }
 
-  for (const [batchId, lo] of theoLo) {
+  for (const [, lo] of theoKy) {
     const dau = lo[0];
     const note = (msg: string, extra: Record<string, unknown> = {}) =>
       detail.push({ nhom: dau.ma_he_thong, ky: dau.ky_doi_soat, msg, ...extra });
 
     try {
-      const result = await guiLoChoKhach(batchId);
+      const result = await guiLoChoKhach(dau.batch_id);
       if (result.sent) {
         ok += 1;
         note(result.message);
@@ -82,9 +84,21 @@ export async function guiLoChoKhach(
   const sb = supabaseAdmin();
   const today = nowInVN().isoDate;
 
-  const lo = (await filesInBatch(batchId)).filter((f) => !f.sent_at);
-  if (lo.length === 0) return { sent: false, message: 'Lô này đã gửi trước đó.' };
+  const goc = (await filesInBatch(batchId)).filter((f) => !f.sent_at);
+  if (goc.length === 0) return { sent: false, message: 'Lô này đã gửi trước đó.' };
 
+  const mau = goc[0];
+
+  // Kéo về mọi tệp chưa gửi của cùng khách, cùng kỳ, cùng đợt, cùng loại —
+  // kể cả tệp thuộc lô tải lên khác. Khách chỉ nên nhận một thư cho một kỳ.
+  const { data: cungKy } = await sb
+    .from('statement_files').select('*')
+    .eq('group_id', mau.group_id).eq('ky_doi_soat', mau.ky_doi_soat)
+    .eq('dot', mau.dot).eq('kind', mau.kind)
+    .is('sent_at', null)
+    .order('uploaded_at');
+
+  const lo = (cungKy?.length ? cungKy : goc) as typeof goc;
   const dau = lo[0];
 
   const { data: g } = await sb

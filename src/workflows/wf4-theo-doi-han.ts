@@ -2,11 +2,12 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { nowInVN, daysBetween } from '@/lib/period';
 import { sendMail } from '@/lib/google/gmail';
 import {
-  refSubject, tplNhacKhach, tplMacDinhChot,
+  refSubject, tplNhacKhach, tplMacDinhChot, tplNhacChuanBiHstt,
   tplNhacNoiBoUpload, tplEscalateNoiBo, tplCanQuyetDinh,
 } from '@/lib/email-templates';
 import { BillingGroup, RunResult, STATUS_DONE, TrackingStatus } from '@/lib/types';
 import { MailLog } from '@/lib/mail-log';
+import { pushNotify } from '@/lib/notify';
 
 /**
  * WF4 — Theo dõi hạn phản hồi
@@ -26,9 +27,13 @@ import { MailLog } from '@/lib/mail-log';
 
 /** Số cấp escalate và số vòng lặp cho phép, theo sheet "3. Quy định chung SLA". */
 function escalationPolicy(nhom: number) {
+  // maxPasses đếm số lượt đi hết chuỗi L1→L2→L3, tính cả lượt đầu tiên.
+  //   Nhóm 1: L1 → L2, xong thì tự chốt
+  //   Nhóm 2: L1 → L2 → L3 một lượt, xong thì kế toán quyết định
+  //   Nhóm 3: chuỗi trên lặp hai lượt rồi mới dừng
   if (nhom === 1) return { maxLevel: 2, maxPasses: 1, autoChot: true };
-  if (nhom === 2) return { maxLevel: 3, maxPasses: 2, autoChot: false };
-  return { maxLevel: 3, maxPasses: 3, autoChot: false };
+  if (nhom === 2) return { maxLevel: 3, maxPasses: 1, autoChot: false };
+  return { maxLevel: 3, maxPasses: 2, autoChot: false };
 }
 
 /** Người nhận ở mỗi cấp: cấp sau luôn CC toàn bộ cấp trước. */
@@ -78,14 +83,21 @@ export async function runWf4(): Promise<RunResult> {
 
     try {
       // =============== NHÁNH NỘI BỘ: kế toán chậm upload ===============
+      // Bốn tình huống đồng hồ đang chạy về phía nội bộ. Khách đã làm xong
+      // phần của họ, giờ là lỗi của mình nếu để lâu.
       const choFile: Record<string, string> = {
-        cho_file_da_nhac_noi_bo: 'bảng kê bản gốc',
-        can_chinh_sua: 'bảng kê bản chỉnh sửa (_v2)',
-        cho_ho_so_thanh_toan: 'hồ sơ thanh toán (_HSTT)',
+        cho_file_da_nhac_noi_bo: 'tải bảng kê lên hệ thống',
+        can_chinh_sua: 'tải bảng kê bản chỉnh sửa lên',
+        cho_ho_so_thanh_toan: 'chuẩn bị và tải hồ sơ thanh toán lên',
+        cho_duyet_phan_loai: 'duyệt phản hồi của khách',
       };
 
       if (choFile[row.status as string]) {
-        const moc = row.ngay_bat_dau_cho_file ?? row.ngay_gui_gan_nhat ?? today;
+        // Với việc chờ duyệt, mốc tính là lúc khách phản hồi chứ không phải
+        // lúc gửi bảng kê — đó mới là thời điểm bóng sang chân nội bộ.
+        const moc = row.status === 'cho_duyet_phan_loai'
+          ? (row.updated_at?.slice(0, 10) ?? today)
+          : (row.ngay_bat_dau_cho_file ?? row.ngay_gui_gan_nhat ?? today);
         const treNgay = daysBetween(moc, today);
         const viec = choFile[row.status as string];
 
@@ -116,6 +128,16 @@ export async function runWf4(): Promise<RunResult> {
           ngay_remind_cuoi: today,
           internal_thread_id: row.internal_thread_id ?? sent.threadId,
         }).eq('id', row.id);
+
+        await pushNotify({
+          tieuDe: `${row.ten_nhom} ${row.ky_doi_soat} — trễ ${treNgay} ngày`,
+          noiDung: `Đang chờ nội bộ ${viec}.`,
+          muc: isEscalate ? 'khan' : 'canh_bao',
+          lienKet: row.status === 'cho_duyet_phan_loai' ? '/approvals'
+            : row.status === 'cho_ho_so_thanh_toan' ? '/hstt' : '/files',
+          roles: isEscalate ? ['admin', 'ke_toan', 'pm', 'high_level'] : ['admin', 'ke_toan'],
+          entity: 'tracking', entityId: row.id,
+        });
 
         ok += 1;
         note(isEscalate ? 'Đã escalate nội bộ D+2.' : 'Đã nhắc nội bộ D+1.', { treNgay, viec });
@@ -205,13 +227,41 @@ export async function runWf4(): Promise<RunResult> {
           den: g.email_l1!, cc: ccChot, tieu_de: subjChot,
         });
 
+        // Chốt rồi vẫn có thể còn một chặng: khách nào yêu cầu hồ sơ thanh
+        // toán thì kỳ chuyển sang chờ hồ sơ, không dừng ở đây.
+        const canHstt = Boolean(g.ho_so_thanh_toan?.trim());
+
         await sb.from('tracking').update({
-          status: 'mac_dinh_chap_thuan' as TrackingStatus,
+          status: (canHstt ? 'cho_ho_so_thanh_toan' : 'mac_dinh_chap_thuan') as TrackingStatus,
           so_vong_remind: nextPass,
           ngay_chot: today,
           ngay_remind_cuoi: today,
-          ghi_chu: 'WF4: nhóm 1 hết vòng nhắc, mặc định chấp thuận theo hợp đồng.',
+          ngay_bat_dau_cho_file: canHstt ? today : null,
+          ket_qua_duyet: 'mac_dinh_chap_thuan',
+          ghi_chu: 'WF4: nhóm 1 hết vòng nhắc, mặc định chấp thuận theo hợp đồng.'
+            + (canHstt ? ' Cần chuẩn bị hồ sơ thanh toán.' : ''),
         }).eq('id', row.id);
+
+        if (canHstt && g.email_ke_toan) {
+          const mailHstt = tplNhacChuanBiHstt(
+            row.ten_nhom, row.ky_doi_soat, g.ho_so_thanh_toan!, g.sla_hstt ?? null, appUrl);
+          await sendMail({
+            to: g.email_ke_toan, cc: g.email_pm ?? undefined, ...mailHstt,
+            threadId: row.internal_thread_id ?? undefined,
+          });
+          mails.ghi({ nhom: row.ten_nhom, ky: row.ky_doi_soat, loai: 'Nhắc chuẩn bị HSTT',
+            den: g.email_ke_toan, cc: g.email_pm ?? undefined, tieu_de: mailHstt.subject });
+        }
+
+        await pushNotify({
+          tieuDe: `${row.ten_nhom} ${row.ky_doi_soat} — mặc định chấp thuận`,
+          noiDung: canHstt
+            ? `Cần chuẩn bị hồ sơ thanh toán: ${g.ho_so_thanh_toan}`
+            : 'Kỳ đã hoàn tất, chờ thanh toán.',
+          muc: canHstt ? 'canh_bao' : 'info',
+          lienKet: canHstt ? '/hstt' : '/tracking',
+          roles: ['admin', 'ke_toan'],
+        });
 
         ok += 1;
         note('Nhóm 1 hết vòng nhắc — đã tự động chốt và thông báo khách.');

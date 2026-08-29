@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { capNhatO, OMasterData } from '@/app/actions';
+import { capNhatO, xoaNhom, OMasterData } from '@/app/actions';
 import { GroupEditor } from './group-editor';
 
 // =====================================================================
@@ -27,6 +27,7 @@ const COT: Cot[] = [
   { k: 'ten_nhom', ten: 'Tên nhóm', kieu: 'text', w: 160, nhom: 'Định danh' },
   { k: 'ngung_hop_tac', ten: 'Ngưng', kieu: 'bool', w: 62, nhom: 'Định danh' },
   { k: 'so_dot', ten: 'Số đợt/tháng', kieu: 'int', w: 88, chiDoc: true, nhom: 'Định danh' },
+  { k: 'so_phap_nhan', ten: 'Pháp nhân', kieu: 'int', w: 78, chiDoc: true, nhom: 'Định danh' },
 
   { k: 'diem_gmv', ten: 'GMV', kieu: 'int', w: 58, nhom: 'Chấm điểm' },
   { k: 'diem_company_size', ten: 'Quy mô', kieu: 'int', w: 62, nhom: 'Chấm điểm' },
@@ -157,7 +158,9 @@ function OSua({ cot, giaTri, dangLuu, loi, onLuu }: {
 
 type SapXep = { cot: string; chieu: 'tang' | 'giam' } | null;
 
-export function MasterGrid({ rows, laKeToan }: { rows: any[]; laKeToan: boolean }) {
+export function MasterGrid({ rows, laKeToan, onChonNhom }: {
+  rows: any[]; laKeToan: boolean; onChonNhom?: (id: string) => void;
+}) {
   const router = useRouter();
 
   /** Giá trị đã sửa nhưng chưa xác nhận từ máy chủ, để cập nhật lạc quan. */
@@ -174,6 +177,18 @@ export function MasterGrid({ rows, laKeToan }: { rows: any[]; laKeToan: boolean 
   const [anNgung, setAnNgung] = useState(false);
   const [sapXep, setSapXep] = useState<SapXep>({ cot: 'ten_nhom', chieu: 'tang' });
   const [sua, setSua] = useState<any | null | undefined>(undefined);
+
+  function xoa(r: any) {
+    if (!confirm(
+      `Xoá nhóm "${r.ten_nhom}" (${r.ma_he_thong})?\n\n`
+      + 'Chỉ xoá được nhóm chưa phát sinh kỳ đối soát nào. '
+      + 'Nhóm đã chạy thì dùng "Ngưng hợp tác" để workflow bỏ qua.')) return;
+
+    start(async () => {
+      try { await xoaNhom(r.id); setToast({ kind: 'ok', msg: `Đã xoá ${r.ten_nhom}` }); router.refresh(); }
+      catch (e) { setToast({ kind: 'err', msg: e instanceof Error ? e.message : 'Không xoá được.' }); }
+    });
+  }
 
   useEffect(() => {
     if (!toast) return;
@@ -343,7 +358,7 @@ export function MasterGrid({ rows, laKeToan }: { rows: any[]; laKeToan: boolean 
                       </span>
                     </th>
                   ))}
-                  {laKeToan && <th className="pin-r no-print" style={{ width: 62 }}></th>}
+                  {laKeToan && <th className="pin-r no-print" style={{ width: 158 }}></th>}
                 </tr>
               </thead>
               <tbody>
@@ -373,8 +388,15 @@ export function MasterGrid({ rows, laKeToan }: { rows: any[]; laKeToan: boolean 
                       );
                     })}
                     {laKeToan && (
-                      <td className="pin-r no-print text-center">
-                        <button className="btn btn-sm" onClick={() => setSua(r)}>Dòng</button>
+                      <td className="pin-r no-print">
+                        <div className="flex gap-1 justify-end pr-2">
+                          <button className="btn btn-sm" title="Sửa cả dòng trong một biểu mẫu"
+                                  onClick={() => setSua(r)}>Sửa</button>
+                          <button className="btn btn-sm" title="Xem và sửa lịch gửi của nhóm này"
+                                  onClick={() => onChonNhom?.(r.id)}>Lịch</button>
+                          <button className="btn btn-sm btn-danger" title="Xoá nhóm"
+                                  onClick={() => xoa(r)}>Xoá</button>
+                        </div>
                       </td>
                     )}
                   </tr>
