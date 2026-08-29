@@ -72,11 +72,21 @@ export async function classifyReply(emailBody: string): Promise<Classification> 
     const valid: ActionKhach[] = ['dong_y', 'tu_choi', 'trao_doi_them', 'review'];
     if (!valid.includes(parsed.action)) return classifyByKeyword(clean);
 
+    // Cột lưu độ tin cậy chỉ chứa được tới 9.99. Mô hình đôi khi trả về dạng
+    // phần trăm (95 thay vì 0.95); ghi thẳng con số đó xuống là Postgres từ
+    // chối cả dòng, và vì lỗi bị nuốt nên workflow chạy lại vô tận.
+    const chuanHoaTinCay = (v: unknown): number => {
+      const n = Number(v);
+      if (!Number.isFinite(n)) return 0.5;
+      const x = n > 1 ? n / 100 : n;
+      return Math.min(Math.max(x, 0), 1);
+    };
+
     return {
       action: parsed.action,
       pham_vi: String(parsed.pham_vi ?? 'chưa xác định').slice(0, 500),
       tom_tat: String(parsed.tom_tat ?? '').slice(0, 1000),
-      do_tin_cay: Number(parsed.do_tin_cay ?? 0.5),
+      do_tin_cay: chuanHoaTinCay(parsed.do_tin_cay),
       nguon: 'ai',
     };
   } catch (err) {

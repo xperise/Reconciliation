@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { duyetPhanHoi, chotMacDinh, QuyetDinh } from '@/app/actions';
+import { duyetPhanHoi, chotMacDinh, QuyetDinh, CanSua } from '@/app/actions';
+import { ReplyBox } from './reply-box';
 
 const AI_LABEL: Record<string, string> = {
   dong_y: 'Khách đồng ý',
@@ -38,7 +39,11 @@ export function ApprovalRow({ row }: { row: any }) {
   const [ghiChu, setGhiChu] = useState('');
   const [loi, setLoi] = useState('');
   const [xong, setXong] = useState<{ canHstt: boolean; hoSo: string | null } | null>(null);
+  const [canSua, setCanSua] = useState<CanSua>('bang_ke');
   const [dangChay, start] = useTransition();
+
+  // Khách đang góp ý về hồ sơ thanh toán hay về bảng kê
+  const veHstt = row.doi_tuong_duyet === 'hstt';
 
   const hetVong = row.ai_de_xuat === 'het_vong_escalate';
   const chiMoiNhan = row.ai_de_xuat === 'review';
@@ -57,7 +62,7 @@ export function ApprovalRow({ row }: { row: any }) {
     setLoi('');
     start(async () => {
       try {
-        const kq = await duyetPhanHoi(row.id, hoi, ghiChu);
+        const kq = await duyetPhanHoi(row.id, hoi, ghiChu, hoi === 'can_sua' ? canSua : undefined);
         setHoi(null);
         setGhiChu('');
         if (hoi === 'dong_y' && kq?.canHstt) {
@@ -95,6 +100,9 @@ export function ApprovalRow({ row }: { row: any }) {
         <td>
           <span className={`pill pill-dot ${AI_TONE[row.ai_de_xuat] ?? 'pill-neutral'}`}>
             {AI_LABEL[row.ai_de_xuat] ?? 'Cần xem xét'}
+          </span>
+          <span className="sub">
+            về {veHstt ? 'hồ sơ thanh toán' : 'bảng kê'}
           </span>
           {tinCay !== null && !hetVong && (
             <span className="sub mono">độ tin cậy {tinCay}%</span>
@@ -153,6 +161,9 @@ export function ApprovalRow({ row }: { row: any }) {
 
                 {loi && <p role="alert" className="callout callout-critical m-0">{loi}</p>}
 
+                {/* Trả lời khách — độc lập với quyết định */}
+                {!hoi && !xong && <ReplyBox row={row} />}
+
                 {/* Bước 1: chọn hành động */}
                 {!hoi && !xong && (
                   <div className="flex flex-wrap gap-2">
@@ -195,6 +206,29 @@ export function ApprovalRow({ row }: { row: any }) {
                 {hoi && (
                   <div className="card card-pad">
                     <p className="eyebrow mb-1.5">{NHAN_QD[hoi]}</p>
+
+                    {hoi === 'can_sua' && !veHstt && (
+                      <div className="mb-2.5">
+                        <label className="label" htmlFor={`cs-${row.id}`}>Cần chỉnh sửa gì</label>
+                        <select id={`cs-${row.id}`} className="field" value={canSua}
+                                onChange={(e) => setCanSua(e.target.value as CanSua)}>
+                          <option value="bang_ke">Bảng kê</option>
+                          <option value="hoa_don">Hóa đơn điều chỉnh</option>
+                          <option value="ca_hai">Cả bảng kê và hóa đơn</option>
+                        </select>
+                        <p className="text-[11px] text-[var(--ink-3)] mt-1 mb-0 leading-snug">
+                          Nội dung này vào thư nhắc nội bộ và hiện trên Theo dõi kỳ, để người
+                          chuẩn bị chứng từ biết phải làm gì mà không cần hỏi lại.
+                        </p>
+                      </div>
+                    )}
+
+                    {hoi === 'can_sua' && veHstt && (
+                      <p className="callout callout-accent m-0 mb-2.5">
+                        Kỳ sẽ chuyển sang <strong>HSTT cần chỉnh sửa</strong>. Tải bản hồ sơ
+                        thanh toán mới lên là hệ thống gửi lại và đợi khách xác nhận tiếp.
+                      </p>
+                    )}
 
                     {canCanhBao && (
                       <p className="callout callout-high m-0 mb-2.5">
@@ -257,6 +291,7 @@ export function ApprovalRow({ row }: { row: any }) {
           </td>
         </tr>
       )}
+
     </>
   );
 }

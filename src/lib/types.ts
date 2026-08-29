@@ -12,7 +12,9 @@ export type TrackingStatus =
   | 'da_gui_ho_so_thanh_toan'
   | 'hoan_tat_cho_thanh_toan'
   | 'mac_dinh_chap_thuan'
-  | 'can_xu_ly_tay';
+  | 'can_xu_ly_tay'
+  | 'cho_xac_nhan_hstt'
+  | 'can_chinh_sua_hstt';
 
 /** Nhãn tiếng Việt hiển thị trên giao diện. */
 export const STATUS_LABEL: Record<TrackingStatus, string> = {
@@ -28,6 +30,8 @@ export const STATUS_LABEL: Record<TrackingStatus, string> = {
   hoan_tat_cho_thanh_toan: 'Hoàn tất — chờ thanh toán',
   mac_dinh_chap_thuan: 'Mặc định chấp thuận',
   can_xu_ly_tay: 'Cần xử lý tay',
+  cho_xac_nhan_hstt: 'Chờ khách xác nhận HSTT',
+  can_chinh_sua_hstt: 'HSTT cần chỉnh sửa',
 };
 
 /** Trạng thái đã kết thúc — WF1 và WF4 bỏ qua. */
@@ -35,7 +39,6 @@ export const STATUS_DONE: TrackingStatus[] = [
   'da_chot',
   'hoan_tat_cho_thanh_toan',
   'mac_dinh_chap_thuan',
-  'da_gui_ho_so_thanh_toan',
   'can_xu_ly_tay',
 ];
 
@@ -45,6 +48,10 @@ export const STATUS_WF1_SKIP: TrackingStatus[] = [
   'da_nhan_phan_hoi',
   'cho_duyet_phan_loai',
   'can_chinh_sua',
+  'cho_ho_so_thanh_toan',
+  'da_gui_ho_so_thanh_toan',
+  'cho_xac_nhan_hstt',
+  'can_chinh_sua_hstt',
   ...STATUS_DONE,
 ];
 
@@ -145,12 +152,17 @@ export type BillingSchedule = {
   ghi_chu: string | null;
 };
 
-export type FileKind = 'bang_ke' | 'hstt';
+export type FileKind = 'bang_ke' | 'hstt' | 'trao_doi' | 'hoa_don_dieu_chinh';
 
 export const FILE_KIND_LABEL: Record<FileKind, string> = {
   bang_ke: 'Bảng kê',
   hstt: 'Hồ sơ thanh toán',
+  hoa_don_dieu_chinh: 'Hóa đơn điều chỉnh',
+  trao_doi: 'Trao đổi',
 };
+
+/** Loại tệp gửi thẳng cho khách kèm mẫu thư riêng. */
+export const KIND_GUI_KHACH: FileKind[] = ['bang_ke', 'hstt', 'hoa_don_dieu_chinh'];
 
 export type WorkflowKey = 'wf1' | 'wf2' | 'wf3' | 'wf4';
 

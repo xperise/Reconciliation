@@ -1,11 +1,13 @@
 import { supabaseAdmin } from './supabase/admin';
+import type { FileKind } from './types';
 
 export const BUCKET = 'bang-ke';
 
 /** Liên kết ký sống 90 ngày — đủ dài cho khách mở lại trong kỳ thanh toán. */
 const SIGNED_URL_TTL = 60 * 60 * 24 * 90;
 
-export type FileKind = 'bang_ke' | 'hstt';
+// Kiểu dùng chung, khai một chỗ ở types để hai nơi không lệch nhau
+export type { FileKind } from './types';
 
 export type StatementFile = {
   id: string;
@@ -39,7 +41,10 @@ export function buildPath(
     .replace(/[/\\?%*:|"<>]/g, '_')
     .slice(0, 120);
   const stamp = Date.now().toString(36);
-  const nhan = kind === 'hstt' ? 'HSTT' : `v${version}`;
+  const NHAN_KIND: Record<string, string> = {
+    hstt: 'HSTT', trao_doi: 'TraoDoi', hoa_don_dieu_chinh: 'HDDC',
+  };
+  const nhan = NHAN_KIND[kind] ?? `v${version}`;
   const thuMuc = dot > 1 ? `${ky}/dot${dot}` : ky;
   return `${maHeThong}/${thuMuc}/${nhan}_${stamp}_${safe}`;
 }

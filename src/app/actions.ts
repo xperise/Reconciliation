@@ -4,11 +4,16 @@ import { revalidatePath } from 'next/cache';
 import { currentUser } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { writeAudit } from '@/lib/audit';
-import { nowInVN, addDays } from '@/lib/period';
+import { nowInVN, addDays, periodFull } from '@/lib/period';
 import { sendMail } from '@/lib/google/gmail';
-import { refSubject, tplMacDinhChot, tplNhacChuanBiHstt } from '@/lib/email-templates';
+import {
+  refSubject, tplMacDinhChot, tplNhacChuanBiHstt, tplNhacSuaChungTu, tplTraLoiKhach,
+} from '@/lib/email-templates';
 import { TrackingStatus, FileKind } from '@/lib/types';
-import { buildPath, nextVersion, removeFile, previewUrl } from '@/lib/storage';
+import {
+  buildPath, nextVersion, removeFile, previewUrl, mimeFor,
+  downloadFile as taiTepVe,
+} from '@/lib/storage';
 import { pushNotify } from '@/lib/notify';
 import { guiTepChoKhach, guiLoChoKhach } from '@/workflows/wf3-gui-tep';
 
@@ -30,7 +35,17 @@ function tenNguoi(u: { full_name?: string | null; email: string }): string {
 
 export type QuyetDinh = 'dong_y' | 'can_sua' | 'tu_choi' | 'bo_qua';
 
-export async function duyetPhanHoi(trackingId: string, quyetDinh: QuyetDinh, ghiChu: string) {
+export type CanSua = 'bang_ke' | 'hoa_don' | 'ca_hai';
+
+const NHAN_CAN_SUA: Record<CanSua, string> = {
+  bang_ke: 'bảng kê',
+  hoa_don: 'hóa đơn điều chỉnh',
+  ca_hai: 'bảng kê và hóa đơn điều chỉnh',
+};
+
+export async function duyetPhanHoi(
+  trackingId: string, quyetDinh: QuyetDinh, ghiChu: string, canSua?: CanSua,
+) {
   const user = await requireRole('admin', 'ke_toan');
   const sb = supabaseAdmin();
   const today = nowInVN().isoDate;
@@ -47,14 +62,26 @@ export async function duyetPhanHoi(trackingId: string, quyetDinh: QuyetDinh, ghi
   const before = { status: row.status, ket_qua_duyet: row.ket_qua_duyet };
   const canHstt = Boolean(g.ho_so_thanh_toan?.trim());
 
+  // Khách vừa phản hồi về cái gì. WF2 ghi cột này lúc phát hiện thư mới.
+  const veHstt = row.doi_tuong_duyet === 'hstt';
+
   let next: TrackingStatus;
   let extra: Record<string, unknown> = {};
 
   if (quyetDinh === 'bo_qua') {
     // Khách mới báo đã nhận, chưa có ý kiến thực chất. Trả kỳ về đúng trạng
     // thái trước đó để đồng hồ SLA chạy tiếp, không coi như đã xử lý xong.
-    next = 'da_gui_bang_ke';
+    next = veHstt ? 'cho_xac_nhan_hstt' : 'da_gui_bang_ke';
     extra = { ket_qua_duyet: 'bo_qua' };
+  } else if (quyetDinh === 'dong_y' && veHstt) {
+    // Khách xác nhận hồ sơ thanh toán là chặng cuối, kỳ đóng lại.
+    next = 'hoan_tat_cho_thanh_toan';
+    extra = {
+      ngay_chot: row.ngay_chot ?? today,
+      han_xac_nhan_hstt: null,
+      doi_tuong_duyet: null,
+      ngay_remind_cuoi: null,
+    };
   } else if (quyetDinh === 'dong_y') {
     next = canHstt ? 'cho_ho_so_thanh_toan' : 'hoan_tat_cho_thanh_toan';
     extra = {
@@ -65,11 +92,16 @@ export async function duyetPhanHoi(trackingId: string, quyetDinh: QuyetDinh, ghi
       ngay_remind_cuoi: null,
     };
   } else if (quyetDinh === 'can_sua') {
-    next = 'can_chinh_sua';
+    // Khách đang góp ý về hồ sơ thanh toán thì vòng sửa là vòng của hồ sơ,
+    // không kéo kỳ ngược về giai đoạn bảng kê đã chốt xong.
+    next = veHstt ? 'can_chinh_sua_hstt' : 'can_chinh_sua';
     extra = {
       ngay_bat_dau_cho_file: today,
       ngay_remind_cuoi: null,
-      han_chap_nhan: addDays(today, g.sla_phan_hoi_dieu_chinh ?? 2),
+      noi_dung_can_sua: veHstt
+        ? 'hồ sơ thanh toán'
+        : NHAN_CAN_SUA[canSua ?? 'bang_ke'],
+      ...(veHstt ? {} : { han_chap_nhan: addDays(today, g.sla_phan_hoi_dieu_chinh ?? 2) }),
     };
   } else {
     next = 'can_xu_ly_tay';
@@ -132,8 +164,23 @@ export async function duyetPhanHoi(trackingId: string, quyetDinh: QuyetDinh, ghi
     });
   }
   if (quyetDinh === 'can_sua') {
+    const viec = veHstt ? 'hồ sơ thanh toán' : NHAN_CAN_SUA[canSua ?? 'bang_ke'];
+
+    if (g.email_ke_toan) {
+      try {
+        const mail = tplNhacSuaChungTu(
+          row.ten_nhom, row.ky_doi_soat, viec, process.env.NEXT_PUBLIC_APP_URL ?? '');
+        await sendMail({
+          to: g.email_ke_toan, cc: g.email_pm ?? undefined, ...mail,
+          threadId: row.internal_thread_id ?? undefined,
+        });
+      } catch (e) {
+        console.error('[duyet] không gửi được thư nhắc sửa:', e);
+      }
+    }
+
     await pushNotify({
-      tieuDe: `${row.ten_nhom} ${row.ky_doi_soat} chờ bản chỉnh sửa`,
+      tieuDe: `${row.ten_nhom} ${row.ky_doi_soat} cần chỉnh sửa ${viec}`,
       noiDung: 'Tải bản mới lên ở mục Tệp bảng kê, hệ thống gửi cho khách ngay.',
       muc: 'canh_bao', lienKet: '/files',
       roles: ['admin', 'ke_toan'],
@@ -145,7 +192,7 @@ export async function duyetPhanHoi(trackingId: string, quyetDinh: QuyetDinh, ghi
   revalidatePath('/tracking');
   revalidatePath('/hstt');
 
-  return { status: next, canHstt, hoSo: g.ho_so_thanh_toan ?? null, nhacHstt };
+  return { status: next, canHstt: canHstt && !veHstt, veHstt, hoSo: g.ho_so_thanh_toan ?? null, nhacHstt };
 }
 
 /** Kết thúc một kỳ đã hết vòng escalate: chốt mặc định và báo khách. */
@@ -644,6 +691,8 @@ export async function ghiNhanTep(input: {
   ghiChu?: string;
   /** Người dùng đã xác nhận muốn gửi dù loại tệp này từng gửi rồi. */
   chapNhanGuiLai?: { lyDo: string };
+  /** Chỉ dùng cho hồ sơ thanh toán: khách có phải xác nhận lại không. */
+  hsttCanXacNhan?: boolean;
 }) {
   const user = await requireRole('admin', 'ke_toan');
   const sb = supabaseAdmin();
@@ -683,7 +732,7 @@ export async function ghiNhanTep(input: {
 
   if (input.guiNgay) {
     try {
-      const r = await guiTepChoKhach(file.id);
+      const r = await guiLoChoKhach(input.batchId, input.hsttCanXacNhan);
       if (r.sent) {
         const { data: tr } = await sb.from('tracking').select('id')
           .eq('group_id', input.groupId).eq('ky_doi_soat', input.ky).maybeSingle();
@@ -712,7 +761,7 @@ export async function ghiNhanTep(input: {
 
   revalidatePath('/files');
   revalidatePath('/tracking');
-  return { ketQua };
+  return { ketQua, fileId: file.id as string };
 }
 
 /**
@@ -862,7 +911,11 @@ export async function danhDauDocHet() {
 }
 
 /** Gửi cả một lô tệp cho khách. Gửi lại phải nêu lý do. */
-export async function guiLoNgay(batchId: string, guiLai?: { lyDo: string }) {
+export async function guiLoNgay(
+  batchId: string,
+  guiLai?: { lyDo: string },
+  hsttCanXacNhan?: boolean,
+) {
   const user = await requireRole('admin', 'ke_toan');
   const sb = supabaseAdmin();
 
@@ -878,7 +931,7 @@ export async function guiLoNgay(batchId: string, guiLai?: { lyDo: string }) {
     await sb.from('statement_files').update({ sent_at: null }).eq('batch_id', batchId);
   }
 
-  const r = await guiLoChoKhach(batchId);
+  const r = await guiLoChoKhach(batchId, hsttCanXacNhan);
 
   if (r.sent) {
     const { data: tr } = await sb.from('tracking').select('id')
@@ -1083,3 +1136,123 @@ export async function xoaPhapNhan(id: string) {
 
   revalidatePath('/master-data');
 }
+
+// =====================================================================
+// Trả lời khách trực tiếp từ màn hình duyệt
+// =====================================================================
+
+/**
+ * Gửi một thư do kế toán tự soạn vào đúng thread của kỳ.
+ *
+ * Không đổi trạng thái kỳ. Kế toán có thể hỏi lại khách rồi để nguyên chờ
+ * trả lời, hoặc trả lời xong mới bấm quyết định — hai việc tách rời nhau.
+ *
+ * Tệp đính kèm đã được trình duyệt tải thẳng lên kho trước khi gọi hàm này,
+ * ở đây chỉ ghi nhận và đính vào thư.
+ */
+export async function traLoiKhach(input: {
+  trackingId: string;
+  noiDung: string;
+  /** Tệp đã tải lên kho trước đó, truyền id để đính kèm. */
+  fileIds?: string[];
+}) {
+  const user = await requireRole('admin', 'ke_toan');
+  const sb = supabaseAdmin();
+
+  if (!input.noiDung?.trim()) throw new Error('Nội dung thư không được để trống.');
+
+  const { data: row } = await sb
+    .from('tracking').select('*, billing_groups!inner(*)').eq('id', input.trackingId).single();
+  if (!row) throw new Error('Không tìm thấy kỳ đối soát này.');
+
+  const g = (row as any).billing_groups;
+  if (!g.email_l1?.includes('@')) {
+    throw new Error('Nhóm này chưa khai báo email đầu mối khách hàng.');
+  }
+  if (!row.thread_id) {
+    throw new Error('Kỳ này chưa có thread email, chưa gửi bảng kê lần nào.');
+  }
+
+  const attachments: { filename: string; mimeType: string; data: Buffer }[] = [];
+  const tenTep: string[] = [];
+
+  if (input.fileIds?.length) {
+    const { data: files } = await sb
+      .from('statement_files').select('*').in('id', input.fileIds);
+    for (const f of files ?? []) {
+      attachments.push({
+        filename: f.file_name,
+        mimeType: f.mime_type ?? mimeFor(f.file_name),
+        data: await taiTepVe(f.storage_path),
+      });
+      tenTep.push(f.file_name);
+    }
+  }
+
+  const cc = [g.email_ke_toan, g.email_cc].filter(Boolean).join(',') || undefined;
+  const nhanKy = periodFull(row.ky_doi_soat, row.pham_vi_nhan, row.dot);
+
+  await sendMail({
+    to: g.email_l1,
+    cc,
+    subject: refSubject(row.ten_nhom, nhanKy),
+    html: tplTraLoiKhach(row.ten_nhom, row.ky_doi_soat, input.noiDung.trim(), attachments.length),
+    attachments: attachments.length ? attachments : undefined,
+    threadId: row.thread_id,
+  });
+
+  if (input.fileIds?.length) {
+    await sb.from('statement_files')
+      .update({ sent_at: new Date().toISOString() }).in('id', input.fileIds);
+  }
+
+  await sb.from('reply_log').insert({
+    tracking_id: input.trackingId,
+    ma_he_thong: row.ma_he_thong,
+    ky_doi_soat: row.ky_doi_soat,
+    dot: row.dot ?? 1,
+    noi_dung: input.noiDung.trim(),
+    so_tep: attachments.length,
+    ten_tep: tenTep.join(', ') || null,
+    den: g.email_l1,
+    cc: cc ?? null,
+    nguoi_gui: user.id,
+  });
+
+  await writeAudit({
+    actorId: user.id, actorEmail: user.email,
+    action: 'reply.send', entity: 'tracking', entityId: input.trackingId,
+    note: `${tenNguoi(user)} trả lời ${row.ten_nhom} ${nhanKy}`
+      + (attachments.length ? ` kèm ${attachments.length} tệp` : '')
+      + `: ${input.noiDung.trim().slice(0, 160)}`,
+  });
+
+  await pushNotify({
+    tieuDe: `Đã trả lời ${row.ten_nhom} ${nhanKy}`,
+    noiDung: input.noiDung.trim().slice(0, 120),
+    muc: 'info', lienKet: '/approvals',
+    roles: ['admin', 'ke_toan', 'pm'],
+    entity: 'tracking', entityId: input.trackingId,
+  });
+
+  revalidatePath('/approvals');
+  revalidatePath('/tracking');
+  revalidatePath('/files');
+
+  return { soTep: attachments.length };
+}
+
+/** Chỗ lưu tệp đính kèm của thư trao đổi. */
+export async function xinChoLuuTepTraLoi(trackingId: string, fileName: string) {
+  await requireRole('admin', 'ke_toan');
+  const { data: row } = await supabaseAdmin()
+    .from('tracking').select('ma_he_thong, ky_doi_soat, dot').eq('id', trackingId).single();
+  if (!row) throw new Error('Không tìm thấy kỳ đối soát này.');
+
+  return {
+    path: buildPath(row.ma_he_thong, row.ky_doi_soat, 'trao_doi', 1, fileName, row.dot),
+  };
+}
+
+// =====================================================================
+// Trả lời khách trong lúc trao đổi

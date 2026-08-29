@@ -251,3 +251,68 @@ export function tplNhacChuanBiHstt(
       `${appUrl}/hstt`),
   };
 }
+
+export function tplHoaDonDieuChinh(nhomKh: string, ky: string, fileLink: string): string {
+  return shell(
+    `Hóa đơn điều chỉnh ${periodInWords(ky)}`,
+    `<p style="margin:0 0 16px;">Kính gửi <strong>${nhomKh}</strong>,</p>
+     <p style="margin:0 0 16px;">Theo phản hồi của Quý khách hàng, xperise đã rà soát và xuất lại
+     hóa đơn điều chỉnh cho kỳ <strong>${periodInWords(ky)}</strong>.</p>
+     <p style="margin:0;">Kính đề nghị Quý khách hàng kiểm tra và phản hồi xác nhận để hai Bên
+     tiến hành các bước tiếp theo.</p>
+     <p style="margin:20px 0 0;">Trân trọng,<br>Team xperise.</p>`,
+    fileLink, 'Xem hóa đơn điều chỉnh',
+  );
+}
+
+/**
+ * Thư kế toán trả lời khách trong lúc trao đổi.
+ *
+ * Giữ khung nhận diện của xperise nhưng bỏ nút bấm và khối "Lưu ý quan trọng"
+ * — đây là một câu trả lời trong hội thoại, không phải một mốc của quy trình.
+ */
+export function tplTraLoiKhach(
+  nhomKh: string, ky: string, noiDung: string, soTep = 0,
+): string {
+  const doan = noiDung
+    .split(/\n{2,}/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .map((x) => `<p style="margin:0 0 14px;">${x.replace(/\n/g, '<br>')}</p>`)
+    .join('');
+
+  return shell(
+    `Phản hồi về bảng kê ${periodInWords(ky)}`,
+    `<p style="margin:0 0 16px;">Kính gửi <strong>${nhomKh}</strong>,</p>
+     ${doan}
+     ${soTep > 0 ? `<p style="margin:16px 0 0;">Đính kèm ${soTep} tệp trong email này.</p>` : ''}
+     <p style="margin:20px 0 0;">Trân trọng,<br>Team xperise.</p>`,
+  );
+}
+
+export function tplNhacXacNhanHstt(nhomKh: string, ky: string): string {
+  return shell(
+    `Nhắc xác nhận hồ sơ thanh toán ${periodInWords(ky)}`,
+    `<p style="margin:0 0 16px;">Kính gửi <strong>${nhomKh}</strong>,</p>
+     <p style="margin:0 0 16px;">Kính đề nghị Quý khách hàng kiểm tra và phản hồi xác nhận
+     hồ sơ thanh toán <strong>${periodInWords(ky)}</strong> mà xperise đã gửi.</p>
+     <p style="margin:0;">Vui lòng xác nhận bằng cách trả lời trực tiếp email này.</p>
+     <p style="margin:20px 0 0;">Trân trọng,<br>Team xperise.</p>`,
+  );
+}
+
+export function tplNhacSuaChungTu(
+  nhomKh: string, ky: string, canSua: string, appUrl: string,
+) {
+  return {
+    subject: `[CẦN CHỈNH SỬA] ${nhomKh} ${ky} — ${canSua}`,
+    html: internalShell('CẦN CHỈNH SỬA', '#C77914',
+      `Khách ${nhomKh} yêu cầu chỉnh sửa kỳ ${ky}`,
+      [
+        `Nội dung cần xử lý: <strong>${canSua}</strong>`,
+        'Chuẩn bị chứng từ rồi tải lên hệ thống. Chọn đúng loại tệp để khách nhận '
+          + 'được mẫu thư phù hợp, hệ thống gửi ngay sau khi tải lên.',
+      ],
+      `${appUrl}/files`),
+  };
+}

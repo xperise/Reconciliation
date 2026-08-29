@@ -16,11 +16,19 @@ const DANG_CHO_KHACH: TrackingStatus[] = [
   // còn sống để các bước sau nối tiếp được. Quét luôn để phát hiện mất thread.
   'cho_duyet_phan_loai',
   'cho_ho_so_thanh_toan',
+  'cho_xac_nhan_hstt',
+  'can_chinh_sua_hstt',
 ];
 
 /** Trạng thái mà phản hồi mới của khách cần đẩy lại hàng chờ duyệt. */
 const NHAN_PHAN_HOI_MOI: TrackingStatus[] = [
-  'da_gui_bang_ke', 'da_nhan_phan_hoi', 'can_chinh_sua', 'da_gui_ho_so_thanh_toan',
+  'da_gui_bang_ke', 'da_nhan_phan_hoi', 'can_chinh_sua',
+  'da_gui_ho_so_thanh_toan', 'cho_xac_nhan_hstt', 'can_chinh_sua_hstt',
+];
+
+/** Kỳ đang chờ khách nói về hồ sơ thanh toán, không phải về bảng kê. */
+const VE_HSTT: TrackingStatus[] = [
+  'cho_xac_nhan_hstt', 'can_chinh_sua_hstt', 'da_gui_ho_so_thanh_toan',
 ];
 
 /**
@@ -106,9 +114,16 @@ export async function runWf2(): Promise<RunResult> {
       const latest = fromCustomer[fromCustomer.length - 1];
 
       if (!latest) { note('Khách chưa trả lời.'); continue; }
-      if (latest.id === row.message_id) { note('Không có phản hồi mới.'); continue; }
+
+      if (latest.id === row.message_id) {
+        note('Không có phản hồi mới.');
+        continue;
+      }
+
       if (!NHAN_PHAN_HOI_MOI.includes(row.status)) {
-        note('Thread còn sống, trạng thái hiện tại không nhận phản hồi mới.');
+        note('Trạng thái hiện tại không nhận phản hồi mới.', {
+          status: row.status, message_id_dang_luu: row.message_id, message_id_moi: latest.id,
+        });
         continue;
       }
 
@@ -129,7 +144,8 @@ export async function runWf2(): Promise<RunResult> {
         message_id: latest.id,
         ai_de_xuat: cls.action,
         ai_pham_vi: cls.pham_vi,
-        ai_do_tin_cay: cls.do_tin_cay,
+        ai_do_tin_cay: Math.min(Math.max(Number(cls.do_tin_cay) || 0, 0), 1),
+        doi_tuong_duyet: VE_HSTT.includes(row.status) ? 'hstt' : 'bang_ke',
         email_khach_goc: (latest.body || latest.snippet).slice(0, 5000),
         ghi_chu: ghiChu,
         ket_qua_duyet: null,
@@ -140,6 +156,22 @@ export async function runWf2(): Promise<RunResult> {
         failed += 1;
         note('Không ghi được phản hồi, bỏ qua để không gửi thư trùng.',
           { error: loiGhi.message });
+        continue;
+      }
+
+      // Đọc lại để chắc chắn thay đổi đã nằm trong database. Lệnh update
+      // không khớp dòng nào cũng trả về "không lỗi", nên nếu chỉ tin vào
+      // error thì lượt sau lại xử lý y hệt và bắn thư thêm lần nữa.
+      const { data: sauGhi } = await sb
+        .from('tracking').select('status, message_id').eq('id', row.id).maybeSingle();
+
+      if (sauGhi?.message_id !== latest.id || sauGhi?.status !== 'cho_duyet_phan_loai') {
+        failed += 1;
+        note('Ghi xong nhưng đọc lại thấy chưa đổi. Dừng để không gửi thư trùng.', {
+          mong_doi: { status: 'cho_duyet_phan_loai', message_id: latest.id },
+          thuc_te: sauGhi,
+          tracking_id: row.id,
+        });
         continue;
       }
 
@@ -164,7 +196,8 @@ export async function runWf2(): Promise<RunResult> {
 
       if (vuaVaoHangCho) {
         await pushNotify({
-          tieuDe: `${row.ten_nhom} ${row.ky_doi_soat} — khách đã phản hồi`,
+          tieuDe: `${row.ten_nhom} ${row.ky_doi_soat} — khách phản hồi về `
+            + `${VE_HSTT.includes(row.status) ? 'hồ sơ thanh toán' : 'bảng kê'}`,
           noiDung: cls.tom_tat,
           muc: 'canh_bao', lienKet: '/approvals',
           roles: ['admin', 'ke_toan', 'pm'],

@@ -17,7 +17,9 @@ function kichCo(bytes: number | null): string {
  * dùng cần thấy hai thứ đó là hai việc khác nhau.
  */
 function nhanLoai(f: any): { nhan: string; tone: string } {
+  if (f.kind === 'trao_doi') return { nhan: 'Tệp trao đổi', tone: 'pill-neutral' };
   if (f.kind === 'hstt') return { nhan: 'Hồ sơ thanh toán', tone: 'pill-watch' };
+  if (f.kind === 'trao_doi') return { nhan: 'Trao đổi', tone: 'pill-neutral' };
   if (f.version > 1) return { nhan: `Bảng kê chỉnh sửa (bản ${f.version})`, tone: 'pill-high' };
   return { nhan: 'Bảng kê', tone: 'pill-stable' };
 }
@@ -47,12 +49,14 @@ export default async function FilesPage({ searchParams }: {
   if (loc === 'bang_ke') rows = rows.filter((f: any) => f.kind === 'bang_ke' && f.version === 1);
   else if (loc === 'sua') rows = rows.filter((f: any) => f.kind === 'bang_ke' && f.version > 1);
   else if (loc === 'hstt') rows = rows.filter((f: any) => f.kind === 'hstt');
+  else if (loc === 'trao_doi') rows = rows.filter((f: any) => f.kind === 'trao_doi');
   else if (loc === 'cho_gui') rows = rows.filter((f: any) => !f.sent_at);
 
   const dem = {
     bang_ke: (files ?? []).filter((f: any) => f.kind === 'bang_ke' && f.version === 1).length,
     sua: (files ?? []).filter((f: any) => f.kind === 'bang_ke' && f.version > 1).length,
     hstt: (files ?? []).filter((f: any) => f.kind === 'hstt').length,
+    trao_doi: (files ?? []).filter((f: any) => f.kind === 'trao_doi').length,
     cho_gui: (files ?? []).filter((f: any) => !f.sent_at).length,
   };
 
@@ -104,6 +108,8 @@ export default async function FilesPage({ searchParams }: {
           <Chip v="bang_ke" nhan="Bảng kê" so={dem.bang_ke} />
           <Chip v="sua" nhan="Bảng kê chỉnh sửa" so={dem.sua} />
           <Chip v="hstt" nhan="Hồ sơ thanh toán" so={dem.hstt} />
+          <Chip v="trao_doi" nhan="Tệp trao đổi" so={dem.trao_doi} />
+          <Chip v="trao_doi" nhan="Trao đổi" so={dem.trao_doi} />
           <Chip v="cho_gui" nhan="Chờ gửi" so={dem.cho_gui} />
         </div>
       </div>
