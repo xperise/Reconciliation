@@ -2,7 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { nowInVN, daysBetween } from '@/lib/period';
 import { sendMail } from '@/lib/google/gmail';
 import {
-  refSubject, tplNhacKhach, tplMacDinhChot, tplNhacChuanBiHstt,
+  refSubject, tplNhacKhach, tplMacDinhChot, tplNhacChuanBiHstt, tplNhacXacNhanHstt,
   tplNhacNoiBoUpload, tplEscalateNoiBo, tplCanQuyetDinh,
 } from '@/lib/email-templates';
 import { BillingGroup, RunResult, STATUS_DONE, TrackingStatus } from '@/lib/types';
@@ -90,6 +90,7 @@ export async function runWf4(): Promise<RunResult> {
         can_chinh_sua: 'tải bảng kê bản chỉnh sửa lên',
         cho_ho_so_thanh_toan: 'chuẩn bị và tải hồ sơ thanh toán lên',
         cho_duyet_phan_loai: 'duyệt phản hồi của khách',
+        can_chinh_sua_hstt: 'tải hồ sơ thanh toán bản chỉnh sửa lên',
       };
 
       if (choFile[row.status as string]) {
@@ -144,7 +145,33 @@ export async function runWf4(): Promise<RunResult> {
         continue;
       }
 
-      // =============== NHÁNH KHÁCH: quá hạn xác nhận ==================
+      // =============== NHÁNH KHÁCH: chờ xác nhận hồ sơ thanh toán =====
+      // Vòng nhắc của HSTT đơn giản hơn bảng kê: chỉ nhắc đầu mối L1 mỗi ngày,
+      // không leo thang cấp, vì tới bước này hai bên đã chốt số liệu rồi.
+      if (row.status === 'cho_xac_nhan_hstt') {
+        if (!row.han_xac_nhan_hstt) { note('Chưa có hạn xác nhận HSTT.'); continue; }
+        if (daysBetween(row.han_xac_nhan_hstt, today) < 0) { note('HSTT còn trong hạn.'); continue; }
+        if (!g.email_l1) { note('Thiếu email khách.'); failed += 1; continue; }
+
+        const subjH = refSubject(row.ten_nhom, row.ky_doi_soat);
+        await sendMail({
+          to: g.email_l1,
+          cc: [g.email_ke_toan, g.email_cc].filter(Boolean).join(',') || undefined,
+          subject: subjH,
+          html: tplNhacXacNhanHstt(row.ten_nhom, row.ky_doi_soat),
+          threadId: row.thread_id ?? undefined,
+        });
+
+        await sb.from('tracking').update({ ngay_remind_cuoi: today }).eq('id', row.id);
+
+        mails.ghi({ nhom: row.ten_nhom, ky: row.ky_doi_soat, loai: 'Nhắc xác nhận HSTT',
+          den: g.email_l1, tieu_de: subjH });
+        ok += 1;
+        note('Đã nhắc khách xác nhận hồ sơ thanh toán.');
+        continue;
+      }
+
+      // =============== NHÁNH KHÁCH: quá hạn xác nhận bảng kê ==========
       if (row.status !== 'da_gui_bang_ke') { note('Không thuộc diện nhắc khách.'); continue; }
       if (!row.han_chap_nhan) { note('Chưa có hạn chấp nhận.'); continue; }
       if (daysBetween(row.han_chap_nhan, today) < 0) { note('Còn trong hạn.'); continue; }

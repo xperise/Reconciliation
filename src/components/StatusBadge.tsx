@@ -14,6 +14,8 @@ const TONE: Record<TrackingStatus, string> = {
   hoan_tat_cho_thanh_toan: 'pill-stable',
   mac_dinh_chap_thuan:     'pill-stable',
   can_xu_ly_tay:           'pill-critical',
+  cho_xac_nhan_hstt:       'pill-watch',
+  can_chinh_sua_hstt:      'pill-high',
 };
 
 export function StatusBadge({ status }: { status: TrackingStatus }) {

@@ -2,7 +2,9 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { nowInVN, addDays, periodFull } from '@/lib/period';
 import { downloadFile, signedUrl, mimeFor, filesInBatch, StatementFile } from '@/lib/storage';
 import { sendMail, Attachment } from '@/lib/google/gmail';
-import { refSubject, tplBangKeSuaDoi, tplHoSoThanhToan, tplBangKe } from '@/lib/email-templates';
+import {
+  refSubject, tplBangKeSuaDoi, tplHoSoThanhToan, tplBangKe, tplHoaDonDieuChinh,
+} from '@/lib/email-templates';
 import { RunResult, TrackingStatus, effectiveSlaChapNhan, BillingGroup } from '@/lib/types';
 import { MailLog } from '@/lib/mail-log';
 
@@ -28,6 +30,7 @@ export async function runWf3(): Promise<RunResult> {
     .from('statement_files')
     .select('*')
     .is('sent_at', null)
+    .neq('kind', 'trao_doi')
     .order('uploaded_at', { ascending: true })
     .limit(120);
 
@@ -80,6 +83,7 @@ export async function runWf3(): Promise<RunResult> {
  */
 export async function guiLoChoKhach(
   batchId: string,
+  canXacNhanHstt?: boolean,
 ): Promise<{ sent: boolean; message: string; mail?: any }> {
   const sb = supabaseAdmin();
   const today = nowInVN().isoDate;
@@ -143,16 +147,20 @@ export async function guiLoChoKhach(
   const cc = [group.email_ke_toan, group.email_cc].filter(Boolean).join(',') || undefined;
 
   const laHstt = dau.kind === 'hstt';
-  const laBanSua = !laHstt && dau.version > 1;
+  const laHoaDon = dau.kind === 'hoa_don_dieu_chinh';
+  const laBanSua = dau.kind === 'bang_ke' && dau.version > 1;
 
   const html = laHstt
     ? tplHoSoThanhToan(group.ten_nhom, dau.ky_doi_soat, link)
-    : laBanSua
-      ? tplBangKeSuaDoi(group.ten_nhom, dau.ky_doi_soat, dau.version, link)
-      : tplBangKe(group.ten_nhom, dau.ky_doi_soat, link, tr?.pham_vi_nhan, lo.length);
+    : laHoaDon
+      ? tplHoaDonDieuChinh(group.ten_nhom, dau.ky_doi_soat, link)
+      : laBanSua
+        ? tplBangKeSuaDoi(group.ten_nhom, dau.ky_doi_soat, dau.version, link)
+        : tplBangKe(group.ten_nhom, dau.ky_doi_soat, link, tr?.pham_vi_nhan, lo.length);
 
   const subject = refSubject(group.ten_nhom, nhanKy);
   const loaiThu = laHstt ? 'Hồ sơ thanh toán'
+    : laHoaDon ? 'Hóa đơn điều chỉnh'
     : laBanSua ? `Bảng kê bản ${dau.version}` : 'Bảng kê';
   const mailRec = {
     nhom: group.ten_nhom, ky: nhanKy,
@@ -175,32 +183,49 @@ export async function guiLoChoKhach(
   const tenTep = lo.map((f) => f.file_name).join(', ');
 
   if (laHstt) {
+    // Hai ngả sau khi gửi hồ sơ thanh toán. Có khách chỉ cần nhận là xong, có
+    // khách còn phải xác nhận rồi mới chốt — và có thể yêu cầu sửa hồ sơ.
+    // Lựa chọn này do kế toán quyết định ngay lúc gửi, lưu ở hstt_can_xac_nhan.
+    const canXacNhan = canXacNhanHstt ?? tr?.hstt_can_xac_nhan ?? false;
+    const slaHstt = group.sla_hstt ?? effectiveSlaChapNhan(group);
+
     await sb.from('tracking').update({
-      status: 'da_gui_ho_so_thanh_toan' as TrackingStatus,
+      status: (canXacNhan ? 'cho_xac_nhan_hstt' : 'hoan_tat_cho_thanh_toan') as TrackingStatus,
       link_file_hstt: link,
       ten_file_hstt_da_gui: tenTep,
+      version_hstt: dau.version,
+      hstt_can_xac_nhan: canXacNhan,
+      han_xac_nhan_hstt: canXacNhan ? addDays(today, slaHstt) : null,
+      doi_tuong_duyet: canXacNhan ? 'hstt' : null,
       ngay_gui_gan_nhat: today,
+      ngay_chot: canXacNhan ? tr?.ngay_chot ?? null : (tr?.ngay_chot ?? today),
       ngay_remind_cuoi: null,
       ngay_bat_dau_cho_file: null,
+      escalate_level: 0,
+      so_vong_remind: 0,
     }).eq('id', tr!.id);
 
     return {
       sent: true,
-      message: `Đã gửi hồ sơ thanh toán cho ${group.ten_nhom} (${lo.length} tệp).`,
+      message: canXacNhan
+        ? `Đã gửi hồ sơ thanh toán cho ${group.ten_nhom} (${lo.length} tệp), đang đợi khách xác nhận.`
+        : `Đã gửi hồ sơ thanh toán cho ${group.ten_nhom} (${lo.length} tệp). Kỳ đã hoàn tất.`,
       mail: mailRec,
     };
   }
 
-  // Gửi bảng kê, dù bản đầu hay bản sửa, đều làm đồng hồ SLA khách chạy lại.
-  const soNgay = laBanSua
+  // Bảng kê và hóa đơn điều chỉnh đều đưa kỳ về chờ khách xác nhận, và đều
+  // làm đồng hồ SLA của khách chạy lại từ lúc gửi.
+  const soNgay = (laBanSua || laHoaDon)
     ? (group.sla_phan_hoi_dieu_chinh ?? effectiveSlaChapNhan(group))
     : effectiveSlaChapNhan(group);
 
   await sb.from('tracking').update({
     status: 'da_gui_bang_ke' as TrackingStatus,
-    link_file_bang_ke: link,
+    doi_tuong_duyet: 'bang_ke',
+    noi_dung_can_sua: null,
+    ...(laHoaDon ? {} : { link_file_bang_ke: link, version_bang_ke: dau.version }),
     ten_file_da_gui: tenTep,
-    version_bang_ke: dau.version,
     ngay_gui_gan_nhat: today,
     han_chap_nhan: addDays(today, soNgay),
     escalate_level: 0,
@@ -213,9 +238,11 @@ export async function guiLoChoKhach(
 
   return {
     sent: true,
-    message: laBanSua
-      ? `Đã gửi bảng kê bản ${dau.version} cho ${group.ten_nhom} (${lo.length} tệp).`
-      : `Đã gửi bảng kê cho ${group.ten_nhom} (${lo.length} tệp).`,
+    message: laHoaDon
+      ? `Đã gửi hóa đơn điều chỉnh cho ${group.ten_nhom} (${lo.length} tệp).`
+      : laBanSua
+        ? `Đã gửi bảng kê bản ${dau.version} cho ${group.ten_nhom} (${lo.length} tệp).`
+        : `Đã gửi bảng kê cho ${group.ten_nhom} (${lo.length} tệp).`,
     mail: mailRec,
   };
 }

@@ -9,13 +9,22 @@ import { FileKind } from '@/lib/types';
 const DUOI_HOP_LE = ['.xlsx', '.xls', '.docx', '.doc', '.pdf', '.zip'];
 const GIOI_HAN = 50 * 1024 * 1024;
 
-type LoaiChon = 'bang_ke' | 'bang_ke_sua' | 'hstt';
+type LoaiChon = 'bang_ke' | 'bang_ke_sua' | 'hoa_don_dieu_chinh' | 'hstt';
 
 const LOAI: { v: LoaiChon; nhan: string; mo_ta: string }[] = [
   { v: 'bang_ke', nhan: 'Bảng kê', mo_ta: 'Bản gửi lần đầu của kỳ' },
   { v: 'bang_ke_sua', nhan: 'Bảng kê chỉnh sửa', mo_ta: 'Bản sửa sau khi khách có ý kiến' },
+  { v: 'hoa_don_dieu_chinh', nhan: 'Hóa đơn điều chỉnh',
+    mo_ta: 'Hóa đơn xuất lại khi khách báo sai thông tin' },
   { v: 'hstt', nhan: 'Hồ sơ thanh toán', mo_ta: 'Chứng từ gửi sau khi chốt bảng kê' },
 ];
+
+/** Ba giá trị lưu xuống database; bảng kê và bản sửa dùng chung một kind. */
+function toKind(l: LoaiChon): FileKind {
+  if (l === 'hstt') return 'hstt';
+  if (l === 'hoa_don_dieu_chinh') return 'hoa_don_dieu_chinh';
+  return 'bang_ke';
+}
 
 export type Nhom = {
   id: string; ten_nhom: string; ma_he_thong: string;
@@ -118,6 +127,10 @@ export function UploadPanel({ groups, macDinhKind, tieuDe }: {
   const [mdLoai, setMdLoai] = useState<LoaiChon>(macDinhKind === 'hstt' ? 'hstt' : 'bang_ke');
   const [mdGuiNgay, setMdGuiNgay] = useState(true);
 
+  // Hỏi kế toán khi gửi hồ sơ thanh toán: khách này có phải xác nhận không
+  const [hoiHstt, setHoiHstt] = useState<{ chiDong?: string[] } | null>(null);
+  const [hsttXacNhan, setHsttXacNhan] = useState<boolean | null>(null);
+
   // Hộp thoại cảnh báo trước khi gửi
   const [canhBao, setCanhBao] = useState<{
     items: { loai: string; tieuDe: string; noiDung: string }[];
@@ -162,8 +175,7 @@ export function UploadPanel({ groups, macDinhKind, tieuDe }: {
     setDong((p) => p.map((d) => d.trangThai === 'cho' ? { ...d, ...patch } : d));
 
   /** Khóa gom lô: cùng khách, cùng kỳ, cùng đợt, cùng loại thì chung một email. */
-  const khoaLo = (d: Dong) =>
-    `${d.groupId}|${d.ky}|${d.dot}|${d.loai === 'hstt' ? 'hstt' : 'bang_ke'}`;
+  const khoaLo = (d: Dong) => `${d.groupId}|${d.ky}|${d.dot}|${toKind(d.loai)}`;
 
   async function batDau(chiDong?: string[]) {
     const canXuLy = dong.filter((d) =>
@@ -172,6 +184,14 @@ export function UploadPanel({ groups, macDinhKind, tieuDe }: {
 
     if (canXuLy.length === 0) {
       setLoi('Chưa dòng nào đủ thông tin. Mỗi tệp phải chọn khách hàng.');
+      return;
+    }
+
+    // Gửi hồ sơ thanh toán thì phải biết khách có xác nhận lại hay không,
+    // vì hai ngả dẫn tới hai trạng thái khác hẳn nhau
+    const guiNgayHstt = canXuLy.filter((d) => d.guiNgay && d.loai === 'hstt');
+    if (guiNgayHstt.length > 0 && hsttXacNhan === null) {
+      setHoiHstt({ chiDong });
       return;
     }
 
@@ -187,7 +207,7 @@ export function UploadPanel({ groups, macDinhKind, tieuDe }: {
         if (daHoi.has(k)) continue;
         daHoi.add(k);
         const kq = await kiemTraTruocKhiGui(
-          d.groupId, d.ky, d.loai === 'hstt' ? 'hstt' : 'bang_ke', d.dot);
+          d.groupId, d.ky, toKind(d.loai), d.dot);
         if (kq.coCanhBao) {
           const g = groups.find((x) => x.id === d.groupId);
           ten.push(`${g?.ten_nhom ?? ''} ${d.ky}`);
@@ -224,7 +244,7 @@ export function UploadPanel({ groups, macDinhKind, tieuDe }: {
 
     for (const [, ds] of lo) {
       const batchId = crypto.randomUUID();
-      const kind: FileKind = ds[0].loai === 'hstt' ? 'hstt' : 'bang_ke';
+      const kind: FileKind = toKind(ds[0].loai);
       let banChung: number | undefined;
 
       for (const d of ds) {
@@ -261,7 +281,10 @@ export function UploadPanel({ groups, macDinhKind, tieuDe }: {
       // Gửi cả lô trong một email
       if (ds[0].guiNgay) {
         try {
-          const r = await guiLoNgay(batchId, canhBao ? { lyDo: lyDo.trim() } : undefined);
+          const r = await guiLoNgay(
+            batchId,
+            canhBao ? { lyDo: lyDo.trim() } : undefined,
+            kind === 'hstt' ? (hsttXacNhan ?? false) : undefined);
           for (const d of ds) {
             if (d.trangThai !== 'loi') sua(d.id, { ketQua: r.message });
           }
@@ -275,6 +298,7 @@ export function UploadPanel({ groups, macDinhKind, tieuDe }: {
     setDangChay(false);
     setChacChan(false);
     setLyDo('');
+    setHsttXacNhan(null);
     if (inputRef.current) inputRef.current.value = '';
     router.refresh();
   }
@@ -496,6 +520,51 @@ export function UploadPanel({ groups, macDinhKind, tieuDe }: {
           )}
         </div>
       </div>
+
+      {/* Hỏi ngả xử lý sau khi gửi hồ sơ thanh toán */}
+      {hoiHstt && (
+        <div className="modal-scrim" onClick={(e) => {
+          if (e.target === e.currentTarget) setHoiHstt(null);
+        }}>
+          <div className="modal-box" style={{ maxWidth: 560 }} role="dialog" aria-modal="true">
+            <header className="modal-hd">
+              <p className="eyebrow">Hồ sơ thanh toán</p>
+              <h2 className="card-title mt-0.5">Sau khi gửi thì kỳ này đi tiếp thế nào?</h2>
+              <p className="card-note m-0 mt-1">
+                Mỗi khách một kiểu, và cùng một khách cũng có kỳ khác nhau, nên hệ thống
+                hỏi lại từng lần thay vì khai sẵn.
+              </p>
+            </header>
+            <div className="modal-bd flex flex-col gap-2.5">
+              <button className="card card-pad text-left"
+                      style={{ borderLeft: '4px solid var(--stable)' }}
+                      onClick={() => { setHsttXacNhan(false); setHoiHstt(null);
+                        setTimeout(() => batDau(hoiHstt.chiDong), 0); }}>
+                <p className="card-title m-0 mb-1">Đã hoàn tất quy trình chốt</p>
+                <p className="card-note m-0">
+                  Khách nhận hồ sơ là xong, không cần xác nhận lại. Kỳ chuyển sang
+                  <strong> Hoàn tất — chờ thanh toán</strong> và đóng lại.
+                </p>
+              </button>
+
+              <button className="card card-pad text-left"
+                      style={{ borderLeft: '4px solid var(--watch)' }}
+                      onClick={() => { setHsttXacNhan(true); setHoiHstt(null);
+                        setTimeout(() => batDau(hoiHstt.chiDong), 0); }}>
+                <p className="card-title m-0 mb-1">Cần khách xác nhận hồ sơ</p>
+                <p className="card-note m-0">
+                  Kỳ chuyển sang <strong>Chờ khách xác nhận HSTT</strong>. Hệ thống nhắc theo
+                  SLA hồ sơ, khách phản hồi thì đẩy vào hàng chờ duyệt. Khách yêu cầu sửa thì
+                  tải bản hồ sơ mới lên và lặp lại vòng này.
+                </p>
+              </button>
+            </div>
+            <footer className="modal-ft">
+              <button className="btn" onClick={() => setHoiHstt(null)}>Hủy</button>
+            </footer>
+          </div>
+        </div>
+      )}
 
       {/* Cảnh báo trước khi gửi */}
       {canhBao && (
