@@ -127,6 +127,11 @@ export function UploadPanel({ groups, macDinhKind, tieuDe }: {
   const [mdLoai, setMdLoai] = useState<LoaiChon>(macDinhKind === 'hstt' ? 'hstt' : 'bang_ke');
   const [mdGuiNgay, setMdGuiNgay] = useState(true);
 
+  // Chỉ hỏi khi gửi hồ sơ thanh toán: có khách chỉ cần nhận là xong, có khách
+  // phải xác nhận lại và có thể yêu cầu sửa. Quyết định lúc gửi chứ không khai
+  // sẵn, vì cùng một khách có kỳ cần có kỳ không.
+  const [hsttCanXacNhan, setHsttCanXacNhan] = useState(false);
+
   // Hỏi kế toán khi gửi hồ sơ thanh toán: khách này có phải xác nhận không
   const [hoiHstt, setHoiHstt] = useState<{ chiDong?: string[] } | null>(null);
   const [hsttXacNhan, setHsttXacNhan] = useState<boolean | null>(null);
@@ -267,6 +272,7 @@ export function UploadPanel({ groups, macDinhKind, tieuDe }: {
             mimeType: d.file.type || 'application/octet-stream',
             sizeBytes: d.file.size,
             guiNgay: false,   // gửi cả lô một lần ở dưới, không gửi từng tệp
+            hsttCanXacNhan: kind === 'hstt' ? hsttCanXacNhan : undefined,
           });
 
           sua(d.id, { trangThai: 'xong', ketQua: `Đã lưu, bản ${cho.version}` });
