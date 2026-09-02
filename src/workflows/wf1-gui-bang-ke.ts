@@ -141,7 +141,7 @@ export async function runWf1(): Promise<RunResult> {
       }
       const link = await signedUrl(lo[0].storage_path, lo[0].file_name);
 
-      const ccList = [g.email_ke_toan, g.email_cc].filter(Boolean).join(',') || undefined;
+      const ccList = [g.email_ke_toan, g.email_cc, g.email_pm].filter(Boolean).join(',') || undefined;
       const subject = refSubject(g.ten_nhom, nhanKy);
 
       const sent = await sendMail({
