@@ -30,11 +30,24 @@ export function consentUrl(state: string) {
 }
 
 export async function saveRefreshToken(refreshToken: string, email: string) {
-  await supabaseAdmin().from('app_settings').upsert({
-    key: SETTINGS_KEY,
-    value: { refresh_token: refreshToken, email, connected_at: new Date().toISOString() },
-    updated_at: new Date().toISOString(),
-  });
+  const { error } = await supabaseAdmin()
+    .from('app_settings')
+    .upsert(
+      {
+        key: SETTINGS_KEY,
+        value: { refresh_token: refreshToken, email, connected_at: new Date().toISOString() },
+        updated_at: new Date().toISOString(),
+      },
+      { 
+        onConflict: 'key' // Rất quan trọng: Báo cho Supabase biết phải đè dữ liệu dựa trên cột 'key'
+      }
+    );
+
+  // Thêm đoạn này để bắt lỗi hiển thị ra Vercel Logs nếu Supabase từ chối lưu
+  if (error) {
+    console.error("LỖI SUPABASE KHI LƯU TOKEN:", error);
+    throw new Error("Không thể lưu token vào Database: " + error.message);
+  }
 }
 
 export async function googleConnection(): Promise<{ email: string; connected_at: string } | null> {
