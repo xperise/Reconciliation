@@ -1,30 +1,32 @@
-try {
-  const client = oauthClient();
-  const { tokens } = await client.getToken(code);
+import { NextResponse } from 'next/server';
+// ... các import khác của bạn (client, v.v.)
 
-  if (!tokens.refresh_token) {
-    return NextResponse.redirect(new URL('/settings?loi=thieu_refresh_token', req.url));
-  }
-
-  client.setCredentials(tokens);
-
-  let email = '';
+export async function GET(req: Request) {
   try {
-    const { data } = await google.oauth2({ version: 'v2', auth: client }).userinfo.get();
-    email = data.email ?? '';
-  } catch (userinfoErr) {
-    console.error('[google callback] không lấy được email, vẫn lưu refresh token:', userinfoErr);
+    // 1. Lấy tham số `code` từ URL do Google trả về (nếu bạn chưa có)
+    const url = new URL(req.url);
+    const code = url.searchParams.get('code');
+
+    if (!code) {
+      return NextResponse.redirect(new URL('/settings?loi=thieu_code', req.url));
+    }
+
+    // 2. Logic hiện tại của bạn đưa vào đây
+    const { tokens } = await client.getToken(code);
+
+    if (!tokens.refresh_token) {
+      return NextResponse.redirect(new URL('/settings?loi=thieu_refresh_token', req.url));
+    }
+
+    client.setCredentials(tokens);
+    
+    // ... (logic lưu database, lưu cấu hình hòm thư của bạn) ...
+    // ví dụ: note: `Kết nối hộp thư ${email || '(không xác định được email)'}`,
+
+    return NextResponse.redirect(new URL('/settings?ok=da_ket_noi', req.url));
+    
+  } catch (err) {
+    console.error('[google callback]', err);
+    return NextResponse.redirect(new URL('/settings?loi=doi_token_that_bai', req.url));
   }
-
-  await saveRefreshToken(tokens.refresh_token, email);
-  await writeAudit({
-    actorId: user.id, actorEmail: user.email,
-    action: 'google.connect', entity: 'app_settings', entityId: 'google_oauth',
-    note: `Kết nối hộp thư ${email || '(không xác định được email)'}`,
-  });
-
-  return NextResponse.redirect(new URL('/settings?ok=da_ket_noi', req.url));
-} catch (err) {
-  console.error('[google callback]', err);
-  return NextResponse.redirect(new URL('/settings?loi=doi_token_that_bai', req.url));
 }
