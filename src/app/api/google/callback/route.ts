@@ -1,18 +1,7 @@
 import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
-import { createClient } from '@supabase/supabase-js'; // Gọi trực tiếp từ thư viện
-
-// 1. Khởi tạo Google Client
-const client = new google.auth.OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URI
-);
-
-// 2. Khởi tạo Supabase Client ngay tại đây (không cần gọi từ @/lib/supabase nữa)
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Import các hàm bạn đã viết sẵn ở file google.ts (sửa lại đường dẫn '@/' cho đúng với project của bạn)
+import { oauthClient, saveRefreshToken } from '@/lib/google'; 
 
 export async function GET(req: Request) {
   try {
@@ -23,26 +12,23 @@ export async function GET(req: Request) {
       return NextResponse.redirect(new URL('/settings?loi=thieu_code', req.url));
     }
 
-    // Đổi code lấy tokens
+    // 1. Dùng oauthClient() bạn đã cấu hình sẵn để đổi code lấy token
+    const client = oauthClient();
     const { tokens } = await client.getToken(code);
+
+    if (!tokens.refresh_token) {
+      return NextResponse.redirect(new URL('/settings?loi=thieu_refresh_token', req.url));
+    }
+
     client.setCredentials(tokens);
 
-    // Lấy email của tài khoản Google vừa đăng nhập
+    // 2. Lấy email của tài khoản vừa đăng nhập
     const oauth2 = google.oauth2({ version: 'v2', auth: client });
     const userInfo = await oauth2.userinfo.get();
-    const email = userInfo.data.email;
+    const email = userInfo.data.email || '';
 
-    // Lưu vào Supabase
-    // LƯU Ý: Đổi 'he_thong_cai_dat' thành đúng tên bảng trong database của bạn
-    await supabase
-      .from('he_thong_cai_dat') 
-      .upsert({
-        id: 1, 
-        email: email,
-        refresh_token: tokens.refresh_token,
-        updated_at: new Date().toISOString(),
-        note: `Kết nối hộp thư ${email || '(không xác định)'}`,
-      });
+    // 3. GỌI HÀM LƯU ĐÚNG VÀO BẢNG 'app_settings'
+    await saveRefreshToken(tokens.refresh_token, email);
 
     return NextResponse.redirect(new URL('/settings?ok=da_ket_noi', req.url));
   } catch (err) {
