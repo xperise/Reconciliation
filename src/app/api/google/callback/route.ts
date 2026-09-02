@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
-// ... các import khác của bạn (client, v.v.)
+// Sửa đường dẫn dưới đây theo đúng file bạn đã tạo trong project
+import { client } from '@/lib/google'; 
 
 export async function GET(req: Request) {
+   // ...
+
   try {
     // 1. Lấy tham số `code` từ URL do Google trả về (nếu bạn chưa có)
     const url = new URL(req.url);
