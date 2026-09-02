@@ -2,6 +2,8 @@ import { google } from 'googleapis';
 import { supabaseAdmin } from '../supabase/admin';
 
 export const GOOGLE_SCOPES = [
+  'openid',
+  'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/gmail.modify',
