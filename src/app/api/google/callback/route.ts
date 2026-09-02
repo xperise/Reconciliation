@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
-// Import các hàm bạn đã viết sẵn ở file google.ts (sửa lại đường dẫn '@/' cho đúng với project của bạn)
-import { oauthClient, saveRefreshToken } from '@/lib/google'; 
+
+// Import từ đường dẫn chính xác của bạn
+import { oauthClient, saveRefreshToken } from '@/lib/google/auth'; 
 
 export async function GET(req: Request) {
   try {
@@ -12,7 +13,7 @@ export async function GET(req: Request) {
       return NextResponse.redirect(new URL('/settings?loi=thieu_code', req.url));
     }
 
-    // 1. Dùng oauthClient() bạn đã cấu hình sẵn để đổi code lấy token
+    // 1. Dùng oauthClient() đã cấu hình sẵn để đổi code lấy token
     const client = oauthClient();
     const { tokens } = await client.getToken(code);
 
@@ -22,12 +23,12 @@ export async function GET(req: Request) {
 
     client.setCredentials(tokens);
 
-    // 2. Lấy email của tài khoản vừa đăng nhập
+    // 2. Lấy email của tài khoản vừa đăng nhập để lưu kèm
     const oauth2 = google.oauth2({ version: 'v2', auth: client });
     const userInfo = await oauth2.userinfo.get();
     const email = userInfo.data.email || '';
 
-    // 3. GỌI HÀM LƯU ĐÚNG VÀO BẢNG 'app_settings'
+    // 3. Gọi hàm saveRefreshToken để lưu đúng vào bảng 'app_settings'
     await saveRefreshToken(tokens.refresh_token, email);
 
     return NextResponse.redirect(new URL('/settings?ok=da_ket_noi', req.url));
