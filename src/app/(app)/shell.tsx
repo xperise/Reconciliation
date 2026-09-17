@@ -56,6 +56,9 @@ export function Shell({ role, email, userId, soChoDuyet, thongBao, children }: {
     router.refresh();
   }, [path, router]);
 
+  // Tab MLX (/mlx...) có thanh tab riêng, không dùng các nhóm tab của Xperise
+  const laMlx = path === '/mlx' || path.startsWith('/mlx/');
+
   const isOn = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));
 
   // Nhóm nào đang chứa trang hiện tại thì mở hàng tab con của nhóm đó
@@ -73,11 +76,11 @@ export function Shell({ role, email, userId, soChoDuyet, thongBao, children }: {
       <header className="topbar">
         <img src={LOGO} alt="xperise" className="topbar-logo" />
         <span className="topbar-div" />
-        <span className="topbar-name">Đối soát bảng kê</span>
+        <span className="topbar-name">{laMlx ? 'Bảng kê MLX' : 'Đối soát bảng kê'}</span>
 
         <div className="ml-auto flex items-center gap-3 no-print">
-     <AppTabs />
-     <Bell items={thongBao} userId={userId} />
+          <AppTabs />
+          <Bell items={thongBao} userId={userId} />
           <div className="text-right leading-tight hidden sm:block">
             <div className="text-[11.5px] text-[var(--ink-2)] font-semibold">{email}</div>
             <div className="text-[10.5px] text-[var(--ink-3)]">{VAI_TRO[role] ?? role}</div>
@@ -86,42 +89,47 @@ export function Shell({ role, email, userId, soChoDuyet, thongBao, children }: {
         </div>
       </header>
 
-      {/* Hàng 1: nhóm tab */}
-      <nav className="tabs no-print" aria-label="Nhóm chức năng">
-        {NHOM.map((n) => {
-          const dau = n.muc.find((m) => !m.adminOnly || role === 'admin');
-          if (!dau) return null;
-          const on = n.ten === nhomHienTai.ten;
-          return (
-            <Link key={n.ten} href={dau.href} className="tab" data-active={on}>
-              {n.ten}
-              {n.ten === 'Bảng kê' && soChoDuyet > 0 && (
-                <span className="pill pill-watch chip-count !px-1.5 !py-0 !text-[10px]">{soChoDuyet}</span>
-              )}
-            </Link>
-          );
-        })}
-      </nav>
+      {!laMlx && (
+        <>
+          {/* Hàng 1: nhóm tab */}
+          <nav className="tabs no-print" aria-label="Nhóm chức năng">
+            {NHOM.map((n) => {
+              const dau = n.muc.find((m) => !m.adminOnly || role === 'admin');
+              if (!dau) return null;
+              const on = n.ten === nhomHienTai.ten;
+              return (
+                <Link key={n.ten} href={dau.href} className="tab" data-active={on}>
+                  {n.ten}
+                  {n.ten === 'Bảng kê' && soChoDuyet > 0 && (
+                    <span className="pill pill-watch chip-count !px-1.5 !py-0 !text-[10px]">{soChoDuyet}</span>
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
 
-      {/* Hàng 2: mục trong nhóm, chỉ hiện khi nhóm có nhiều hơn một mục */}
-      {mucTrongNhom.length > 1 && (
-        <nav
-          className="tabs no-print !top-[89px] !py-0"
-          style={{ background: 'var(--surface-2)' }}
-          aria-label={`Mục trong ${nhomHienTai.ten}`}
-        >
-          {mucTrongNhom.map((m) => (
-            <Link key={m.href} href={m.href} className="tab !text-[12.5px] !py-2" data-active={isOn(m.href)}>
-              {m.label}
-              {m.badge && soChoDuyet > 0 && (
-                <span className="pill pill-watch chip-count !px-1.5 !py-0 !text-[10px]">{soChoDuyet}</span>
-              )}
-            </Link>
-          ))}
-        </nav>
+          {/* Hàng 2: mục trong nhóm, chỉ hiện khi nhóm có nhiều hơn một mục */}
+          {mucTrongNhom.length > 1 && (
+            <nav
+              className="tabs no-print !top-[89px] !py-0"
+              style={{ background: 'var(--surface-2)' }}
+              aria-label={`Mục trong ${nhomHienTai.ten}`}
+            >
+              {mucTrongNhom.map((m) => (
+                <Link key={m.href} href={m.href} className="tab !text-[12.5px] !py-2" data-active={isOn(m.href)}>
+                  {m.label}
+                  {m.badge && soChoDuyet > 0 && (
+                    <span className="pill pill-watch chip-count !px-1.5 !py-0 !text-[10px]">{soChoDuyet}</span>
+                  )}
+                </Link>
+              ))}
+            </nav>
+          )}
+        </>
       )}
 
-      <main className="page">{children}</main>
+      {/* Trang MLX tự có khung & lề riêng, không bọc thêm .page để tránh lề đôi */}
+      {laMlx ? <main>{children}</main> : <main className="page">{children}</main>}
     </>
   );
 }
