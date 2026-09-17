@@ -7,7 +7,7 @@ import { danhDauDaDoc, danhDauDocHet } from '@/app/actions';
 const MUC_TONE: Record<string, string> = {
   khan: 'pill-critical', canh_bao: 'pill-high', info: 'pill-neutral',
 };
-<AppTabs />
+
 export function Bell({ items, userId }: { items: any[]; userId: string }) {
   const router = useRouter();
   const [mo, setMo] = useState(false);
