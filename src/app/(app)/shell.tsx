@@ -75,6 +75,9 @@ export function Shell({ role, email, userId, soChoDuyet, thongBao, children }: {
         <span className="topbar-name">Đối soát bảng kê</span>
 
         <div className="ml-auto flex items-center gap-3 no-print">
+             <AppTabs />
+   <Bell items={...} userId={...} />
+  
           <Bell items={thongBao} userId={userId} />
           <div className="text-right leading-tight hidden sm:block">
             <div className="text-[11.5px] text-[var(--ink-2)] font-semibold">{email}</div>
