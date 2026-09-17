@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { Bell } from './bell';
+import AppTabs from '@/components/AppTabs';
 
 const LOGO = 'https://files.uts.network/email_assets/xperise_alt_fulllogo%402x.png';
 
@@ -75,10 +76,8 @@ export function Shell({ role, email, userId, soChoDuyet, thongBao, children }: {
         <span className="topbar-name">Đối soát bảng kê</span>
 
         <div className="ml-auto flex items-center gap-3 no-print">
-             <AppTabs />
-   <Bell items={...} userId={...} />
-  
-          <Bell items={thongBao} userId={userId} />
+     <AppTabs />
+     <Bell items={thongBao} userId={userId} />
           <div className="text-right leading-tight hidden sm:block">
             <div className="text-[11.5px] text-[var(--ink-2)] font-semibold">{email}</div>
             <div className="text-[10.5px] text-[var(--ink-3)]">{VAI_TRO[role] ?? role}</div>
