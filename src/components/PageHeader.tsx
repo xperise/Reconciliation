@@ -1,3 +1,4 @@
+import AppTabs from '@/components/AppTabs';
 export function PageHeader({ eyebrow, title, description, action }: {
   eyebrow: string;
   title: string;
