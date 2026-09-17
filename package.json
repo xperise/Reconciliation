@@ -9,6 +9,8 @@
     "lint": "next lint"
   },
   "dependencies": {
+       "exceljs": "^4.4.0",
+       "jszip": "^3.10.2",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.45.4",
     "googleapis": "^144.0.0",
