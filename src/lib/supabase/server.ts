@@ -30,7 +30,7 @@ export async function currentUser() {
 
   const { data: profile } = await sb
     .from('profiles')
-    .select('id, email, full_name, role, is_active')
+    .select('*') // gồm cả xem_xperise / xem_mlx (nếu đã chạy SQL 13)
     .eq('id', user.id)
     .single();
 

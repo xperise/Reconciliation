@@ -1,16 +1,20 @@
 'use client';
 
-// Nút chuyển Xperise | MLX — đặt trong header, ngay trước chuông thông báo
+// Nút chuyển Xperise | MLX — đặt trong header, ngay trước chuông thông báo.
+// Chỉ hiện những tab người dùng được xem; được xem 1 tab thì ẩn hẳn nút.
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const TABS = [
-  { href: '/', label: 'Xperise', match: (p: string) => !p.startsWith('/mlx') },
-  { href: '/mlx', label: 'MLX', match: (p: string) => p.startsWith('/mlx') },
-];
+  { key: 'xperise', href: '/', label: 'Xperise', match: (p: string) => !p.startsWith('/mlx') },
+  { key: 'mlx', href: '/mlx', label: 'MLX', match: (p: string) => p.startsWith('/mlx') },
+] as const;
 
-export default function AppTabs() {
+export default function AppTabs({ xperise = true, mlx = true }: { xperise?: boolean; mlx?: boolean }) {
   const pathname = usePathname() ?? '/';
+  const allowed = TABS.filter((t) => (t.key === 'xperise' ? xperise : mlx));
+  if (allowed.length < 2) return null;
+
   return (
     <div
       role="tablist"
@@ -25,7 +29,7 @@ export default function AppTabs() {
         flexShrink: 0,
       }}
     >
-      {TABS.map((t) => {
+      {allowed.map((t) => {
         const active = t.match(pathname);
         return (
           <Link

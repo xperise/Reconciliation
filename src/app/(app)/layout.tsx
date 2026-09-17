@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { Shell } from './shell';
-import AppTabs from '@/components/AppTabs';
+import { tabAccess } from '@/lib/access';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +30,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       userId={user.id}
       soChoDuyet={choDuyet.count ?? 0}
       thongBao={items}
+      access={tabAccess(user)}
     >
       {children}
     </Shell>

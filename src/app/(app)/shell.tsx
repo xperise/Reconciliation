@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { Bell } from './bell';
 import AppTabs from '@/components/AppTabs';
+import type { TabAccess } from '@/lib/access';
 
 const LOGO = 'https://files.uts.network/email_assets/xperise_alt_fulllogo%402x.png';
 
@@ -40,9 +41,9 @@ const VAI_TRO: Record<string, string> = {
   admin: 'Quản trị', ke_toan: 'Kế toán', pm: 'PM', high_level: 'Cấp quản lý',
 };
 
-export function Shell({ role, email, userId, soChoDuyet, thongBao, children }: {
+export function Shell({ role, email, userId, soChoDuyet, thongBao, access, children }: {
   role: string; email: string; userId: string; soChoDuyet: number;
-  thongBao: any[]; children: React.ReactNode;
+  thongBao: any[]; access?: TabAccess; children: React.ReactNode;
 }) {
   const path = usePathname();
   const router = useRouter();
@@ -79,7 +80,7 @@ export function Shell({ role, email, userId, soChoDuyet, thongBao, children }: {
         <span className="topbar-name">{laMlx ? 'Bảng kê MLX' : 'Đối soát bảng kê'}</span>
 
         <div className="ml-auto flex items-center gap-3 no-print">
-          <AppTabs />
+          <AppTabs xperise={access?.xperise ?? true} mlx={access?.mlx ?? true} />
           <Bell items={thongBao} userId={userId} />
           <div className="text-right leading-tight hidden sm:block">
             <div className="text-[11.5px] text-[var(--ink-2)] font-semibold">{email}</div>

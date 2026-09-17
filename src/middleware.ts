@@ -1,5 +1,6 @@
 import { createServerClient, type SetAllCookies } from '@supabase/ssr';
 import { NextRequest, NextResponse } from 'next/server';
+import { isMlxPath, tabAccess } from '@/lib/access';
 
 /** Làm mới phiên đăng nhập và chặn truy cập khi chưa đăng nhập. */
 export async function middleware(req: NextRequest) {
@@ -26,8 +27,19 @@ export async function middleware(req: NextRequest) {
   if (!user && path !== '/login') {
     return NextResponse.redirect(new URL('/login', req.url));
   }
-  if (user && path === '/login') {
-    return NextResponse.redirect(new URL('/', req.url));
+  if (!user) return res;
+
+  // Quyền xem tab: không có quyền thì chuyển sang tab còn lại
+  const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+  const access = tabAccess(profile);
+  const home = access.xperise ? '/' : '/mlx';
+
+  if (path === '/login') {
+    return NextResponse.redirect(new URL(home, req.url));
+  }
+  if (!path.startsWith('/api/')) {
+    if (isMlxPath(path) && !access.mlx) return NextResponse.redirect(new URL('/', req.url));
+    if (!isMlxPath(path) && !access.xperise) return NextResponse.redirect(new URL('/mlx', req.url));
   }
   return res;
 }

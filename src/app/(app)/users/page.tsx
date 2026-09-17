@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { PageHeader } from '@/components/PageHeader';
-import { CreateUser, ToggleUser } from './user-form';
+import { AccessToggle, CreateUser, ToggleUser } from './user-form';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,13 +33,21 @@ export default async function UsersPage() {
 
       <div className="card overflow-hidden">
         <table className="tbl">
-          <thead><tr><th>Họ tên</th><th>Email</th><th>Vai trò</th><th>Trạng thái</th><th></th></tr></thead>
+          <thead><tr><th>Họ tên</th><th>Email</th><th>Vai trò</th><th>Được xem tab</th><th>Trạng thái</th><th></th></tr></thead>
           <tbody>
             {(data ?? []).map((u) => (
               <tr key={u.id}>
                 <td className="font-semibold">{u.full_name || '—'}</td>
                 <td className="text-xs">{u.email}</td>
                 <td><span className="pill pill-neutral">{VAI_TRO[u.role] ?? u.role}</span></td>
+                <td>
+                  <AccessToggle
+                    id={u.id}
+                    xperise={u.xem_xperise ?? true}
+                    mlx={u.xem_mlx ?? true}
+                    isAdmin={u.role === 'admin'}
+                  />
+                </td>
                 <td>
                   <span className={`badge ${u.is_active ? 'badge-teal' : 'badge-red'}`}>
                     {u.is_active ? 'Đang hoạt động' : 'Đã khóa'}
