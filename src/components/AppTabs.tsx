@@ -1,6 +1,6 @@
 'use client';
 
-// Thanh tab cấp cao nhất: Xperise (luồng gửi bảng kê hiện có) | MLX (chuyển đổi bảng kê taxi)
+// Nút chuyển Xperise | MLX — đặt trong header, ngay trước chuông thông báo
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -12,27 +12,44 @@ const TABS = [
 export default function AppTabs() {
   const pathname = usePathname() ?? '/';
   return (
-    <nav style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e3e8ec', padding: '0 24px', background: '#fff' }}>
+    <div
+      role="tablist"
+      aria-label="Chuyển ứng dụng"
+      style={{
+        display: 'inline-flex',
+        padding: 3,
+        gap: 2,
+        border: '1px solid #e3e8ec',
+        borderRadius: 999,
+        background: '#f4f6f8',
+        flexShrink: 0,
+      }}
+    >
       {TABS.map((t) => {
         const active = t.match(pathname);
         return (
           <Link
             key={t.href}
             href={t.href}
+            role="tab"
+            aria-selected={active}
             style={{
-              padding: '12px 16px',
-              fontWeight: 700,
-              fontSize: 14,
+              padding: '5px 14px',
+              borderRadius: 999,
+              fontSize: 13,
+              fontWeight: 600,
+              lineHeight: '18px',
               textDecoration: 'none',
-              color: active ? '#122433' : '#8a96a0',
-              borderBottom: `2px solid ${active ? '#0f7ae5' : 'transparent'}`,
-              marginBottom: -1,
+              whiteSpace: 'nowrap',
+              color: active ? '#ffffff' : '#46535f',
+              background: active ? '#0f7ae5' : 'transparent',
+              boxShadow: active ? '0 1px 2px rgba(18,36,51,.15)' : 'none',
             }}
           >
             {t.label}
           </Link>
         );
       })}
-    </nav>
+    </div>
   );
 }

@@ -92,3 +92,18 @@ export function safeSheetName(s: string): string {
 export function safeFileName(s: string): string {
   return s.replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim() || 'Bang_ke';
 }
+
+/** Kỳ dạng lưu DB: 2026-09 */
+export const periodToKy = (p: Period): string => periodToInput(p);
+
+/** "2026-09" → "Tháng 09/2026" */
+export function kyLabel(ky: string): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(ky);
+  return m ? `Tháng ${m[2]}/${m[1]}` : ky;
+}
+
+/** "2026-09" → "T09.2026" */
+export function kyShort(ky: string): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(ky);
+  return m ? `T${m[2]}.${m[1]}` : ky;
+}

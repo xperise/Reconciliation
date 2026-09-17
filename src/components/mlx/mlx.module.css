@@ -119,3 +119,23 @@
 
 @media (max-width: 1200px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 760px) { .page { padding: 12px; } .kpis { grid-template-columns: minmax(0, 1fr); } }
+
+/* Lịch sử */
+.periodChips { display: flex; flex-wrap: wrap; gap: 8px; }
+.periodChip {
+  display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
+  font: inherit; font-weight: 600; color: var(--ink-2); cursor: pointer;
+}
+.periodChip:hover { background: var(--surface-2); }
+.periodChipActive { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-deep); }
+.periodCount { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+.periodChipActive .periodCount { color: var(--accent-deep); }
+.btnDanger { color: var(--critical); }
+.btnDanger:hover:not(:disabled) { background: var(--critical-soft); }
+.linkBtn { border: 0; background: transparent; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; padding: 4px 6px; }
+.linkBtn:hover:not(:disabled) { text-decoration: underline; }
+.linkBtn:disabled { opacity: .5; cursor: not-allowed; }
+.linkDanger { color: var(--critical); }
+.rowDim td { opacity: .55; }
+.note a { color: var(--accent); font-weight: 600; }

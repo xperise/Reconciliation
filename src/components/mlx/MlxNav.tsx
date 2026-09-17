@@ -6,6 +6,7 @@ import s from './mlx.module.css';
 
 const ITEMS = [
   { href: '/mlx', label: 'Chuyển đổi bảng kê' },
+  { href: '/mlx/lich-su', label: 'Lịch sử bảng kê' },
   { href: '/mlx/master-data', label: 'Master data khách hàng' },
 ];
 
