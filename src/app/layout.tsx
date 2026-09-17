@@ -1,3 +1,4 @@
+import AppTabs from '@/components/AppTabs';
 import type { Metadata } from 'next';
 import { Be_Vietnam_Pro, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
