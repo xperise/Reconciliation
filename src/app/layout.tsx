@@ -33,6 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="vi" className={`${ui.variable} ${mono.variable}`}>
       <body>{children}</body>
+       <AppTabs />
     </html>
   );
 }
