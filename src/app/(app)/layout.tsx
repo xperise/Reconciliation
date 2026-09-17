@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { Shell } from './shell';
+import AppTabs from '@/components/AppTabs';
 
 export const dynamic = 'force-dynamic';
 
