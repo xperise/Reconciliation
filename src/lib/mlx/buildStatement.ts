@@ -106,7 +106,7 @@ export async function buildStatement(
     const row = ws.getRow(FIRST_DATA_ROW + idx);
     const values: Record<string, unknown> = {
       ...r,
-      stt: r.stt ?? idx + 1,
+      stt: idx + 1, // đánh số lại liên tục vì đã bỏ các dòng 0đ
     };
     COLUMNS.forEach((c, i) => {
       const cell = row.getCell(i + 1);

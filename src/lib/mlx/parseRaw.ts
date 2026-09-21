@@ -143,7 +143,11 @@ export async function parseRawFile(
     rows.push(rawRow);
   }
 
+  // Dòng 0đ (khởi tạo hệ thống, giao dịch huỷ…) không đưa vào bảng kê
+  const giuLai = rows.filter((r) => (r.soTien ?? 0) !== 0);
+  const zeroRows = rows.length - giuLai.length;
+
   const { company, period } = parseFileName(fileName);
-  const total = rows.reduce((s, r) => s + (r.soTien ?? 0), 0);
-  return { fileName, companyFromFile: company, periodFromFile: period, rows, total };
+  const total = giuLai.reduce((s, r) => s + (r.soTien ?? 0), 0);
+  return { fileName, companyFromFile: company, periodFromFile: period, rows: giuLai, zeroRows, total };
 }

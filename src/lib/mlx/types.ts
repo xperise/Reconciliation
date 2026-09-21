@@ -46,5 +46,7 @@ export interface ParsedRawFile {
   /** Kỳ tách từ tên file (null nếu không đọc được) */
   periodFromFile: Period | null;
   rows: RawRow[];
+  /** Số dòng 0đ đã loại khỏi file xuất */
+  zeroRows: number;
   total: number;
 }

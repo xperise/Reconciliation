@@ -284,7 +284,12 @@ export default function ConverterView() {
         <div className={s.kpi}>
           <div className={s.kpiLabel}>Tổng giao dịch</div>
           <div className={s.kpiNum}>{fmt.format(totalRows)}</div>
-          <div className={s.kpiSub}>của {matched.length} file mới đã khớp</div>
+          <div className={s.kpiSub}>
+            của {matched.length} file mới đã khớp
+            {matched.reduce((n, i) => n + (i.parsed?.zeroRows ?? 0), 0) > 0
+              ? ` · đã bỏ ${matched.reduce((n, i) => n + (i.parsed?.zeroRows ?? 0), 0)} dòng 0đ`
+              : ''}
+          </div>
         </div>
         <div className={s.kpi}>
           <div className={s.kpiLabel}>Tổng số tiền</div>
@@ -330,7 +335,7 @@ export default function ConverterView() {
         >
           <div className={s.dropTitle}>Kéo thả nhiều file .xlsx vào đây hoặc bấm để chọn</div>
           <div className={s.note} style={{ marginTop: 4 }}>
-            Tên file theo dạng <b>Tên công ty_Kỳ</b>. File đã xử lý trước đó sẽ tự bỏ qua.
+            Tên file theo dạng <b>Tên công ty_Kỳ</b>. File đã xử lý trước đó sẽ tự bỏ qua, dòng 0đ được loại khỏi bảng kê.
           </div>
           <input
             ref={inputRef}
@@ -432,7 +437,12 @@ export default function ConverterView() {
                         />
                         {!it.period && it.status === 'ready' && <div className={s.note}>theo kỳ mặc định</div>}
                       </td>
-                      <td className={s.num}>{it.parsed ? fmt.format(it.parsed.rows.length) : '—'}</td>
+                      <td className={s.num}>
+                        {it.parsed ? fmt.format(it.parsed.rows.length) : '—'}
+                        {it.parsed && it.parsed.zeroRows > 0 && (
+                          <div className={s.note}>bỏ {it.parsed.zeroRows} dòng 0đ</div>
+                        )}
+                      </td>
                       <td className={s.num}>{it.parsed ? fmt.format(it.parsed.total) : '—'}</td>
                       <td className={s.muted}>{customer ? outputNames(customer, period).fileName : '—'}</td>
                       <td>
