@@ -1,6 +1,6 @@
 import { createServerClient, type SetAllCookies } from '@supabase/ssr';
 import { NextRequest, NextResponse } from 'next/server';
-import { isMlxPath, tabAccess } from '@/lib/access';
+import { isDashboardPath, isMlxPath, tabAccess } from '@/lib/access';
 
 /** Làm mới phiên đăng nhập và chặn truy cập khi chưa đăng nhập. */
 export async function middleware(req: NextRequest) {
@@ -36,6 +36,13 @@ export async function middleware(req: NextRequest) {
 
   if (path === '/login') {
     return NextResponse.redirect(new URL(home, req.url));
+  }
+  if (path.startsWith('/api/dashboard') && !access.dashboard) {
+    return NextResponse.json({ error: 'Tài khoản không có quyền xem Dashboard' }, { status: 403 });
+  }
+  if (isDashboardPath(path)) {
+    if (!access.dashboard) return NextResponse.redirect(new URL(home, req.url));
+    return res;
   }
   if (!path.startsWith('/api/')) {
     if (isMlxPath(path) && !access.mlx) return NextResponse.redirect(new URL('/', req.url));

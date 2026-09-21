@@ -45,6 +45,7 @@ export default async function UsersPage() {
                     id={u.id}
                     xperise={u.xem_xperise ?? true}
                     mlx={u.xem_mlx ?? true}
+                    dashboard={u.xem_dashboard ?? false}
                     isAdmin={u.role === 'admin'}
                   />
                 </td>

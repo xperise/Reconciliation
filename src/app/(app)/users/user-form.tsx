@@ -2,10 +2,10 @@
 import { useState, useTransition } from 'react';
 import { taoNguoiDung, doiTrangThaiNguoiDung, doiQuyenXemTab } from '@/app/actions';
 
-/** Hai ô tick chọn tab được xem */
-function TabCheckboxes({ xperise, mlx, onChange, disabled, locked }: {
-  xperise: boolean; mlx: boolean;
-  onChange: (x: boolean, m: boolean) => void;
+/** Ô tick chọn tab được xem */
+function TabCheckboxes({ xperise, mlx, dashboard, onChange, disabled, locked }: {
+  xperise: boolean; mlx: boolean; dashboard: boolean;
+  onChange: (x: boolean, m: boolean, d: boolean) => void;
   disabled?: boolean; locked?: boolean;
 }) {
   const box = (label: string, checked: boolean, next: () => void) => (
@@ -16,8 +16,9 @@ function TabCheckboxes({ xperise, mlx, onChange, disabled, locked }: {
   );
   return (
     <div className="flex items-center gap-5">
-      {box('Xperise', xperise, () => onChange(!xperise, mlx))}
-      {box('MLX', mlx, () => onChange(xperise, !mlx))}
+      {box('Xperise', xperise, () => onChange(!xperise, mlx, dashboard))}
+      {box('MLX', mlx, () => onChange(xperise, !mlx, dashboard))}
+      {box('Dashboard', dashboard, () => onChange(xperise, mlx, !dashboard))}
     </div>
   );
 }
@@ -29,6 +30,7 @@ export function CreateUser() {
   const [vaiTro, setVaiTro] = useState('ke_toan');
   const [xemXperise, setXemXperise] = useState(false);
   const [xemMlx, setXemMlx] = useState(false);
+  const [xemDash, setXemDash] = useState(false);
   const [tb, setTb] = useState('');
   const [dangChay, start] = useTransition();
 
@@ -39,10 +41,10 @@ export function CreateUser() {
     setTb('');
     start(async () => {
       try {
-        await taoNguoiDung(email, mk, ten, vaiTro, laAdmin || xemXperise, laAdmin || xemMlx);
+        await taoNguoiDung(email, mk, ten, vaiTro, laAdmin || xemXperise, laAdmin || xemMlx, laAdmin || xemDash);
         setTb(`Đã cấp tài khoản cho ${email}.`);
         setEmail(''); setMk(''); setTen('');
-        setXemXperise(false); setXemMlx(false);
+        setXemXperise(false); setXemMlx(false); setXemDash(false);
       } catch (e) { setTb(e instanceof Error ? e.message : 'Không tạo được tài khoản.'); }
     });
   }
@@ -77,14 +79,15 @@ export function CreateUser() {
           <TabCheckboxes
             xperise={laAdmin || xemXperise}
             mlx={laAdmin || xemMlx}
+            dashboard={laAdmin || xemDash}
             locked={laAdmin}
-            onChange={(x, m) => { setXemXperise(x); setXemMlx(m); }}
+            onChange={(x, m, d) => { setXemXperise(x); setXemMlx(m); setXemDash(d); }}
           />
           <div className="text-xs text-[var(--ink-3)] mt-1">
             {laAdmin
-              ? 'Quản trị luôn xem được cả 2 tab.'
+              ? 'Quản trị luôn xem được cả 3 tab.'
               : coTab
-                ? 'Chỉ hiện nút chuyển tab khi được xem cả 2.'
+                ? 'Dashboard là quyền thêm — có số hoa hồng từng người.'
                 : 'Chọn ít nhất 1 tab.'}
           </div>
         </div>
@@ -100,29 +103,30 @@ export function CreateUser() {
 }
 
 /** Ô tick quyền xem tab trong bảng người dùng — lưu ngay khi đổi */
-export function AccessToggle({ id, xperise, mlx, isAdmin }: {
-  id: string; xperise: boolean; mlx: boolean; isAdmin: boolean;
+export function AccessToggle({ id, xperise, mlx, dashboard, isAdmin }: {
+  id: string; xperise: boolean; mlx: boolean; dashboard: boolean; isAdmin: boolean;
 }) {
   const [x, setX] = useState(xperise);
   const [m, setM] = useState(mlx);
+  const [d, setD] = useState(dashboard);
   const [loi, setLoi] = useState('');
   const [dangChay, start] = useTransition();
 
-  if (isAdmin) return <span className="text-xs text-[var(--ink-3)]">Cả 2 (Quản trị)</span>;
+  if (isAdmin) return <span className="text-xs text-[var(--ink-3)]">Cả 3 (Quản trị)</span>;
 
-  function doi(nx: boolean, nm: boolean) {
-    if (!nx && !nm) { setLoi('Giữ ít nhất 1 tab'); return; }
-    const [cx, cm] = [x, m];
-    setX(nx); setM(nm); setLoi('');
+  function doi(nx: boolean, nm: boolean, nd: boolean) {
+    if (!nx && !nm) { setLoi('Giữ ít nhất 1 tab Xperise hoặc MLX'); return; }
+    const [cx, cm, cd] = [x, m, d];
+    setX(nx); setM(nm); setD(nd); setLoi('');
     start(async () => {
-      try { await doiQuyenXemTab(id, nx, nm); }
-      catch (e) { setX(cx); setM(cm); setLoi(e instanceof Error ? e.message : 'Không lưu được'); }
+      try { await doiQuyenXemTab(id, nx, nm, nd); }
+      catch (e) { setX(cx); setM(cm); setD(cd); setLoi(e instanceof Error ? e.message : 'Không lưu được'); }
     });
   }
 
   return (
     <div>
-      <TabCheckboxes xperise={x} mlx={m} onChange={doi} disabled={dangChay} />
+      <TabCheckboxes xperise={x} mlx={m} dashboard={d} onChange={doi} disabled={dangChay} />
       {loi && <div className="text-xs text-[var(--critical)] mt-1">{loi}</div>}
     </div>
   );

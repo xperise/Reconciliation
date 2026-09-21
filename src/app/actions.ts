@@ -555,13 +555,13 @@ export async function luuLichWorkflow(key: string, form: {
 
 export async function taoNguoiDung(
   email: string, matKhau: string, hoTen: string, vaiTro: string,
-  xemXperise: boolean, xemMlx: boolean,
+  xemXperise: boolean, xemMlx: boolean, xemDashboard = false,
 ) {
   const user = await requireRole('admin');
   const sb = supabaseAdmin();
 
   // Admin luôn xem được cả 2 tab; vai trò khác phải chọn ít nhất 1 tab
-  if (vaiTro === 'admin') { xemXperise = true; xemMlx = true; }
+  if (vaiTro === 'admin') { xemXperise = true; xemMlx = true; xemDashboard = true; }
   if (!xemXperise && !xemMlx) throw new Error('Chọn ít nhất 1 tab được xem (Xperise hoặc MLX).');
 
   const { data, error } = await sb.auth.admin.createUser({
@@ -574,7 +574,7 @@ export async function taoNguoiDung(
 
   // Hồ sơ được trigger handle_new_user tạo sẵn → cập nhật quyền xem tab
   const { error: qErr } = await sb.from('profiles')
-    .update({ xem_xperise: xemXperise, xem_mlx: xemMlx })
+    .update({ xem_xperise: xemXperise, xem_mlx: xemMlx, xem_dashboard: xemDashboard })
     .eq('id', data.user!.id);
   if (qErr) {
     throw new Error(`Đã tạo tài khoản nhưng chưa lưu được quyền xem tab (${qErr.message}). Kiểm tra đã chạy SQL 13_phan_quyen_tab.sql chưa, rồi chỉnh quyền trong bảng Người dùng.`);
@@ -583,23 +583,23 @@ export async function taoNguoiDung(
   await writeAudit({
     actorId: user.id, actorEmail: user.email,
     action: 'user.create', entity: 'profiles', entityId: data.user!.id,
-    note: `${email} — vai trò ${vaiTro} — tab: ${[xemXperise && 'Xperise', xemMlx && 'MLX'].filter(Boolean).join(', ')}`,
+    note: `${email} — vai trò ${vaiTro} — tab: ${[xemXperise && 'Xperise', xemMlx && 'MLX', xemDashboard && 'Dashboard'].filter(Boolean).join(', ')}`,
   });
 
   revalidatePath('/users');
 }
 
-export async function doiQuyenXemTab(userId: string, xemXperise: boolean, xemMlx: boolean) {
+export async function doiQuyenXemTab(userId: string, xemXperise: boolean, xemMlx: boolean, xemDashboard = false) {
   const user = await requireRole('admin');
-  if (!xemXperise && !xemMlx) throw new Error('Phải giữ ít nhất 1 tab được xem.');
+  if (!xemXperise && !xemMlx) throw new Error('Phải giữ ít nhất 1 tab Xperise hoặc MLX.');
   const { error } = await supabaseAdmin().from('profiles')
-    .update({ xem_xperise: xemXperise, xem_mlx: xemMlx })
+    .update({ xem_xperise: xemXperise, xem_mlx: xemMlx, xem_dashboard: xemDashboard })
     .eq('id', userId);
   if (error) throw new Error(error.message);
   await writeAudit({
     actorId: user.id, actorEmail: user.email,
     action: 'user.access', entity: 'profiles', entityId: userId,
-    note: `Tab được xem: ${[xemXperise && 'Xperise', xemMlx && 'MLX'].filter(Boolean).join(', ')}`,
+    note: `Tab được xem: ${[xemXperise && 'Xperise', xemMlx && 'MLX', xemDashboard && 'Dashboard'].filter(Boolean).join(', ')}`,
   });
   revalidatePath('/users');
 }
