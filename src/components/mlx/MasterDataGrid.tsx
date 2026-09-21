@@ -6,11 +6,13 @@ import { loadCustomers, saveCustomers, TableMissingError } from '@/lib/mlx/maste
 import { companyKey } from '@/lib/mlx/normalize';
 import type { MlxCustomer } from '@/lib/mlx/types';
 
-type Field = 'ten_cong_ty' | 'ten_viet_tat' | 'dia_chi' | 'mst' | 'chiet_khau';
-type GridRow = { _k: string; id?: string; ten_cong_ty: string; ten_viet_tat: string; dia_chi: string; mst: string; chiet_khau: string };
+type Field = 'ma_khach_hang' | 'ma_hop_dong' | 'ten_cong_ty' | 'ten_viet_tat' | 'dia_chi' | 'mst' | 'chiet_khau';
+type GridRow = { _k: string; id?: string; ma_khach_hang: string; ma_hop_dong: string; ten_cong_ty: string; ten_viet_tat: string; dia_chi: string; mst: string; chiet_khau: string };
 
 const FIELDS: { key: Field; label: string; width: number; numeric?: boolean }[] = [
-  { key: 'ten_viet_tat', label: 'Tên viết tắt', width: 120 },
+  { key: 'ma_khach_hang', label: 'Mã khách hàng', width: 120 },
+  { key: 'ma_hop_dong', label: 'Mã hợp đồng', width: 120 },
+  { key: 'ten_viet_tat', label: 'Tên viết tắt', width: 140 },
   { key: 'ten_cong_ty', label: 'Tên công ty *', width: 340 },
   { key: 'dia_chi', label: 'Địa chỉ', width: 420 },
   { key: 'mst', label: 'MST', width: 140 },
@@ -22,13 +24,15 @@ const newKey = () => `r${Date.now()}${seq++}`;
 const toGrid = (c: MlxCustomer): GridRow => ({
   _k: c.id ?? newKey(),
   id: c.id,
+  ma_khach_hang: c.ma_khach_hang,
+  ma_hop_dong: c.ma_hop_dong,
   ten_cong_ty: c.ten_cong_ty,
   ten_viet_tat: c.ten_viet_tat,
   dia_chi: c.dia_chi,
   mst: c.mst,
   chiet_khau: c.chiet_khau ? String(c.chiet_khau) : '0',
 });
-const emptyRow = (): GridRow => ({ _k: newKey(), ten_cong_ty: '', ten_viet_tat: '', dia_chi: '', mst: '', chiet_khau: '0' });
+const emptyRow = (): GridRow => ({ _k: newKey(), ma_khach_hang: '', ma_hop_dong: '', ten_cong_ty: '', ten_viet_tat: '', dia_chi: '', mst: '', chiet_khau: '0' });
 
 /** "5", "5%", "5,5" → 5 / 5.5 ; không hợp lệ → NaN */
 function parsePct(v: string): number {
@@ -149,6 +153,8 @@ export default function MasterDataGrid() {
         .filter((r) => !isBlank(r))
         .map((r) => ({
           id: r.id,
+          ma_khach_hang: r.ma_khach_hang,
+          ma_hop_dong: r.ma_hop_dong,
           ten_cong_ty: r.ten_cong_ty,
           ten_viet_tat: r.ten_viet_tat,
           dia_chi: r.dia_chi,
@@ -178,7 +184,7 @@ export default function MasterDataGrid() {
             <div className={s.eyebrow}>Master data</div>
             <h2 className={s.title}>Khách hàng MLX</h2>
             <div className={s.note}>
-              {rows.filter((r) => !isBlank(r)).length} khách · Copy vùng dữ liệu từ Excel rồi dán vào ô bất kỳ (theo thứ tự cột
+              {rows.filter((r) => !isBlank(r)).length} khách · Tên file xuất = Mã hợp đồng_Tên công ty · Copy dữ liệu từ Excel rồi dán vào ô bất kỳ (theo thứ tự cột
               bên dưới) · % chiết khấu nhập 5 = 5%
             </div>
           </div>

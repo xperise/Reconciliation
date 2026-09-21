@@ -2,6 +2,10 @@
 
 export interface MlxCustomer {
   id?: string;
+  /** Mã khách hàng trên hệ thống MLX (vd G345) */
+  ma_khach_hang: string;
+  /** Mã hợp đồng — dùng đặt tên file bảng kê */
+  ma_hop_dong: string;
   ten_cong_ty: string;
   ten_viet_tat: string;
   dia_chi: string;

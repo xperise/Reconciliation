@@ -15,6 +15,13 @@ export function matchCustomer(nameFromFile: string, customers: MlxCustomer[]): M
   const byShort = customers.find((c) => c.ten_viet_tat && companyKey(c.ten_viet_tat) === key);
   if (byShort) return byShort;
 
+  const byCode = customers.find(
+    (c) =>
+      (c.ma_khach_hang && companyKey(c.ma_khach_hang) === key) ||
+      (c.ma_hop_dong && companyKey(c.ma_hop_dong) === key),
+  );
+  if (byCode) return byCode;
+
   const partial = customers
     .filter((c) => {
       const k = companyKey(c.ten_cong_ty);

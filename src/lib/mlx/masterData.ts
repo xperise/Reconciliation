@@ -2,7 +2,7 @@ import { getSupabase } from './supabase';
 import type { MlxCustomer } from './types';
 
 const TABLE = 'mlx_customers';
-const COLS = 'id, ten_cong_ty, ten_viet_tat, dia_chi, mst, chiet_khau';
+const COLS = 'id, ma_khach_hang, ma_hop_dong, ten_cong_ty, ten_viet_tat, dia_chi, mst, chiet_khau';
 
 export class TableMissingError extends Error {}
 
@@ -21,6 +21,8 @@ export async function loadCustomers(): Promise<MlxCustomer[]> {
   check(error);
   return (data ?? []).map((r: MlxCustomer) => ({
     id: r.id,
+    ma_khach_hang: r.ma_khach_hang ?? '',
+    ma_hop_dong: r.ma_hop_dong ?? '',
     ten_cong_ty: r.ten_cong_ty ?? '',
     ten_viet_tat: r.ten_viet_tat ?? '',
     dia_chi: r.dia_chi ?? '',
@@ -39,6 +41,8 @@ export async function saveCustomers(rows: MlxCustomer[], originalIds: string[]):
   const toDelete = originalIds.filter((id) => !keepIds.has(id));
 
   const clean = (r: MlxCustomer) => ({
+    ma_khach_hang: r.ma_khach_hang.trim(),
+    ma_hop_dong: r.ma_hop_dong.trim(),
     ten_cong_ty: r.ten_cong_ty.trim(),
     ten_viet_tat: r.ten_viet_tat.trim(),
     dia_chi: r.dia_chi.trim(),

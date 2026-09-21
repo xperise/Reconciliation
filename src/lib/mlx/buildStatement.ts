@@ -24,14 +24,14 @@ export interface BuildInput {
 }
 
 export function outputNames(customer: MlxCustomer, period: Period) {
-  const shortName = customer.ten_viet_tat?.trim() || customer.ten_cong_ty.trim();
+  const ten = customer.ten_cong_ty.trim();
+  // Cú pháp tên file: mã hợp đồng_tên khách hàng. Chưa có mã hợp đồng thì lùi
+  // về mã khách hàng, rồi tên viết tắt, rồi chỉ còn tên khách hàng.
+  const ma = customer.ma_hop_dong?.trim() || customer.ma_khach_hang?.trim() || customer.ten_viet_tat?.trim() || '';
   return {
-    fileName: `${safeFileName(shortName)}_${periodLabel(period)}.xlsx`,
-    sheetName: safeSheetName(
-      customer.ten_viet_tat?.trim()
-        ? `${customer.ten_viet_tat.trim()} - ${customer.ten_cong_ty.trim()}`
-        : customer.ten_cong_ty,
-    ),
+    fileName: `${safeFileName(ma ? `${ma}_${ten}` : ten)}.xlsx`,
+    sheetName: safeSheetName(ma ? `${ma} - ${ten}` : ten),
+    period: periodLabel(period),
   };
 }
 
