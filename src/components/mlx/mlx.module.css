@@ -139,3 +139,50 @@
 .linkDanger { color: var(--critical); }
 .rowDim td { opacity: .55; }
 .note a { color: var(--accent); font-weight: 600; }
+
+/* ---- Ô chọn khách hàng có tìm kiếm ---------------------------------- */
+.picker {
+  display: flex; align-items: center; gap: 8px; width: 100%; max-width: 320px; height: 32px;
+  padding: 0 10px; border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--ink); font: inherit; text-align: left; cursor: pointer;
+}
+.picker:hover:not(:disabled) { border-color: var(--accent); }
+.picker:disabled { opacity: .55; cursor: not-allowed; }
+.pickerTrong { color: var(--ink-3); }
+.pickerText { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pickerIcon { flex: 0 0 auto; color: var(--ink-3); font-size: 11px; }
+
+/* Vẽ ngoài bảng (portal) nên dùng position: fixed, toạ độ do JS tính */
+.pickerBox {
+  position: fixed; z-index: 1000; display: flex; flex-direction: column; max-height: 320px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-sm);
+  box-shadow: 0 18px 44px -20px rgba(18, 36, 51, .45), 0 2px 6px rgba(18, 36, 51, .08);
+  overflow: hidden;
+  font-family: "Be Vietnam Pro", Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px; color: var(--ink);
+}
+.pickerSearch {
+  flex: 0 0 auto; height: 38px; border: 0; border-bottom: 1px solid var(--line);
+  padding: 0 12px; font: inherit; color: var(--ink); background: var(--surface-2);
+}
+.pickerSearch:focus { outline: none; background: var(--surface); }
+.pickerList { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.pickerItem {
+  display: block; width: 100%; padding: 7px 12px; border: 0; background: transparent;
+  font: inherit; text-align: left; cursor: pointer;
+}
+.pickerItemOn { background: var(--accent-soft); }
+.pickerItemSel .pickerName { color: var(--accent-deep); }
+.pickerName {
+  display: block; font-weight: 600; color: var(--ink); line-height: 1.3;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pickerMeta {
+  display: block; margin-top: 1px; font-family: var(--mono); font-size: 11px; color: var(--ink-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pickerEmpty { padding: 18px 12px; text-align: center; color: var(--ink-3); }
+.pickerFoot {
+  flex: 0 0 auto; padding: 6px 12px; border-top: 1px solid var(--line);
+  background: var(--surface-2); font-size: 11px; color: var(--ink-3);
+}

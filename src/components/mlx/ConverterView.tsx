@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import s from './mlx.module.css';
+import CustomerPicker from './CustomerPicker';
 import { buildStatement, outputNames } from '@/lib/mlx/buildStatement';
 import { downloadBlob, loadExcelJS, XLSX_MIME } from '@/lib/mlx/download';
 import { findRelated, HistoryNotReadyError, saveStatement, sha256, type StatementRecord } from '@/lib/mlx/history';
@@ -411,21 +412,12 @@ export default function ConverterView() {
                         {it.parsed && <div className={s.note}>Tên đọc được: {it.parsed.companyFromFile}</div>}
                       </td>
                       <td>
-                        <select
-                          className={s.select}
-                          style={{ maxWidth: 320 }}
+                        <CustomerPicker
+                          customers={customers}
                           value={it.customerId}
                           disabled={it.status !== 'ready' || busy}
-                          onChange={(e) => update(it.uid, { customerId: e.target.value })}
-                        >
-                          <option value="">— Chọn khách hàng —</option>
-                          {customers.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.ten_viet_tat ? `${c.ten_viet_tat} - ` : ''}
-                              {c.ten_cong_ty}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(id) => update(it.uid, { customerId: id })}
+                        />
                       </td>
                       <td>
                         <input
