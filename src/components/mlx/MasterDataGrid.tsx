@@ -100,11 +100,14 @@ export default function MasterDataGrid() {
         bad.add(`${r._k}:chiet_khau`);
         list.push(`Dòng ${i + 1}: % chiết khấu phải là số từ 0 đến 100`);
       }
-      const key = companyKey(r.ten_cong_ty);
+      // So trùng đúng như ràng buộc trên Supabase: bỏ khoảng trắng thừa, không
+      // phân biệt hoa/thường, GIỮ NGUYÊN dấu tiếng Việt. Nếu bỏ dấu để so thì
+      // hai công ty khác nhau thật sự sẽ bị báo trùng oan.
+      const key = r.ten_cong_ty.trim().toLowerCase();
       if (key) {
         if (seen.has(key)) {
           bad.add(`${r._k}:ten_cong_ty`);
-          list.push(`Dòng ${i + 1}: trùng tên công ty với dòng ${seen.get(key)! + 1}`);
+          list.push(`Dòng ${i + 1} trùng tên với dòng ${seen.get(key)! + 1}: ${r.ten_cong_ty.trim()}`);
         } else seen.set(key, i);
       }
     });
@@ -161,9 +164,15 @@ export default function MasterDataGrid() {
           mst: r.mst,
           chiet_khau: parsePct(r.chiet_khau),
         }));
-      await saveCustomers(payload, original.ids);
+      const kq = await saveCustomers(payload, original.ids);
       await reload();
-      setMsg({ type: 'ok', text: `Đã lưu ${payload.length} khách hàng.` });
+      const chiTiet = [kq.them && `thêm ${kq.them}`, kq.sua && `cập nhật ${kq.sua}`, kq.xoa && `xoá ${kq.xoa}`]
+        .filter(Boolean)
+        .join(' · ');
+      setMsg({
+        type: 'ok',
+        text: `Đã lưu ${payload.length} khách hàng${chiTiet ? ` (${chiTiet})` : ''}.`,
+      });
     } catch (e) {
       setMsg({ type: 'err', text: `Lưu thất bại: ${(e as Error).message}` });
     } finally {
