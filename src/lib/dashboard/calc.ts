@@ -519,6 +519,7 @@ export interface ArLine {
   so_tien: number; da_thu: number; con_lai: number; thu_du: string | null; thu_gan_nhat: string | null;
   late: number; tt: "da_thu" | "qua_han" | "den_han" | "chua_den_han";
   ngayThuSauHan: number | null;
+  nguonBK?: "file" | "web" | "recon"; suaTay?: boolean; ghiChu?: string | null;
 }
 export interface ArCust {
   ma_kh: string; ten: string; nhom: string; pm: string; term: number | null;
@@ -544,6 +545,7 @@ export function arByCustomer(C: Ctx): ArCust[] {
       ky: r.ky, so_ct: r.so_ct, guiBK: r.ngay_gui_bk ?? null, ngay_hd: r.ngay_hd, den_han: r.ngay_den_han,
       so_tien: r.so_tien, da_thu, con_lai, thu_du: r.ngay_thu_du, thu_gan_nhat: r.ngay_thu_gan_nhat ?? null,
       late, tt, ngayThuSauHan: r.ngay_thu_du ? days(r.ngay_thu_du, r.ngay_den_han) : null,
+      nguonBK: r.nguonBK, suaTay: r.suaTay, ghiChu: r.ghi_chu ?? null,
     });
     o.billed += r.so_tien; o.paid += da_thu;
     if (con_lai > 0) { o.open += con_lai; if (late > 0) { o.overdue += con_lai; o.maxLate = Math.max(o.maxLate, late); } }
@@ -567,6 +569,7 @@ export interface ApLine {
   so_tien: number; da_tra: number; con_lai: number; ngay_tra: string | null;
   dueIn: number; tt: "da_tra" | "qua_han" | "sap_den_han" | "con_han";
   dpo: number | null;
+  suaTay?: boolean; ghiChu?: string | null;
 }
 export interface ApSup {
   ma_ncc: string; ten: string; nganh: string; term: number | null; partnership: string;
@@ -592,6 +595,7 @@ export function apBySupplier(C: Ctx): ApSup[] {
       ky: r.ky, so_ct: r.so_ct, ngay_hd: r.ngay_hd, den_han: r.ngay_den_han,
       so_tien: r.so_tien, da_tra, con_lai, ngay_tra: r.ngay_tra, dueIn, tt,
       dpo: r.ngay_tra ? days(r.ngay_tra, r.ngay_hd) : null,
+      suaTay: r.suaTay, ghiChu: r.ghi_chu ?? null,
     });
     o.billed += r.so_tien; o.paid += da_tra;
     if (con_lai > 0) { o.open += con_lai; if (dueIn < 0) o.overdue += con_lai; if (dueIn >= 0 && dueIn <= 15) o.due15 += con_lai; }
@@ -677,4 +681,81 @@ export function paySchedule(C: Ctx, ky: string, P: Period): PaySchedule {
     return { name: n, team: r?.team || "PM", tuKyNay: a, tuKyTruoc: b, tong: a + b };
   }).filter((x) => x.tong > 0).sort((a, b) => b.tong - a.tong);
   return { rows, duePeriod, kyNguon: src, thangTraSau: lag, tongChiKyNay: sum(duePeriod, (x) => x.tong) };
+}
+
+/* ==========================================================================
+   GỘP SỐ SỬA TAY TRÊN WEB VÀ NGÀY GỬI BẢNG KÊ TỪ APP RECONCILIATION
+   Thứ tự ưu tiên của mỗi ô: sửa tay trên web → file template → Reconciliation.
+   Hàm chạy một lần khi tải dữ liệu, trước khi mọi phép tính khác dùng tới.
+   ========================================================================== */
+export function mergeEdits(D: DataSet): DataSet {
+  const key = (a: string, b: string, c: string | null | undefined) => `${a}|${b}|${c || ""}`;
+  const arE = new Map(D.arEdits.map((e) => [key(e.ma_kh, e.ky, e.so_ct), e]));
+  const apE = new Map(D.apEdits.map((e) => [key(e.ma_ncc, e.ky, e.so_ct), e]));
+  const pick = <T,>(manual: T | null | undefined, file: T) => (manual == null ? file : manual);
+
+  const ar: import("./types").ArRow[] = [];
+  const usedAr = new Set<string>();
+  D.ar.forEach((r) => {
+    const k = key(r.ma_kh, r.ky, r.so_ct);
+    const e = arE.get(k);
+    if (e) usedAr.add(k);
+    if (e?.xoa) return;
+    const bk = D.bangKe[`${r.ma_kh}|${r.ky}`];
+    const guiFile = pick(e?.ngay_gui_bk, r.ngay_gui_bk);
+    const nguon: import("./types").ArRow["nguonBK"] = e?.ngay_gui_bk ? "web" : r.ngay_gui_bk ? "file" : bk?.gui ? "recon" : undefined;
+    ar.push({
+      ...r,
+      ngay_gui_bk: guiFile ?? bk?.gui ?? null,
+      ngay_hd: pick(e?.ngay_hd, r.ngay_hd),
+      ngay_den_han: pick(e?.ngay_den_han, r.ngay_den_han),
+      so_tien: pick(e?.so_tien, r.so_tien),
+      da_thu: pick(e?.da_thu, r.da_thu),
+      ngay_thu_du: pick(e?.ngay_thu_du, r.ngay_thu_du),
+      ngay_thu_gan_nhat: pick(e?.ngay_thu_gan_nhat, r.ngay_thu_gan_nhat),
+      ghi_chu: e?.ghi_chu ?? null, suaTay: !!e, nguonBK: nguon,
+    });
+  });
+  // Dòng do người dùng tự tạo trên web
+  D.arEdits.forEach((e) => {
+    const k = key(e.ma_kh, e.ky, e.so_ct);
+    if (!e.tu_tao || e.xoa || usedAr.has(k)) return;
+    const bk = D.bangKe[`${e.ma_kh}|${e.ky}`];
+    ar.push({
+      ma_kh: e.ma_kh, ky: e.ky, so_ct: e.so_ct || null,
+      ngay_gui_bk: e.ngay_gui_bk ?? bk?.gui ?? null, ngay_hd: e.ngay_hd,
+      ngay_den_han: e.ngay_den_han || e.ngay_hd || "",
+      so_tien: e.so_tien || 0, da_thu: e.da_thu, ngay_thu_du: e.ngay_thu_du, ngay_thu_gan_nhat: e.ngay_thu_gan_nhat,
+      ghi_chu: e.ghi_chu, suaTay: true, nguonBK: e.ngay_gui_bk ? "web" : bk?.gui ? "recon" : undefined,
+    });
+  });
+
+  const ap: import("./types").ApRow[] = [];
+  const usedAp = new Set<string>();
+  D.ap.forEach((r) => {
+    const k = key(r.ma_ncc, r.ky || "", r.so_ct);
+    const e = apE.get(k);
+    if (e) usedAp.add(k);
+    if (e?.xoa) return;
+    ap.push({
+      ...r,
+      ngay_hd: pick(e?.ngay_hd, r.ngay_hd),
+      ngay_den_han: pick(e?.ngay_den_han, r.ngay_den_han),
+      so_tien: pick(e?.so_tien, r.so_tien),
+      da_tra: pick(e?.da_tra, r.da_tra),
+      ngay_tra: pick(e?.ngay_tra, r.ngay_tra),
+      ghi_chu: e?.ghi_chu ?? null, suaTay: !!e,
+    });
+  });
+  D.apEdits.forEach((e) => {
+    const k = key(e.ma_ncc, e.ky, e.so_ct);
+    if (!e.tu_tao || e.xoa || usedAp.has(k)) return;
+    ap.push({
+      ma_ncc: e.ma_ncc, ky: e.ky || null, so_ct: e.so_ct || null,
+      ngay_hd: e.ngay_hd || "", ngay_den_han: e.ngay_den_han || e.ngay_hd || "",
+      so_tien: e.so_tien || 0, da_tra: e.da_tra, ngay_tra: e.ngay_tra,
+      ghi_chu: e.ghi_chu, suaTay: true,
+    });
+  });
+  return { ...D, ar: ar.filter((r) => r.ngay_den_han), ap: ap.filter((r) => r.ngay_den_han) };
 }

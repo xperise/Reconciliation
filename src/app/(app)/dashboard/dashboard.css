@@ -512,3 +512,37 @@
 
 /* Ô chọn trong form cảnh báo giữ mũi tên xổ xuống như atom Dropdown của DS */
 .xd select.fld { padding-right: 30px; }
+
+/* --------------------------------------------------------------------------
+   SỬA CÔNG NỢ TRỰC TIẾP TRÊN WEB
+   -------------------------------------------------------------------------- */
+.xd .icon-btn {
+  background: transparent; border: 0; border-radius: var(--radius-rounded-6);
+  padding: 2px 4px; cursor: pointer; color: var(--color-icon-subtle); line-height: 1;
+  transition: background-color var(--duration-normal) var(--ease-standard), color var(--duration-normal) var(--ease-standard);
+}
+.xd .icon-btn:hover { background: var(--color-surface-primary); color: var(--color-icon-primary); }
+.xd .icon-btn i { font-size: 16px; }
+.xd tr.r-edited td { background: var(--color-surface-accent-subtle); }
+.xd tr.r-edited:hover td { background: var(--color-surface-accent); }
+.xd .src { font-size: 11px; color: var(--color-icon-subtle); cursor: help; }
+.xd .src.web { color: var(--color-content-accent); }
+.xd tr.ed-row > td { background: var(--color-canvas-secondary); padding: 0; }
+.xd .cn-form {
+  display: flex; flex-wrap: wrap; gap: var(--gap-xsmall); align-items: flex-end;
+  padding: var(--padding-small);
+}
+.xd .cn-form label {
+  display: flex; flex-direction: column; gap: 3px;
+  font-size: 12px; line-height: 16px; color: var(--color-content-subtle); font-weight: 600;
+}
+.xd .cn-form label.wide { flex: 1; min-width: 180px; }
+.xd .cn-form label.wide .fld { width: 100%; min-width: 0; }
+.xd .cn-form .fld { min-width: 136px; }
+.xd .cn-act { display: flex; gap: var(--gap-2xsmall); align-items: flex-end; margin-left: auto; }
+.xd details.add-det {
+  margin-top: var(--gap-small); border: 1px dashed var(--color-border-default);
+  border-radius: var(--radius-rounded-12); padding: 8px 12px; background: var(--color-canvas-secondary);
+}
+.xd details.add-det > summary { color: var(--color-content-primary); font-size: 13px; font-weight: 600; }
+.xd details.add-det .cn-form { padding: 10px 0 2px; }

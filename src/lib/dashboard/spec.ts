@@ -90,6 +90,11 @@ export const SHEETS: SheetSpec[] = [
     "t": "int"
    },
    {
+    "h": "Mã nhóm đối soát",
+    "f": "ma_he_thong",
+    "t": "code"
+   },
+   {
     "h": "Ghi chú",
     "f": "ghi_chu",
     "t": "text"

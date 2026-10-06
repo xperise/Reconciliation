@@ -9,6 +9,7 @@ export interface VM {
   C: Ctx; P: Period; A: AR; B: AP; CS: Cash; AL: Alert[]; ky: string;
   CR: CustRow[]; GB: GroupBlock[]; ARC: ArCust[]; APS: ApSup[]; CD: CashDetail; PS: PaySchedule;
   AA: Record<string, AlertAction>;
+  canEdit: boolean;
 }
 // Bảng màu biểu đồ lấy từ Display palette của Xperise Design System.
 // Tuổi nợ là thang tuần tự (xanh → vàng → cam → đỏ → đỏ đậm); các mảng và
@@ -507,6 +508,24 @@ function cashDetailCards(v: VM): string {
    <div class="card small">Số thực tế lấy từ ngày thu đủ / ngày trả trong sổ công nợ; số dự kiến lấy từ các khoản còn lại theo ngày đến hạn. Sheet DONG_TIEN chỉ nhập theo khoản mục nên không tách được theo đối tượng — hai bảng trên là cách duy nhất nhìn thấy chi tiết từng khách, từng NCC.</div>`;
 }
 
+/* ---------- Form sửa công nợ ngay trên web ---------- */
+interface EdF { f: string; l: string; t: "date" | "money" | "text"; v?: string | number | null; w?: string }
+function edForm(loai: "ar" | "ap", ma: string, ky: string, soCt: string, fields: EdF[], opts: { them?: boolean; suaTay?: boolean } = {}): string {
+  const inp = (x: EdF) => {
+    const val = x.v == null ? "" : x.t === "money" ? String(Math.round(Number(x.v))) : String(x.v);
+    const type = x.t === "date" ? "date" : x.t === "money" ? "number" : "text";
+    return `<label${x.w ? ` class="${x.w}"` : ""}>${esc(x.l)}<input type="${type}" class="fld" data-f="${x.f}" value="${esc(val)}"${x.t === "money" ? " step=\"1000\" inputmode=\"numeric\"" : ""}></label>`;
+  };
+  return `<div class="cn-form" data-loai="${loai}" data-ma="${esc(ma)}" data-ky="${esc(ky)}" data-soct="${esc(soCt)}"${opts.them ? " data-them=\"1\"" : ""}>
+    ${fields.map(inp).join("")}
+    <div class="cn-act">
+      <button type="button" class="btn primary cn-save">${opts.them ? "Thêm dòng" : "Lưu"}</button>
+      ${opts.them ? "" : `<button type="button" class="btn cn-reset" title="Bỏ số sửa tay, quay về số trong file template"${opts.suaTay ? "" : " disabled"}>Về số gốc</button>`}
+      ${opts.them ? "" : `<button type="button" class="btn danger cn-hide" title="Ẩn dòng này khỏi dashboard">Ẩn dòng</button>`}
+    </div>
+  </div>`;
+}
+
 /* ==========================================================================
    CÔNG NỢ PHẢI THU — CHI TIẾT THEO KHÁCH VÀ THEO KỲ
    ========================================================================== */
@@ -514,7 +533,7 @@ const TT_AR: Record<string, [string, string]> = {
   da_thu: ["Đã thu đủ", "stable"], qua_han: ["Quá hạn", "critical"], den_han: ["Đến hạn hôm nay", "high"], chua_den_han: ["Chưa đến hạn", "neutral"],
 };
 function arCustomerCards(v: VM): string {
-  const { ARC, C } = v;
+  const { ARC, C, canEdit } = v;
   if (!ARC.length) return "";
   const withOpen = ARC.filter((c) => c.open > 0);
   const top = withOpen.slice(0, 15);
@@ -544,11 +563,31 @@ function arCustomerCards(v: VM): string {
   const detail = ARC.slice(0, 60).map((c) => {
     const rows = c.lines.map((l) => {
       const [lab, cls] = TT_AR[l.tt];
-      return `<tr><td class="num">${esc(l.ky)}</td><td class="small">${esc(l.so_ct || "—")}</td><td class="num">${fmtDate(l.guiBK)}</td><td class="num">${fmtDate(l.ngay_hd)}</td><td class="num">${fmtDate(l.den_han)}</td><td class="r num">${n0(l.so_tien / 1e6)}</td><td class="r num">${l.da_thu ? n0(l.da_thu / 1e6) : "–"}</td><td class="r num ${l.con_lai > 0 && l.tt === "qua_han" ? "c-critical" : ""}">${l.con_lai > 0 ? n0(l.con_lai / 1e6) : "–"}</td><td class="num">${fmtDate(l.thu_du || (l.thu_gan_nhat && l.thu_gan_nhat <= C.asOf ? l.thu_gan_nhat : null))}</td><td class="r num ${l.tt === "qua_han" ? "c-critical" : ""}">${l.tt === "qua_han" ? n0(l.late) : l.ngayThuSauHan != null && l.ngayThuSauHan > 0 ? "trễ " + n0(l.ngayThuSauHan) : "–"}</td><td>${pill(lab, cls)}</td></tr>`;
+      const src = l.nguonBK === "recon" ? ` <span class="src" title="Lấy từ app Reconciliation">↩</span>` : l.nguonBK === "web" ? ` <span class="src web" title="Sửa tay trên web">✎</span>` : "";
+      const form = canEdit ? `<tr class="ed-row" hidden><td colspan="12">${edForm("ar", c.ma_kh, l.ky, l.so_ct || "", [
+        { f: "ngay_gui_bk", l: "Ngày gửi bảng kê", t: "date", v: l.guiBK },
+        { f: "ngay_den_han", l: "Ngày đến hạn", t: "date", v: l.den_han },
+        { f: "so_tien", l: "Số tiền phải thu", t: "money", v: l.so_tien },
+        { f: "da_thu", l: "Đã thu", t: "money", v: l.da_thu },
+        { f: "ngay_thu_du", l: "Ngày thu đủ", t: "date", v: l.thu_du },
+        { f: "ngay_thu_gan_nhat", l: "Ngày thu gần nhất", t: "date", v: l.thu_gan_nhat },
+        { f: "ghi_chu", l: "Ghi chú", t: "text", v: l.ghiChu, w: "wide" },
+      ], { suaTay: l.suaTay })}</td></tr>` : "";
+      return `<tr class="${l.suaTay ? "r-edited" : ""}"><td class="num">${esc(l.ky)}</td><td class="small">${esc(l.so_ct || "—")}</td><td class="num">${fmtDate(l.guiBK)}${src}</td><td class="num">${fmtDate(l.ngay_hd)}</td><td class="num">${fmtDate(l.den_han)}</td><td class="r num">${n0(l.so_tien / 1e6)}</td><td class="r num">${l.da_thu ? n0(l.da_thu / 1e6) : "–"}</td><td class="r num ${l.con_lai > 0 && l.tt === "qua_han" ? "c-critical" : ""}">${l.con_lai > 0 ? n0(l.con_lai / 1e6) : "–"}</td><td class="num">${fmtDate(l.thu_du || (l.thu_gan_nhat && l.thu_gan_nhat <= C.asOf ? l.thu_gan_nhat : null))}</td><td class="r num ${l.tt === "qua_han" ? "c-critical" : ""}">${l.tt === "qua_han" ? n0(l.late) : l.ngayThuSauHan != null && l.ngayThuSauHan > 0 ? "trễ " + n0(l.ngayThuSauHan) : "–"}</td><td>${pill(lab, cls)}</td><td class="r">${canEdit ? `<button type="button" class="icon-btn cn-toggle" title="Sửa dòng này"><i class="ri-edit-line"></i></button>` : ""}</td></tr>${form}`;
     }).join("");
     return `<details class="cust-det"><summary><b>${esc(c.ten)}</b> <span class="small">${esc(c.nhom)} · PM ${esc(c.pm)} · còn lại <b class="num">${tr(c.open)}</b>${c.overdue > 0 ? ` · quá hạn <b class="num c-critical">${tr(c.overdue)}</b> (trễ nhất ${n0(c.maxLate)} ngày)` : ""} · đúng hạn ${pc(c.onTimeRate, 0)}</span></summary>
-      <div class="tw" style="margin-top:10px"><table><thead><tr><th>Kỳ nợ</th><th>Số chứng từ</th><th>Gửi bảng kê</th><th>Hóa đơn</th><th>Đến hạn</th><th class="r">Phải thu (tr)</th><th class="r">Đã thu (tr)</th><th class="r">Còn lại (tr)</th><th>Ngày thu</th><th class="r">Số ngày trễ</th><th>Trạng thái</th></tr></thead><tbody>${rows}
-      <tr class="tot"><td>Tổng</td><td></td><td></td><td></td><td></td><td class="r num">${n0(c.billed / 1e6)}</td><td class="r num">${n0(c.paid / 1e6)}</td><td class="r num">${n0(c.open / 1e6)}</td><td></td><td></td><td></td></tr></tbody></table></div></details>`;
+      <div class="tw" style="margin-top:10px"><table><thead><tr><th>Kỳ nợ</th><th>Số chứng từ</th><th>Gửi bảng kê</th><th>Hóa đơn</th><th>Đến hạn</th><th class="r">Phải thu (tr)</th><th class="r">Đã thu (tr)</th><th class="r">Còn lại (tr)</th><th>Ngày thu</th><th class="r">Số ngày trễ</th><th>Trạng thái</th><th></th></tr></thead><tbody>${rows}
+      <tr class="tot"><td>Tổng</td><td></td><td></td><td></td><td></td><td class="r num">${n0(c.billed / 1e6)}</td><td class="r num">${n0(c.paid / 1e6)}</td><td class="r num">${n0(c.open / 1e6)}</td><td></td><td></td><td></td><td></td></tr></tbody></table></div>${canEdit ? `<details class="add-det"><summary>+ Thêm dòng công nợ cho ${esc(c.ten)}</summary>${edForm("ar", c.ma_kh, "", "", [
+        { f: "__ky", l: "Kỳ nợ (T09.2026)", t: "text" },
+        { f: "__soct", l: "Số chứng từ", t: "text" },
+        { f: "ngay_gui_bk", l: "Ngày gửi bảng kê", t: "date" },
+        { f: "ngay_hd", l: "Ngày hóa đơn", t: "date" },
+        { f: "ngay_den_han", l: "Ngày đến hạn", t: "date" },
+        { f: "so_tien", l: "Số tiền phải thu", t: "money" },
+        { f: "da_thu", l: "Đã thu", t: "money" },
+        { f: "ngay_thu_du", l: "Ngày thu đủ", t: "date" },
+        { f: "ghi_chu", l: "Ghi chú", t: "text", w: "wide" },
+      ], { them: true })}</details>` : ""}</details>`;
   }).join("");
 
   return `<div class="g75">${card("Theo khách hàng", "Dư nợ còn lại của từng khách", "tỷ VND · còn nợ nhiều nhất trước", bars)}${card("Tiến độ theo kỳ", "Bảng kê đã gửi và tiền đã thu", "tỷ VND", progHTML)}</div>
@@ -562,16 +601,33 @@ const TT_AP: Record<string, [string, string]> = {
   da_tra: ["Đã trả", "stable"], qua_han: ["Quá hạn", "critical"], sap_den_han: ["Đến hạn ≤ 15 ngày", "high"], con_han: ["Còn hạn", "neutral"],
 };
 function apSupplierCards(v: VM): string {
-  const { APS, C } = v;
+  const { APS, C, canEdit } = v;
   if (!APS.length) return "";
   const detail = APS.map((s2) => {
     const rows = s2.lines.map((l) => {
       const [lab, cls] = TT_AP[l.tt];
-      return `<tr><td class="num">${esc(l.ky || "—")}</td><td class="small">${esc(l.so_ct || "—")}</td><td class="num">${fmtDate(l.ngay_hd)}</td><td class="num">${fmtDate(l.den_han)}</td><td class="r num">${n0(l.so_tien / 1e6)}</td><td class="r num">${l.da_tra ? n0(l.da_tra / 1e6) : "–"}</td><td class="r num ${l.tt === "qua_han" ? "c-critical" : ""}">${l.con_lai > 0 ? n0(l.con_lai / 1e6) : "–"}</td><td class="num">${fmtDate(l.ngay_tra)}</td><td class="r num">${l.dpo != null ? n0(l.dpo) : l.con_lai > 0 ? (l.dueIn < 0 ? "quá " + n0(-l.dueIn) : "còn " + n0(l.dueIn)) : "–"}</td><td>${pill(lab, cls)}</td></tr>`;
+      const form = canEdit ? `<tr class="ed-row" hidden><td colspan="11">${edForm("ap", s2.ma_ncc, l.ky || "", l.so_ct || "", [
+        { f: "ngay_hd", l: "Ngày hóa đơn", t: "date", v: l.ngay_hd },
+        { f: "ngay_den_han", l: "Ngày đến hạn", t: "date", v: l.den_han },
+        { f: "so_tien", l: "Số tiền phải trả", t: "money", v: l.so_tien },
+        { f: "da_tra", l: "Đã trả", t: "money", v: l.da_tra },
+        { f: "ngay_tra", l: "Ngày trả", t: "date", v: l.ngay_tra },
+        { f: "ghi_chu", l: "Ghi chú", t: "text", v: l.ghiChu, w: "wide" },
+      ], { suaTay: l.suaTay })}</td></tr>` : "";
+      return `<tr class="${l.suaTay ? "r-edited" : ""}"><td class="num">${esc(l.ky || "—")}</td><td class="small">${esc(l.so_ct || "—")}</td><td class="num">${fmtDate(l.ngay_hd)}</td><td class="num">${fmtDate(l.den_han)}</td><td class="r num">${n0(l.so_tien / 1e6)}</td><td class="r num">${l.da_tra ? n0(l.da_tra / 1e6) : "–"}</td><td class="r num ${l.tt === "qua_han" ? "c-critical" : ""}">${l.con_lai > 0 ? n0(l.con_lai / 1e6) : "–"}</td><td class="num">${fmtDate(l.ngay_tra)}</td><td class="r num">${l.dpo != null ? n0(l.dpo) : l.con_lai > 0 ? (l.dueIn < 0 ? "quá " + n0(-l.dueIn) : "còn " + n0(l.dueIn)) : "–"}</td><td>${pill(lab, cls)}</td><td class="r">${canEdit ? `<button type="button" class="icon-btn cn-toggle" title="Sửa dòng này"><i class="ri-edit-line"></i></button>` : ""}</td></tr>${form}`;
     }).join("");
     return `<details class="cust-det"><summary><b>${esc(s2.ten)}</b> <span class="small">${esc(s2.nganh)} · term ${s2.term ?? "—"} ngày${s2.dpo != null ? ` · DPO thực tế ${n0(s2.dpo)} ngày` : ""} · còn phải trả <b class="num">${tr(s2.open)}</b>${s2.overdue > 0 ? ` · quá hạn <b class="num c-critical">${tr(s2.overdue)}</b>` : ""}</span></summary>
-      <div class="tw" style="margin-top:10px"><table><thead><tr><th>Kỳ</th><th>Số chứng từ</th><th>Hóa đơn</th><th>Đến hạn</th><th class="r">Phải trả (tr)</th><th class="r">Đã trả (tr)</th><th class="r">Còn lại (tr)</th><th>Ngày trả</th><th class="r">Số ngày</th><th>Trạng thái</th></tr></thead><tbody>${rows}
-      <tr class="tot"><td>Tổng</td><td></td><td></td><td></td><td class="r num">${n0(s2.billed / 1e6)}</td><td class="r num">${n0(s2.paid / 1e6)}</td><td class="r num">${n0(s2.open / 1e6)}</td><td></td><td></td><td></td></tr></tbody></table></div></details>`;
+      <div class="tw" style="margin-top:10px"><table><thead><tr><th>Kỳ</th><th>Số chứng từ</th><th>Hóa đơn</th><th>Đến hạn</th><th class="r">Phải trả (tr)</th><th class="r">Đã trả (tr)</th><th class="r">Còn lại (tr)</th><th>Ngày trả</th><th class="r">Số ngày</th><th>Trạng thái</th><th></th></tr></thead><tbody>${rows}
+      <tr class="tot"><td>Tổng</td><td></td><td></td><td></td><td class="r num">${n0(s2.billed / 1e6)}</td><td class="r num">${n0(s2.paid / 1e6)}</td><td class="r num">${n0(s2.open / 1e6)}</td><td></td><td></td><td></td><td></td></tr></tbody></table></div>${canEdit ? `<details class="add-det"><summary>+ Thêm dòng công nợ cho ${esc(s2.ten)}</summary>${edForm("ap", s2.ma_ncc, "", "", [
+        { f: "__ky", l: "Kỳ (T09.2026)", t: "text" },
+        { f: "__soct", l: "Số chứng từ", t: "text" },
+        { f: "ngay_hd", l: "Ngày hóa đơn", t: "date" },
+        { f: "ngay_den_han", l: "Ngày đến hạn", t: "date" },
+        { f: "so_tien", l: "Số tiền phải trả", t: "money" },
+        { f: "da_tra", l: "Đã trả", t: "money" },
+        { f: "ngay_tra", l: "Ngày trả", t: "date" },
+        { f: "ghi_chu", l: "Ghi chú", t: "text", w: "wide" },
+      ], { them: true })}</details>` : ""}</details>`;
   }).join("");
   const bars = hStack(APS.filter((x) => x.open > 0).slice(0, 12).map((x) => ({
     l: x.ten, sub: `${x.nganh} · Partnership ${x.partnership}`,

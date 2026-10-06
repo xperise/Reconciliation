@@ -3,7 +3,7 @@
 import "./dashboard.css";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DataSet } from "@/lib/dashboard/types";
-import { makeCtx, calcPeriod, calcAR, calcAP, calcCash, alerts, hasActual, customerRows, customersByGroup, arByCustomer, apBySupplier, cashDetail, paySchedule } from "@/lib/dashboard/calc";
+import { makeCtx, calcPeriod, calcAR, calcAP, calcCash, alerts, hasActual, customerRows, customersByGroup, arByCustomer, apBySupplier, cashDetail, paySchedule, mergeEdits } from "@/lib/dashboard/calc";
 import { renderView, kpiStrip, VM } from "@/lib/dashboard/views";
 import { kyIdx, ty, pc, tr, todayIso } from "@/lib/dashboard/util";
 import DataTab from "@/components/dashboard/DataTab";
@@ -39,7 +39,7 @@ export default function DashboardPage() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const ctx = useMemo(() => (data ? makeCtx(data) : null), [data]);
+  const ctx = useMemo(() => (data ? makeCtx(mergeEdits(data)) : null), [data]);
   useEffect(() => {
     if (!ctx || (ky && ctx.periods.includes(ky))) return;
     const now = kyIdx(`T${todayIso().slice(5, 7)}.${todayIso().slice(0, 4)}`);
@@ -56,7 +56,7 @@ export default function DashboardPage() {
     return {
       C: ctx, P, A, B, CS, AL: alerts(ctx, P, A, B, CS, { ty, pc }), ky,
       CR, GB: customersByGroup(ctx, ky, CR), ARC: arByCustomer(ctx), APS: apBySupplier(ctx),
-      CD: cashDetail(ctx), PS: paySchedule(ctx, ky, P), AA,
+      CD: cashDetail(ctx), PS: paySchedule(ctx, ky, P), AA, canEdit: !!data?.me?.canEdit,
     };
   }, [ctx, ky]);
 
@@ -82,8 +82,54 @@ export default function DashboardPage() {
     }
   }
 
+  // Lưu một dòng công nợ sửa trên web (hoặc thêm dòng mới / bỏ sửa tay / ẩn dòng)
+  async function saveCongNo(box: HTMLElement, mode: "save" | "reset" | "hide") {
+    const loai = box.dataset.loai, ma = box.dataset.ma;
+    if (!loai || !ma) return;
+    const them = box.dataset.them === "1";
+    const val = (f: string) => (box.querySelector(`[data-f="${f}"]`) as HTMLInputElement | null)?.value?.trim() || "";
+    const fields: Record<string, string> = {};
+    box.querySelectorAll("[data-f]").forEach((el) => {
+      const f = (el as HTMLElement).dataset.f as string;
+      if (!f.startsWith("__")) fields[f] = (el as HTMLInputElement).value;
+    });
+    const ky = them ? val("__ky").toUpperCase() : box.dataset.ky || "";
+    const so_ct = them ? val("__soct") : box.dataset.soct || "";
+    if (them && loai === "ar" && !/^T\d{2}\.\d{4}$/.test(ky)) return toast("Kỳ nợ phải có dạng T09.2026", true);
+    const btns = Array.from(box.querySelectorAll("button")) as HTMLButtonElement[];
+    btns.forEach((b) => (b.disabled = true));
+    try {
+      const r = await fetch("/api/dashboard/congno", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ loai, ma, ky, so_ct, tu_tao: them, xoa: mode === "hide", reset: mode === "reset", fields }),
+      });
+      const j = await r.json();
+      if (!r.ok || j.error) throw new Error(j.error || "Không lưu được");
+      toast(mode === "reset" ? "Đã bỏ số sửa tay, quay về số trong file" : mode === "hide" ? "Đã ẩn dòng công nợ" : them ? "Đã thêm dòng công nợ" : "Đã lưu công nợ");
+      await load();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : String(err), true);
+      btns.forEach((b) => (b.disabled = false));
+    }
+  }
+
   const onClick = (e: React.MouseEvent) => {
     const t = e.target as HTMLElement;
+    const tog = t.closest(".cn-toggle") as HTMLElement | null;
+    if (tog) {
+      e.preventDefault();
+      const tr = tog.closest("tr")?.nextElementSibling as HTMLElement | null;
+      if (tr?.classList.contains("ed-row")) tr.hidden = !tr.hidden;
+      return;
+    }
+    const cn = t.closest(".cn-save, .cn-reset, .cn-hide") as HTMLElement | null;
+    if (cn) {
+      e.preventDefault();
+      const box = cn.closest(".cn-form") as HTMLElement | null;
+      if (box) saveCongNo(box, cn.classList.contains("cn-reset") ? "reset" : cn.classList.contains("cn-hide") ? "hide" : "save");
+      return;
+    }
+    if (t.closest(".cn-form")) return;
     const save = t.closest(".al-save") as HTMLElement | null;
     if (save) {
       e.preventDefault();
