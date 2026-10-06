@@ -12,9 +12,14 @@ const DATE_FMT = 'dd/mm/yyyy hh:mm:ss';
 const thin: Partial<ExcelJS.Border> = { style: 'thin', color: { argb: 'FF000000' } };
 const BORDER: Partial<ExcelJS.Borders> = { top: thin, left: thin, bottom: thin, right: thin };
 
-/** Bố cục (khớp template "Trang tính1", đã bỏ dòng mô tả 11 và Số SK) */
-const HEADER_ROW = 10;
-const FIRST_DATA_ROW = 11;
+/**
+ * Bố cục (khớp template "Trang tính1", đã bỏ dòng mô tả và Số SK).
+ * Dòng 1–3 pháp nhân · 4 tiêu đề · 5 kỳ · 6 tên khách · 7 địa chỉ · 8 trống
+ * · 9 tiêu đề cột · 10 trở đi là dữ liệu.
+ * Mọi phần bên dưới (dòng Tổng, bảng tổng hợp, chữ ký) tự dịch theo 2 hằng số này.
+ */
+const HEADER_ROW = 9;
+const FIRST_DATA_ROW = 10;
 const LAST_COL = COLUMNS.length; // 15 = cột O
 
 export interface BuildInput {
