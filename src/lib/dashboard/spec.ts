@@ -410,6 +410,11 @@ export const SHEETS: SheetSpec[] = [
     "t": "text"
    },
    {
+    "h": "Ngày gửi bảng kê",
+    "f": "ngay_gui_bk",
+    "t": "date"
+   },
+   {
     "h": "Ngày hóa đơn",
     "f": "ngay_hd",
     "t": "date"
@@ -434,6 +439,11 @@ export const SHEETS: SheetSpec[] = [
    {
     "h": "Ngày thu đủ",
     "f": "ngay_thu_du",
+    "t": "date"
+   },
+   {
+    "h": "Ngày thu gần nhất",
+    "f": "ngay_thu_gan_nhat",
     "t": "date"
    }
   ]

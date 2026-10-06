@@ -9,19 +9,21 @@ export interface Target {
   kh_n1: number | null; kh_n2: number | null; kh_n3: number | null; kh_n4: number | null; kh_n5: number | null; opex_budget: number | null;
 }
 export interface GmvRow { ky: string; ma_kh: string; ma_ncc: string | null; dich_vu: string; gmv: number; gia_von: number; chiet_khau: number | null }
-export interface ArRow { ma_kh: string; ky: string; so_ct: string | null; ngay_hd: string | null; ngay_den_han: string; so_tien: number; da_thu: number | null; ngay_thu_du: string | null }
+export interface ArRow { ma_kh: string; ky: string; so_ct: string | null; ngay_gui_bk: string | null; ngay_hd: string | null; ngay_den_han: string; so_tien: number; da_thu: number | null; ngay_thu_du: string | null; ngay_thu_gan_nhat: string | null }
 export interface ApRow { ma_ncc: string; ky: string | null; so_ct: string | null; ngay_hd: string; ngay_den_han: string; so_tien: number; da_tra: number | null; ngay_tra: string | null }
 export interface CashRow { ky_nua_thang: string; khoan_muc: string; ke_hoach: number | null; thuc_hien: number | null }
 export interface OpexRow { ky: string; khoan_muc: string; so_tien: number }
 export interface Contract { ma_kh: string; nhom: string; sales: string; ngay_ky: string; so_user: number | null }
 export interface UploadLog { id: number; file_name: string | null; uploaded_at: string; summary: Record<string, unknown> | null }
 export interface Snapshot { ky: string; data: Record<string, unknown>; locked_at: string; note: string | null }
+/** Theo dõi xử lý cảnh báo — người nhận việc, hạn, hành động, trạng thái */
+export interface AlertAction { id: string; ky: string; pic: string | null; han_xu_ly: string | null; hanh_dong: string | null; trang_thai: string; updated_at: string }
 
 export interface DataSet {
   params: Record<string, string>;
   customers: Customer[]; suppliers: Supplier[]; staff: Staff[]; alloc: PmAlloc[]; targets: Target[];
   gmv: GmvRow[]; ar: ArRow[]; ap: ApRow[]; cash: CashRow[]; opex: OpexRow[]; contracts: Contract[];
-  uploads: UploadLog[]; snapshots: Snapshot[];
+  uploads: UploadLog[]; snapshots: Snapshot[]; alertActions: AlertAction[];
   me?: { email: string; role: string; canEdit: boolean };
 }
 

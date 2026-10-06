@@ -3,12 +3,23 @@
 import "./dashboard.css";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DataSet } from "@/lib/dashboard/types";
-import { makeCtx, calcPeriod, calcAR, calcAP, calcCash, alerts, hasActual } from "@/lib/dashboard/calc";
+import { makeCtx, calcPeriod, calcAR, calcAP, calcCash, alerts, hasActual, customerRows, customersByGroup, arByCustomer, apBySupplier, cashDetail, paySchedule } from "@/lib/dashboard/calc";
 import { renderView, kpiStrip, VM } from "@/lib/dashboard/views";
 import { kyIdx, ty, pc, tr, todayIso } from "@/lib/dashboard/util";
 import DataTab from "@/components/dashboard/DataTab";
 
-const TABS: [string, string][] = [["overview", "Tổng quan"], ["revenue", "Doanh thu & Margin"], ["customers", "Khách hàng"], ["cash", "Dòng tiền"], ["ar", "Công nợ phải thu"], ["ap", "Công nợ phải trả"], ["kpi", "KPI & Hoa hồng"], ["alerts", "Cảnh báo"], ["data", "Dữ liệu"]];
+// [key, nhãn, icon RemixIcon] — bộ icon của Xperise Design System, không dùng emoji
+const TABS: [string, string, string][] = [
+  ["overview", "Tổng quan", "ri-compass-3-line"],
+  ["revenue", "Doanh thu & Margin", "ri-line-chart-line"],
+  ["customers", "Khách hàng", "ri-group-line"],
+  ["cash", "Dòng tiền", "ri-wallet-3-line"],
+  ["ar", "Công nợ phải thu", "ri-arrow-down-circle-line"],
+  ["ap", "Công nợ phải trả", "ri-arrow-up-circle-line"],
+  ["kpi", "KPI & Hoa hồng", "ri-award-line"],
+  ["alerts", "Cảnh báo", "ri-alarm-warning-line"],
+  ["data", "Dữ liệu", "ri-database-2-line"],
+];
 
 export default function DashboardPage() {
   const [data, setData] = useState<DataSet | null>(null);
@@ -34,16 +45,54 @@ export default function DashboardPage() {
     const now = kyIdx(`T${todayIso().slice(5, 7)}.${todayIso().slice(0, 4)}`);
     const withAct = ctx.periods.filter((p) => hasActual(ctx, p));
     setKy(withAct.slice(-1)[0] || ctx.periods.filter((p) => kyIdx(p) <= now).slice(-1)[0] || ctx.periods[0] || "");
-  }, [ctx, ky]);
+  }, [ctx, ky, data]);
 
   const vm: VM | null = useMemo(() => {
     if (!ctx || !ky) return null;
     const P = calcPeriod(ctx, ky), A = calcAR(ctx), B = calcAP(ctx, A.dso), CS = calcCash(ctx);
-    return { C: ctx, P, A, B, CS, AL: alerts(ctx, P, A, B, CS, { ty, pc }), ky };
+    const CR = customerRows(ctx, ky);
+    const AA: Record<string, import("@/lib/dashboard/types").AlertAction> = {};
+    (data?.alertActions || []).forEach((x) => { AA[x.id] = x; });
+    return {
+      C: ctx, P, A, B, CS, AL: alerts(ctx, P, A, B, CS, { ty, pc }), ky,
+      CR, GB: customersByGroup(ctx, ky, CR), ARC: arByCustomer(ctx), APS: apBySupplier(ctx),
+      CD: cashDetail(ctx), PS: paySchedule(ctx, ky, P), AA,
+    };
   }, [ctx, ky]);
 
+  // Lưu ghi chú xử lý của một cảnh báo (PIC, hạn, hành động, trạng thái)
+  async function saveAlert(box: HTMLElement) {
+    const id = box.dataset.alert;
+    if (!id) return;
+    const get = (f: string) => (box.querySelector(`[data-f="${f}"]`) as HTMLInputElement | HTMLSelectElement | null)?.value || "";
+    const btn = box.querySelector(".al-save") as HTMLButtonElement | null;
+    if (btn) { btn.disabled = true; btn.textContent = "Đang lưu…"; }
+    try {
+      const r = await fetch("/api/dashboard/alert", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, ky, pic: get("pic"), han_xu_ly: get("han_xu_ly") || null, hanh_dong: get("hanh_dong"), trang_thai: get("trang_thai") }),
+      });
+      const j = await r.json();
+      if (!r.ok || j.error) throw new Error(j.error || "Không lưu được");
+      toast("Đã lưu phân công xử lý");
+      await load();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : String(err), true);
+      if (btn) { btn.disabled = false; btn.textContent = "Lưu"; }
+    }
+  }
+
   const onClick = (e: React.MouseEvent) => {
-    const g = (e.target as HTMLElement).closest("[data-go]") as HTMLElement | null;
+    const t = e.target as HTMLElement;
+    const save = t.closest(".al-save") as HTMLElement | null;
+    if (save) {
+      e.preventDefault();
+      const box = save.closest("[data-alert]") as HTMLElement | null;
+      if (box) saveAlert(box);
+      return;
+    }
+    if (t.closest(".al-form")) return;
+    const g = t.closest("[data-go]") as HTMLElement | null;
     if (g) { e.preventDefault(); setTab(g.dataset.go || "overview"); window.scrollTo({ top: 0 }); }
   };
   const onKey = (e: React.KeyboardEvent) => {
@@ -76,7 +125,7 @@ export default function DashboardPage() {
     <div className="xd" onClick={onClick} onKeyDown={onKey}>
       <nav className="xd-tabs no-print" aria-label="Dashboard quản trị"><div className="xd-tabs-in">
         <div className="xd-tablist">
-          {TABS.map(([k, l]) => (<button key={k} className={"xd-tab" + (tab === k ? " on" : "")} onClick={() => setTab(k)}>{l}{k === "alerts" && nCrit > 0 && <span className="cnt">{nCrit}</span>}</button>))}
+          {TABS.map(([k, l, ic]) => (<button key={k} className={"xd-tab" + (tab === k ? " on" : "")} onClick={() => setTab(k)}><i className={ic} aria-hidden="true" />{l}{k === "alerts" && nCrit > 0 && <span className="cnt">{nCrit}</span>}</button>))}
         </div>
         <div className="ctl"><label htmlFor="xdKy">Kỳ</label>
           <select id="xdKy" value={ky} onChange={(e) => setKy(e.target.value)}>
