@@ -1,5 +1,5 @@
 // Biểu đồ SVG/HTML dựng dạng chuỗi (không cần thư viện). Màu lấy từ biến CSS trong dashboard.css.
-import { esc, n0, pc, sum } from "./util";
+import { esc, n0, pc, sum, unit, axisNum, exact } from "./util";
 
 const col = (c: string) => `var(--${c})`;
 type Fmt = (v: number) => string;
@@ -14,7 +14,9 @@ export function legend(items: LegendItem[]): string {
 }
 
 export interface BarSeries { name: string; c: string; vals: (number | null)[]; op?: number; cf?: (v: number, j: number) => string }
-export interface BarOpts { labels: string[]; series: BarSeries[]; targets?: (number | null)[]; tName?: string; h?: number; W?: number; bw?: number; stack?: boolean; showTot?: boolean; showVal?: boolean; fv?: Fmt; ft?: Fmt; fy?: Fmt; noLegend?: boolean; max?: number }
+export interface BarOpts { labels: string[]; series: BarSeries[]; targets?: (number | null)[]; tName?: string; h?: number; W?: number; bw?: number; stack?: boolean; showTot?: boolean; showVal?: boolean; fv?: Fmt; ft?: Fmt; fy?: Fmt; noLegend?: boolean; max?: number;
+  /** mã tra cứu theo từng cột — bấm vào cột sẽ mở danh sách khách tương ứng */
+  drills?: (string | null)[] }
 export function barChart(o: BarOpts): string {
   const W = o.W || 640, H = o.h || 230, pl = 48, pr = 8, pt = 14, pb = 30, n = o.labels.length, k = o.stack ? 1 : o.series.length;
   const tots = o.stack ? o.labels.map((_, j) => sum(o.series, (s) => s.vals[j] || 0)) : [];
@@ -27,14 +29,15 @@ export function barChart(o: BarOpts): string {
   if (mn < 0) s += `<line x1="${pl}" x2="${W - pr}" y1="${y(0)}" y2="${y(0)}" style="stroke:var(--ink-3)"/>`;
   o.labels.forEach((lb, j) => {
     const cx = pl + gw * j + gw / 2, x0 = cx - (bw * k) / 2;
+    const dr = o.drills?.[j] ? ` data-drill="${esc(o.drills[j] as string)}" class="hit"` : "";
     if (o.stack) {
       let acc = 0;
-      o.series.forEach((se) => { const v = se.vals[j] || 0; if (!v) return; s += `<rect x="${x0 + 1}" y="${y(acc + v)}" width="${bw - 2}" height="${Math.max(0, y(acc) - y(acc + v))}" style="fill:${col(se.c)};opacity:${se.op ?? 1}"><title>${esc(lb)} · ${esc(se.name)}: ${ft(v)}</title></rect>`; acc += v; });
+      o.series.forEach((se) => { const v = se.vals[j] || 0; if (!v) return; s += `<rect${dr} x="${x0 + 1}" y="${y(acc + v)}" width="${bw - 2}" height="${Math.max(0, y(acc) - y(acc + v))}" style="fill:${col(se.c)};opacity:${se.op ?? 1}"><title>${esc(lb)} · ${esc(se.name)}: ${ft(v)}</title></rect>`; acc += v; });
       if (o.showTot && acc) s += `<text x="${cx}" y="${y(acc) - 4}" text-anchor="middle" style="fill:var(--ink)">${ft(acc)}</text>`;
     } else o.series.forEach((se, q) => {
       const v = se.vals[j]; if (v == null || !isFinite(v)) return;
       const x = x0 + q * bw, c = se.cf ? se.cf(v, j) : se.c, top = Math.min(y(v), y(0));
-      s += `<rect x="${x + 1}" y="${top}" width="${bw - 2}" height="${Math.max(1, Math.abs(y(0) - y(v)))}" rx="3" style="fill:${col(c)};opacity:${se.op ?? 1}"><title>${esc(lb)} · ${esc(se.name)}: ${ft(v)}</title></rect>`;
+      s += `<rect${dr} x="${x + 1}" y="${top}" width="${bw - 2}" height="${Math.max(1, Math.abs(y(0) - y(v)))}" rx="3" style="fill:${col(c)};opacity:${se.op ?? 1}"><title>${esc(lb)} · ${esc(se.name)}: ${ft(v)}</title></rect>`;
       if (o.showVal) s += `<text x="${x + bw / 2}" y="${v >= 0 ? y(v) - 4 : y(v) + 11}" text-anchor="middle" style="fill:var(--ink)">${(o.fv || ft)(v)}</text>`;
     });
     const tg = o.targets?.[j];
@@ -72,7 +75,7 @@ export function waterfall(items: { l: string; v: number; kind?: "total" }[]): st
   const bars = items.map((it) => { if (it.kind === "total") { run = it.v; return { ...it, a: 0, b: it.v }; } const a = run; run += it.v; return { ...it, a, b: run }; });
   const max = niceMax(Math.max(...bars.map((b) => Math.max(b.a, b.b)), 1) * 1.05), lo = Math.min(0, ...bars.map((b) => Math.min(b.a, b.b))), mn = lo < 0 ? -niceMax(-lo * 1.05) : 0;
   const y = (v: number) => pt + (H - pt - pb) * (1 - (v - mn) / (max - mn)), gw = (W - pl - pr) / n, bw = gw * 0.62;
-  const tm = (v: number) => n0(v / 1e6);
+  const tm = (v: number) => axisNum(v / unit().chia);
   let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img">`;
   for (let t = 0; t <= 4; t++) { const v = mn + ((max - mn) * t) / 4; s += `<line class="grid" x1="${pl}" x2="${W - pr}" y1="${y(v)}" y2="${y(v)}"/><text x="${pl - 6}" y="${y(v) + 3}" text-anchor="end">${tm(v)}</text>`; }
   bars.forEach((b, j) => {
@@ -87,32 +90,33 @@ export function waterfall(items: { l: string; v: number; kind?: "total" }[]): st
 }
 
 const pw = (v: number | null | undefined, m: number) => Math.min(100, Math.max(0, ((v || 0) / m) * 100)) + "%";
-export interface BulletItem { l: string; sub?: string; v: number | null; t?: number | null; c?: string; txt: string; txt2?: string; vc?: string; bold?: boolean }
+export interface BulletItem { l: string; sub?: string; v: number | null; t?: number | null; c?: string; txt: string; txt2?: string; vc?: string; bold?: boolean; dr?: string }
 export function hBullet(items: BulletItem[], o: { max?: number; legend?: string } = {}): string {
   if (!items.length) return empty("Chưa có dữ liệu");
   const max = o.max || Math.max(...items.map((i) => Math.max(i.v || 0, i.t || 0))) * 1.05 || 1;
-  return `<div class="hb">${items.map((i) => `<div class="hb-row ${i.bold ? "bold" : ""}"><div class="hb-lab" title="${esc(i.l)}">${esc(i.l)}${i.sub ? `<small>${esc(i.sub)}</small>` : ""}</div><div class="hb-track"><span class="fill" style="width:${pw(i.v, max)};background:${col(i.c || "accent")}"></span>${i.t != null ? `<b style="left:${pw(i.t, max)}"></b>` : ""}</div><div class="hb-val num ${i.vc ? "c-" + i.vc : ""}">${i.txt}${i.txt2 ? `<small>${i.txt2}</small>` : ""}</div></div>`).join("")}</div>${o.legend || ""}`;
+  return `<div class="hb">${items.map((i) => `<div class="hb-row ${i.bold ? "bold" : ""} ${i.dr ? "hit" : ""}"${i.dr ? ` data-drill="${esc(i.dr)}"` : ""}><div class="hb-lab" title="${esc(i.l)}">${esc(i.l)}${i.sub ? `<small>${esc(i.sub)}</small>` : ""}</div><div class="hb-track"><span class="fill" style="width:${pw(i.v, max)};background:${col(i.c || "accent")}"></span>${i.t != null ? `<b style="left:${pw(i.t, max)}"></b>` : ""}</div><div class="hb-val num ${i.vc ? "c-" + i.vc : ""}">${i.txt}${i.txt2 ? `<small>${i.txt2}</small>` : ""}</div></div>`).join("")}</div>${o.legend || ""}`;
 }
-export interface StackRow { l: string; sub?: string; parts: [number, string, string, number?][]; txt: string; txt2?: string; bold?: boolean }
+export interface StackRow { l: string; sub?: string; parts: [number, string, string, number?][]; txt: string; txt2?: string; bold?: boolean; dr?: string }
 export function hStack(rows: StackRow[], o: { max?: number; legend?: LegendItem[]; ft?: Fmt } = {}): string {
   if (!rows.length) return empty("Chưa có dữ liệu");
   const max = o.max || Math.max(...rows.map((r) => sum(r.parts, (p) => Math.max(0, p[0])))) || 1;
   const ft = o.ft || n0;
-  return `<div class="hb">${rows.map((r) => { const tot = sum(r.parts, (p) => Math.max(0, p[0])); return `<div class="hb-row ${r.bold ? "bold" : ""}"><div class="hb-lab" title="${esc(r.l)}">${esc(r.l)}${r.sub ? `<small>${esc(r.sub)}</small>` : ""}</div><div class="hb-track"><div class="hbs" style="width:${pw(tot, max)}">${r.parts.filter((p) => p[0] > 0).map((p) => `<i style="flex:${p[0]};background:${col(p[1])};opacity:${p[3] ?? 1}" title="${esc(p[2])}: ${ft(p[0])}"></i>`).join("")}</div></div><div class="hb-val num">${r.txt}${r.txt2 ? `<small>${r.txt2}</small>` : ""}</div></div>`; }).join("")}</div>${o.legend ? legend(o.legend) : ""}`;
+  return `<div class="hb">${rows.map((r) => { const tot = sum(r.parts, (p) => Math.max(0, p[0])); return `<div class="hb-row ${r.bold ? "bold" : ""} ${r.dr ? "hit" : ""}"${r.dr ? ` data-drill="${esc(r.dr)}"` : ""}><div class="hb-lab" title="${esc(r.l)}">${esc(r.l)}${r.sub ? `<small>${esc(r.sub)}</small>` : ""}</div><div class="hb-track"><div class="hbs" style="width:${pw(tot, max)}">${r.parts.filter((p) => p[0] > 0).map((p) => `<i style="flex:${p[0]};background:${col(p[1])};opacity:${p[3] ?? 1}" title="${esc(p[2])}: ${ft(p[0])}"></i>`).join("")}</div></div><div class="hb-val num">${r.txt}${r.txt2 ? `<small>${r.txt2}</small>` : ""}</div></div>`; }).join("")}</div>${o.legend ? legend(o.legend) : ""}`;
 }
-export function divBars(items: { l: string; sub?: string; v: number; c: string; txt: string }[], range: number): string {
+export function divBars(items: { l: string; sub?: string; v: number; c: string; txt: string; dr?: string }[], range: number): string {
   if (!items.length) return empty("Chưa đủ dữ liệu 2 tháng liên tiếp để so sánh");
-  return `<div class="hb">${items.map((i) => { const w = Math.min(50, (Math.abs(i.v) / range) * 50); return `<div class="hb-row"><div class="hb-lab" title="${esc(i.l)}">${esc(i.l)}${i.sub ? `<small>${esc(i.sub)}</small>` : ""}</div><div class="hb-track div"><span class="mid"></span><span class="fill" style="left:${i.v < 0 ? 50 - w : 50}%;width:${w}%;background:${col(i.c)}"></span></div><div class="hb-val num c-${i.c}">${i.txt}</div></div>`; }).join("")}</div>`;
+  return `<div class="hb">${items.map((i) => { const w = Math.min(50, (Math.abs(i.v) / range) * 50); return `<div class="hb-row ${i.dr ? "hit" : ""}"${i.dr ? ` data-drill="${esc(i.dr)}"` : ""}><div class="hb-lab" title="${esc(i.l)}">${esc(i.l)}${i.sub ? `<small>${esc(i.sub)}</small>` : ""}</div><div class="hb-track div"><span class="mid"></span><span class="fill" style="left:${i.v < 0 ? 50 - w : 50}%;width:${w}%;background:${col(i.c)}"></span></div><div class="hb-val num c-${i.c}">${i.txt}</div></div>`; }).join("")}</div>`;
 }
-export function donut(parts: [number, string, string][], center: string, sub: string, o: { size?: number; ft?: Fmt } = {}): string {
+export type DonutPart = [number, string, string] | [number, string, string, string];
+export function donut(parts: DonutPart[], center: string, sub: string, o: { size?: number; ft?: Fmt } = {}): string {
   const R = 58, C = 2 * Math.PI * R, tot = sum(parts, (p) => Math.max(0, p[0]));
   if (!tot) return empty("Chưa có dữ liệu");
   const ft = o.ft || n0;
   let off = 0;
   let s = `<svg viewBox="0 0 160 160" width="${o.size || 150}" height="${o.size || 150}" role="img"><circle cx="80" cy="80" r="${R}" fill="none" style="stroke:var(--line-soft);stroke-width:22"/>`;
-  parts.forEach((p) => { const len = (Math.max(0, p[0]) / tot) * C; if (len <= 0) return; s += `<circle cx="80" cy="80" r="${R}" fill="none" style="stroke:${col(p[1])};stroke-width:22" stroke-dasharray="${Math.max(0, len - 1.5)} ${C}" stroke-dashoffset="${-off}" transform="rotate(-90 80 80)"><title>${esc(p[2])}: ${ft(p[0])}</title></circle>`; off += len; });
+  parts.forEach((p) => { const len = (Math.max(0, p[0]) / tot) * C; if (len <= 0) return; const dr = p[3] ? ` data-drill="${esc(p[3])}" class="hit"` : ""; s += `<circle${dr} cx="80" cy="80" r="${R}" fill="none" style="stroke:${col(p[1])};stroke-width:22" stroke-dasharray="${Math.max(0, len - 1.5)} ${C}" stroke-dashoffset="${-off}" transform="rotate(-90 80 80)"><title>${esc(p[2])}: ${ft(p[0])}</title></circle>`; off += len; });
   s += `<text x="80" y="80" text-anchor="middle" class="dn-c">${esc(center)}</text><text x="80" y="97" text-anchor="middle">${esc(sub)}</text></svg>`;
-  return `<div class="donut">${s}<div class="dn-leg">${parts.map((p) => `<div><i style="background:${col(p[1])}"></i><span>${esc(p[2])}</span><b class="num">${ft(p[0])}</b><em class="num">${pc(Math.max(0, p[0]) / tot, 0)}</em></div>`).join("")}</div></div>`;
+  return `<div class="donut">${s}<div class="dn-leg">${parts.map((p) => `<div${p[3] ? ` data-drill="${esc(p[3])}" class="hit"` : ""}><i style="background:${col(p[1])}"></i><span>${esc(p[2])}</span><b class="num">${ft(p[0])}</b><em class="num">${pc(Math.max(0, p[0]) / tot, 0)}</em></div>`).join("")}</div></div>`;
 }
 export function tierChart(x: number | null, H: number, tiers: [number, number | null, string][], tierFn: (v: number) => number): string {
   const W = 640, Hh = 240, pl = 44, pr = 16, pt = 22, pb = 30, X = (v: number) => pl + ((W - pl - pr) * v) / 1.5, Y = (v: number) => pt + (Hh - pt - pb) * (1 - v / 1.7);

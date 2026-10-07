@@ -519,12 +519,19 @@ export interface ArLine {
   so_tien: number; da_thu: number; con_lai: number; thu_du: string | null; thu_gan_nhat: string | null;
   late: number; tt: "da_thu" | "qua_han" | "den_han" | "chua_den_han";
   ngayThuSauHan: number | null;
-  nguonBK?: "file" | "web" | "recon"; suaTay?: boolean; ghiChu?: string | null;
+  nguonBK?: "file" | "web" | "recon"; suaTay?: boolean; suaKy?: boolean; ghiChu?: string | null;
+}
+/** Một kỳ nợ của một khách — mức để cập nhật công nợ trên web (không cần xuống từng hóa đơn). */
+export interface ArKy {
+  ky: string; n: number; guiBK: string | null; den_han: string;
+  so_tien: number; da_thu: number; con_lai: number; thu_du: string | null; thu_gan_nhat: string | null;
+  late: number; tt: ArLine["tt"]; nguonBK?: "file" | "web" | "recon"; suaTay: boolean; suaKy: boolean; ghiChu: string | null;
+  soCts: string[];
 }
 export interface ArCust {
   ma_kh: string; ten: string; nhom: string; pm: string; term: number | null;
   billed: number; paid: number; open: number; overdue: number; maxLate: number;
-  lines: ArLine[]; onTimeRate: number | null; avgDelay: number | null;
+  lines: ArLine[]; kys: ArKy[]; onTimeRate: number | null; avgDelay: number | null;
 }
 /** Sổ công nợ phải thu bóc theo khách → từng kỳ, đủ để trả lời "kỳ nào chưa trả, còn bao nhiêu". */
 export function arByCustomer(C: Ctx): ArCust[] {
@@ -535,7 +542,7 @@ export function arByCustomer(C: Ctx): ArCust[] {
     const o = by.get(r.ma_kh) || {
       ma_kh: r.ma_kh, ten: c?.ten_viet_tat || c?.ten_kh || r.ma_kh, nhom: c?.nhom || "?",
       pm: c?.pm || "—", term: c?.credit_term ?? null,
-      billed: 0, paid: 0, open: 0, overdue: 0, maxLate: 0, lines: [], onTimeRate: null, avgDelay: null,
+      billed: 0, paid: 0, open: 0, overdue: 0, maxLate: 0, lines: [], kys: [], onTimeRate: null, avgDelay: null,
     };
     const da_thu = r.da_thu || 0, con_lai = r.so_tien - da_thu;
     const late = days(asOf, r.ngay_den_han);
@@ -545,7 +552,7 @@ export function arByCustomer(C: Ctx): ArCust[] {
       ky: r.ky, so_ct: r.so_ct, guiBK: r.ngay_gui_bk ?? null, ngay_hd: r.ngay_hd, den_han: r.ngay_den_han,
       so_tien: r.so_tien, da_thu, con_lai, thu_du: r.ngay_thu_du, thu_gan_nhat: r.ngay_thu_gan_nhat ?? null,
       late, tt, ngayThuSauHan: r.ngay_thu_du ? days(r.ngay_thu_du, r.ngay_den_han) : null,
-      nguonBK: r.nguonBK, suaTay: r.suaTay, ghiChu: r.ghi_chu ?? null,
+      nguonBK: r.nguonBK, suaTay: r.suaTay, suaKy: r.suaKy, ghiChu: r.ghi_chu ?? null,
     });
     o.billed += r.so_tien; o.paid += da_thu;
     if (con_lai > 0) { o.open += con_lai; if (late > 0) { o.overdue += con_lai; o.maxLate = Math.max(o.maxLate, late); } }
@@ -559,6 +566,33 @@ export function arByCustomer(C: Ctx): ArCust[] {
     o.onTimeRate = val > 0 ? sum(judged.filter((l) => l.thu_du && l.thu_du <= l.den_han), (l) => l.so_tien) / val : null;
     const paidLines = o.lines.filter((l) => l.ngayThuSauHan != null);
     o.avgDelay = paidLines.length ? sum(paidLines, (l) => l.ngayThuSauHan as number) / paidLines.length : null;
+    // gom về mức KỲ — đây là mức dùng để cập nhật công nợ trên web
+    const by = new Map<string, ArKy>();
+    o.lines.forEach((l) => {
+      const k = by.get(l.ky) || {
+        ky: l.ky, n: 0, guiBK: l.guiBK, den_han: l.den_han, so_tien: 0, da_thu: 0, con_lai: 0,
+        thu_du: null, thu_gan_nhat: null, late: 0, tt: "chua_den_han" as ArLine["tt"],
+        nguonBK: l.nguonBK, suaTay: false, suaKy: false, ghiChu: null, soCts: [],
+      };
+      k.n++; k.so_tien += l.so_tien; k.da_thu += l.da_thu; k.con_lai += l.con_lai;
+      if (l.guiBK && (!k.guiBK || l.guiBK < k.guiBK)) k.guiBK = l.guiBK;
+      if (l.den_han && (!k.den_han || l.den_han > k.den_han)) k.den_han = l.den_han;
+      if (l.thu_gan_nhat && (!k.thu_gan_nhat || l.thu_gan_nhat > k.thu_gan_nhat)) k.thu_gan_nhat = l.thu_gan_nhat;
+      if (l.thu_du && (!k.thu_du || l.thu_du > k.thu_du)) k.thu_du = l.thu_du;
+      if (l.suaTay) k.suaTay = true;
+      if (l.suaKy) k.suaKy = true;
+      if (l.ghiChu && !k.ghiChu) k.ghiChu = l.ghiChu;
+      if (l.nguonBK === "web") k.nguonBK = "web";
+      else if (l.nguonBK === "recon" && k.nguonBK !== "web") k.nguonBK = "recon";
+      if (l.so_ct) k.soCts.push(l.so_ct);
+      by.set(l.ky, k);
+    });
+    o.kys = Array.from(by.values()).map((k) => {
+      const late = days(asOf, k.den_han);
+      const tt: ArLine["tt"] = k.con_lai <= 0 ? "da_thu" : late > 0 ? "qua_han" : late === 0 ? "den_han" : "chua_den_han";
+      if (k.con_lai > 0) k.thu_du = null;
+      return { ...k, late, tt };
+    }).sort((a, b) => (kyIdx(a.ky) || 0) - (kyIdx(b.ky) || 0));
   });
   return out.sort((a, b) => b.open - a.open || b.billed - a.billed);
 }
@@ -569,12 +603,18 @@ export interface ApLine {
   so_tien: number; da_tra: number; con_lai: number; ngay_tra: string | null;
   dueIn: number; tt: "da_tra" | "qua_han" | "sap_den_han" | "con_han";
   dpo: number | null;
-  suaTay?: boolean; ghiChu?: string | null;
+  suaTay?: boolean; suaKy?: boolean; ghiChu?: string | null;
+}
+/** Một kỳ công nợ của một NCC — mức để cập nhật trên web. */
+export interface ApKy {
+  ky: string; n: number; ngay_hd: string; den_han: string;
+  so_tien: number; da_tra: number; con_lai: number; ngay_tra: string | null;
+  dueIn: number; tt: ApLine["tt"]; suaTay: boolean; suaKy: boolean; ghiChu: string | null; soCts: string[];
 }
 export interface ApSup {
   ma_ncc: string; ten: string; nganh: string; term: number | null; partnership: string;
   billed: number; paid: number; open: number; overdue: number; due15: number;
-  lines: ApLine[]; dpo: number | null;
+  lines: ApLine[]; kys: ApKy[]; dpo: number | null;
 }
 /** Sổ công nợ phải trả bóc theo NCC → từng chứng từ, để biết chi cho ai và khi nào. */
 export function apBySupplier(C: Ctx): ApSup[] {
@@ -586,7 +626,7 @@ export function apBySupplier(C: Ctx): ApSup[] {
     const o = by.get(r.ma_ncc) || {
       ma_ncc: r.ma_ncc, ten: s?.ten_ncc || r.ma_ncc, nganh: s?.nganh || "Khác",
       term: s?.payment_term ?? null, partnership: s?.partnership || "—",
-      billed: 0, paid: 0, open: 0, overdue: 0, due15: 0, lines: [], dpo: null,
+      billed: 0, paid: 0, open: 0, overdue: 0, due15: 0, lines: [], kys: [], dpo: null,
     };
     const da_tra = r.da_tra || 0, con_lai = r.so_tien - da_tra;
     const dueIn = days(r.ngay_den_han, asOf);
@@ -595,7 +635,7 @@ export function apBySupplier(C: Ctx): ApSup[] {
       ky: r.ky, so_ct: r.so_ct, ngay_hd: r.ngay_hd, den_han: r.ngay_den_han,
       so_tien: r.so_tien, da_tra, con_lai, ngay_tra: r.ngay_tra, dueIn, tt,
       dpo: r.ngay_tra ? days(r.ngay_tra, r.ngay_hd) : null,
-      suaTay: r.suaTay, ghiChu: r.ghi_chu ?? null,
+      suaTay: r.suaTay, suaKy: r.suaKy, ghiChu: r.ghi_chu ?? null,
     });
     o.billed += r.so_tien; o.paid += da_tra;
     if (con_lai > 0) { o.open += con_lai; if (dueIn < 0) o.overdue += con_lai; if (dueIn >= 0 && dueIn <= 15) o.due15 += con_lai; }
@@ -607,6 +647,29 @@ export function apBySupplier(C: Ctx): ApSup[] {
     const paid = o.lines.filter((l) => l.dpo != null);
     const w = sum(paid, (l) => l.so_tien);
     o.dpo = w > 0 ? sum(paid, (l) => (l.dpo as number) * l.so_tien) / w : null;
+    const by = new Map<string, ApKy>();
+    o.lines.forEach((l) => {
+      const kk = l.ky || l.den_han.slice(0, 7);
+      const k = by.get(kk) || {
+        ky: l.ky || "", n: 0, ngay_hd: l.ngay_hd, den_han: l.den_han, so_tien: 0, da_tra: 0, con_lai: 0,
+        ngay_tra: null, dueIn: 0, tt: "con_han" as ApLine["tt"], suaTay: false, suaKy: false, ghiChu: null, soCts: [],
+      };
+      k.n++; k.so_tien += l.so_tien; k.da_tra += l.da_tra; k.con_lai += l.con_lai;
+      if (l.ngay_hd && (!k.ngay_hd || l.ngay_hd < k.ngay_hd)) k.ngay_hd = l.ngay_hd;
+      if (l.den_han && (!k.den_han || l.den_han > k.den_han)) k.den_han = l.den_han;
+      if (l.ngay_tra && (!k.ngay_tra || l.ngay_tra > k.ngay_tra)) k.ngay_tra = l.ngay_tra;
+      if (l.suaTay) k.suaTay = true;
+      if (l.suaKy) k.suaKy = true;
+      if (l.ghiChu && !k.ghiChu) k.ghiChu = l.ghiChu;
+      if (l.so_ct) k.soCts.push(l.so_ct);
+      by.set(kk, k);
+    });
+    o.kys = Array.from(by.values()).map((k) => {
+      const dueIn = days(k.den_han, asOf);
+      const tt: ApLine["tt"] = k.con_lai <= 0 ? "da_tra" : dueIn < 0 ? "qua_han" : dueIn <= 15 ? "sap_den_han" : "con_han";
+      if (k.con_lai > 0) k.ngay_tra = null;
+      return { ...k, dueIn, tt };
+    }).sort((a, b) => a.den_han.localeCompare(b.den_han));
   });
   return out.sort((a, b) => b.open - a.open || b.billed - a.billed);
 }
@@ -690,72 +753,292 @@ export function paySchedule(C: Ctx, ky: string, P: Period): PaySchedule {
    ========================================================================== */
 export function mergeEdits(D: DataSet): DataSet {
   const key = (a: string, b: string, c: string | null | undefined) => `${a}|${b}|${c || ""}`;
-  const arE = new Map(D.arEdits.map((e) => [key(e.ma_kh, e.ky, e.so_ct), e]));
-  const apE = new Map(D.apEdits.map((e) => [key(e.ma_ncc, e.ky, e.so_ct), e]));
+  const isKyLevel = (e: { so_ct: string; tu_tao: boolean }) => !e.so_ct && !e.tu_tao;
+  const arE = new Map(D.arEdits.filter((e) => !isKyLevel(e)).map((e) => [key(e.ma_kh, e.ky, e.so_ct), e]));
+  const apE = new Map(D.apEdits.filter((e) => !isKyLevel(e)).map((e) => [key(e.ma_ncc, e.ky, e.so_ct), e]));
+  // Sửa ở mức KỲ: một dòng cho cả kỳ của một khách / NCC (so_ct để trống)
+  const arK = new Map(D.arEdits.filter(isKyLevel).map((e) => [`${e.ma_kh}|${e.ky}`, e]));
+  const apK = new Map(D.apEdits.filter(isKyLevel).map((e) => [`${e.ma_ncc}|${e.ky}`, e]));
   const pick = <T,>(manual: T | null | undefined, file: T) => (manual == null ? file : manual);
+  const pick2 = <T,>(a: T | null | undefined, b: T | null | undefined, file: T) => (a == null ? (b == null ? file : b) : a);
+
+  /** Rải một số tiền ở mức kỳ xuống các hóa đơn của kỳ đó theo thứ tự ngày hóa đơn (FIFO). */
+  function spread(total: number, caps: number[]): number[] {
+    let left = total;
+    return caps.map((c) => { const x = Math.max(0, Math.min(c, left)); left -= x; return x; });
+  }
 
   const ar: import("./types").ArRow[] = [];
   const usedAr = new Set<string>();
-  D.ar.forEach((r) => {
-    const k = key(r.ma_kh, r.ky, r.so_ct);
-    const e = arE.get(k);
-    if (e) usedAr.add(k);
-    if (e?.xoa) return;
-    const bk = D.bangKe[`${r.ma_kh}|${r.ky}`];
-    const guiFile = pick(e?.ngay_gui_bk, r.ngay_gui_bk);
-    const nguon: import("./types").ArRow["nguonBK"] = e?.ngay_gui_bk ? "web" : r.ngay_gui_bk ? "file" : bk?.gui ? "recon" : undefined;
-    ar.push({
-      ...r,
-      ngay_gui_bk: guiFile ?? bk?.gui ?? null,
-      ngay_hd: pick(e?.ngay_hd, r.ngay_hd),
-      ngay_den_han: pick(e?.ngay_den_han, r.ngay_den_han),
-      so_tien: pick(e?.so_tien, r.so_tien),
-      da_thu: pick(e?.da_thu, r.da_thu),
-      ngay_thu_du: pick(e?.ngay_thu_du, r.ngay_thu_du),
-      ngay_thu_gan_nhat: pick(e?.ngay_thu_gan_nhat, r.ngay_thu_gan_nhat),
-      ghi_chu: e?.ghi_chu ?? null, suaTay: !!e, nguonBK: nguon,
+  const usedArKy = new Set<string>();
+  // gom theo khách + kỳ để áp số sửa ở mức kỳ
+  const arGroups = new Map<string, import("./types").ArRow[]>();
+  D.ar.forEach((r) => { const k = `${r.ma_kh}|${r.ky}`; const a = arGroups.get(k) || []; a.push(r); arGroups.set(k, a); });
+  arGroups.forEach((rows, gk) => {
+    const g = arK.get(gk);
+    if (g) usedArKy.add(gk);
+    if (g?.xoa) return;
+    const bk = D.bangKe[gk];
+    // bước 1: áp sửa tay mức hóa đơn
+    const base = rows.map((r) => {
+      const k = key(r.ma_kh, r.ky, r.so_ct);
+      const e = arE.get(k);
+      if (e) usedAr.add(k);
+      return { r, e, bo: !!e?.xoa };
+    }).filter((x) => !x.bo);
+    if (!base.length) return;
+    // bước 2: số tiền mức kỳ — rải theo tỷ trọng hóa đơn hiện có
+    const tiens = base.map((x) => pick(x.e?.so_tien, x.r.so_tien));
+    const fileTot = sum(tiens, (t) => t);
+    let soTien = tiens;
+    if (g?.so_tien != null && fileTot > 0) soTien = tiens.map((t) => Math.round((t / fileTot) * (g.so_tien as number)));
+    else if (g?.so_tien != null) soTien = tiens.map((_, i) => (i === 0 ? (g.so_tien as number) : 0));
+    // bước 3: đã thu mức kỳ — rải FIFO theo ngày hóa đơn
+    let daThu = base.map((x) => pick(x.e?.da_thu, x.r.da_thu) ?? 0);
+    if (g?.da_thu != null) {
+      const ord = base.map((x, i) => i).sort((a, b) => (base[a].r.ngay_hd || "").localeCompare(base[b].r.ngay_hd || ""));
+      const parts = spread(g.da_thu, ord.map((i) => soTien[i]));
+      const out = daThu.slice();
+      ord.forEach((i, q) => { out[i] = parts[q]; });
+      daThu = out;
+    }
+    base.forEach((x, i) => {
+      const { r, e } = x;
+      const guiFile = pick2(e?.ngay_gui_bk, g?.ngay_gui_bk, r.ngay_gui_bk);
+      const nguon: import("./types").ArRow["nguonBK"] = e?.ngay_gui_bk || g?.ngay_gui_bk ? "web" : r.ngay_gui_bk ? "file" : bk?.gui ? "recon" : undefined;
+      ar.push({
+        ...r,
+        ngay_gui_bk: guiFile ?? bk?.gui ?? null,
+        ngay_hd: pick(e?.ngay_hd, r.ngay_hd),
+        ngay_den_han: pick2(e?.ngay_den_han, g?.ngay_den_han, r.ngay_den_han),
+        so_tien: soTien[i],
+        da_thu: daThu[i],
+        ngay_thu_du: daThu[i] >= soTien[i] - 1 && soTien[i] > 0 ? pick2(e?.ngay_thu_du, g?.ngay_thu_du, r.ngay_thu_du) : pick(e?.ngay_thu_du, g?.ngay_thu_du != null ? null : r.ngay_thu_du),
+        ngay_thu_gan_nhat: pick2(e?.ngay_thu_gan_nhat, g?.ngay_thu_gan_nhat, r.ngay_thu_gan_nhat),
+        ghi_chu: e?.ghi_chu ?? g?.ghi_chu ?? null, suaTay: !!e || !!g, suaKy: !e && !!g, nguonBK: nguon,
+      });
     });
   });
-  // Dòng do người dùng tự tạo trên web
+  // Dòng do người dùng tự tạo trên web, và dòng sửa mức kỳ cho kỳ chưa có trong file
   D.arEdits.forEach((e) => {
+    const gk = `${e.ma_kh}|${e.ky}`;
     const k = key(e.ma_kh, e.ky, e.so_ct);
-    if (!e.tu_tao || e.xoa || usedAr.has(k)) return;
-    const bk = D.bangKe[`${e.ma_kh}|${e.ky}`];
+    const moi = e.tu_tao ? !usedAr.has(k) : isKyLevel(e) && !usedArKy.has(gk);
+    if (!moi || e.xoa) return;
+    const bk = D.bangKe[gk];
     ar.push({
       ma_kh: e.ma_kh, ky: e.ky, so_ct: e.so_ct || null,
       ngay_gui_bk: e.ngay_gui_bk ?? bk?.gui ?? null, ngay_hd: e.ngay_hd,
       ngay_den_han: e.ngay_den_han || e.ngay_hd || "",
       so_tien: e.so_tien || 0, da_thu: e.da_thu, ngay_thu_du: e.ngay_thu_du, ngay_thu_gan_nhat: e.ngay_thu_gan_nhat,
-      ghi_chu: e.ghi_chu, suaTay: true, nguonBK: e.ngay_gui_bk ? "web" : bk?.gui ? "recon" : undefined,
+      ghi_chu: e.ghi_chu, suaTay: true, suaKy: !e.tu_tao, nguonBK: e.ngay_gui_bk ? "web" : bk?.gui ? "recon" : undefined,
     });
   });
 
   const ap: import("./types").ApRow[] = [];
   const usedAp = new Set<string>();
-  D.ap.forEach((r) => {
-    const k = key(r.ma_ncc, r.ky || "", r.so_ct);
-    const e = apE.get(k);
-    if (e) usedAp.add(k);
-    if (e?.xoa) return;
-    ap.push({
-      ...r,
-      ngay_hd: pick(e?.ngay_hd, r.ngay_hd),
-      ngay_den_han: pick(e?.ngay_den_han, r.ngay_den_han),
-      so_tien: pick(e?.so_tien, r.so_tien),
-      da_tra: pick(e?.da_tra, r.da_tra),
-      ngay_tra: pick(e?.ngay_tra, r.ngay_tra),
-      ghi_chu: e?.ghi_chu ?? null, suaTay: !!e,
+  const usedApKy = new Set<string>();
+  const apGroups = new Map<string, import("./types").ApRow[]>();
+  D.ap.forEach((r) => { const k = `${r.ma_ncc}|${r.ky || ""}`; const a = apGroups.get(k) || []; a.push(r); apGroups.set(k, a); });
+  apGroups.forEach((rows, gk) => {
+    const g = apK.get(gk);
+    if (g) usedApKy.add(gk);
+    if (g?.xoa) return;
+    const base = rows.map((r) => {
+      const k = key(r.ma_ncc, r.ky || "", r.so_ct);
+      const e = apE.get(k);
+      if (e) usedAp.add(k);
+      return { r, e, bo: !!e?.xoa };
+    }).filter((x) => !x.bo);
+    if (!base.length) return;
+    const tiens = base.map((x) => pick(x.e?.so_tien, x.r.so_tien));
+    const fileTot = sum(tiens, (t) => t);
+    let soTien = tiens;
+    if (g?.so_tien != null && fileTot > 0) soTien = tiens.map((t) => Math.round((t / fileTot) * (g.so_tien as number)));
+    else if (g?.so_tien != null) soTien = tiens.map((_, i) => (i === 0 ? (g.so_tien as number) : 0));
+    let daTra = base.map((x) => pick(x.e?.da_tra, x.r.da_tra) ?? 0);
+    if (g?.da_tra != null) {
+      const ord = base.map((x, i) => i).sort((a, b) => (base[a].r.ngay_hd || "").localeCompare(base[b].r.ngay_hd || ""));
+      const parts = spread(g.da_tra, ord.map((i) => soTien[i]));
+      const out = daTra.slice();
+      ord.forEach((i, q) => { out[i] = parts[q]; });
+      daTra = out;
+    }
+    base.forEach((x, i) => {
+      const { r, e } = x;
+      ap.push({
+        ...r,
+        ngay_hd: pick(e?.ngay_hd, r.ngay_hd),
+        ngay_den_han: pick2(e?.ngay_den_han, g?.ngay_den_han, r.ngay_den_han),
+        so_tien: soTien[i], da_tra: daTra[i],
+        ngay_tra: daTra[i] >= soTien[i] - 1 && soTien[i] > 0 ? pick2(e?.ngay_tra, g?.ngay_tra, r.ngay_tra) : pick(e?.ngay_tra, g?.ngay_tra != null ? null : r.ngay_tra),
+        ghi_chu: e?.ghi_chu ?? g?.ghi_chu ?? null, suaTay: !!e || !!g, suaKy: !e && !!g,
+      });
     });
   });
   D.apEdits.forEach((e) => {
+    const gk = `${e.ma_ncc}|${e.ky || ""}`;
     const k = key(e.ma_ncc, e.ky, e.so_ct);
-    if (!e.tu_tao || e.xoa || usedAp.has(k)) return;
+    const moi = e.tu_tao ? !usedAp.has(k) : isKyLevel(e) && !usedApKy.has(gk);
+    if (!moi || e.xoa) return;
     ap.push({
       ma_ncc: e.ma_ncc, ky: e.ky || null, so_ct: e.so_ct || null,
       ngay_hd: e.ngay_hd || "", ngay_den_han: e.ngay_den_han || e.ngay_hd || "",
       so_tien: e.so_tien || 0, da_tra: e.da_tra, ngay_tra: e.ngay_tra,
-      ghi_chu: e.ghi_chu, suaTay: true,
+      ghi_chu: e.ghi_chu, suaTay: true, suaKy: !e.tu_tao,
     });
   });
   return { ...D, ar: ar.filter((r) => r.ngay_den_han), ap: ap.filter((r) => r.ngay_den_han) };
+}
+
+/* ==========================================================================
+   DRILL — bấm vào một phần của biểu đồ để xem danh sách đứng sau con số đó
+   Mỗi biểu đồ gắn một "mã tra cứu"; hàm này dịch mã đó thành danh sách
+   khách hàng / nhà cung cấp / nhân sự kèm giá trị, tỷ trọng tính ở phần render.
+   ========================================================================== */
+export interface DrillRow { ma: string; ten: string; sub: string; v: number; v2?: number | null }
+export interface Drill { key: string; title: string; note: string; kind: "money" | "count" | "days"; v2l: string; rows: DrillRow[]; total: number }
+export interface DrillSrc { C: Ctx; ky: string; P: Period; A: AR; B: AP; CD: CashDetail; PS: PaySchedule; CR: CustRow[]; ARC: ArCust[]; APS: ApSup[] }
+
+const AP_BK: Record<string, [string, (dd: number) => boolean]> = {
+  od: ["Quá hạn", (d) => d < 0],
+  d7: ["Đến hạn trong 7 ngày", (d) => d >= 0 && d <= 7],
+  d15: ["Đến hạn 8–15 ngày", (d) => d > 7 && d <= 15],
+  d30: ["Đến hạn 16–30 ngày", (d) => d > 15 && d <= 30],
+  later: ["Còn hơn 30 ngày", (d) => d > 30],
+};
+
+export function drill(s: DrillSrc, key: string): Drill | null {
+  const { C, ky } = s;
+  const grp = (kh: string) => C.cust.get(kh)?.nhom || "?";
+  const cname = (kh: string) => { const c = C.cust.get(kh); return c?.ten_viet_tat || c?.ten_kh || kh; };
+  const csub = (kh: string) => { const c = C.cust.get(kh); return `${c?.nhom || "?"} · PM ${c?.pm || "—"}`; };
+  const mk = (title: string, note: string, rows: DrillRow[], kind: Drill["kind"] = "money", v2l = ""): Drill =>
+    ({ key, title, note, kind, v2l, rows: rows.filter((r) => r.v !== 0), total: sum(rows, (r) => r.v) });
+
+  /** Gom GMV (hoặc margin net) theo khách từ các dòng GMV thỏa điều kiện. */
+  const byGmv = (pred: (r: GmvRow, g: string) => boolean, margin = false): DrillRow[] => {
+    const ck = num(C.D, "chiet_khau_mobility");
+    const m = new Map<string, DrillRow>();
+    (C.gmvByKy.get(ky) || []).filter((r) => pred(r, grp(r.ma_kh))).forEach((r) => {
+      const o = m.get(r.ma_kh) || { ma: r.ma_kh, ten: cname(r.ma_kh), sub: csub(r.ma_kh), v: 0, v2: 0 };
+      const disc = r.dich_vu === "Mobility" ? (r.chiet_khau != null ? r.chiet_khau : r.gmv * ck) : 0;
+      const mg = r.gmv - r.gia_von - disc;
+      o.v += margin ? mg : r.gmv;
+      o.v2 = (o.v2 || 0) + (margin ? r.gmv : mg);
+      m.set(r.ma_kh, o);
+    });
+    return Array.from(m.values()).sort((a, b) => b.v - a.v);
+  };
+
+  const [head, ...restArr] = key.split(":");
+  const rest = restArr.join(":");
+
+  /* --- GMV / margin theo trục, theo dòng dịch vụ, theo nhóm, theo dịch vụ --- */
+  if (head === "axis" || head === "mgaxis") {
+    const a = rest as Axis, mg = head === "mgaxis";
+    const rows = byGmv((r, g) => LINE_DEFS.some((l) => l.axis === a && l.match(r, g)), mg);
+    return mk(`${mg ? "Margin net" : "GMV"} ${AXIS_NAME[a]} — kỳ ${ky}`, `${rows.length} khách có phát sinh`, rows, "money", mg ? "GMV" : "margin net");
+  }
+  if (head === "line" || head === "mgline") {
+    const l = LINE_DEFS.find((x) => x.k === rest); if (!l) return null;
+    const mg = head === "mgline";
+    const rows = byGmv((r, g) => l.match(r, g), mg);
+    return mk(`${mg ? "Margin net" : "GMV"} ${l.name} — kỳ ${ky}`, `${rows.length} khách có phát sinh`, rows, "money", mg ? "GMV" : "margin net");
+  }
+  if (head === "group") {
+    const rows = byGmv((r, g) => g === rest);
+    return mk(`Nhóm ${rest} — GMV kỳ ${ky}`, `${rows.length} khách có GMV trong kỳ`, rows, "money", "margin net");
+  }
+  if (head === "svc") {
+    const rows = byGmv((r) => r.dich_vu === rest);
+    return mk(`Dịch vụ ${rest} — GMV kỳ ${ky}`, `${rows.length} khách có phát sinh`, rows, "money", "margin net");
+  }
+  if (head === "cust") {
+    const c = s.CR.find((x) => x.ma_kh === rest); if (!c) return null;
+    const rows = Object.entries(c.bySvc).map(([k, v]) => ({ ma: k, ten: k, sub: "dịch vụ", v })).sort((a, b) => b.v - a.v);
+    return mk(`${c.ten} — GMV theo dịch vụ, kỳ ${ky}`, `${c.nhom} · PM ${c.pm} · margin net ${Math.round(100 * (c.mgPct ?? 0))}%`, rows);
+  }
+  if (head === "custcount") {
+    const rows = s.CR.filter((r) => r.nhom === rest).map((r) => ({ ma: r.ma_kh, ten: r.ten, sub: `PM ${r.pm}`, v: r.gmv }));
+    return mk(`Nhóm ${rest} — khách active kỳ ${ky}`, `${rows.length} khách có GMV trong kỳ`, rows, "money", "margin net");
+  }
+
+  /* --- Công nợ phải thu --- */
+  if (head === "ar") {
+    const k = Number(rest);
+    const rows = s.A.customers.filter((c) => c.b[k] > 0).map((c) => ({ ma: c.ma_kh, ten: c.ten, sub: `${c.g} · PM ${c.pm}`, v: c.b[k], v2: c.tot })).sort((a, b) => b.v - a.v);
+    return mk(`Phải thu — ${AR_BUCKETS[k]}`, `${rows.length} khách · tính tới ${s.A.asOf}`, rows, "money", "tổng dư nợ");
+  }
+  if (head === "argroup") {
+    const rows = s.A.customers.filter((c) => c.g === rest).map((c) => ({ ma: c.ma_kh, ten: c.ten, sub: `PM ${c.pm} · quá hạn ${Math.round(100 * (c.tot ? c.od / c.tot : 0))}%`, v: c.tot, v2: c.od })).sort((a, b) => b.v - a.v);
+    return mk(`Phải thu — nhóm ${rest}`, `${rows.length} khách còn dư nợ`, rows, "money", "trong đó quá hạn");
+  }
+  if (head === "arky") {
+    const rows = s.ARC.map((c) => {
+      const ls = c.lines.filter((l) => l.ky === rest && l.con_lai > 0);
+      return { ma: c.ma_kh, ten: c.ten, sub: `${c.nhom} · PM ${c.pm}`, v: sum(ls, (l) => l.con_lai), v2: sum(ls, (l) => l.so_tien) };
+    }).filter((r) => r.v > 0).sort((a, b) => b.v - a.v);
+    return mk(`Phải thu còn lại — kỳ nợ ${rest}`, `${rows.length} khách chưa trả đủ`, rows, "money", "giá trị bảng kê");
+  }
+
+  if (head === "arcust") {
+    const c = s.ARC.find((x) => x.ma_kh === rest); if (!c) return null;
+    const m = new Map<string, DrillRow>();
+    c.lines.forEach((l) => {
+      const o = m.get(l.ky) || { ma: l.ky, ten: `Kỳ ${l.ky}`, sub: "", v: 0, v2: 0 };
+      o.v += l.con_lai; o.v2 = (o.v2 || 0) + l.so_tien;
+      o.sub = `bảng kê ${l.guiBK ? l.guiBK : "—"} · đến hạn ${l.den_han}` + (l.con_lai > 0 && l.late > 0 ? ` · quá hạn ${l.late} ngày` : l.con_lai <= 0 ? " · đã thu đủ" : "");
+      m.set(l.ky, o);
+    });
+    const rows = Array.from(m.values()).filter((r) => r.v !== 0);
+    return mk(`${c.ten} — còn phải thu theo kỳ`, `${c.nhom} · PM ${c.pm} · tổng bảng kê ${Math.round(c.billed).toLocaleString("vi-VN")} VND`, rows, "money", "giá trị bảng kê");
+  }
+
+  /* --- Công nợ phải trả --- */
+  if (head === "apsup") {
+    const x = s.APS.find((y) => y.ma_ncc === rest); if (!x) return null;
+    const m = new Map<string, DrillRow>();
+    x.lines.forEach((l) => {
+      const k = l.ky || l.den_han.slice(0, 7);
+      const o = m.get(k) || { ma: k, ten: l.ky ? `Kỳ ${l.ky}` : `Đến hạn ${l.den_han.slice(0, 7)}`, sub: "", v: 0, v2: 0 };
+      o.v += l.con_lai; o.v2 = (o.v2 || 0) + l.so_tien;
+      o.sub = l.con_lai <= 0 ? "đã trả đủ" : l.dueIn < 0 ? `quá hạn ${-l.dueIn} ngày` : `còn ${l.dueIn} ngày tới hạn`;
+      m.set(k, o);
+    });
+    const rows = Array.from(m.values()).filter((r) => r.v !== 0);
+    return mk(`${x.ten} — còn phải trả theo kỳ`, `${x.nganh} · term ${x.term ?? "—"} ngày`, rows, "money", "giá trị hóa đơn");
+  }
+  if (head === "ap") {
+    const bk = AP_BK[rest]; if (!bk) return null;
+    const rows = s.APS.map((x) => {
+      const ls = x.lines.filter((l) => l.con_lai > 0 && bk[1](l.dueIn));
+      return { ma: x.ma_ncc, ten: x.ten, sub: `${x.nganh} · term ${x.term ?? "—"} ngày`, v: sum(ls, (l) => l.con_lai), v2: x.open };
+    }).filter((r) => r.v > 0).sort((a, b) => b.v - a.v);
+    return mk(`Phải trả — ${bk[0]}`, `${rows.length} nhà cung cấp`, rows, "money", "tổng còn phải trả");
+  }
+  if (head === "apn") {
+    const rows = s.APS.filter((x) => x.nganh === rest && x.open > 0).map((x) => ({ ma: x.ma_ncc, ten: x.ten, sub: `term ${x.term ?? "—"} ngày`, v: x.open, v2: x.overdue })).sort((a, b) => b.v - a.v);
+    return mk(`Phải trả — ngành ${rest}`, `${rows.length} nhà cung cấp`, rows, "money", "trong đó quá hạn");
+  }
+
+  /* --- Dòng tiền --- */
+  if (head === "cashin" || head === "cashout") {
+    const list = head === "cashin" ? s.CD.inflow : s.CD.outflow;
+    const f = (rest || "thuc") as keyof FlowRow;
+    const lbl: Record<string, string> = { thuc: `thực ${head === "cashin" ? "thu" : "chi"} ${s.CD.fromDays} ngày qua`, sapToi: `đến hạn ${s.CD.aheadDays} ngày tới`, quaHan: "đã quá hạn", dukien: "còn lại dự kiến" };
+    const rows = list.map((o) => ({ ma: o.ma, ten: o.ten, sub: o.phu, v: Number(o[f] || 0), v2: o.thuc })).filter((r) => r.v > 0).sort((a, b) => b.v - a.v);
+    return mk(`${head === "cashin" ? "Tiền thu từ khách" : "Tiền chi cho nhà cung cấp"} — ${lbl[f as string] || f}`, `${rows.length} đối tượng`, rows, "money", "thực tế 30 ngày qua");
+  }
+
+  /* --- Hoa hồng & chi trả --- */
+  if (head === "team") {
+    const rows = s.PS.rows.filter((r) => r.team === rest).map((r) => ({ ma: r.name, ten: r.name, sub: `team ${r.team}`, v: r.tongKy, v2: r.traNgay })).sort((a, b) => b.v - a.v);
+    return mk(`Hoa hồng team ${rest} — kỳ ${ky}`, `${rows.length} người`, rows, "money", "trả ngay");
+  }
+  if (head === "paydue") {
+    const rows = s.PS.duePeriod.map((r) => ({ ma: r.name, ten: r.name, sub: `team ${r.team}`, v: r.tong, v2: r.tuKyTruoc })).sort((a, b) => b.v - a.v);
+    return mk(`Phải chi trong kỳ ${ky}`, `${rows.length} người · phần trả sau đến từ kỳ ${s.PS.kyNguon}`, rows, "money", "phần trả sau kỳ trước");
+  }
+  return null;
 }

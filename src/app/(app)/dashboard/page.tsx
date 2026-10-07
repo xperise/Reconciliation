@@ -4,8 +4,8 @@ import "./dashboard.css";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DataSet } from "@/lib/dashboard/types";
 import { makeCtx, calcPeriod, calcAR, calcAP, calcCash, alerts, hasActual, customerRows, customersByGroup, arByCustomer, apBySupplier, cashDetail, paySchedule, mergeEdits } from "@/lib/dashboard/calc";
-import { renderView, kpiStrip, VM } from "@/lib/dashboard/views";
-import { kyIdx, ty, pc, tr, todayIso } from "@/lib/dashboard/util";
+import { renderView, kpiStrip, drillPanel, VM } from "@/lib/dashboard/views";
+import { kyIdx, ty, pc, tr, todayIso, setUnit, UNITS, UnitKey } from "@/lib/dashboard/util";
 import DataTab from "@/components/dashboard/DataTab";
 
 // [key, nhãn, icon RemixIcon] — bộ icon của Xperise Design System, không dùng emoji
@@ -27,6 +27,12 @@ export default function DashboardPage() {
   const [tab, setTab] = useState("overview");
   const [ky, setKy] = useState("");
   const [toastMsg, setToastMsg] = useState<{ m: string; err: boolean } | null>(null);
+  // Mã tra cứu đang mở khi bấm vào một phần của biểu đồ
+  const [drillKey, setDrillKey] = useState<string | null>(null);
+  // Đơn vị hiển thị tiền, áp cho cả dashboard. "vnd" là số gốc không làm tròn.
+  const [donVi, setDonVi] = useState<UnitKey>("ty");
+  const [soLe, setSoLe] = useState(2);
+  setUnit(donVi, soLe);
 
   const toast = useCallback((m: string, e = false) => { setToastMsg({ m, err: e }); setTimeout(() => setToastMsg(null), e ? 7000 : 3600); }, []);
   const load = useCallback(async () => {
@@ -115,6 +121,12 @@ export default function DashboardPage() {
 
   const onClick = (e: React.MouseEvent) => {
     const t = e.target as HTMLElement;
+    if (t.closest("[data-dpclose]")) { e.preventDefault(); setDrillKey(null); return; }
+    if (t.closest(".dp-wrap") && !t.closest(".dp-box")) { setDrillKey(null); return; }
+    if (!t.closest(".dp-box")) {
+      const hit = t.closest("[data-drill]") as HTMLElement | null;
+      if (hit?.dataset.drill) { e.preventDefault(); setDrillKey(hit.dataset.drill); return; }
+    }
     const tog = t.closest(".cn-toggle") as HTMLElement | null;
     if (tog) {
       e.preventDefault();
@@ -143,6 +155,7 @@ export default function DashboardPage() {
   };
   const onKey = (e: React.KeyboardEvent) => {
     const t = e.target as HTMLElement;
+    if (e.key === "Escape" && drillKey) { setDrillKey(null); return; }
     if ((e.key === "Enter" || e.key === " ") && t.dataset.go) { e.preventDefault(); setTab(t.dataset.go); }
   };
 
@@ -171,7 +184,16 @@ export default function DashboardPage() {
     <div className="xd" onClick={onClick} onKeyDown={onKey}>
       <nav className="xd-tabs no-print" aria-label="Dashboard quản trị"><div className="xd-tabs-in">
         <div className="xd-tablist">
-          {TABS.map(([k, l, ic]) => (<button key={k} className={"xd-tab" + (tab === k ? " on" : "")} onClick={() => setTab(k)}><i className={ic} aria-hidden="true" />{l}{k === "alerts" && nCrit > 0 && <span className="cnt">{nCrit}</span>}</button>))}
+          {TABS.map(([k, l, ic]) => (<button key={k} className={"xd-tab" + (tab === k ? " on" : "")} onClick={() => { setTab(k); setDrillKey(null); }}><i className={ic} aria-hidden="true" />{l}{k === "alerts" && nCrit > 0 && <span className="cnt">{nCrit}</span>}</button>))}
+        </div>
+        <div className="ctl"><label htmlFor="xdDv">Đơn vị</label>
+          <select id="xdDv" value={donVi} onChange={(e) => { const k = e.target.value as UnitKey; setDonVi(k); setSoLe(k === "ty" ? 2 : k === "trieu" ? 1 : 0); }}>
+            {(Object.keys(UNITS) as UnitKey[]).map((k) => (<option key={k} value={k}>{UNITS[k].ten}</option>))}
+          </select>
+          <label htmlFor="xdLe">Số lẻ</label>
+          <select id="xdLe" value={soLe} onChange={(e) => setSoLe(Number(e.target.value))}>
+            {[0, 1, 2, 3].map((n) => (<option key={n} value={n}>{n}</option>))}
+          </select>
         </div>
         <div className="ctl"><label htmlFor="xdKy">Kỳ</label>
           <select id="xdKy" value={ky} onChange={(e) => setKy(e.target.value)}>
@@ -201,6 +223,7 @@ export default function DashboardPage() {
         {vm && tab !== "data" && <div className="view" dangerouslySetInnerHTML={{ __html: renderView(tab, vm) }} />}
         {data && tab === "data" && <DataTab data={data} onDone={load} toast={toast} canEdit={canEdit} />}
       </div>
+      {vm && drillKey && <div dangerouslySetInnerHTML={{ __html: drillPanel(vm, drillKey) }} />}
       {toastMsg && <div className={"toast" + (toastMsg.err ? " err" : "")}>{toastMsg.m}</div>}
     </div>
   );
