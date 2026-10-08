@@ -61,19 +61,19 @@ export async function GET() {
   try {
     const g = await guard();
     if ("error" in g) return NextResponse.json({ error: g.error }, { status: g.status });
-    const [params, customers, suppliers, staff, alloc, targets, gmv, ar, ap, cash, opex, contracts, uploads, snapshots, alertActions, arEdits, apEdits] = await Promise.all([
+    const [params, customers, suppliers, staff, alloc, targets, gmv, ar, ap, cash, opex, contracts, uploads, snapshots, alertActions, arEdits, apEdits, manual] = await Promise.all([
       fetchAll<{ key: string; value: string | null }>("fin_params"),
       fetchAll<Customer>("fin_customers"), fetchAll("fin_suppliers"), fetchAll("fin_staff"), fetchAll("fin_pm_alloc"), fetchAll("fin_targets"),
       fetchAll("fin_gmv", "id"), fetchAll("fin_ar", "id"), fetchAll("fin_ap", "id"), fetchAll("fin_cash"), fetchAll("fin_opex"), fetchAll("fin_contracts"),
       fetchAll("fin_uploads", "id"), fetchAll("fin_snapshots"), fetchAll("fin_alert_actions"),
-      fetchAll("fin_ar_edit"), fetchAll("fin_ap_edit"),
+      fetchAll("fin_ar_edit"), fetchAll("fin_ap_edit"), fetchAll("fin_manual").catch(() => []),
     ]);
     const bangKe = await bangKeMap(customers);
     return NextResponse.json({
       params: Object.fromEntries(params.map((p) => [p.key, p.value ?? ""])),
       customers, suppliers, staff, alloc, targets, gmv, ar, ap, cash, opex, contracts,
       uploads: (uploads as { id: number }[]).slice(-30).reverse(), snapshots, alertActions,
-      arEdits, apEdits, bangKe,
+      arEdits, apEdits, manual, bangKe,
       me: { email: g.user.email, role: g.user.role, canEdit: EDIT_ROLES.includes(g.user.role) },
     });
   } catch (e) {

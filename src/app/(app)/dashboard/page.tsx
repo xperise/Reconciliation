@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DataSet } from "@/lib/dashboard/types";
 import { makeCtx, calcPeriod, calcAR, calcAP, calcCash, alerts, hasActual, customerRows, customersByGroup, arByCustomer, apBySupplier, cashDetail, paySchedule, mergeEdits } from "@/lib/dashboard/calc";
 import { renderView, kpiStrip, drillPanel, VM } from "@/lib/dashboard/views";
-import { kyIdx, ty, pc, tr, todayIso, setUnit, UNITS, UnitKey } from "@/lib/dashboard/util";
+import { kyIdx, ty, pc, tr, todayIso, setUnit, UNITS, UnitKey, tyLe, leVua, unit } from "@/lib/dashboard/util";
 import DataTab from "@/components/dashboard/DataTab";
 
 // [key, nhãn, icon RemixIcon] — bộ icon của Xperise Design System, không dùng emoji
@@ -56,12 +56,12 @@ export default function DashboardPage() {
   const vm: VM | null = useMemo(() => {
     if (!ctx || !ky) return null;
     const P = calcPeriod(ctx, ky), A = calcAR(ctx), B = calcAP(ctx, A.dso), CS = calcCash(ctx);
-    const CR = customerRows(ctx, ky);
+    const CR = customerRows(ctx, ky), ARC = arByCustomer(ctx);
     const AA: Record<string, import("@/lib/dashboard/types").AlertAction> = {};
     (data?.alertActions || []).forEach((x) => { AA[x.id] = x; });
     return {
-      C: ctx, P, A, B, CS, AL: alerts(ctx, P, A, B, CS, { ty, pc }), ky,
-      CR, GB: customersByGroup(ctx, ky, CR), ARC: arByCustomer(ctx), APS: apBySupplier(ctx),
+      C: ctx, P, A, B, CS, AL: alerts(ctx, P, A, B, CS, { ty, pc, tien: (x: number) => `${tyLe(x, leVua(x))} ${unit().nhan}` }, { CR, ARC }), ky,
+      CR, GB: customersByGroup(ctx, ky, CR), ARC, APS: apBySupplier(ctx),
       CD: cashDetail(ctx), PS: paySchedule(ctx, ky, P), AA, canEdit: !!data?.me?.canEdit,
     };
   }, [ctx, ky]);
@@ -119,6 +119,36 @@ export default function DashboardPage() {
     }
   }
 
+  // Lưu bảng nhập số tổng (kế hoạch, GMV & giá vốn, chi phí, dòng tiền)
+  async function saveNhap(form: HTMLElement) {
+    // chỉ gửi những ô thực sự đổi, để ô đang lấy từ file không bị biến thành số nhập tay
+    const ins = (Array.from(form.querySelectorAll("input.nq-in")) as HTMLInputElement[])
+      .filter((el) => el.value.trim() !== (el.dataset.goc || "") || (el.dataset.tay === "1" && el.value.trim() === ""));
+    if (!ins.length) return toast("Chưa có ô nào thay đổi");
+    const rows = ins.map((el) => {
+      const raw = el.value.trim();
+      const tien = el.dataset.tien === "1";
+      const n = raw === "" ? null : Number(raw.replace(",", "."));
+      return {
+        nhom: el.dataset.nhom as string, ky: el.dataset.ky as string, khoa: el.dataset.khoa as string,
+        gia_tri: n == null || !isFinite(n) ? null : Math.round(tien ? n * UNITS[donVi].chia : n),
+      };
+    });
+    const btn = form.querySelector(".nq-save") as HTMLButtonElement | null;
+    if (btn) { btn.disabled = true; btn.textContent = "Đang lưu…"; }
+    try {
+      const r = await fetch("/api/dashboard/nhap", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows }) });
+      const j = await r.json();
+      if (!r.ok || j.error) throw new Error(j.error || "Không lưu được");
+      toast(`Đã lưu ${j.luu} ô${j.xoa ? `, xóa ${j.xoa} ô nhập tay` : ""}`);
+      await load();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : String(err), true);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = "Lưu số đã nhập"; }
+    }
+  }
+
   const onClick = (e: React.MouseEvent) => {
     const t = e.target as HTMLElement;
     if (t.closest("[data-dpclose]")) { e.preventDefault(); setDrillKey(null); return; }
@@ -134,6 +164,14 @@ export default function DashboardPage() {
       if (tr?.classList.contains("ed-row")) tr.hidden = !tr.hidden;
       return;
     }
+    const nq = t.closest(".nq-save") as HTMLElement | null;
+    if (nq) {
+      e.preventDefault();
+      const form = nq.closest(".nq-form") as HTMLElement | null;
+      if (form) saveNhap(form);
+      return;
+    }
+    if (t.closest(".nq-form")) return;
     const cn = t.closest(".cn-save, .cn-reset, .cn-hide") as HTMLElement | null;
     if (cn) {
       e.preventDefault();

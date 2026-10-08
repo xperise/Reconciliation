@@ -528,24 +528,24 @@
 .xd .src { font-size: 11px; color: var(--color-icon-subtle); cursor: help; }
 .xd .src.web { color: var(--color-content-accent); }
 .xd tr.ed-row > td { background: var(--color-canvas-secondary); padding: 0; }
-.xd .cn-form {
+.xd div.cn-form {
   display: flex; flex-wrap: wrap; gap: var(--gap-xsmall); align-items: flex-end;
   padding: var(--padding-small);
 }
-.xd .cn-form label {
+.xd div.cn-form label {
   display: flex; flex-direction: column; gap: 3px;
   font-size: 12px; line-height: 16px; color: var(--color-content-subtle); font-weight: 600;
 }
-.xd .cn-form label.wide { flex: 1; min-width: 180px; }
-.xd .cn-form label.wide .fld { width: 100%; min-width: 0; }
-.xd .cn-form .fld { min-width: 136px; }
+.xd div.cn-form label.wide { flex: 1; min-width: 180px; }
+.xd div.cn-form label.wide .fld { width: 100%; min-width: 0; }
+.xd div.cn-form .fld { min-width: 136px; }
 .xd .cn-act { display: flex; gap: var(--gap-2xsmall); align-items: flex-end; margin-left: auto; }
 .xd details.add-det {
   margin-top: var(--gap-small); border: 1px dashed var(--color-border-default);
   border-radius: var(--radius-rounded-12); padding: 8px 12px; background: var(--color-canvas-secondary);
 }
 .xd details.add-det > summary { color: var(--color-content-primary); font-size: 13px; font-weight: 600; }
-.xd details.add-det .cn-form { padding: 10px 0 2px; }
+.xd details.add-det div.cn-form { padding: 10px 0 2px; }
 
 /* ---------- Bấm vào biểu đồ để xem danh sách khách ---------- */
 .xd [data-drill] { cursor: pointer; }
@@ -583,7 +583,7 @@
 .xd svg text { pointer-events: none; }
 
 /* ---------- Cập nhật công nợ theo kỳ ---------- */
-.xd .cn-note {
+.xd div.cn-form .cn-note {
   flex: 1 0 100%; font-size: 12px; line-height: 17px; color: var(--color-content-subtle);
   background: var(--color-surface-default); border: 1px dashed var(--color-border-default);
   border-radius: var(--radius-rounded-10); padding: 7px 10px; margin-bottom: 2px;
@@ -593,3 +593,27 @@
 }
 .xd details.inv-det > summary { font-size: 13px; color: var(--color-content-subtle); font-weight: 600; }
 .xd details.inv-det[open] > summary { color: var(--color-content-primary); }
+
+/* Biểu đồ trong thẻ chiếm hết chiều rộng — chặn không cho phóng to quá cỡ đọc */
+.xd .chart-cap { max-width: 980px; margin: 0 auto; }
+.xd .card > svg[role="img"], .xd .card .chart-cap svg[role="img"] { max-height: 360px; }
+
+/* ---------- Nhập số tổng thẳng trên dashboard ---------- */
+.xd table.nq td, .xd table.nq th { vertical-align: middle; }
+.xd table.nq td:first-child { min-width: 180px; }
+.xd .nq-in { width: 128px; text-align: right; }
+.xd .nq-in.tay { background-color: var(--color-canvas-accent, #F3E9FF); border-color: var(--color-border-accent, #B041FF); }
+.xd .nq-act {
+  display: flex; align-items: center; gap: var(--gap-small); flex-wrap: wrap;
+  margin-top: var(--gap-small); padding-top: var(--gap-small);
+  border-top: 1px solid var(--color-border-default);
+}
+.xd .nq-act .small { flex: 1; min-width: 220px; }
+
+/* ---------- Bảng cập nhật bảng kê & tiền thu ---------- */
+.xd .bk-tbl { max-height: 60vh; overflow: auto; }
+.xd table.bk thead th { position: sticky; top: 0; z-index: 1; background: var(--color-surface-default); }
+.xd table.bk td { vertical-align: middle; }
+.xd table.bk .fld { width: 142px; }
+.xd table.bk .fld.money { width: 124px; text-align: right; }
+.xd table.bk tr.r-edited > td:first-child { box-shadow: inset 3px 0 0 var(--color-border-accent, #B041FF); }

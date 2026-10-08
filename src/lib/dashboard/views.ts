@@ -1,6 +1,6 @@
 // Nội dung các tab (trừ tab Dữ liệu) — dựng HTML từ kết quả tính toán ở calc.ts
 import { Ctx, Period, AR, AP, Cash, Alert, AR_BUCKETS, TIERS, tier, tierIdx, AXIS_NAME, Axis, num, hasActual,
-  CustRow, GroupBlock, ArCust, ApSup, CashDetail, PaySchedule, drill } from "./calc";
+  CustRow, GroupBlock, ArCust, ApSup, CashDetail, PaySchedule, drill, MANUAL_LINES, MANUAL_TARGETS, CASH_IN, CASH_OUT, CASH_SIGNED } from "./calc";
 import { barChart, lineChart, waterfall, hBullet, hStack, divBars, donut, tierChart, legend, pill, stCls, xC, empty, LegendItem } from "./charts";
 import { esc, ty, tyN, tr, trN, n0, pc, sum, ok, N1, N2, kyShort, fmtDate, kyIdx, days, unit, unitLabel, axisNum, exact, leVua, tyLe } from "./util";
 import type { AlertAction } from "./types";
@@ -32,6 +32,8 @@ function execBand(eyebrow: string, lead: string, points: [string, string][]): st
     (points.length ? `<ul class="band-list">${points.map(([t, c]) => `<li class="bl-${c}">${esc(t)}</li>`).join("")}</ul>` : "") +
     `</div>`;
 }
+/** "tại 08/10/2026" — kèm ngày chốt số liệu nếu file có khai và khác hôm nay */
+const asOfTxt = (C: Ctx) => `tại ${fmtDate(C.asOf)}` + (C.chotFile && C.chotFile !== C.asOf ? ` · số liệu chốt ${fmtDate(C.chotFile)}` : "");
 const arrow = (d: number | null) => (d == null ? "" : (d > 0 ? "tăng " : "giảm ") + pc(Math.abs(d), 0));
 const nameOf = (r: { ten: string }) => r.ten;
 
@@ -87,13 +89,13 @@ function overview(v: VM): string {
     `<div class="small" style="margin-top:8px">Tổng chi hoa hồng <b class="num">${tr(P.comm)}</b></div>`;
   return `<div class="card banner"><div class="eyebrow">Tóm tắt điều hành</div><p>${esc(t)}</p><div class="chips">${chips}</div></div>
    <div class="g57">${card("Tăng trưởng", "GMV theo mảng — thực tế và kế hoạch", unitLabel() + " · vạch = kế hoạch", gmv)}${card("Cần xử lý", "Cảnh báo ưu tiên", `<a href="#" data-go="alerts" class="small">Xem tất cả</a>`, alertHTML(AL.slice(0, 5)))}</div>
-   <div class="g3">${card("Dòng tiền", "Số dư tiền dự kiến", unitLabel() + " · theo nửa tháng", cash)}${card("Công nợ phải thu", "Cơ cấu tuổi nợ", "tại " + fmtDate(A.asOf), ar)}${card("KPI", "Hệ số bậc thưởng & hoa hồng", "kỳ " + esc(v.ky), kpi)}</div>`;
+   <div class="g3">${card("Dòng tiền", "Số dư tiền dự kiến", unitLabel() + " · theo nửa tháng", cash)}${card("Công nợ phải thu", "Cơ cấu tuổi nợ", asOfTxt(v.C), ar)}${card("KPI", "Hệ số bậc thưởng & hoa hồng", "kỳ " + esc(v.ky), kpi)}</div>`;
 }
 
 /* ---------- 2. Doanh thu & Margin ---------- */
 function revenue(v: VM): string {
   const { P, C } = v;
-  if (!P.hasActual && !P.hasTarget) return noActual(v.ky);
+  if (!P.hasActual && !P.hasTarget) return noActual(v.ky) + quickRevenue(v);
   const agg = (a: Axis) => { const rs = P.lines.filter((l) => l.axis === a); return { rs, tgt: sum(rs, (l) => l.tgt), act: sum(rs, (l) => l.act), mgNet: sum(rs, (l) => l.mgNet), mgGross: sum(rs, (l) => l.mgGross), mgT: sum(rs, (l) => l.mgT) }; };
   const items: Parameters<typeof hBullet>[0] = [];
   (["T", "M", "S", "F"] as Axis[]).forEach((a) => {
@@ -138,7 +140,8 @@ function revenue(v: VM): string {
    ${custRevenueCards(v)}
    <div class="g2">${card("Xu hướng", "GMV Travel & Mobility theo tháng", unitLabel(), trendHTML)}${card("Từ margin tới EBITDA", "Waterfall lợi nhuận kỳ", unitLabel(), wf)}</div>
    <div class="g2">${card("Lợi nhuận gộp", "Margin theo mảng — thực tế và kế hoạch", unitLabel() + " · vạch = kế hoạch", mgAmt)}${card("Hiệu quả đàm phán NCC", "% Margin theo ngành so với target", "vạch đen = target", mgPct)}</div>
-   ${details("Xem bảng số liệu chi tiết (GMV, margin, P&L)", tbl + plTbl)}`;
+   ${details("Xem bảng số liệu chi tiết (GMV, margin, P&L)", tbl + plTbl)}
+   ${quickRevenue(v)}`;
 }
 function lineAxis(C: Ctx, r: import("./types").GmvRow): Axis | null {
   if (r.dich_vu === "Hotel" || r.dich_vu === "Flight") return "T";
@@ -172,9 +175,13 @@ function customers(v: VM): string {
 /* ---------- 4. Dòng tiền ---------- */
 function cash(v: VM): string {
   const { CS } = v;
-  if (!CS.halves.length) return `<div class="card notice">Chưa có sheet DONG_TIEN. Upload kế hoạch/thực hiện dòng tiền theo nửa tháng ở tab <a href="#" data-go="data">Dữ liệu</a>.</div>`;
-  const labels = CS.halves.map((h) => h.h.replace("-", " "));
-  const W = labels.length > 6 ? 1300 : 640;
+  if (!CS.halves.length) return `<div class="card notice">Chưa có sheet DONG_TIEN. Upload ở tab <a href="#" data-go="data">Dữ liệu</a>, hoặc nhập thẳng số tổng theo nửa tháng ngay bên dưới.</div>` + quickCash(v);
+  // nhãn gọn: bỏ năm khi mọi kỳ cùng năm, để chữ không bị cắt ở mép phải
+  const nams = Array.from(new Set(CS.halves.map((h) => h.h.slice(4, 9))));
+  const labels = CS.halves.map((h) => (nams.length === 1 ? h.h.slice(0, 3) + " " + h.h.slice(10) : h.h.replace("-", " ")));
+  // Card này chiếm hết chiều rộng trang nên biểu đồ phải tự giới hạn bề ngang,
+  // nếu không SVG bị phóng to gấp đôi và tràn màn hình.
+  const W = labels.length > 10 ? 1180 : labels.length > 6 ? 900 : 760;
   const top = barChart({ labels, series: [{ name: "Tổng thu", c: "stable", vals: CS.halves.map((h) => h.thu / unit().chia) }, { name: "Tổng chi", c: "critical", vals: CS.halves.map((h) => h.chi / unit().chia), op: 0.7 }], ft: (x) => axisNum(x) + " " + unit().nhan, fy: axisNum, h: 250, W, bw: 34 }) +
     (CS.hasOpen ? lineChart({ labels, series: [{ name: "Số dư cuối kỳ", c: "accent", vals: CS.halves.map((h) => h.bal / unit().chia) }], ft: (x) => axisNum(x) + " " + unit().nhan, fy: axisNum, h: 170, W }) : `<div class="small">Nhập số dư đầu kỳ (THAM_SO → so_du_tien_dau_ky) để xem đường số dư.</div>`) +
     `<div class="small">Kỳ có thực hiện dùng số thực hiện; kỳ chưa có dùng số kế hoạch.</div>`;
@@ -184,8 +191,8 @@ function cash(v: VM): string {
   const cats = Array.from(new Set(CS.halves.flatMap((h) => h.rows.map((r) => r.khoan_muc))));
   const tbl = `<table><thead><tr><th>Khoản mục (${unitLabel()})</th>${CS.halves.map((h) => `<th class="r">${h.h}${h.hasAct ? " · TH" : " · KH"}</th>`).join("")}</tr></thead><tbody>${cats.map((c) => `<tr><td>${esc(c)}</td>${CS.halves.map((h) => { const r = h.rows.find((x) => x.khoan_muc === c); if (!r) return `<td class="r c-muted">–</td>`; return h.hasAct ? `<td class="r"><span class="num">${tyN((r.thuc_hien || 0))}</span><div class="t2">KH ${tyN((r.ke_hoach || 0))}</div></td>` : `<td class="r num c-muted">${tyN((r.ke_hoach || 0))}</td>`; }).join("")}</tr>`).join("")}
    <tr class="tot"><td>Dòng tiền ròng</td>${CS.halves.map((h) => `<td class="r num">${tyN(h.net)}</td>`).join("")}</tr>${CS.hasOpen ? `<tr class="tot"><td>Số dư cuối kỳ</td>${CS.halves.map((h) => `<td class="r num">${tyN(h.bal)}</td>`).join("")}</tr>` : ""}</tbody></table>`;
-  return sumCash(v) + card("Kế hoạch nguồn tiền", "Thu – chi – số dư theo nửa tháng", unitLabel(), top) + cashDetailCards(v) +
-    `<div class="g2">${card("Dòng tiền ròng", "Thu trừ chi từng nửa tháng", unitLabel(), net)}${card("Kế hoạch so với thực hiện", lastAct ? "Kỳ " + lastAct.h : "Theo khoản mục", "vạch đen = kế hoạch", pva)}</div>` + details("Xem bảng kế hoạch – thực hiện chi tiết", tbl);
+  return sumCash(v) + card("Kế hoạch nguồn tiền", "Thu – chi – số dư theo nửa tháng", unitLabel() + (nams.length === 1 ? " · năm " + nams[0].slice(1) : ""), `<div class="chart-cap">${top}</div>`) + cashDetailCards(v) +
+    `<div class="g2">${card("Dòng tiền ròng", "Thu trừ chi từng nửa tháng", unitLabel(), net)}${card("Kế hoạch so với thực hiện", lastAct ? "Kỳ " + lastAct.h : "Theo khoản mục", "vạch đen = kế hoạch", pva)}</div>` + details("Xem bảng kế hoạch – thực hiện chi tiết", tbl) + quickCash(v);
 }
 
 /* ---------- 5. Công nợ phải thu ---------- */
@@ -201,7 +208,7 @@ function ar(v: VM): string {
   const th = num(v.C.D, "nguong_dung_han"), tl = num(v.C.D, "pm_tra_ngay");
   const on = hBullet(Object.entries(P.onTime).map(([g, o]) => { const c = !ok(o.rate) ? "ink-3" : o.rate >= th ? "stable" : o.rate >= 0.7 ? "high" : "critical"; return { l: g, sub: GNAME[g] + (o.notDue ? ` · ${tr(o.notDue)} chưa đến hạn` : ""), v: o.rate, t: th, c, txt: pc(o.rate, 0), txt2: ok(o.rate) ? `trả sau còn ${pc((1 - tl) * o.rate, 1)}` : "chưa có dữ liệu", vc: c === "ink-3" ? "" : c, dr: `argroup:${g}` }; }), { max: 1 }) + `<div class="small" style="margin-top:6px">Kỳ nợ ${esc(v.ky)} · khoản nợ đúng hạn khi thu đủ trước/đúng ngày đến hạn.</div>`;
   const tbl = `<table><thead><tr><th>Khách hàng (${unitLabel()})</th><th>Nhóm</th><th>PM</th>${AR_BUCKETS.map((b) => `<th class="r">${b}</th>`).join("")}<th class="r">Tổng</th></tr></thead><tbody>${A.customers.map((c) => `<tr><td>${esc(c.ten)}</td><td>${c.g}</td><td>${esc(c.pm)}</td>${c.b.map((x) => `<td class="r num">${x ? tyN(x) : "–"}</td>`).join("")}<td class="r num">${tyN(c.tot)}</td></tr>`).join("")}<tr class="tot"><td>Tổng</td><td></td><td></td>${A.bk.map((x) => `<td class="r num">${tyN(x)}</td>`).join("")}<td class="r num">${tyN(A.tot)}</td></tr></tbody></table>`;
-  return sumAR(v) + `<div class="g57">${card("Tổng quan", "Công nợ phải thu theo tuổi nợ", "tại " + fmtDate(A.asOf), sum1)}${card("Tiến độ thu tiền", "Đường cong thu tiền theo kỳ nợ", "% đã thu lũy kế", curve)}</div>
+  return sumAR(v) + `<div class="g57">${card("Tổng quan", "Công nợ phải thu theo tuổi nợ", asOfTxt(v.C), sum1)}${card("Tiến độ thu tiền", "Đường cong thu tiền theo kỳ nợ", "% đã thu lũy kế", curve)}</div>
    <div class="g75">${card("Tuổi nợ theo ngày đến hạn", "Dư nợ theo khách hàng", unitLabel() + " · lớn nhất trước", cust)}${card("Ảnh hưởng hoa hồng PM", "Tỷ lệ thu đúng hạn theo nhóm", `vạch = ngưỡng ${pc(th, 0)}`, on)}</div>
    ${arCustomerCards(v)}
    ${details("Xem bảng tuổi nợ chi tiết", tbl)}`;
@@ -220,7 +227,7 @@ function ap(v: VM): string {
   const flt = barChart({ labels: ["DSO — thu tiền khách", "DPO — trả tiền NCC", "Float = DPO − DSO"], series: [{ name: "Số ngày", c: "accent", vals: [A.dso, B.wDpo, B.float], cf: (x, j) => (j === 2 ? (x < 0 ? "critical" : "stable") : j === 0 ? "high" : "accent") }], showVal: true, fv: (x) => N1.format(x), ft: (x) => N1.format(x) + " ngày", h: 230, noLegend: true, bw: 60 }) +
     `<div class="small">${ok(B.float) ? (B.float < 0 ? `Float âm ${N1.format(-B.float)} ngày: công ty trả NCC nhanh hơn thu tiền khách — đang tự ứng vốn lưu động.` : "Float dương: NCC đang tài trợ vốn lưu động.") : "Cần cả AR (DSO) và AP đã thanh toán (DPO) để tính."}</div>`;
   const tbl = `<table><thead><tr><th>Nhà cung cấp (${unitLabel()})</th><th>Ngành</th><th class="r">Term HĐ</th><th class="r">DPO</th><th class="r">Quá hạn</th><th class="r">≤ 7</th><th class="r">8–15</th><th class="r">16–30</th><th class="r">> 30</th><th class="r">Tổng</th></tr></thead><tbody>${B.rows.map((r) => `<tr><td>${esc(r.ten)}</td><td>${esc(r.nganh)}</td><td class="r num">${r.term ?? "—"}</td><td class="r num">${ok(r.dpo) ? n0(r.dpo) : "—"}</td><td class="r num">${tyN(r.od)}</td><td class="r num">${tyN(r.d7)}</td><td class="r num">${tyN(r.d15)}</td><td class="r num">${tyN(r.d30)}</td><td class="r num">${tyN(r.later)}</td><td class="r num">${tyN(r.out)}</td></tr>`).join("")}</tbody></table>`;
-  return sumAP(v) + `<div class="g57">${card("Tổng quan", "Công nợ phải trả theo ngành", "tại " + fmtDate(v.C.asOf), s1)}${card("Lịch trả", "Số tiền đến hạn theo nhà cung cấp", unitLabel(), stack)}</div>
+  return sumAP(v) + `<div class="g57">${card("Tổng quan", "Công nợ phải trả theo ngành", asOfTxt(v.C), s1)}${card("Lịch trả", "Số tiền đến hạn theo nhà cung cấp", unitLabel(), stack)}</div>
    <div class="g2">${card("Kỳ hạn thực hưởng", "DPO thực tế so với payment term hợp đồng", "vạch = term HĐ", term)}${card("Vốn lưu động", "Ai đang tài trợ ai?", "ngày", flt)}</div>${apSupplierCards(v)}${details("Xem bảng công nợ phải trả chi tiết", tbl)}`;
 }
 
@@ -599,7 +606,8 @@ function arCustomerCards(v: VM): string {
   }).join("");
 
   return `<div class="g75">${card("Theo khách hàng", "Dư nợ còn lại của từng khách", unitLabel() + " · còn nợ nhiều nhất trước", bars)}${card("Tiến độ theo kỳ", "Bảng kê đã gửi và tiền đã thu", unitLabel(), progHTML)}</div>
-   ${card("Chi tiết từng khách", "Kỳ nào chưa trả, còn bao nhiêu, trễ mấy ngày", `tại ${fmtDate(C.asOf)} · bấm tên khách để mở`, `<div class="det-wrap">${detail}</div>` + (ARC.length > 60 ? `<div class="small" style="margin-top:8px">Hiển thị 60/${ARC.length} khách có dư nợ lớn nhất.</div>` : ""))}`;
+   ${bangKeCard(v)}
+   ${card("Chi tiết từng khách", "Kỳ nào chưa trả, còn bao nhiêu, trễ mấy ngày", `${asOfTxt(C)} · bấm tên khách để mở`, `<div class="det-wrap">${detail}</div>` + (ARC.length > 60 ? `<div class="small" style="margin-top:8px">Hiển thị 60/${ARC.length} khách có dư nợ lớn nhất.</div>` : ""))}`;
 }
 
 /* ==========================================================================
@@ -647,7 +655,7 @@ function apSupplierCards(v: VM): string {
     parts: [[x.overdue, D("red"), "Quá hạn"], [x.due15, D("orange"), "≤ 15 ngày"], [Math.max(0, x.open - x.overdue - x.due15), D("green"), "Còn hạn"]] as [number, string, string][],
     txt: tyN(x.open),
   })), { ft: ty, legend: [["Quá hạn", D("red")], ["≤ 15 ngày", D("orange")], ["Còn hạn", D("green")]] });
-  return `<div class="g2">${card("Theo nhà cung cấp", "Số còn phải trả và mức độ gấp", unitLabel(), bars)}${card("Chi tiết từng NCC", "Chứng từ nào chưa trả, đến hạn khi nào", `tại ${fmtDate(C.asOf)} · bấm tên NCC để mở`, `<div class="det-wrap">${detail}</div>`)}</div>`;
+  return `<div class="g2">${card("Theo nhà cung cấp", "Số còn phải trả và mức độ gấp", unitLabel(), bars)}${card("Chi tiết từng NCC", "Chứng từ nào chưa trả, đến hạn khi nào", `${asOfTxt(C)} · bấm tên NCC để mở`, `<div class="det-wrap">${detail}</div>`)}</div>`;
 }
 
 /* ==========================================================================
@@ -771,4 +779,119 @@ export function drillPanel(v: VM, key: string): string {
     <div class="dp-h"><div class="eyebrow">Chi tiết theo khách</div><div class="card-title">${esc(d.title)}</div><div class="small">${esc(d.note)} · 3 dòng đầu chiếm ${pc(top3 / tot, 0)}</div></div>
     <div class="dp-top"><div class="dp-dn">${dn}</div><div class="dp-bars">${bars}${d.rows.length > 14 ? `<div class="small" style="margin-top:6px">Biểu đồ hiển thị 14/${d.rows.length} dòng lớn nhất — bảng dưới có đủ.</div>` : ""}</div></div>
     <div class="tw dp-tbl">${tbl}</div></div></div>`;
+}
+
+/* ==========================================================================
+   NHẬP SỐ TỔNG THẲNG TRÊN DASHBOARD
+   Dành cho những kỳ chưa kịp làm file template, hoặc chỉ cần số tổng để nhìn
+   bức tranh chung. Số nhập ở đây đắp lên số đọc từ file; upload lại không mất.
+   ========================================================================== */
+export interface QRow { khoa: string; ten: string; v: number | null; tien?: boolean; tay?: boolean; sub?: string }
+
+/** Ô nhập: số tiền nhập theo ĐƠN VỊ đang chọn ở thanh tab, số đếm thì nhập thẳng. */
+function qInput(nhom: string, ky: string, r: QRow): string {
+  const tien = r.tien !== false;
+  const val = r.v == null ? "" : tien ? String(Number((r.v / unit().chia).toFixed(6))) : String(Math.round(r.v));
+  return `<td class="r"><input type="number" step="any" inputmode="decimal" class="fld nq-in${r.tay ? " tay" : ""}" data-khoa="${esc(r.khoa)}" data-ky="${esc(ky)}" data-nhom="${esc(nhom)}" data-tien="${tien ? 1 : 0}" data-goc="${esc(val)}" data-tay="${r.tay ? 1 : 0}" value="${esc(val)}" placeholder="—"></td>`;
+}
+
+function quickCard(eyebrow: string, title: string, note: string, nhom: string, ky: string, cols: string[], rows: QRow[][], huong: string): string {
+  if (!rows.length) return "";
+  const body = rows.map((g) => {
+    const head = g[0];
+    return `<tr><td>${esc(head.ten)}${head.sub ? `<div class="t2">${esc(head.sub)}</div>` : ""}</td>${g.map((r) => qInput(nhom, r.khoa.includes("@") ? r.khoa.split("@")[1] : ky, { ...r, khoa: r.khoa.split("@")[0] })).join("")}</tr>`;
+  }).join("");
+  return card(eyebrow, title, note, `<div class="nq-form" data-nhom="${esc(nhom)}">
+    <div class="tw"><table class="nq"><thead><tr><th>Khoản mục</th>${cols.map((c) => `<th class="r">${esc(c)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>
+    <div class="nq-act"><span class="small">${huong}</span><button type="button" class="btn primary nq-save">Lưu số đã nhập</button></div>
+  </div>`);
+}
+
+const nguonTay = (C: Ctx, nhom: string, ky: string, khoa: string) => (C.D.manual || []).some((x) => x.nhom === nhom && x.ky === ky && x.khoa === khoa && x.gia_tri != null);
+
+/** Nhập GMV, giá vốn và kế hoạch của kỳ đang xem. */
+export function quickRevenue(v: VM): string {
+  if (!v.canEdit) return "";
+  const { C, P, ky } = v;
+  const gRows: QRow[][] = MANUAL_LINES.map((L) => {
+    const ln = P.lines.find((x) => x.k === L.k);
+    return [
+      { khoa: `${L.k}|gmv`, ten: L.ten, v: ln && ln.act ? ln.act : null, tay: nguonTay(C, "gmv", ky, `${L.k}|gmv`), sub: ln && ln.act > 0 && !nguonTay(C, "gmv", ky, `${L.k}|gmv`) ? "đang lấy từ file" : "" },
+      { khoa: `${L.k}|gia_von`, ten: L.ten, v: ln && ln.cost ? ln.cost : null, tay: nguonTay(C, "gmv", ky, `${L.k}|gia_von`) },
+    ];
+  });
+  const T = C.D.targets.find((t) => t.ky === ky);
+  const tRows: QRow[][] = MANUAL_TARGETS.map((f) => [{
+    khoa: String(f.k), ten: f.ten, tien: f.tien,
+    v: T ? ((T[f.k] as number | null) || null) : null, tay: nguonTay(C, "target", ky, String(f.k)),
+  }]);
+  const mucChi = Array.from(new Set([...C.D.opex.map((o) => o.khoan_muc), "Lương & nhân sự", "Marketing", "Vận hành & công nghệ", "Thuê văn phòng", "Khấu hao", "Lãi vay", "Thuế TNDN"]));
+  const cRows: QRow[][] = mucChi.map((m) => [{
+    khoa: m, ten: m, v: C.D.opex.find((o) => o.ky === ky && o.khoan_muc === m)?.so_tien ?? null, tay: nguonTay(C, "opex", ky, m),
+  }]);
+  const huong = `Số tiền nhập theo đơn vị đang chọn — <b>${esc(unitLabel())}</b>. Để trống là xóa số nhập tay, quay lại số trong file.`;
+  return `<div class="g2">
+    ${quickCard("Nhập nhanh", `GMV & giá vốn kỳ ${esc(ky)}`, "ô nền tím là số đang nhập tay", "gmv", ky, [`GMV (${unit().nhan})`, `Giá vốn (${unit().nhan})`], gRows, huong)}
+    ${quickCard("Nhập nhanh", `Kế hoạch kỳ ${esc(ky)}`, "GMV theo đơn vị đang chọn, số khách là số nguyên", "target", ky, ["Giá trị"], tRows, huong)}
+  </div>
+  ${quickCard("Nhập nhanh", `Chi phí vận hành kỳ ${esc(ky)}`, "cần có để tính EBITDA và lợi nhuận ròng", "opex", ky, [`Số tiền (${unit().nhan})`], cRows, huong)}`;
+}
+
+/** Nhập dòng tiền kế hoạch / thực hiện theo nửa tháng. */
+export function quickCash(v: VM): string {
+  if (!v.canEdit) return "";
+  const { C, ky } = v;
+  const halves = [`${ky}-H1`, `${ky}-H2`];
+  const mucs = Array.from(new Set([...CASH_IN, ...CASH_OUT, ...CASH_SIGNED, ...C.D.cash.map((r) => r.khoan_muc)]));
+  const rows: QRow[][] = mucs.map((m) => halves.flatMap((h) => {
+    const r = C.D.cash.find((x) => x.ky_nua_thang === h && x.khoan_muc === m);
+    return (["ke_hoach", "thuc_hien"] as const).map((cot) => ({
+      khoa: `${m}|${cot}@${h}`, ten: m, v: r ? r[cot] : null, tay: nguonTay(C, "cash", h, `${m}|${cot}`),
+    }));
+  }));
+  const huong = `Số tiền nhập theo đơn vị đang chọn — <b>${esc(unitLabel())}</b>. Chi ghi số dương, hệ thống tự trừ.`;
+  return quickCard("Nhập nhanh", `Dòng tiền kỳ ${esc(ky)}`, "theo nửa tháng · để trống là bỏ số nhập tay", "cash", ky,
+    ["H1 kế hoạch", "H1 thực hiện", "H2 kế hoạch", "H2 thực hiện"], rows, huong);
+}
+
+/* ==========================================================================
+   CẬP NHẬT BẢNG KÊ & TIỀN THU NGAY TRÊN MỘT BẢNG
+   Khỏi phải mở từng khách: chọn kỳ, điền ngày gửi và tiền đã thu cho cả danh sách.
+   ========================================================================== */
+function bangKeCard(v: VM): string {
+  const { ARC, C, canEdit } = v;
+  const coKy = (k: string) => ARC.some((c) => c.kys.some((x) => x.ky === k));
+  // Kỳ đang chọn có thể chưa có bảng kê nào — khi đó lấy kỳ nợ gần nhất để vẫn cập nhật được
+  const kyNo = Array.from(new Set(ARC.flatMap((c) => c.kys.map((x) => x.ky)))).filter((k) => ok(kyIdx(k))).sort((a, b) => kyIdx(b) - kyIdx(a));
+  const ky = coKy(v.ky) ? v.ky : kyNo[0];
+  if (!ky) return "";
+  const ds = ARC.map((c) => ({ c, k: c.kys.find((x) => x.ky === ky) })).filter((x) => x.k) as { c: ArCust; k: ArCust["kys"][number] }[];
+  if (!ds.length) return "";
+  ds.sort((a, b) => b.k.con_lai - a.k.con_lai || b.k.so_tien - a.k.so_tien);
+  const daGui = ds.filter((x) => x.k.guiBK).length, daThuDu = ds.filter((x) => x.k.con_lai <= 0).length;
+  const note = `${ds.length} khách có bảng kê kỳ ${esc(ky)} · đã gửi ${daGui} · đã thu đủ ${daThuDu}` + (ky !== v.ky ? ` · kỳ ${esc(v.ky)} chưa có bảng kê nào` : "");
+  const dt = (x: string | null) => (x ? esc(x) : "");
+  const rows = ds.map(({ c, k }) => {
+    const [lab, cls] = TT_AR[k.tt];
+    const src = k.nguonBK === "recon" ? ` <span class="src" title="Lấy từ app Reconciliation">↩</span>` : k.nguonBK === "web" ? ` <span class="src web" title="Sửa tay trên web">✎</span>` : "";
+    const o = canEdit
+      ? `<td><input type="date" class="fld bk-in" data-f="ngay_gui_bk" value="${dt(k.guiBK)}"></td>
+         <td class="r"><input type="number" step="1000" inputmode="numeric" class="fld bk-in money" data-f="da_thu" value="${k.da_thu ? Math.round(k.da_thu) : ""}" placeholder="0"></td>
+         <td><input type="date" class="fld bk-in" data-f="ngay_thu_gan_nhat" value="${dt(k.thu_gan_nhat)}"></td>
+         <td><input type="date" class="fld bk-in" data-f="ngay_thu_du" value="${dt(k.thu_du)}"></td>
+         <td class="r"><button type="button" class="btn cn-save" title="Lưu dòng này">Lưu</button></td>`
+      : `<td class="num">${fmtDate(k.guiBK)}</td><td class="r num">${tyN(k.da_thu)}</td><td class="num">${fmtDate(k.thu_gan_nhat)}</td><td class="num">${fmtDate(k.thu_du)}</td><td></td>`;
+    return `<tr class="cn-form ${k.suaTay ? "r-edited" : ""}" data-loai="ar" data-ma="${esc(c.ma_kh)}" data-ky="${esc(ky)}" data-soct="">
+      <td><b>${esc(c.ten)}</b><div class="t2">${esc(c.nhom)} · PM ${esc(c.pm)}${src}</div></td>
+      <td class="r num">${tyN(k.so_tien)}</td>
+      <td class="r num ${k.con_lai > 0 && k.tt === "qua_han" ? "c-critical" : ""}">${k.con_lai > 0 ? tyN(k.con_lai) : "–"}</td>
+      <td class="num">${fmtDate(k.den_han)}</td><td>${pill(lab, cls)}</td>${o}</tr>`;
+  }).join("");
+  const tbl = `<div class="tw bk-tbl"><table class="bk"><thead><tr>
+    <th>Khách hàng</th><th class="r">Phải thu (${unit().nhan})</th><th class="r">Còn lại (${unit().nhan})</th><th>Đến hạn</th><th>Trạng thái</th>
+    <th>Ngày gửi bảng kê</th><th class="r">Đã thu (VND)</th><th>Ngày thu gần nhất</th><th>Ngày thu đủ</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  const huong = canEdit
+    ? `Điền rồi bấm <b>Lưu</b> ở cuối dòng. Ô "Đã thu" nhập số VND nguyên. Số lưu ở đây không bị mất khi upload file mới.`
+    : `Chỉ Quản trị và Kế toán mới sửa được các ô này.`;
+  return card("Cập nhật trực tiếp", `Bảng kê & tiền thu — kỳ ${esc(ky)}`, note, tbl + `<div class="small" style="margin-top:8px">${huong}</div>`);
 }

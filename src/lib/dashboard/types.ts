@@ -33,6 +33,9 @@ export interface ApEdit {
   so_tien: number | null; da_tra: number | null; ngay_tra: string | null;
   ghi_chu: string | null; tu_tao: boolean; xoa: boolean; updated_by: string | null; updated_at: string;
 }
+/** Một ô số tổng nhập thẳng trên dashboard, đắp lên số đọc từ file template */
+export interface ManualRow { nhom: "target" | "gmv" | "opex" | "cash"; ky: string; khoa: string; gia_tri: number | null; ghi_chu: string | null; updated_by: string | null; updated_at: string }
+
 /** Tiến độ bảng kê lấy từ app Reconciliation (bảng tracking), khóa "maKH|kỳ" */
 export interface BangKe { gui: string | null; chot: string | null; status: string | null; nhom: string }
 
@@ -44,7 +47,7 @@ export interface DataSet {
   customers: Customer[]; suppliers: Supplier[]; staff: Staff[]; alloc: PmAlloc[]; targets: Target[];
   gmv: GmvRow[]; ar: ArRow[]; ap: ApRow[]; cash: CashRow[]; opex: OpexRow[]; contracts: Contract[];
   uploads: UploadLog[]; snapshots: Snapshot[]; alertActions: AlertAction[];
-  arEdits: ArEdit[]; apEdits: ApEdit[]; bangKe: Record<string, BangKe>;
+  arEdits: ArEdit[]; apEdits: ApEdit[]; manual: ManualRow[]; bangKe: Record<string, BangKe>;
   me?: { email: string; role: string; canEdit: boolean };
 }
 
