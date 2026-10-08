@@ -136,6 +136,81 @@ export function tierChart(x: number | null, H: number, tiers: [number, number | 
   }
   return s + `</svg>` + legend([["Hệ số bậc thưởng", "accent", 1, true], ["Đường 1:1 (hệ số = %đạt)", "ink-3", 1, true, true]]);
 }
+/** Hai thanh trên cùng một hàng — so tỷ trọng GMV với tỷ trọng margin của từng khách */
+export interface PairRow { l: string; sub?: string; a: number; b: number; ta: string; tb: string; cb?: string; dr?: string }
+export function pairBars(rows: PairRow[], o: { la: string; lb: string; ca?: string; cb?: string; max?: number }): string {
+  if (!rows.length) return empty("Chưa có dữ liệu");
+  const max = o.max || Math.max(...rows.map((r) => Math.max(Math.abs(r.a), Math.abs(r.b))), 1e-9) * 1.05;
+  const ca = o.ca || "color-display-blue-default", cb = o.cb || "color-display-purple-default";
+  const w = (v: number) => Math.min(100, (Math.max(0, v) / max) * 100) + "%";
+  return `<div class="hb pb">${rows.map((r) => `<div class="hb-row ${r.dr ? "hit" : ""}"${r.dr ? ` data-drill="${esc(r.dr)}"` : ""}><div class="hb-lab" title="${esc(r.l)}">${esc(r.l)}${r.sub ? `<small>${esc(r.sub)}</small>` : ""}</div><div class="pb-tracks"><div class="hb-track thin"><span class="fill" style="width:${w(r.a)};background:${col(ca)}"></span></div><div class="hb-track thin"><span class="fill" style="width:${w(r.b)};background:${col(r.b < 0 ? "critical" : r.cb || cb)}"></span>${r.b < 0 ? `<em class="neg">âm</em>` : ""}</div></div><div class="hb-val num pb-v"><span style="color:var(--${ca})">${r.ta}</span><span style="color:var(--${r.b < 0 ? "critical" : r.cb || cb})">${r.tb}</span></div></div>`).join("")}</div>` + legend([[o.la, ca], [o.lb, cb]]);
+}
+
+/** Biểu đồ phân tán: trục X, trục Y, kích thước chấm, đường chia góc phần tư */
+export interface ScatterPt { x: number; y: number; r?: number; l: string; c?: string; dr?: string; tip: string }
+const qtl = (a: number[], q: number) => { const b = a.slice().sort((x, y) => x - y); return b.length ? b[Math.min(b.length - 1, Math.max(0, Math.floor(q * (b.length - 1))))] : 0; };
+export function scatter(pts: ScatterPt[], o: { xl: string; yl: string; fx: Fmt; fy: Fmt; qx?: number; qy?: number; W?: number; h?: number; labelTop?: number;
+  /** trục X dạng log — dùng khi quy mô khách chênh nhau hàng nghìn lần */ logX?: boolean;
+  /** cắt trục Y theo phân vị 5–95 để vài khách cực nhỏ không làm bẹp cả biểu đồ */ clip?: boolean }): string {
+  const P0 = o.logX ? pts.filter((p) => p.x > 0) : pts;
+  if (!P0.length) return empty("Chưa có dữ liệu");
+  const W = o.W || 640, H = o.h || 300, pl = 54, pr = 16, pt = 14, pb = 40;
+  const tx = (v: number) => (o.logX ? Math.log10(Math.max(v, 1e-12)) : v);
+  const xs = P0.map((p) => tx(p.x)), ys = P0.map((p) => p.y);
+  let xMin: number, xMax: number;
+  if (o.logX) { xMin = Math.floor(Math.min(...xs)); xMax = Math.ceil(Math.max(...xs)); if (xMax === xMin) xMax += 1; }
+  else { xMax = niceMax(Math.max(...xs, 0) * 1.08); xMin = Math.min(0, ...xs); }
+  let yHi = Math.max(...ys, 0), yLo = Math.min(...ys, 0);
+  if (o.clip && ys.length > 8) {
+    const a = qtl(ys, 0.05), b = qtl(ys, 0.95), sp = Math.max(b - a, 1e-9);
+    yLo = Math.min(a - sp * 0.15, o.qy ?? Infinity); yHi = Math.max(b + sp * 0.15, o.qy ?? -Infinity);
+  }
+  const span = Math.max(yHi - yLo, 1e-9);
+  const yMax = yHi + span * 0.08, yMin = yLo - span * 0.08;
+  const X = (v: number) => pl + ((W - pl - pr) * (tx(v) - xMin)) / (xMax - xMin || 1);
+  const Y = (v: number) => pt + (H - pt - pb) * (1 - (Math.min(yMax, Math.max(yMin, v)) - yMin) / (yMax - yMin || 1));
+  const rMax = Math.max(...P0.map((p) => Math.abs(p.r || 0)), 1e-9);
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img">`;
+  for (let t = 0; t <= 4; t++) { const yv = yMin + ((yMax - yMin) * t) / 4; s += `<line class="grid" x1="${pl}" x2="${W - pr}" y1="${Y(yv)}" y2="${Y(yv)}"/><text x="${pl - 6}" y="${Y(yv) + 3}" text-anchor="end">${o.fy(yv)}</text>`; }
+  if (o.logX) for (let e = xMin; e <= xMax; e++) { const xv = Math.pow(10, e); s += `<line class="grid" x1="${X(xv)}" x2="${X(xv)}" y1="${pt}" y2="${H - pb}"/><text x="${X(xv)}" y="${H - pb + 14}" text-anchor="middle">${o.fx(xv)}</text>`; }
+  else for (let t = 0; t <= 4; t++) { const xv = xMin + ((xMax - xMin) * t) / 4; s += `<text x="${X(xv)}" y="${H - pb + 14}" text-anchor="middle">${o.fx(xv)}</text>`; }
+  if (yMin < 0) s += `<line x1="${pl}" x2="${W - pr}" y1="${Y(0)}" y2="${Y(0)}" style="stroke:var(--ink-3)"/>`;
+  if (o.qx != null && (!o.logX || o.qx > 0)) s += `<line x1="${X(o.qx)}" x2="${X(o.qx)}" y1="${pt}" y2="${H - pb}" style="stroke:var(--ink-3);stroke-dasharray:4 4"/>`;
+  if (o.qy != null) s += `<line x1="${pl}" x2="${W - pr}" y1="${Y(o.qy)}" y2="${Y(o.qy)}" style="stroke:var(--ink-3);stroke-dasharray:4 4"/>`;
+  const sorted = P0.slice().sort((a, b) => Math.abs(b.r || 0) - Math.abs(a.r || 0));
+  sorted.slice().reverse().forEach((p) => {
+    const r = 3.5 + 11 * Math.sqrt(Math.abs(p.r || 0) / rMax);
+    const out = p.y > yMax || p.y < yMin;
+    s += `<circle${p.dr ? ` data-drill="${esc(p.dr)}" class="hit"` : ""} cx="${X(p.x).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="${r.toFixed(1)}" style="fill:${out ? "var(--surface)" : col(p.c || "accent")};fill-opacity:${out ? 1 : 0.5};stroke:${col(p.c || "accent")};stroke-width:${out ? 1.6 : 1}"><title>${esc(p.tip)}</title></circle>`;
+  });
+  // nhãn cho các chấm lớn nhất, bỏ nhãn nếu đè lên nhãn đã đặt
+  const placed: [number, number][] = [];
+  sorted.slice(0, o.labelTop ?? 6).forEach((p) => {
+    const x = X(p.x) + 8, y = Y(p.y) - 6;
+    if (placed.some(([a, b]) => Math.abs(a - x) < 80 && Math.abs(b - y) < 13)) return;
+    placed.push([x, y]);
+    const anc = x > W - 90 ? ` text-anchor="end"` : "";
+    s += `<text x="${anc ? X(p.x) - 8 : x}" y="${y}"${anc} style="fill:var(--ink)">${esc(p.l.length > 16 ? p.l.slice(0, 15) + "…" : p.l)}</text>`;
+  });
+  s += `<text x="${(W + pl) / 2}" y="${H - 6}" text-anchor="middle" class="lbl">${esc(o.xl)}</text>`;
+  s += `<text x="12" y="${(H - pb) / 2}" text-anchor="middle" class="lbl" transform="rotate(-90 12 ${(H - pb) / 2})">${esc(o.yl)}</text>`;
+  return s + `</svg>`;
+}
+
+/** Đường xu hướng nhỏ trong ô bảng */
+export function spark(vals: (number | null)[], c = "accent", w = 96, h = 24): string {
+  const v = vals.map((x) => (x == null || !isFinite(x) ? null : x));
+  const nums = v.filter((x): x is number => x != null);
+  if (nums.length < 2) return "";
+  const lo = Math.min(...nums, 0), hi = Math.max(...nums, 1e-9);
+  const X = (i: number) => 2 + ((w - 4) * i) / Math.max(1, v.length - 1), Y = (x: number) => 2 + (h - 4) * (1 - (x - lo) / (hi - lo || 1));
+  let path = "", seg: string[] = [];
+  v.forEach((x, i) => { if (x == null) { if (seg.length) path += "M" + seg.join("L"); seg = []; return; } seg.push(`${X(i).toFixed(1)},${Y(x).toFixed(1)}`); });
+  if (seg.length) path += "M" + seg.join("L");
+  const last = v.length - 1, lv = v[last];
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><path d="${path}" fill="none" style="stroke:${col(c)};stroke-width:1.6"/>${lv != null ? `<circle cx="${X(last)}" cy="${Y(lv)}" r="2.2" style="fill:${col(c)}"/>` : ""}</svg>`;
+}
+
 export const empty = (msg: string) => `<div class="empty">${esc(msg)}</div>`;
 export const pill = (t: string, c: string, dot = true) => `<span class="pill ${dot ? "dot" : ""} p-${c}">${esc(t)}</span>`;
 export const stCls = (x: number | null | undefined) => (x == null || !isFinite(x) ? "muted" : x >= 1 ? "stable" : x >= 0.9 ? "watch" : x >= 0.7 ? "high" : "critical");

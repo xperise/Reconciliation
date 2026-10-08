@@ -9,6 +9,48 @@ type Val = string | number | null;
 interface ChunkBody { action: "chunk"; sheet: string; rows: Record<string, Val>[]; first: boolean; kys?: string[] }
 interface LogBody { action: "log"; fileName: string; summary: Record<string, unknown> }
 const WITH_UPDATED_AT = new Set(["fin_params", "fin_customers", "fin_suppliers", "fin_staff", "fin_targets"]);
+const KY = /^T\d{2}\.\d{4}$/, KY_HALF = /^T\d{2}\.\d{4}-H[12]$/;
+
+/** Upload file thì số trong file GHI ĐÈ số nhập tay trên web của cùng phạm vi:
+ *    GMV             → GMV nhập tay (số tổng theo dòng dịch vụ và theo khách) của các kỳ trong file
+ *    KE_HOACH        → kế hoạch nhập tay của các kỳ trong file
+ *    CHI_PHI         → chi phí nhập tay của các kỳ trong file
+ *    DONG_TIEN       → dòng tiền nhập tay của cùng nửa tháng + cùng khoản mục
+ *    CONG_NO_PHAI_THU / CONG_NO_PHAI_TRA → dòng sửa / thêm tay của các kỳ có trong file
+ *  Trả về số ô / dòng nhập tay đã bị thay. */
+async function overwriteManual(sb: ReturnType<typeof adminClient>, sheet: string, rows: Record<string, Val>[]): Promise<number> {
+  const kys = Array.from(new Set(rows.map((r) => String(r.ky ?? "")).filter((k) => KY.test(k))));
+  const del = async (q: PromiseLike<{ error: { message: string } | null; count: number | null }>) => {
+    const { error, count } = await q;
+    if (error) throw new Error(`Ghi đè số nhập tay: ${error.message}`);
+    return count || 0;
+  };
+  switch (sheet) {
+    case "GMV":
+      return kys.length ? del(sb.from("fin_manual").delete({ count: "exact" }).in("nhom", ["gmv", "gmvkh"]).in("ky", kys)) : 0;
+    case "KE_HOACH":
+      return kys.length ? del(sb.from("fin_manual").delete({ count: "exact" }).eq("nhom", "target").in("ky", kys)) : 0;
+    case "CHI_PHI":
+      return kys.length ? del(sb.from("fin_manual").delete({ count: "exact" }).eq("nhom", "opex").in("ky", kys)) : 0;
+    case "DONG_TIEN": {
+      const by = new Map<string, string[]>();
+      rows.forEach((r) => {
+        const h = String(r.ky_nua_thang ?? ""), m = String(r.khoan_muc ?? "");
+        if (!KY_HALF.test(h) || !m) return;
+        const a = by.get(h) || []; a.push(`${m}|ke_hoach`, `${m}|thuc_hien`); by.set(h, a);
+      });
+      let n = 0;
+      for (const [h, khoa] of Array.from(by.entries())) n += await del(sb.from("fin_manual").delete({ count: "exact" }).eq("nhom", "cash").eq("ky", h).in("khoa", khoa));
+      return n;
+    }
+    case "CONG_NO_PHAI_THU":
+      return kys.length ? del(sb.from("fin_ar_edit").delete({ count: "exact" }).in("ky", kys)) : 0;
+    case "CONG_NO_PHAI_TRA":
+      return kys.length ? del(sb.from("fin_ap_edit").delete({ count: "exact" }).in("ky", kys)) : 0;
+    default:
+      return 0;
+  }
+}
 
 export async function POST(req: Request) {
   try {
@@ -48,7 +90,9 @@ export async function POST(req: Request) {
       const { error } = await q;
       if (error) throw new Error(`Ghi ${spec.sheet}: ${error.message}`);
     }
-    return NextResponse.json({ ok: true, written: rows.length });
+    // số trong file ghi đè số nhập tay cùng phạm vi (chạy theo từng phần, chỉ đụng các kỳ có trong phần này)
+    const boTay = rows.length ? await overwriteManual(sb, spec.sheet, rows) : 0;
+    return NextResponse.json({ ok: true, written: rows.length, boTay });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
   }

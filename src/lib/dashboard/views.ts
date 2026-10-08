@@ -1,15 +1,41 @@
 // Nội dung các tab (trừ tab Dữ liệu) — dựng HTML từ kết quả tính toán ở calc.ts
 import { Ctx, Period, AR, AP, Cash, Alert, AR_BUCKETS, TIERS, tier, tierIdx, AXIS_NAME, Axis, num, hasActual,
-  CustRow, GroupBlock, ArCust, ApSup, CashDetail, PaySchedule, drill, MANUAL_LINES, MANUAL_TARGETS, CASH_IN, CASH_OUT, CASH_SIGNED } from "./calc";
-import { barChart, lineChart, waterfall, hBullet, hStack, divBars, donut, tierChart, legend, pill, stCls, xC, empty, LegendItem } from "./charts";
-import { esc, ty, tyN, tr, trN, n0, pc, sum, ok, N1, N2, kyShort, fmtDate, kyIdx, days, unit, unitLabel, axisNum, exact, leVua, tyLe } from "./util";
-import type { AlertAction } from "./types";
+  CustRow, GroupBlock, ArCust, ApSup, CashDetail, PaySchedule, drill, MANUAL_LINES, MANUAL_TARGETS, CASH_IN, CASH_OUT, CASH_SIGNED,
+  calcPeriod, calcAR, calcAP, calcCash, alerts, customerRows, customersByGroup, arByCustomer, apBySupplier, cashDetail, paySchedule,
+  WhyBlock, cashDir } from "./calc";
+import { barChart, lineChart, waterfall, hBullet, hStack, divBars, donut, tierChart, legend, pill, stCls, xC, empty, LegendItem, pairBars, scatter, spark } from "./charts";
+import { esc, ty, tyN, tr, trN, n0, pc, sum, ok, N1, N2, kyShort, fmtDate, kyIdx, days, unit, unitLabel, axisNum, exact, leVua, tyLe, kyAdd, kyOfDate, kyEnd } from "./util";
+import type { AlertAction, DataSet } from "./types";
+import { trendData, customerProfit, ltvCac, cashForecast, explain, gmvBridge, whyOnTime, custMonth, monthsBetween, periodOf, Gran, Trend, TrendBucket, Profitability, CustProfit, Forecast, GROUPS } from "./insight";
 
+/** Lựa chọn của người xem trên các tab mới — giữ ở page.tsx, truyền vào khi dựng HTML */
+export interface ViewState {
+  tFrom?: string; tTo?: string; gran?: Gran;      // tab Xu hướng
+  cpG?: string;                                     // lọc nhóm ở bảng lợi nhuận theo khách
+  rate?: number | null; fcScn?: string;             // kịch bản dự báo dòng tiền
+}
 export interface VM {
   C: Ctx; P: Period; A: AR; B: AP; CS: Cash; AL: Alert[]; ky: string;
   CR: CustRow[]; GB: GroupBlock[]; ARC: ArCust[]; APS: ApSup[]; CD: CashDetail; PS: PaySchedule;
   AA: Record<string, AlertAction>;
   canEdit: boolean;
+  st: ViewState;
+}
+/** Định dạng tiền tự thêm số lẻ khi số nhỏ so với đơn vị đang chọn */
+const tien = (x: number) => { const v = x || 0; return `${tyLe(v, leVua(v))} ${unit().nhan}`; };
+const F = { tien, pc };
+
+/** Dựng toàn bộ số liệu cho một kỳ — dùng chung cho trang và cho kiểm thử */
+export function buildVM(C: Ctx, ky: string, data: DataSet | null, st: ViewState = {}): VM {
+  const P = calcPeriod(C, ky), A = calcAR(C), B = calcAP(C, A.dso), CS = calcCash(C);
+  const CR = customerRows(C, ky), ARC = arByCustomer(C);
+  const AA: Record<string, AlertAction> = {};
+  (data?.alertActions || []).forEach((x) => { AA[x.id] = x; });
+  const AL = explain(C, P, alerts(C, P, A, B, CS, { ty, pc, tien }, { CR, ARC }), F);
+  return {
+    C, P, A, B, CS, AL, ky, CR, GB: customersByGroup(C, ky, CR), ARC, APS: apBySupplier(C),
+    CD: cashDetail(C), PS: paySchedule(C, ky, P), AA, canEdit: !!data?.me?.canEdit, st,
+  };
 }
 // Bảng màu biểu đồ lấy từ Display palette của Xperise Design System.
 // Tuổi nợ là thang tuần tự (xanh → vàng → cam → đỏ → đỏ đậm); các mảng và
@@ -60,7 +86,21 @@ export function kpiStrip(v: VM): string {
 export function alertHTML(list: Alert[]): string {
   if (!list.length) return empty("Không có cảnh báo nào.");
   const lab = { critical: "Khẩn", high: "Cao", watch: "Theo dõi" };
-  return list.map((a) => `<div class="alert ${a.sev}">${pill(lab[a.sev], a.sev)}<div><div class="msg">${esc(a.msg)}</div><div class="act">→ ${esc(a.act)}</div></div><div class="own">${esc(a.area)}<br>${esc(a.own)}</div></div>`).join("");
+  return list.map((a) => `<div class="alert ${a.sev}">${pill(lab[a.sev], a.sev)}<div><div class="msg">${esc(a.msg)}</div><div class="act">→ ${esc(a.act)}</div>${whyHTML(a.why)}</div><div class="own">${esc(a.area)}<br>${esc(a.own)}</div></div>`).join("");
+}
+
+/* ---------- Phân tích nguyên nhân: "Vì sao?" ---------- */
+const WHY_C: Record<string, string> = { stable: "stable", high: "high", critical: "critical", watch: "watch" };
+function whyBars(bars: NonNullable<WhyBlock["items"][number]["bars"]>): string {
+  const max = Math.max(...bars.map((b) => Math.abs(b.v)), 1);
+  return hBullet(bars.map((b) => ({ l: b.l, sub: b.sub, v: Math.abs(b.v), txt: b.txt, c: (b.c && WHY_C[b.c]) || "accent" })), { max: max * 1.05 });
+}
+export function whyBody(w: WhyBlock): string {
+  return `<p class="why-lead">${esc(w.lead)}</p>` + w.items.map((it) => `<div class="why-i ${it.sev || ""}"><div class="why-t">${esc(it.t)}</div>${it.bars?.length ? whyBars(it.bars) : ""}</div>`).join("");
+}
+function whyHTML(w?: WhyBlock, open = false): string {
+  if (!w || (!w.items.length && !w.lead)) return "";
+  return `<details class="why"${open ? " open" : ""}><summary><i class="ri-search-eye-line" aria-hidden="true"></i>Vì sao?</summary><div class="why-b">${whyBody(w)}</div></details>`;
 }
 
 /* ---------- 1. Tổng quan ---------- */
@@ -138,7 +178,8 @@ function revenue(v: VM): string {
   const plTbl = `<table style="margin-top:16px"><thead><tr><th>P&L quản trị (${unitLabel()})</th><th class="r">Giá trị</th><th class="r">% GMV</th></tr></thead><tbody>${pl("GMV", P.totAct, "tot")}${pl("Margin gross", P.travelMg + P.mobGross + P.saasMg + P.fnbMg)}${pl("(−) Chiết khấu khách hàng", -P.disc)}${pl("Margin net", P.gp, "tot")}${pl("(−) Hoa hồng các team", -P.comm)}${opexLines}${pl("EBITDA", P.ebitda, "tot")}${pl("(−) Khấu hao, lãi vay, thuế", P.belowAmt ? -P.belowAmt : null)}${pl("Lợi nhuận ròng", P.netProfit, "tot")}</tbody></table>`;
   return (P.hasActual ? "" : noActual(v.ky)) + sumRevenue(v) + `<div class="g75">${card("Chi tiết theo mảng", "%đạt GMV theo mảng & nhóm khách", "vạch đen = 100% kế hoạch", hBullet(items, { max: 1.3 }))}${card("Cơ cấu", "GMV và margin đến từ đâu", "kỳ " + esc(v.ky), mix)}</div>
    ${custRevenueCards(v)}
-   <div class="g2">${card("Xu hướng", "GMV Travel & Mobility theo tháng", unitLabel(), trendHTML)}${card("Từ margin tới EBITDA", "Waterfall lợi nhuận kỳ", unitLabel(), wf)}</div>
+   ${custContribCards(v)}
+   <div class="g2">${card("Xu hướng", "GMV Travel & Mobility theo tháng", unitLabel() + ` · <a href="#" data-go="trend">xem theo quý / năm</a>`, trendHTML)}${card("Từ margin tới EBITDA", "Waterfall lợi nhuận kỳ", unitLabel(), wf)}</div>
    <div class="g2">${card("Lợi nhuận gộp", "Margin theo mảng — thực tế và kế hoạch", unitLabel() + " · vạch = kế hoạch", mgAmt)}${card("Hiệu quả đàm phán NCC", "% Margin theo ngành so với target", "vạch đen = target", mgPct)}</div>
    ${details("Xem bảng số liệu chi tiết (GMV, margin, P&L)", tbl + plTbl)}
    ${quickRevenue(v)}`;
@@ -175,7 +216,8 @@ function customers(v: VM): string {
 /* ---------- 4. Dòng tiền ---------- */
 function cash(v: VM): string {
   const { CS } = v;
-  if (!CS.halves.length) return `<div class="card notice">Chưa có sheet DONG_TIEN. Upload ở tab <a href="#" data-go="data">Dữ liệu</a>, hoặc nhập thẳng số tổng theo nửa tháng ngay bên dưới.</div>` + quickCash(v);
+  const fc = forecastCards(v, cashForecast(v.C, v.A, v.B, CS, 12, v.st.rate ?? null), false);
+  if (!CS.halves.length) return `<div class="card notice">Chưa có sheet DONG_TIEN. Upload ở tab <a href="#" data-go="data">Dữ liệu</a>, hoặc nhập thẳng số tổng theo nửa tháng ngay bên dưới.</div>` + cashCustCards(v) + cashDetailCards(v) + quickCash(v);
   // nhãn gọn: bỏ năm khi mọi kỳ cùng năm, để chữ không bị cắt ở mép phải
   const nams = Array.from(new Set(CS.halves.map((h) => h.h.slice(4, 9))));
   const labels = CS.halves.map((h) => (nams.length === 1 ? h.h.slice(0, 3) + " " + h.h.slice(10) : h.h.replace("-", " ")));
@@ -191,14 +233,14 @@ function cash(v: VM): string {
   const cats = Array.from(new Set(CS.halves.flatMap((h) => h.rows.map((r) => r.khoan_muc))));
   const tbl = `<table><thead><tr><th>Khoản mục (${unitLabel()})</th>${CS.halves.map((h) => `<th class="r">${h.h}${h.hasAct ? " · TH" : " · KH"}</th>`).join("")}</tr></thead><tbody>${cats.map((c) => `<tr><td>${esc(c)}</td>${CS.halves.map((h) => { const r = h.rows.find((x) => x.khoan_muc === c); if (!r) return `<td class="r c-muted">–</td>`; return h.hasAct ? `<td class="r"><span class="num">${tyN((r.thuc_hien || 0))}</span><div class="t2">KH ${tyN((r.ke_hoach || 0))}</div></td>` : `<td class="r num c-muted">${tyN((r.ke_hoach || 0))}</td>`; }).join("")}</tr>`).join("")}
    <tr class="tot"><td>Dòng tiền ròng</td>${CS.halves.map((h) => `<td class="r num">${tyN(h.net)}</td>`).join("")}</tr>${CS.hasOpen ? `<tr class="tot"><td>Số dư cuối kỳ</td>${CS.halves.map((h) => `<td class="r num">${tyN(h.bal)}</td>`).join("")}</tr>` : ""}</tbody></table>`;
-  return sumCash(v) + card("Kế hoạch nguồn tiền", "Thu – chi – số dư theo nửa tháng", unitLabel() + (nams.length === 1 ? " · năm " + nams[0].slice(1) : ""), `<div class="chart-cap">${top}</div>`) + cashDetailCards(v) +
+  return sumCash(v) + card("Kế hoạch nguồn tiền", "Thu – chi – số dư theo nửa tháng", unitLabel() + (nams.length === 1 ? " · năm " + nams[0].slice(1) : ""), `<div class="chart-cap">${top}</div>`) + fc + cashCustCards(v) + cashDetailCards(v) +
     `<div class="g2">${card("Dòng tiền ròng", "Thu trừ chi từng nửa tháng", unitLabel(), net)}${card("Kế hoạch so với thực hiện", lastAct ? "Kỳ " + lastAct.h : "Theo khoản mục", "vạch đen = kế hoạch", pva)}</div>` + details("Xem bảng kế hoạch – thực hiện chi tiết", tbl) + quickCash(v);
 }
 
 /* ---------- 5. Công nợ phải thu ---------- */
 function ar(v: VM): string {
   const { A, P } = v;
-  if (!A.count && !v.C.D.ar.length) return `<div class="card notice">Chưa có sheet CONG_NO_PHAI_THU. Upload ở tab <a href="#" data-go="data">Dữ liệu</a>.</div>`;
+  if (!A.count && !v.C.D.ar.length) return `<div class="card notice">Chưa có sheet CONG_NO_PHAI_THU. Upload ở tab <a href="#" data-go="data">Dữ liệu</a>, hoặc thêm dòng ngay bên dưới.</div>` + bangKeCard(v);
   const sum1 = `<div class="stat-row">${stat("Quá hạn", pc(A.tot ? A.od / A.tot : null), "critical")}${stat("> 60 ngày", ty(A.o60), A.o60 ? "critical" : "")}${stat("DSO", ok(A.dso) ? n0(A.dso) + " ngày" : "—")}${stat("Thu nợ đến hạn", pc(A.collectRate))}</div>` +
     donut(A.bk.map((x, k): [number, string, string, string] => [x, BCLS[k], AR_BUCKETS[k], `ar:${k}`]), ty(A.tot), "tổng phải thu", { ft: ty }) +
     (A.neg ? `<div class="small" style="margin-top:8px">Số dư âm ${tr(A.neg)} (khách trả thừa / chờ cấn trừ) tách riêng, không trừ vào tuổi nợ.</div>` : "");
@@ -217,7 +259,8 @@ function ar(v: VM): string {
 /* ---------- 6. Công nợ phải trả ---------- */
 function ap(v: VM): string {
   const { B, A } = v;
-  if (!v.C.D.ap.length) return `<div class="card notice">Chưa có sheet CONG_NO_PHAI_TRA. Upload ở tab <a href="#" data-go="data">Dữ liệu</a>.</div>`;
+  const add = v.canEdit ? card("Cập nhật trực tiếp", "Thêm công nợ phải trả", "upload file sổ phải trả sẽ ghi đè số nhập tay của cùng kỳ", addApForm(v.ky)) : "";
+  if (!v.C.D.ap.length) return `<div class="card notice">Chưa có sheet CONG_NO_PHAI_TRA. Upload ở tab <a href="#" data-go="data">Dữ liệu</a>, hoặc thêm dòng ngay bên dưới.</div>` + add;
   const NC: Record<string, string> = { Flight: D("cyan"), Hotel: D("blue"), Mobility: D("purple"), SaaS: D("green"), "F&B": D("orange"), Khác: D("gray") };
   const s1 = `<div class="stat-row">${stat("Quá hạn", ty(B.od), B.od ? "high" : "")}${stat("Đến hạn ≤ 15 ngày", ty(B.d7 + B.d15))}${stat("Term HĐ bq", ok(B.wTerm) ? N1.format(B.wTerm) + " ngày" : "—")}</div>` +
     donut(Object.entries(B.byN).filter((e) => e[1] > 0).map(([k, x]): [number, string, string, string] => [x, NC[k] || "ink-3", k, `apn:${k}`]), ty(B.out), "tổng phải trả", { ft: ty });
@@ -228,7 +271,7 @@ function ap(v: VM): string {
     `<div class="small">${ok(B.float) ? (B.float < 0 ? `Float âm ${N1.format(-B.float)} ngày: công ty trả NCC nhanh hơn thu tiền khách — đang tự ứng vốn lưu động.` : "Float dương: NCC đang tài trợ vốn lưu động.") : "Cần cả AR (DSO) và AP đã thanh toán (DPO) để tính."}</div>`;
   const tbl = `<table><thead><tr><th>Nhà cung cấp (${unitLabel()})</th><th>Ngành</th><th class="r">Term HĐ</th><th class="r">DPO</th><th class="r">Quá hạn</th><th class="r">≤ 7</th><th class="r">8–15</th><th class="r">16–30</th><th class="r">> 30</th><th class="r">Tổng</th></tr></thead><tbody>${B.rows.map((r) => `<tr><td>${esc(r.ten)}</td><td>${esc(r.nganh)}</td><td class="r num">${r.term ?? "—"}</td><td class="r num">${ok(r.dpo) ? n0(r.dpo) : "—"}</td><td class="r num">${tyN(r.od)}</td><td class="r num">${tyN(r.d7)}</td><td class="r num">${tyN(r.d15)}</td><td class="r num">${tyN(r.d30)}</td><td class="r num">${tyN(r.later)}</td><td class="r num">${tyN(r.out)}</td></tr>`).join("")}</tbody></table>`;
   return sumAP(v) + `<div class="g57">${card("Tổng quan", "Công nợ phải trả theo ngành", asOfTxt(v.C), s1)}${card("Lịch trả", "Số tiền đến hạn theo nhà cung cấp", unitLabel(), stack)}</div>
-   <div class="g2">${card("Kỳ hạn thực hưởng", "DPO thực tế so với payment term hợp đồng", "vạch = term HĐ", term)}${card("Vốn lưu động", "Ai đang tài trợ ai?", "ngày", flt)}</div>${apSupplierCards(v)}${details("Xem bảng công nợ phải trả chi tiết", tbl)}`;
+   <div class="g2">${card("Kỳ hạn thực hưởng", "DPO thực tế so với payment term hợp đồng", "vạch = term HĐ", term)}${card("Vốn lưu động", "Ai đang tài trợ ai?", "ngày", flt)}</div>${apSupplierCards(v)}${add}${details("Xem bảng công nợ phải trả chi tiết", tbl)}`;
 }
 
 /* ---------- 7. KPI & Hoa hồng ---------- */
@@ -542,7 +585,7 @@ const TT_AR: Record<string, [string, string]> = {
 };
 function arCustomerCards(v: VM): string {
   const { ARC, C, canEdit } = v;
-  if (!ARC.length) return "";
+  if (!ARC.length) return bangKeCard(v);
   const withOpen = ARC.filter((c) => c.open > 0);
   const top = withOpen.slice(0, 15);
   const bars = hStack(top.map((c) => ({
@@ -707,6 +750,7 @@ function alertBoard(v: VM): string {
       <div>
         <div class="msg">${esc(a.msg)}</div>
         <div class="act">→ ${esc(a.act)}</div>
+        ${whyHTML(a.why)}
         <div class="al-form">
           <label>PIC<input type="text" class="fld" data-f="pic" value="${esc(x?.pic || "")}" placeholder="${esc(a.own)}"></label>
           <label>Hạn xử lý<input type="date" class="fld" data-f="han_xu_ly" value="${esc(x?.han_xu_ly || "")}"></label>
@@ -730,6 +774,8 @@ export function renderView(tab: string, v: VM): string {
     case "ap": return ap(v);
     case "kpi": return kpi(v);
     case "alerts": return alertsView(v);
+    case "trend": return trendView(v);
+    case "ceo": return ceoView(v);
     default: return "";
   }
 }
@@ -784,7 +830,8 @@ export function drillPanel(v: VM, key: string): string {
 /* ==========================================================================
    NHẬP SỐ TỔNG THẲNG TRÊN DASHBOARD
    Dành cho những kỳ chưa kịp làm file template, hoặc chỉ cần số tổng để nhìn
-   bức tranh chung. Số nhập ở đây đắp lên số đọc từ file; upload lại không mất.
+   bức tranh chung. Số nhập ở đây đắp lên số đọc từ file; upload file của cùng kỳ thì
+   số trong file ghi đè số nhập tay (xem api/dashboard/upload).
    ========================================================================== */
 export interface QRow { khoa: string; ten: string; v: number | null; tien?: boolean; tay?: boolean; sub?: string }
 
@@ -795,14 +842,14 @@ function qInput(nhom: string, ky: string, r: QRow): string {
   return `<td class="r"><input type="number" step="any" inputmode="decimal" class="fld nq-in${r.tay ? " tay" : ""}" data-khoa="${esc(r.khoa)}" data-ky="${esc(ky)}" data-nhom="${esc(nhom)}" data-tien="${tien ? 1 : 0}" data-goc="${esc(val)}" data-tay="${r.tay ? 1 : 0}" value="${esc(val)}" placeholder="—"></td>`;
 }
 
-function quickCard(eyebrow: string, title: string, note: string, nhom: string, ky: string, cols: string[], rows: QRow[][], huong: string): string {
-  if (!rows.length) return "";
+function quickCard(eyebrow: string, title: string, note: string, nhom: string, ky: string, cols: string[], rows: QRow[][], huong: string, newRow = ""): string {
+  if (!rows.length && !newRow) return "";
   const body = rows.map((g) => {
     const head = g[0];
     return `<tr><td>${esc(head.ten)}${head.sub ? `<div class="t2">${esc(head.sub)}</div>` : ""}</td>${g.map((r) => qInput(nhom, r.khoa.includes("@") ? r.khoa.split("@")[1] : ky, { ...r, khoa: r.khoa.split("@")[0] })).join("")}</tr>`;
   }).join("");
   return card(eyebrow, title, note, `<div class="nq-form" data-nhom="${esc(nhom)}">
-    <div class="tw"><table class="nq"><thead><tr><th>Khoản mục</th>${cols.map((c) => `<th class="r">${esc(c)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>
+    <div class="tw"><table class="nq"><thead><tr><th>Khoản mục</th>${cols.map((c) => `<th class="r">${esc(c)}</th>`).join("")}</tr></thead><tbody>${body}${newRow}</tbody></table></div>
     <div class="nq-act"><span class="small">${huong}</span><button type="button" class="btn primary nq-save">Lưu số đã nhập</button></div>
   </div>`);
 }
@@ -829,12 +876,13 @@ export function quickRevenue(v: VM): string {
   const cRows: QRow[][] = mucChi.map((m) => [{
     khoa: m, ten: m, v: C.D.opex.find((o) => o.ky === ky && o.khoan_muc === m)?.so_tien ?? null, tay: nguonTay(C, "opex", ky, m),
   }]);
-  const huong = `Số tiền nhập theo đơn vị đang chọn — <b>${esc(unitLabel())}</b>. Để trống là xóa số nhập tay, quay lại số trong file.`;
-  return `<div class="g2">
+  const huong = `Số tiền nhập theo đơn vị đang chọn — <b>${esc(unitLabel())}</b>. Để trống là xóa số nhập tay, quay lại số trong file. Upload file của cùng kỳ sẽ ghi đè số nhập tay.`;
+  const opNew = `<tr class="nq-new" data-nhom="opex" data-ky="${esc(ky)}"><td><input type="text" class="fld nq-name" placeholder="+ Thêm khoản mục chi phí"></td><td class="r"><input type="number" step="any" class="fld nq-v" data-sfx="" placeholder="—"></td></tr>`;
+  return gmvKhCard(v) + `<div class="g2">
     ${quickCard("Nhập nhanh", `GMV & giá vốn kỳ ${esc(ky)}`, "ô nền tím là số đang nhập tay", "gmv", ky, [`GMV (${unit().nhan})`, `Giá vốn (${unit().nhan})`], gRows, huong)}
     ${quickCard("Nhập nhanh", `Kế hoạch kỳ ${esc(ky)}`, "GMV theo đơn vị đang chọn, số khách là số nguyên", "target", ky, ["Giá trị"], tRows, huong)}
   </div>
-  ${quickCard("Nhập nhanh", `Chi phí vận hành kỳ ${esc(ky)}`, "cần có để tính EBITDA và lợi nhuận ròng", "opex", ky, [`Số tiền (${unit().nhan})`], cRows, huong)}`;
+  ${quickCard("Nhập nhanh", `Chi phí vận hành kỳ ${esc(ky)}`, "cần có để tính EBITDA và lợi nhuận ròng", "opex", ky, [`Số tiền (${unit().nhan})`], cRows, huong, opNew)}`;
 }
 
 /** Nhập dòng tiền kế hoạch / thực hiện theo nửa tháng. */
@@ -849,9 +897,10 @@ export function quickCash(v: VM): string {
       khoa: `${m}|${cot}@${h}`, ten: m, v: r ? r[cot] : null, tay: nguonTay(C, "cash", h, `${m}|${cot}`),
     }));
   }));
-  const huong = `Số tiền nhập theo đơn vị đang chọn — <b>${esc(unitLabel())}</b>. Chi ghi số dương, hệ thống tự trừ.`;
+  const huong = `Số tiền nhập theo đơn vị đang chọn — <b>${esc(unitLabel())}</b>. Chi ghi số dương, hệ thống tự trừ. Khoản mục thêm mới tự nhận chiều Thu / Chi theo ô chọn. Upload sheet DONG_TIEN sẽ ghi đè số nhập tay của cùng nửa tháng.`;
+  const cNew = `<tr class="nq-new" data-nhom="cash" data-ky="${esc(ky)}"><td><div class="nq-new-f"><select class="fld nq-dir"><option value="in">Thu</option><option value="out" selected>Chi</option></select><input type="text" class="fld nq-name" placeholder="+ Thêm khoản mục"></div></td>${halves.flatMap((h) => (["ke_hoach", "thuc_hien"] as const).map((cot) => `<td class="r"><input type="number" step="any" class="fld nq-v" data-sfx="|${cot}" data-ky="${h}" placeholder="—"></td>`)).join("")}</tr>`;
   return quickCard("Nhập nhanh", `Dòng tiền kỳ ${esc(ky)}`, "theo nửa tháng · để trống là bỏ số nhập tay", "cash", ky,
-    ["H1 kế hoạch", "H1 thực hiện", "H2 kế hoạch", "H2 thực hiện"], rows, huong);
+    ["H1 kế hoạch", "H1 thực hiện", "H2 kế hoạch", "H2 thực hiện"], rows, huong, cNew);
 }
 
 /* ==========================================================================
@@ -863,10 +912,9 @@ function bangKeCard(v: VM): string {
   const coKy = (k: string) => ARC.some((c) => c.kys.some((x) => x.ky === k));
   // Kỳ đang chọn có thể chưa có bảng kê nào — khi đó lấy kỳ nợ gần nhất để vẫn cập nhật được
   const kyNo = Array.from(new Set(ARC.flatMap((c) => c.kys.map((x) => x.ky)))).filter((k) => ok(kyIdx(k))).sort((a, b) => kyIdx(b) - kyIdx(a));
-  const ky = coKy(v.ky) ? v.ky : kyNo[0];
-  if (!ky) return "";
+  const ky = coKy(v.ky) ? v.ky : kyNo[0] || v.ky;
   const ds = ARC.map((c) => ({ c, k: c.kys.find((x) => x.ky === ky) })).filter((x) => x.k) as { c: ArCust; k: ArCust["kys"][number] }[];
-  if (!ds.length) return "";
+  if (!ds.length && !canEdit) return "";
   ds.sort((a, b) => b.k.con_lai - a.k.con_lai || b.k.so_tien - a.k.so_tien);
   const daGui = ds.filter((x) => x.k.guiBK).length, daThuDu = ds.filter((x) => x.k.con_lai <= 0).length;
   const note = `${ds.length} khách có bảng kê kỳ ${esc(ky)} · đã gửi ${daGui} · đã thu đủ ${daThuDu}` + (ky !== v.ky ? ` · kỳ ${esc(v.ky)} chưa có bảng kê nào` : "");
@@ -879,7 +927,7 @@ function bangKeCard(v: VM): string {
          <td class="r"><input type="number" step="1000" inputmode="numeric" class="fld bk-in money" data-f="da_thu" value="${k.da_thu ? Math.round(k.da_thu) : ""}" placeholder="0"></td>
          <td><input type="date" class="fld bk-in" data-f="ngay_thu_gan_nhat" value="${dt(k.thu_gan_nhat)}"></td>
          <td><input type="date" class="fld bk-in" data-f="ngay_thu_du" value="${dt(k.thu_du)}"></td>
-         <td class="r"><button type="button" class="btn cn-save" title="Lưu dòng này">Lưu</button></td>`
+         <td class="r nowrap"><button type="button" class="btn cn-save" title="Lưu dòng này">Lưu</button>${k.tuTao ? ` <button type="button" class="icon-btn cn-reset" title="Xóa dòng thêm tay này"><i class="ri-delete-bin-line"></i></button>` : ""}</td>`
       : `<td class="num">${fmtDate(k.guiBK)}</td><td class="r num">${tyN(k.da_thu)}</td><td class="num">${fmtDate(k.thu_gan_nhat)}</td><td class="num">${fmtDate(k.thu_du)}</td><td></td>`;
     return `<tr class="cn-form ${k.suaTay ? "r-edited" : ""}" data-loai="ar" data-ma="${esc(c.ma_kh)}" data-ky="${esc(ky)}" data-soct="">
       <td><b>${esc(c.ten)}</b><div class="t2">${esc(c.nhom)} · PM ${esc(c.pm)}${src}</div></td>
@@ -891,7 +939,412 @@ function bangKeCard(v: VM): string {
     <th>Khách hàng</th><th class="r">Phải thu (${unit().nhan})</th><th class="r">Còn lại (${unit().nhan})</th><th>Đến hạn</th><th>Trạng thái</th>
     <th>Ngày gửi bảng kê</th><th class="r">Đã thu (VND)</th><th>Ngày thu gần nhất</th><th>Ngày thu đủ</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
   const huong = canEdit
-    ? `Điền rồi bấm <b>Lưu</b> ở cuối dòng. Ô "Đã thu" nhập số VND nguyên. Số lưu ở đây không bị mất khi upload file mới.`
+    ? `Điền rồi bấm <b>Lưu</b> ở cuối dòng. Ô "Đã thu" nhập số VND nguyên. Khi upload file sổ phải thu, số trong file sẽ <b>ghi đè</b> số nhập tay của các kỳ có trong file. Dòng có biểu tượng thùng rác là dòng thêm tay.`
     : `Chỉ Quản trị và Kế toán mới sửa được các ô này.`;
-  return card("Cập nhật trực tiếp", `Bảng kê & tiền thu — kỳ ${esc(ky)}`, note, tbl + `<div class="small" style="margin-top:8px">${huong}</div>`);
+  return card("Cập nhật trực tiếp", `Bảng kê & tiền thu — kỳ ${esc(ky)}`, note, (ds.length ? tbl : empty(`Kỳ ${ky} chưa có dòng công nợ nào — thêm ở bên dưới.`)) + `<div class="small" style="margin-top:8px">${huong}</div>` + (canEdit ? addArForm(ky) : ""));
+}
+
+/* ==========================================================================
+   ĐÓNG GÓP DOANH THU & MARGIN THEO TỪNG KHÁCH (tab Doanh thu & Margin)
+   ========================================================================== */
+const pctN = (x: number) => N1.format(x) + "%";
+/** Nhãn trục log: số đã chia theo đơn vị, tự thêm số lẻ cho số nhỏ */
+const logTick = (x: number) => tyLe(x * unit().chia, leVua(x * unit().chia));
+/** Số tiền không kèm đơn vị, tự thêm số lẻ cho số nhỏ */
+const tn = (x: number) => tyLe(x || 0, leVua(x || 0));
+function custContribCards(v: VM): string {
+  const { CR, P } = v;
+  if (!CR.length) return "";
+  const totG = sum(CR, (r) => r.gmv), totM = sum(CR, (r) => r.mgNet);
+  const top = CR.slice().sort((a, b) => b.mgNet - a.mgNet).slice(0, 15);
+  const pair = pairBars(top.map((r) => ({
+    l: r.ten, sub: `${r.nhom} · PM ${r.pm} · margin ${pc(r.mgPct, 1)}`, dr: `cust:${r.ma_kh}`,
+    a: totG ? r.gmv / totG : 0, b: totM ? r.mgNet / totM : 0,
+    ta: pc(totG ? r.gmv / totG : null, 1), tb: pc(totM ? r.mgNet / totM : null, 1),
+  })), { la: "Tỷ trọng GMV", lb: "Tỷ trọng margin net" }) +
+    `<div class="small" style="margin-top:6px">15 khách tạo nhiều margin net nhất. Thanh tím dài hơn thanh xanh = khách đóng góp lợi nhuận nhiều hơn doanh thu; ngắn hơn = khách "ăn" margin.</div>`;
+  // tập trung: bao nhiêu khách tạo ra 80% margin
+  const byM = CR.slice().sort((a, b) => b.mgNet - a.mgNet);
+  let acc = 0, n80 = 0;
+  for (const r of byM) { if (totM <= 0) break; acc += r.mgNet; n80++; if (acc >= 0.8 * totM) break; }
+  const neg = CR.filter((r) => r.mgNet < 0);
+  const med = CR.map((r) => r.gmv).sort((a, b) => a - b)[Math.floor(CR.length / 2)] || 0;
+  const sc = scatter(CR.filter((r) => r.gmv > 0).map((r) => ({
+    x: r.gmv / unit().chia, y: (r.mgPct || 0) * 100, r: Math.abs(r.mgNet), l: r.ten, c: GC[r.nhom] || "ink-3", dr: `cust:${r.ma_kh}`,
+    tip: `${r.ten} (${r.nhom}) · GMV ${tien(r.gmv)} · margin net ${tien(r.mgNet)} (${pc(r.mgPct, 2)})`,
+  })), { xl: `GMV (${unitLabel()}, thang log)`, yl: "% margin net", fx: logTick, fy: pctN, qx: med / unit().chia, qy: P.totAct ? (100 * P.gp) / P.totAct : 0, logX: true, clip: true, h: 400 }) +
+    legend(GROUPS.map((g): LegendItem => [`${g} — ${GNAME[g]}`, GC[g]])) +
+    `<div class="small" style="margin-top:6px">Đường đứt dọc = GMV trung vị, ngang = %margin bình quân công ty. Góc phải dưới là khách lớn nhưng margin mỏng — cần xem lại giá. Chấm càng to margin net càng lớn; chấm rỗng ở mép là giá trị vượt khung.</div>`;
+  const note = totM > 0 ? `${n80} / ${CR.length} khách tạo ra 80% margin net` + (neg.length ? ` · ${neg.length} khách margin âm (${tien(sum(neg, (r) => r.mgNet))})` : "") : "chưa có margin dương";
+  return `<div class="g2">${card("Đóng góp theo khách", "Khách nào tạo doanh thu, khách nào tạo margin", note, pair)}${card("Bản đồ khách hàng", "Quy mô GMV so với % margin net", "kỳ " + esc(v.ky) + " · bấm chấm để xem chi tiết", sc)}</div>`;
+}
+
+/* ==========================================================================
+   DÒNG TIỀN THEO TỪNG KHÁCH (tab Dòng tiền)
+   ========================================================================== */
+const PAL = [D("cyan"), D("purple"), D("blue"), D("orange"), D("green"), D("yellow"), D("red")];
+function cashCustCards(v: VM): string {
+  const { C, ARC } = v;
+  if (!ARC.length) return "";
+  // 1. Tiền thu về theo tháng, tách theo khách
+  // 6 tháng gần nhất có tiền về (không vượt quá tháng hiện tại)
+  const nowM = kyIdx(kyOfDate(C.asOf));
+  const paidMs = C.D.ar.map((r) => r.ngay_thu_du || r.ngay_thu_gan_nhat).filter((d): d is string => !!d).map(kyOfDate).filter((m) => kyIdx(m) <= nowM);
+  const endM = paidMs.length ? paidMs.reduce((a, b) => (kyIdx(b) > kyIdx(a) ? b : a)) : kyOfDate(C.asOf);
+  const months = monthsBetween(kyAdd(endM, -5), endM);
+  const coll = new Map<string, number[]>();
+  C.D.ar.forEach((r) => {
+    const d = r.ngay_thu_du || r.ngay_thu_gan_nhat;
+    if (!d || !(r.da_thu || 0)) return;
+    const i = months.indexOf(kyOfDate(d));
+    if (i < 0) return;
+    const a = coll.get(r.ma_kh) || months.map(() => 0);
+    a[i] += r.da_thu || 0; coll.set(r.ma_kh, a);
+  });
+  const ranked = Array.from(coll.entries()).sort((a, b) => sum(b[1], (x) => x) - sum(a[1], (x) => x));
+  const topK = ranked.slice(0, 6), rest = ranked.slice(6);
+  const name = (k: string) => { const c = v.C.cust.get(k); return c?.ten_viet_tat || c?.ten_kh || k; };
+  const series = topK.map(([k, vals], i) => ({ name: name(k), c: PAL[i % PAL.length], vals: vals.map((x) => x / unit().chia) }));
+  if (rest.length) series.push({ name: `${rest.length} khách khác`, c: D("gray", "medium"), vals: months.map((_, i) => sum(rest, (r) => r[1][i]) / unit().chia) });
+  const stack = ranked.length ? barChart({ labels: months.map((m) => m.slice(0, 3) + "." + m.slice(6)), stack: true, showTot: true, series, ft: (x) => axisNum(x) + " " + unit().nhan, fy: axisNum, h: 260, bw: 46 }) +
+    `<div class="small" style="margin-top:6px">Tiền đã thu theo tháng của ngày thu (ngày thu đủ, hoặc ngày thu gần nhất nếu mới thu một phần).</div>` : empty("Chưa có khoản nào ghi ngày thu");
+
+  // 2. Margin tạo ra và tiền đã về, 3 kỳ nợ gần nhất
+  const kys = Array.from(new Set(C.D.ar.map((r) => r.ky))).filter((k) => ok(kyIdx(k)) && kyIdx(k) <= kyIdx(v.ky)).sort((a, b) => kyIdx(a) - kyIdx(b)).slice(-3);
+  const rows = ARC.map((c) => {
+    const ls = c.lines.filter((l) => kys.includes(l.ky));
+    const billed = sum(ls, (l) => l.so_tien), paid = sum(ls, (l) => l.da_thu);
+    const od = sum(ls.filter((l) => l.con_lai > 0 && l.tt === "qua_han"), (l) => l.con_lai);
+    const mg = sum(kys, (k) => custMonth(C, k).get(c.ma_kh)?.mgNet || 0);
+    return { c, billed, paid, od, open: billed - paid, mg };
+  }).filter((x) => x.billed > 0).sort((a, b) => b.billed - a.billed);
+  const st = hStack(rows.slice(0, 12).map((x) => ({
+    l: x.c.ten, sub: `${x.c.nhom} · PM ${x.c.pm} · margin ${tien(x.mg)}`, dr: `arcust:${x.c.ma_kh}`,
+    parts: [[x.paid, D("green"), "Đã thu"], [Math.max(0, x.open - x.od), D("cyan", "medium"), "Chưa đến hạn"], [x.od, D("red"), "Quá hạn"]] as [number, string, string][],
+    txt: tyN(x.billed), txt2: `đã thu ${pc(x.billed ? x.paid / x.billed : null, 0)}`,
+  })), { ft: ty, legend: [["Đã thu", D("green")], ["Chưa đến hạn", D("cyan", "medium")], ["Quá hạn", D("red")]] });
+  const kept = rows.filter((x) => x.mg > 0 && x.open > 0).sort((a, b) => b.open - a.open).slice(0, 3);
+  const note = kept.length ? `<div class="small" style="margin-top:8px">Margin đã ghi nhận nhưng tiền chưa về nhiều nhất: ${kept.map((x) => `${esc(x.c.ten)} còn ${tien(x.open)}`).join(" · ")}.</div>` : "";
+  return `<div class="g2">${card("Tiền về theo khách", "Tiền thu được mỗi tháng từ khách nào", unitLabel() + " · 6 tháng gần nhất", stack)}${card("Tiền về so với margin", `Bảng kê ${kys.length ? kys[0] + (kys.length > 1 ? "–" + kys[kys.length - 1] : "") : ""}: đã thu bao nhiêu`, unitLabel() + " · bấm để xem từng kỳ", st + note)}</div>`;
+}
+
+/* ==========================================================================
+   TAB XU HƯỚNG — xem theo tháng / quý / năm trong một khoảng thời gian
+   ========================================================================== */
+const GRAN_L: Record<Gran, string> = { m: "tháng", q: "quý", y: "năm" };
+function trendRange(v: VM) {
+  const ps = v.C.periods;
+  const all = ps.length ? monthsBetween(ps[0], ps[ps.length - 1] > v.ky ? ps[ps.length - 1] : v.ky) : [v.ky];
+  let to = v.st.tTo && all.includes(v.st.tTo) ? v.st.tTo : v.ky;
+  let from = v.st.tFrom && all.includes(v.st.tFrom) ? v.st.tFrom : (all.filter((m) => kyIdx(m) <= kyIdx(to)).slice(-6)[0] || to);
+  if (kyIdx(from) > kyIdx(to)) [from, to] = [to, from];
+  return { all, from, to };
+}
+function ctlBar(v: VM, all: string[], from: string, to: string, gran: Gran): string {
+  const opt = (sel: string) => all.slice().reverse().map((m) => `<option value="${m}"${m === sel ? " selected" : ""}>${m}</option>`).join("");
+  const seg = (["m", "q", "y"] as Gran[]).map((g) => `<button type="button" class="seg-b${g === gran ? " on" : ""}" data-st="gran" data-v="${g}">Theo ${GRAN_L[g]}</button>`).join("");
+  const quick = [3, 6, 12].map((n) => `<button type="button" class="seg-b" data-st="range" data-v="${n}">${n} tháng gần nhất</button>`).join("");
+  return `<div class="card ctl-bar"><label>Từ kỳ<select class="fld" data-st="tFrom">${opt(from)}</select></label><label>Đến kỳ<select class="fld" data-st="tTo">${opt(to)}</select></label><div class="seg">${seg}</div><div class="seg">${quick}</div></div>`;
+}
+const dlt = (a: number | null, b: number | null | undefined) => (a == null || b == null || !b ? null : (a - b) / Math.abs(b));
+const dTxt = (d: number | null, good = 1) => (d == null ? "" : `<span class="c-${d * good >= 0 ? "stable" : "critical"}">${d >= 0 ? "▲" : "▼"}${pc(Math.abs(d), 0)}</span>`);
+
+function trendView(v: VM): string {
+  const { C } = v;
+  const gran: Gran = v.st.gran || "m";
+  const { all, from, to } = trendRange(v);
+  const cashFn = (m: string) => { const hs = v.CS.halves.filter((h) => h.h.startsWith(m)); return hs.length ? { thu: sum(hs, (h) => h.thu), chi: sum(hs, (h) => h.chi) } : null; };
+  const T = trendData(C, from, to, gran, cashFn);
+  const B = T.buckets.filter((b) => b.gmv || b.tgt || b.arBilled || b.collected);
+  const ctl = ctlBar(v, all, from, to, gran);
+  if (!B.length) return ctl + `<div class="card notice">Khoảng ${esc(from)} – ${esc(to)} chưa có số liệu.</div>`;
+  const u = unit().chia, ft = (x: number) => axisNum(x) + " " + unit().nhan;
+  const lab = B.map((b) => b.label + (b.full ? "" : "*"));
+  const W = B.length > 10 ? 1100 : B.length > 6 ? 900 : 720;
+  const first = B[0], last = B[B.length - 1];
+  const firstData = C.periods.find((p) => hasActual(C, p)) || "";
+
+  // Tóm tắt
+  const pts: [string, string][] = [];
+  const dG = dlt(last.gmv, first.gmv);
+  let lead = `Từ ${first.label} đến ${last.label} (${B.length} ${GRAN_L[gran]}): GMV ${tien(first.gmv)} → ${tien(last.gmv)}` + (dG != null ? ` (${dG >= 0 ? "tăng" : "giảm"} ${pc(Math.abs(dG), 0)})` : "") + `; tổng cả khoảng ${tien(sum(B, (b) => b.gmv))}.`;
+  if (ok(first.mgPct) && ok(last.mgPct)) lead += ` %margin net ${pc(first.mgPct, 2)} → ${pc(last.mgPct, 2)}.`;
+  const eb = B.filter((b) => b.ebitda != null);
+  if (eb.length) pts.push([`EBITDA cộng dồn ${tien(sum(eb, (b) => b.ebitda as number))}; ${eb.filter((b) => (b.ebitda as number) < 0).length}/${eb.length} ${GRAN_L[gran]} âm`, eb.some((b) => (b.ebitda as number) < 0) ? "high" : "stable"]);
+  const best = B.slice().sort((a, b) => b.gmv - a.gmv)[0], worst = B.slice().sort((a, b) => a.gmv - b.gmv)[0];
+  if (B.length > 1) pts.push([`GMV cao nhất ${best.label} ${tien(best.gmv)}, thấp nhất ${worst.label} ${tien(worst.gmv)}`, "neutral"]);
+  const xs = B.filter((b) => ok(b.x));
+  if (xs.length) pts.push([`Đạt kế hoạch: ${xs.map((b) => `${b.label} ${pc(b.x, 0)}`).join(" · ")}`, xs.some((b) => (b.x as number) < 0.85) ? "high" : "stable"]);
+  pts.push([`Khách active ${n0(first.act)} → ${n0(last.act)}; thêm ${n0(sum(B, (b) => b.nw))} khách mới, rời bỏ ${n0(sum(B, (b) => b.lost))}`, sum(B, (b) => b.nw) >= sum(B, (b) => b.lost) ? "stable" : "high"]);
+  const py = T.prevYear.get(last.key);
+  if (py && py.gmv) pts.push([`So cùng kỳ năm trước (${py.label}): GMV ${dlt(last.gmv, py.gmv)! >= 0 ? "tăng" : "giảm"} ${pc(Math.abs(dlt(last.gmv, py.gmv) as number), 0)}`, last.gmv >= py.gmv ? "stable" : "high"]);
+  const coll = sum(B, (b) => b.collected), bill = sum(B, (b) => b.arBilled);
+  if (bill) pts.push([`Bảng kê phát hành ${tien(bill)}, tiền thu về trong khoảng ${tien(coll)} (${pc(coll / bill, 0)})`, coll / bill < 0.8 ? "high" : "neutral"]);
+  const band = execBand("Tóm tắt xu hướng", lead, pts);
+
+  // Biểu đồ
+  const gmvC = barChart({ labels: lab, series: [{ name: "GMV thực tế", c: "accent", vals: B.map((b) => b.gmv / u), cf: (x, j) => (B[j].tgt ? xC(B[j].gmv / B[j].tgt) : "accent") }], targets: B.map((b) => (b.tgt ? b.tgt / u : null)), ft, fy: axisNum, h: 250, W, noLegend: true }) +
+    legend([["≥ 100% kế hoạch", "stable"], ["90–100%", "watch"], ["70–90%", "high"], ["< 70%", "critical"], ["Không có kế hoạch", "accent"], ["Kế hoạch", "ink", 1, true]]);
+  const pctS = [{ name: "% margin net / GMV", c: "accent", vals: B.map((b) => (ok(b.mgPct) ? (b.mgPct as number) * 100 : null)) }];
+  if (B.some((b) => b.ebitda != null && b.gmv)) pctS.push({ name: "% EBITDA / GMV", c: D("blue"), vals: B.map((b) => (b.ebitda != null && b.gmv ? (100 * b.ebitda) / b.gmv : null)) });
+  const pctC = lineChart({ labels: lab, series: pctS, ft: (x) => N2.format(x) + "%", fy: (x) => N1.format(x) + "%", h: 250, W });
+  const plC = barChart({ labels: lab, series: [
+    { name: "Margin net", c: "stable", vals: B.map((b) => b.mg / u) },
+    { name: "Hoa hồng", c: "high", vals: B.map((b) => b.comm / u), op: 0.75 },
+    { name: "Chi phí vận hành", c: "critical", vals: B.map((b) => (b.opex == null ? null : b.opex / u)), op: 0.6 },
+    { name: "EBITDA", c: D("blue"), vals: B.map((b) => (b.ebitda == null ? null : b.ebitda / u)), cf: (x) => (x < 0 ? D("red", "strong") : D("blue")) },
+  ], ft, fy: axisNum, h: 260, W, bw: 22 });
+  const axC = barChart({ labels: lab, stack: true, showTot: true, series: (["T", "M", "S", "F"] as Axis[]).map((a) => ({ name: AXIS_NAME[a], c: AXC[a], vals: B.map((b) => b.axis[a] / u) })), ft, fy: axisNum, h: 250, W, bw: 40 });
+  const custC = barChart({ labels: lab, series: [
+    { name: "Khách active", c: "accent", vals: B.map((b) => b.act) },
+    { name: "Khách mới", c: "stable", vals: B.map((b) => b.nw) },
+    { name: "Khách rời bỏ", c: "critical", vals: B.map((b) => b.lost) },
+  ], h: 240, W, bw: 22 });
+  const arC = barChart({ labels: lab, series: [
+    { name: "Bảng kê phát hành", c: "accent", vals: B.map((b) => b.arBilled / u) },
+    { name: "Tiền thu về", c: "stable", vals: B.map((b) => b.collected / u) },
+  ], ft, fy: axisNum, h: 240, W, bw: 26 });
+
+  // Bảng số liệu với mũi tên tăng/giảm
+  const rowsDef: [string, (b: TrendBucket) => number | null, "money" | "pct" | "n", number][] = [
+    ["GMV", (b) => b.gmv, "money", 1], ["Kế hoạch GMV", (b) => b.tgt || null, "money", 1], ["% đạt kế hoạch", (b) => b.x, "pct", 1],
+    ["Margin net", (b) => b.mg, "money", 1], ["% margin net", (b) => b.mgPct, "pct", 1], ["Hoa hồng", (b) => b.comm, "money", -1],
+    ["Chi phí vận hành", (b) => b.opex, "money", -1], ["EBITDA", (b) => b.ebitda, "money", 1],
+    ["Khách active", (b) => b.act, "n", 1], ["Khách mới", (b) => (b.months.includes(firstData) ? null : b.nw), "n", 1], ["Khách rời bỏ", (b) => (b.months.includes(firstData) ? null : b.lost), "n", -1],
+    ["Bảng kê phát hành", (b) => b.arBilled, "money", 1], ["Tiền thu về", (b) => b.collected, "money", 1],
+    ["Thu theo kế hoạch dòng tiền", (b) => b.cashIn, "money", 1], ["Chi theo kế hoạch dòng tiền", (b) => b.cashOut, "money", -1],
+  ];
+  const fmtCell = (x: number | null, k: string) => (x == null ? "—" : k === "money" ? tyN(x) : k === "pct" ? pc(x, 1) : n0(x));
+  const body = rowsDef.filter(([, f]) => B.some((b) => f(b) != null && f(b) !== 0)).map(([l, f, k, good]) => `<tr><td>${esc(l)}</td>${B.map((b, i) => {
+    const x = f(b), p = i ? f(B[i - 1]) : null, y = T.prevYear.get(b.key);
+    const dd = k === "pct" ? (x != null && p != null ? x - p : null) : dlt(x, p);
+    const yy = y ? f(y) : null, dy = k === "pct" ? null : dlt(x, yy);
+    return `<td class="r"><span class="num">${fmtCell(x, k)}</span>${dd != null ? `<div class="t2">${k === "pct" ? `<span class="c-${dd * good >= 0 ? "stable" : "critical"}">${dd >= 0 ? "▲" : "▼"}${N1.format(Math.abs(dd) * 100)}đ</span>` : dTxt(dd, good)}</div>` : ""}${dy != null ? `<div class="t2">cùng kỳ ${dTxt(dy, good)}</div>` : ""}</td>`;
+  }).join("")}<td class="r">${spark(B.map((b) => f(b)), good > 0 ? "accent" : "high")}</td></tr>`).join("");
+  const tbl = `<table><thead><tr><th>Chỉ tiêu (${unitLabel()})</th>${B.map((b) => `<th class="r">${esc(b.label)}${b.full ? "" : "*"}</th>`).join("")}<th class="r">Xu hướng</th></tr></thead><tbody>${body}</tbody></table>` +
+    `<div class="small" style="margin-top:6px">▲▼ so với ${GRAN_L[gran]} liền trước; "cùng kỳ" so với cùng ${GRAN_L[gran]} năm trước khi có dữ liệu; % margin và % đạt so bằng điểm phần trăm (đ).${B.some((b) => !b.full) ? ` Dấu * = ${GRAN_L[gran]} chưa đủ tháng trong khoảng đã chọn.` : ""}</div>`;
+
+  // Khách hàng theo thời gian
+  const cs = T.custs.filter((c) => c.totG > 0);
+  const firstB = 0, lastB = B.length - 1;
+  const idxOf = (b: TrendBucket) => T.buckets.indexOf(b);
+  const fI = idxOf(B[firstB]), lI = idxOf(B[lastB]);
+  const moves = cs.map((c) => ({ c, d: c.gmv[lI] - c.gmv[fI] })).filter((x) => x.d !== 0).sort((a, b) => a.d - b.d);
+  const pick = [...moves.slice(0, 7).filter((x) => x.d < 0), ...moves.slice(-7).filter((x) => x.d > 0).reverse()];
+  const rng = Math.max(...pick.map((x) => Math.abs(x.d)), 1);
+  const mv = B.length > 1 ? divBars(pick.map((x) => ({ l: x.c.ten, sub: `${x.c.nhom} · PM ${x.c.pm} · ${tien(x.c.gmv[fI])} → ${tien(x.c.gmv[lI])}`, v: x.d, c: x.d < 0 ? "critical" : D("green"), txt: (x.d > 0 ? "+" : "−") + tien(Math.abs(x.d)), dr: `cust:${x.c.ma_kh}` })), rng) : empty(`Chọn khoảng có ít nhất 2 ${GRAN_L[gran]} để so sánh`);
+  const ctbl = `<table><thead><tr><th>Khách hàng</th>${B.map((b) => `<th class="r">${esc(b.label)}</th>`).join("")}<th class="r">Xu hướng</th><th class="r">Đầu → cuối</th><th class="r">Tổng margin net</th><th class="r">% margin</th></tr></thead><tbody>${cs.slice(0, 40).map((c) => {
+    const vals = B.map((b) => c.gmv[idxOf(b)]);
+    const d = dlt(vals[vals.length - 1], vals[0]);
+    return `<tr><td>${esc(c.ten)}<div class="t2">${esc(c.nhom)} · PM ${esc(c.pm)}</div></td>${vals.map((x) => `<td class="r num">${x ? tyN(x) : "–"}</td>`).join("")}<td class="r">${spark(vals)}</td><td class="r num">${d == null ? (vals[0] ? "—" : vals[vals.length - 1] ? `<span class="c-stable">mới</span>` : "—") : dTxt(d)}</td><td class="r num ${c.totM < 0 ? "c-critical" : ""}">${tyN(c.totM)}</td><td class="r num">${pc(c.totG ? c.totM / c.totG : null, 1)}</td></tr>`;
+  }).join("")}</tbody></table>${cs.length > 40 ? `<div class="small" style="margin-top:6px">Hiển thị 40/${cs.length} khách có GMV lớn nhất trong khoảng.</div>` : ""}`;
+
+  return ctl + band +
+    `<div class="g75">${card("Doanh thu", `GMV theo ${GRAN_L[gran]} — thực tế và kế hoạch`, unitLabel() + " · vạch = kế hoạch", gmvC)}${card("Chất lượng", "Biên lợi nhuận theo thời gian", "% trên GMV", pctC)}</div>` +
+    `<div class="g2">${card("Lợi nhuận", "Margin net, hoa hồng, chi phí và EBITDA", unitLabel(), plC)}${card("Cơ cấu", "GMV theo mảng", unitLabel(), axC)}</div>` +
+    `<div class="g2">${card("Khách hàng", "Khách active, khách mới, khách rời bỏ", "số khách", custC)}${card("Thu tiền", "Bảng kê phát hành và tiền thu về", unitLabel(), arC)}</div>` +
+    card("Bảng tăng / giảm", `Các chỉ tiêu chính theo ${GRAN_L[gran]}`, unitLabel(), `<div class="tw">${tbl}</div>`) +
+    `<div class="g57">${card("Ai tạo ra thay đổi", `Khách tăng / giảm GMV nhiều nhất (${esc(B[firstB].label)} → ${esc(B[lastB].label)})`, unitLabel(), mv)}${card("Khách hàng theo thời gian", `GMV từng khách theo ${GRAN_L[gran]}`, unitLabel(), `<div class="tw" style="max-height:520px">${ctbl}</div>`)}</div>`;
+}
+
+/* ==========================================================================
+   TAB GÓC NHÌN CEO
+   ========================================================================== */
+function ceoView(v: VM): string {
+  const { C, ky, A, B, CS, P } = v;
+  const PF = customerProfit(C, ky, B);
+  const LC = ltvCac(C, ky, B);
+  const FC = cashForecast(C, A, B, CS, 12, v.st.rate ?? null);
+  // Tóm tắt
+  const pts: [string, string][] = [];
+  let lead = "";
+  if (P.hasActual && PF.rows.length) {
+    const loss = PF.rows.filter((r) => r.net < 0);
+    lead = `Kỳ ${ky}: ${PF.rows.length} khách tạo ${tien(PF.tot.mgNet)} margin net; sau hoa hồng, chi phí phục vụ và chi phí vốn còn ${tien(PF.tot.net)} lợi nhuận ròng.`;
+    if (loss.length) pts.push([`${loss.length} khách lỗ ròng, tổng ${tien(sum(loss, (r) => r.net))}; nặng nhất ${loss[loss.length - 1].ten} (${loss[loss.length - 1].nhom}) ${tien(loss[loss.length - 1].net)}`, "critical"]);
+    ["N2", "N4"].forEach((g) => {
+      const rs = PF.rows.filter((r) => r.nhom === g);
+      if (!rs.length) return;
+      const top = rs[0];
+      pts.push([`${g}: lợi nhuận ròng ${tien(sum(rs, (r) => r.net))} từ ${rs.length} khách, dẫn đầu ${top.ten} ${tien(top.net)}; ${rs.filter((r) => r.net < 0).length} khách lỗ`, rs.some((r) => r.net < 0) ? "high" : "stable"]);
+    });
+  } else lead = `Kỳ ${ky} chưa có GMV thực tế nên chưa tính được lợi nhuận theo khách.`;
+  if (ok(LC.all.ratio)) pts.push([`LTV/CAC toàn công ty ${N1.format(LC.all.ratio as number)}× — ${(LC.all.ratio as number) >= 3 ? "kênh thu hút khách đang có lời" : (LC.all.ratio as number) >= 1 ? "có lời nhưng mỏng (chuẩn ≥ 3×)" : "chi để có khách nhiều hơn khách mang lại"}`, (LC.all.ratio as number) >= 3 ? "stable" : (LC.all.ratio as number) >= 1 ? "high" : "critical"]);
+  const warn = FC.results.find((r) => r.sc.key === "warn"), base = FC.results.find((r) => r.sc.key === "base");
+  if (warn) pts.push([`Nếu thu đúng hạn chỉ ${Math.round(warn.sc.rate * 100)}%: số dư tuần tới ${tien(warn.weeks[0]?.bal ?? FC.start)}, ${warn.firstNeg != null ? `ÂM từ tuần ${warn.firstNeg + 1} (${fmtDate(warn.weeks[warn.firstNeg].to)})` : `không âm trong 12 tuần, thấp nhất ${tien(warn.min)}`}`, warn.firstNeg != null ? "critical" : "stable"]);
+  if (base && base.firstNeg != null) pts.push([`Ngay cả kịch bản cơ sở cũng âm tiền từ tuần ${base.firstNeg + 1}`, "critical"]);
+  const top = v.AL.find((a) => a.why && a.sev === "critical") || v.AL.find((a) => a.why);
+  if (top?.why?.items[0]) pts.push([`${top.msg.split(" đạt ")[0]} — ${top.why.items[0].t}`, "high"]);
+  return execBand("Góc nhìn CEO", lead, pts) + profitCards(v, PF) + ltvCards(v, LC) + forecastCards(v, FC, true) + causeCards(v);
+}
+
+/* ---------- Lợi nhuận ròng theo khách ---------- */
+function profitCards(v: VM, PF: Profitability): string {
+  if (!PF.rows.length) return card("Lợi nhuận theo khách", "Khách nào thực sự có lời", "", empty("Kỳ này chưa có GMV thực tế"));
+  const g = v.st.cpG && v.st.cpG !== "all" ? v.st.cpG : null;
+  const rows = g ? PF.rows.filter((r) => r.nhom === g) : PF.rows;
+  const seg = `<div class="seg">${["all", ...GROUPS].map((x) => `<button type="button" class="seg-b${(g || "all") === x ? " on" : ""}" data-st="cpG" data-v="${x}">${x === "all" ? "Tất cả" : x}</button>`).join("")}</div>`;
+  const S = (f: (r: CustProfit) => number) => sum(rows, f);
+  const wf = waterfall([
+    { l: "Margin net", v: S((r) => r.mgNet), kind: "total" },
+    { l: "Hoa hồng PM", v: -S((r) => r.pmC) }, { l: "Hoa hồng Sales", v: -S((r) => r.salesC + r.saasC) },
+    { l: "Partnership", v: -S((r) => r.partC) }, { l: "Chi phí phục vụ", v: -S((r) => r.cts) },
+    { l: "Chi phí vốn", v: -S((r) => r.capital) }, { l: "Lợi nhuận ròng", v: S((r) => r.net), kind: "total" },
+  ]);
+  const pos = rows.filter((r) => r.net > 0).slice(0, 8), neg = rows.filter((r) => r.net < 0).slice(-8).reverse();
+  const pick = [...pos, ...neg];
+  const rng = Math.max(...pick.map((r) => Math.abs(r.net)), 1);
+  const bars = divBars(pick.map((r) => ({ l: r.ten, sub: `${r.nhom} · PM ${r.pm} · GMV ${tien(r.gmv)}`, v: r.net, c: r.net < 0 ? "critical" : D("green"), txt: (r.net < 0 ? "−" : "") + tien(Math.abs(r.net)), dr: `cust:${r.ma_kh}` })), rng) +
+    `<div class="small" style="margin-top:6px">${pos.length} khách lời nhiều nhất và ${neg.length} khách lỗ nhiều nhất (lỗ nặng nhất ở dưới cùng)${g ? " của nhóm " + g : ""}.</div>`;
+  const med = rows.map((r) => r.gmv).sort((a, b) => a - b)[Math.floor(rows.length / 2)] || 0;
+  const sc = scatter(rows.filter((r) => r.gmv > 0).map((r) => ({
+    x: r.gmv / unit().chia, y: (r.netPct || 0) * 100, r: Math.abs(r.net), l: r.ten, c: r.net < 0 ? "critical" : GC[r.nhom] || "accent", dr: `cust:${r.ma_kh}`,
+    tip: `${r.ten} (${r.nhom}) · GMV ${tien(r.gmv)} · lợi nhuận ròng ${tien(r.net)} (${pc(r.netPct, 2)})`,
+  })), { xl: `GMV (${unitLabel()}, thang log)`, yl: "% lợi nhuận ròng / GMV", fx: logTick, fy: pctN, qx: med / unit().chia, qy: 0, logX: true, clip: true, h: 420 }) +
+    `<div class="small" style="margin-top:6px">Dưới đường ngang = khách lỗ sau khi trừ mọi chi phí phân bổ. Chấm đỏ là khách lỗ; chấm rỗng ở mép = giá trị vượt khung, rê chuột để xem số thật.</div>`;
+  // theo nhóm
+  const grp = GROUPS.map((x) => { const rs = PF.rows.filter((r) => r.nhom === x); return { g: x, n: rs.length, net: sum(rs, (r) => r.net), loss: rs.filter((r) => r.net < 0).length, gmv: sum(rs, (r) => r.gmv), mg: sum(rs, (r) => r.mgNet) }; }).filter((x) => x.n);
+  const gtbl = `<table class="cmp"><thead><tr><th>Nhóm</th><th class="r">Khách</th><th class="r">GMV</th><th class="r">Margin net</th><th class="r">Lợi nhuận ròng</th><th class="r">% GMV</th><th class="r">TB / khách</th><th class="r">Khách lỗ</th></tr></thead><tbody>${grp.map((x) => `<tr class="${x.g === "N2" || x.g === "N4" ? "hl" : ""}"><td><b>${x.g}</b><div class="t2 nowrap">${GNAME[x.g]}</div></td><td class="r num">${x.n}</td><td class="r num">${tyN(x.gmv)}</td><td class="r num">${tyN(x.mg)}</td><td class="r num ${x.net < 0 ? "c-critical" : ""}">${tn(x.net)}</td><td class="r num">${pc(x.gmv ? x.net / x.gmv : null, 2)}</td><td class="r num">${tn(x.net / x.n)}</td><td class="r num ${x.loss ? "c-critical" : ""}">${x.loss}</td></tr>`).join("")}</tbody></table>`;
+  const tbl = `<table><thead><tr><th>Khách hàng</th><th>Nhóm</th><th>PM</th><th class="r">GMV</th><th class="r">Margin net</th><th class="r">HH PM</th><th class="r">HH Sales</th><th class="r">Partnership</th><th class="r">Phục vụ</th><th class="r">Vốn</th><th class="r">Ngày ứng vốn</th><th class="r">Lợi nhuận ròng</th><th class="r">% GMV</th><th class="r">Thưởng HĐ (CAC)</th></tr></thead><tbody>${rows.map((r) => `<tr><td>${esc(r.ten)}</td><td>${esc(r.nhom)}</td><td>${esc(r.pm)}</td><td class="r num">${tyN(r.gmv)}</td><td class="r num">${tyN(r.mgNet)}</td><td class="r num">${tyN(r.pmC)}</td><td class="r num">${tyN(r.salesC + r.saasC)}</td><td class="r num">${tyN(r.partC)}</td><td class="r num">${tyN(r.cts)}</td><td class="r num">${tyN(r.capital)}</td><td class="r num">${r.capDays == null ? "—" : n0(r.capDays)}</td><td class="r num ${r.net < 0 ? "c-critical" : ""}">${tyN(r.net)}</td><td class="r num">${pc(r.netPct, 1)}</td><td class="r num">${r.hd ? tyN(r.hd) : "–"}</td></tr>`).join("")}
+    <tr class="tot"><td>Tổng ${rows.length} khách</td><td></td><td></td><td class="r num">${tyN(S((r) => r.gmv))}</td><td class="r num">${tyN(S((r) => r.mgNet))}</td><td class="r num">${tyN(S((r) => r.pmC))}</td><td class="r num">${tyN(S((r) => r.salesC + r.saasC))}</td><td class="r num">${tyN(S((r) => r.partC))}</td><td class="r num">${tyN(S((r) => r.cts))}</td><td class="r num">${tyN(S((r) => r.capital))}</td><td></td><td class="r num">${tyN(S((r) => r.net))}</td><td></td><td class="r num">${tyN(S((r) => r.hd))}</td></tr></tbody></table>`;
+  const ctsL = PF.ctsMode === "gmv" ? "theo tỷ trọng GMV" : PF.ctsMode === "khach" ? "chia đều mỗi khách active" : "một nửa theo GMV, một nửa chia đều mỗi khách";
+  const method = `Hoa hồng chia về khách theo đúng nguồn tạo ra nó (PM theo margin net trong nhóm, Sales và Partnership theo margin của trục Travel / Mobility). Chi phí phục vụ = chi phí vận hành trừ Marketing (${tien(PF.ctsPool)}), phân bổ ${ctsL} — đổi bằng tham số cts_phan_bo = gmv | khach | tron. Chi phí vốn = giá trị bảng kê × (ngày thu − ngày hóa đơn − DPO ${n0(PF.dpo)} ngày) × lãi suất ${pc(PF.rate, 0)}/năm (tham số lai_suat_von_nam); khoản chưa thu tính tới hôm nay. Đối chiếu: tổng lợi nhuận khách + chi phí vốn = EBITDA + Marketing ${tien(PF.marketing)} + thưởng HĐ ${tien(PF.tot.hd)}${Math.abs(PF.unalloc) > 1000 ? ` + hoa hồng chưa chia được về khách ${tien(PF.unalloc)}` : ""}.`;
+  return `<div class="card ctl-bar"><span class="ctl-t">Lợi nhuận ròng theo khách — kỳ ${esc(v.ky)}</span>${seg}</div>` +
+    `<div class="g2">${card("Từ margin tới lợi nhuận", g ? `Nhóm ${g}: margin net còn lại bao nhiêu` : "Margin net còn lại bao nhiêu sau mọi chi phí", unitLabel(), wf)}${card("Theo nhóm", "Lợi nhuận ròng theo nhóm khách", unitLabel() + " · tô nền N2, N4", `<div class="tw">${gtbl}</div>`)}</div>` +
+    `<div class="g2">${card("Lời / lỗ theo khách", "Khách nào thực sự mang lại lợi nhuận ròng", unitLabel() + " · bấm để xem chi tiết", bars)}${card("Bản đồ lợi nhuận", "Quy mô so với % lợi nhuận ròng", "kỳ " + esc(v.ky) + " · trục GMV dạng log", sc)}</div>` +
+    details(`Xem bảng lợi nhuận ròng của ${rows.length} khách (${unitLabel()})`, tbl + `<div class="small" style="margin-top:8px">${esc(method)}</div>`);
+}
+
+/* ---------- LTV / CAC ---------- */
+function ltvCards(v: VM, LC: ReturnType<typeof ltvCac>): string {
+  const a = LC.all;
+  const rc = (x: number | null) => (!ok(x) ? "" : x >= 3 ? "stable" : x >= 1 ? "high" : "critical");
+  const stats = `<div class="stat-row">${stat("LTV / khách", ok(a.ltv) ? tien(a.ltv as number) : "—")}${stat("CAC / khách mới", ok(a.cac) ? tien(a.cac as number) : "—")}${stat("LTV / CAC", ok(a.ratio) ? N1.format(a.ratio as number) + "×" : "—", rc(a.ratio))}${stat("Hoàn vốn", ok(a.payback) ? N1.format(a.payback as number) + " tháng" : "—")}${stat("Rời bỏ / tháng", ok(a.churn) ? pc(a.churn, 1) : "—")}${stat("Vòng đời", N1.format(a.life) + " tháng")}</div>`;
+  const rows = LC.rows.filter((r) => r.act || r.nw);
+  const chart = barChart({ labels: rows.map((r) => r.g), series: [
+    { name: "LTV", c: "stable", vals: rows.map((r) => (ok(r.ltv) ? (r.ltv as number) / unit().chia : null)) },
+    { name: "CAC", c: "critical", vals: rows.map((r) => (ok(r.cac) ? (r.cac as number) / unit().chia : null)), op: 0.8 },
+  ], ft: (x) => axisNum(x) + " " + unit().nhan, fy: axisNum, h: 240, bw: 34 });
+  const tbl = `<table><thead><tr><th>Nhóm</th><th class="r">Khách active</th><th class="r">Khách mới (${LC.window.length} tháng)</th><th class="r">Chi phí thu hút</th><th class="r">CAC</th><th class="r">Lợi nhuận ròng / khách / tháng</th><th class="r">Rời bỏ / tháng</th><th class="r">Vòng đời (tháng)</th><th class="r">LTV</th><th class="r">LTV / CAC</th><th class="r">Hoàn vốn (tháng)</th></tr></thead><tbody>${[...rows, a].map((r) => `<tr class="${r.g === "Tổng" ? "tot" : r.g === "N2" || r.g === "N4" ? "hl" : ""}"><td>${r.g === "Tổng" ? "Toàn công ty" : `${r.g} — ${GNAME[r.g]}`}</td><td class="r num">${n0(r.act)}</td><td class="r num">${n0(r.nw)}</td><td class="r num">${tyN(r.spend)}</td><td class="r num">${ok(r.cac) ? tyN(r.cac) : "—"}</td><td class="r num ${ok(r.contrib) && (r.contrib as number) < 0 ? "c-critical" : ""}">${ok(r.contrib) ? tyN(r.contrib) : "—"}</td><td class="r num">${ok(r.churn) ? pc(r.churn, 1) : "—"}</td><td class="r num">${N1.format(r.life)}</td><td class="r num">${ok(r.ltv) ? tyN(r.ltv) : "—"}</td><td class="r num c-${rc(r.ratio) || "muted"}">${ok(r.ratio) ? N1.format(r.ratio as number) + "×" : "—"}</td><td class="r num">${ok(r.payback) ? N1.format(r.payback as number) : "—"}</td></tr>`).join("")}</tbody></table>`;
+  const ser = LC.series.filter((s) => s.ky !== LC.firstData).slice(-8);
+  const trendC = ser.length ? barChart({ labels: ser.map((s) => `${s.ky.slice(0, 3)} · ${s.nw} KH`), stack: true, showTot: true, series: [
+    { name: "Marketing", c: D("orange"), vals: ser.map((s) => s.mkt / unit().chia) },
+    { name: `Lương & nhân sự × ${pc(LC.salesShare, 0)} (phần Sales)`, c: D("purple"), vals: ser.map((s) => s.sal / unit().chia) },
+    { name: "Thưởng hợp đồng mới", c: D("cyan"), vals: ser.map((s) => s.hd / unit().chia) },
+  ], ft: (x) => axisNum(x) + " " + unit().nhan, fy: axisNum, h: 240, bw: 40 }) + `<div class="small" style="margin-top:6px">Nhãn cột ghi số khách mới trong tháng. CAC tháng = cột ÷ số khách mới.</div>` : empty("Cần ít nhất 2 tháng dữ liệu");
+  const method = `Khách mới = khách có GMV lần đầu trong tháng (tháng đầu tiên có dữ liệu ${LC.firstData || "—"} không tính). CAC tính trên ${LC.window.length} tháng gần nhất (${LC.window.join(", ") || "—"}, tham số cac_so_thang). Phần lương tính vào chi phí thu hút: ${pc(LC.salesShare, 0)}${LC.salesShareAuto ? " = số người team Sales / tổng DM_NHAN_SU (khai tl_luong_sales để đổi)" : " (tham số tl_luong_sales)"}. LTV = lợi nhuận ròng bình quân một khách mỗi tháng (sau hoa hồng, chi phí phục vụ, chi phí vốn) × vòng đời; vòng đời = 1 ÷ tỷ lệ rời bỏ bình quân 6 tháng, tối đa ${LC.cap} tháng (ltv_thang_toi_da).`;
+  return `<div class="g75">${card("Hiệu quả thu hút khách", "LTV so với CAC theo nhóm", unitLabel(), stats + chart)}${card("Chi phí thu hút theo tháng", "Tiền bỏ ra để có khách mới", unitLabel(), trendC)}</div>` +
+    details("Xem bảng LTV / CAC chi tiết và cách tính", `<div class="tw">${tbl}</div><div class="small" style="margin-top:8px">${esc(method)}</div>${LC.notes.length ? `<ul class="small">${LC.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}`);
+}
+
+/* ---------- Dự báo dòng tiền nhiều kịch bản ---------- */
+function forecastCards(v: VM, FC: Forecast, full: boolean): string {
+  const u = unit().chia;
+  const labels = (FC.results[0]?.weeks || []).map((w) => `T${w.i + 1}`);
+  const chart = lineChart({ labels: ["Nay", ...labels], series: FC.results.map((r) => ({ name: r.sc.name.split(" — ")[0], c: r.sc.c, vals: [FC.start / u, ...r.weeks.map((w) => w.bal / u)], w: r.sc.key === "base" ? 2.6 : 1.6, dash: r.sc.key === "custom" })), ft: (x) => axisNum(x) + " " + unit().nhan, fy: axisNum, h: 280, W: 720 });
+  const scName = (n: string) => { const [a, b] = n.split(" — "); return `<b>${esc(a)}</b>${b ? `<div class="t2">${esc(b)}</div>` : ""}`; };
+  const rows = FC.results.map((r) => `<tr><td><div class="sc-n"><i class="dot-c" style="background:var(--${r.sc.c})"></i><div>${scName(r.sc.name)}</div></div></td><td class="r num ${(r.weeks[0]?.bal ?? 0) < 0 ? "c-critical" : ""}">${tyN(r.weeks[0]?.bal ?? FC.start)}</td><td class="r"><span class="num ${r.min < 0 ? "c-critical" : ""}">${tyN(r.min)}</span>${r.minWeek >= 0 ? `<div class="t2">tuần ${r.minWeek + 1} · ${fmtDate(r.weeks[r.minWeek].to)}</div>` : ""}</td><td class="r ${r.firstNeg != null ? "c-critical" : "c-stable"}">${r.firstNeg != null ? `tuần ${r.firstNeg + 1}<div class="t2">${fmtDate(r.weeks[r.firstNeg].to)}</div>` : "không âm"}</td></tr>`).join("");
+  const sumTbl = `<table><thead><tr><th>Kịch bản</th><th class="r">Cuối tuần tới</th><th class="r">Thấp nhất</th><th class="r">Bắt đầu âm</th></tr></thead><tbody>${rows}</tbody></table>`;
+  const warn = FC.results.find((r) => r.sc.key === "warn");
+  const ans = warn ? `<div class="answer ${warn.firstNeg != null ? "bad" : "good"}"><b>Nếu tỷ lệ thu đúng hạn giảm xuống ${Math.round(warn.sc.rate * 100)}% (mức cảnh báo cao):</b> số dư cuối tuần tới ${tien(warn.weeks[0]?.bal ?? FC.start)}; ${warn.firstNeg != null ? `<b>bắt đầu âm từ tuần ${warn.firstNeg + 1}</b> (${fmtDate(warn.weeks[warn.firstNeg].to)}), đáy ${tien(warn.min)} ở tuần ${warn.minWeek + 1}.` : `không âm trong 12 tuần, thấp nhất ${tien(warn.min)}${warn.minWeek >= 0 ? ` ở tuần ${warn.minWeek + 1}` : ""}.`}</div>` : "";
+  const rateSel = `<label>Thử tỷ lệ thu đúng hạn<select class="fld" data-st="rate"><option value="">— chọn —</option>${[1, 0.95, 0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6, 0.5, 0.4, 0.3].map((x) => `<option value="${x}"${v.st.rate === x ? " selected" : ""}>${Math.round(x * 100)}%</option>`).join("")}</select></label>`;
+  const head = `<div class="fc-ctl">${rateSel}<span class="small">Tỷ lệ lịch sử ${pc(FC.baseRate, 0)} · khoản trễ về sau bình quân ${n0(FC.baseDelay)} ngày · xuất phát từ ${esc(FC.startNote)}: <b class="num">${tien(FC.start)}</b></span></div>`;
+  if (!full) return card("Dự báo 12 tuần", "Số dư tiền theo kịch bản thu tiền", `<a href="#" data-go="ceo" class="small">Xem chi tiết</a>`, head + chart + ans);
+  const scSel = FC.results.find((r) => r.sc.key === (v.st.fcScn || (v.st.rate != null ? "custom" : "base"))) || FC.results[1] || FC.results[0];
+  const segSc = `<div class="seg">${FC.results.map((r) => `<button type="button" class="seg-b${r === scSel ? " on" : ""}" data-st="fcScn" data-v="${r.sc.key}">${esc(r.sc.name.split(" — ")[0])}</button>`).join("")}</div>`;
+  const wk = `<table><thead><tr><th>Tuần</th><th class="r">Thu nợ hiện có</th><th class="r">Thu bảng kê sắp phát hành*</th><th class="r">Trả NCC hiện có</th><th class="r">Trả NCC ước tính*</th><th class="r">Chi phí vận hành</th><th class="r">Hoa hồng</th><th class="r">Ròng</th><th class="r">Số dư</th></tr></thead><tbody>${scSel.weeks.map((w) => `<tr><td>T${w.i + 1} <span class="small">${fmtDate(w.from).slice(0, 5)}–${fmtDate(w.to).slice(0, 5)}</span></td><td class="r num">${w.inAr ? tyN(w.inAr) : "–"}</td><td class="r num">${w.inEst ? tyN(w.inEst) : "–"}</td><td class="r num">${w.outAp ? tyN(w.outAp) : "–"}</td><td class="r num">${w.outEst ? tyN(w.outEst) : "–"}</td><td class="r num">${tyN(w.outOpex)}</td><td class="r num">${w.outComm ? tyN(w.outComm) : "–"}</td><td class="r num ${w.net < 0 ? "c-critical" : ""}">${tyN(w.net)}</td><td class="r num ${w.bal < 0 ? "c-critical" : ""}"><b>${tyN(w.bal)}</b></td></tr>`).join("")}</tbody></table>`;
+  const As = FC.assumptions;
+  const assum = `Giả định: phải thu còn mở ${tien(As.arOpen)} (quá hạn ${tien(As.arOverdue)}) về theo ngày đến hạn — phần đúng hạn về đúng ngày, phần còn lại về trễ theo số ngày trễ lịch sử × hệ số kịch bản (thuận lợi 0,8 · cơ sở 1 · cảnh báo 1,3 · xấu 2, thêm 10% không thu được). Bảng kê các tháng sau ${esc(As.lastArKy || "—")} ước theo GMV tháng (thực tế, hoặc kế hoạch) × tỷ lệ bảng kê / GMV lịch sử, bình quân ${tien(As.avgBill)}/tháng; hóa đơn NCC ước theo giá vốn, bình quân ${tien(As.avgAp)}/tháng, rải 4 lần trong tháng; chi phí vận hành ${tien(As.opexMonth)}/tháng (không tính khấu hao); hoa hồng ${tien(As.commMonth)}/tháng chi ngày 10 tháng sau. * là số ước tính.`;
+  return card("Dự báo dòng tiền", "Số dư tiền 12 tuần tới theo kịch bản thu tiền", unitLabel(), head + `<div class="fc-grid"><div>${chart}</div><div><div class="tw">${sumTbl}</div>${ans}</div></div>`) +
+    card("Chi tiết theo tuần", "Tiền vào, tiền ra từng tuần", unitLabel(), segSc + `<div class="tw" style="margin-top:10px">${wk}</div><div class="small" style="margin-top:8px">${esc(assum)}</div>`);
+}
+
+/* ---------- Phân tích nguyên nhân ---------- */
+function causeCards(v: VM): string {
+  const { C, P, ky } = v;
+  const out: string[] = [];
+  if (P.hasActual && hasActual(C, kyAdd(ky, -1))) {
+    const b = gmvBridge(C, ky, () => true);
+    const wf = waterfall([
+      { l: `GMV ${kyAdd(ky, -1)}`, v: b.prev, kind: "total" }, { l: `Khách mới (${b.nNew})`, v: b.nw }, { l: `Khách tăng (${b.nUp})`, v: b.up },
+      { l: `Khách giảm (${b.nDown})`, v: b.down }, { l: `Khách ngừng (${b.nLost})`, v: b.lost }, { l: `GMV ${ky}`, v: b.cur, kind: "total" },
+    ]);
+    const pm = `<table><thead><tr><th>PM</th><th class="r">${esc(kyAdd(ky, -1))}</th><th class="r">${esc(ky)}</th><th class="r">Thay đổi</th><th class="r">%</th><th class="r">Khách phát sinh</th></tr></thead><tbody>${b.byPm.map((p) => `<tr><td>${esc(p.pm)}</td><td class="r num">${tyN(p.a)}</td><td class="r num">${tyN(p.b)}</td><td class="r num ${p.d < 0 ? "c-critical" : "c-stable"}">${p.d >= 0 ? "+" : ""}${tyN(p.d)}</td><td class="r num">${dTxt(dlt(p.b, p.a))}</td><td class="r num">${p.n}</td></tr>`).join("")}</tbody></table>`;
+    out.push(`<div class="g2">${card("Vì sao GMV thay đổi", `Cầu nối GMV ${esc(kyAdd(ky, -1))} → ${esc(ky)}`, unitLabel(), wf)}${card("Theo người phụ trách", "GMV thay đổi theo PM", unitLabel(), `<div class="tw">${pm}</div>`)}</div>`);
+  }
+  // Thu đúng hạn: nhóm thấp nhất
+  const th = num(C.D, "nguong_dung_han");
+  const low = Object.entries(P.onTime).filter(([, o]) => ok(o.rate)).sort((a, b) => (a[1].rate as number) - (b[1].rate as number));
+  const ws = low.filter(([, o]) => (o.rate as number) < th).slice(0, 2);
+  if (ws.length) out.push(`<div class="g2">${ws.map(([g, o]) => card("Vì sao thu tiền chậm", `Nhóm ${g} — thu đúng hạn ${pc(o.rate, 0)}`, `ngưỡng ${pc(th, 0)}`, whyBody(whyOnTime(C, ky, g, F)))).join("")}</div>`);
+  const withWhy = v.AL.filter((a) => a.why && a.ref?.k !== "ontime");
+  if (withWhy.length) out.push(card("Nguyên nhân từng cảnh báo", "Bấm vào cảnh báo để xem bóc tách", `${withWhy.length} cảnh báo · kỳ ${esc(ky)}`, withWhy.map((a, i) => `<div class="alert ${a.sev}">${pill({ critical: "Khẩn", high: "Cao", watch: "Theo dõi" }[a.sev], a.sev)}<div><div class="msg">${esc(a.msg)}</div>${whyHTML(a.why, i === 0)}</div><div class="own">${esc(a.area)}<br>${esc(a.own)}</div></div>`).join("")));
+  if (!out.length) return card("Phân tích nguyên nhân", "Vì sao chỉ số lệch", "", empty("Kỳ này không có chỉ số nào lệch đáng kể"));
+  return `<div class="sec-h">Phân tích nguyên nhân</div>` + out.join("");
+}
+
+/* ---------- Thêm dòng công nợ (khách / NCC mới hoặc kỳ mới) ---------- */
+const NHOM_OPT = GROUPS.map((g) => `<option value="${g}">${g} — ${GNAME[g]}</option>`).join("");
+function addArForm(ky: string): string {
+  return `<details class="add-det"><summary>+ Thêm dòng công nợ phải thu (khách mới, hoặc kỳ chưa có trong file)</summary>
+  <div class="cn-form" data-loai="ar" data-them="1" data-moi="1">
+    <label>Mã khách hàng *<input type="text" class="fld" list="dl-kh" data-f="__ma" placeholder="chọn hoặc gõ mã mới"></label>
+    <label>Kỳ nợ *<input type="text" class="fld" data-f="__ky" value="${esc(ky)}"></label>
+    <label>Ngày gửi bảng kê<input type="date" class="fld" data-f="ngay_gui_bk"></label>
+    <label>Ngày hóa đơn<input type="date" class="fld" data-f="ngay_hd"></label>
+    <label>Ngày đến hạn *<input type="date" class="fld" data-f="ngay_den_han"></label>
+    <label>Phải thu (VND) *<input type="number" class="fld" data-f="so_tien" step="1000" inputmode="numeric"></label>
+    <label>Đã thu (VND)<input type="number" class="fld" data-f="da_thu" step="1000" inputmode="numeric"></label>
+    <label>Ngày thu đủ<input type="date" class="fld" data-f="ngay_thu_du"></label>
+    <label class="wide">Ghi chú<input type="text" class="fld" data-f="ghi_chu"></label>
+    <div class="cn-note">Khách chưa có trong danh mục thì điền thêm các ô dưới — hệ thống tự thêm khách vào danh mục. Khách đã có thì bỏ trống.</div>
+    <label>Tên khách hàng<input type="text" class="fld" data-f="__ten"></label>
+    <label>Nhóm<select class="fld" data-f="__nhom"><option value="">—</option>${NHOM_OPT}</select></label>
+    <label>PM phụ trách<input type="text" class="fld" data-f="__pm"></label>
+    <label>Sales<input type="text" class="fld" data-f="__sales"></label>
+    <label>Credit term (ngày)<input type="number" class="fld" data-f="__term"></label>
+    <div class="cn-act"><button type="button" class="btn primary cn-save">Thêm dòng</button></div>
+  </div></details>`;
+}
+const NGANH = ["Hotel", "Flight", "Mobility", "SaaS", "F&B", "Khác"];
+function addApForm(ky: string): string {
+  return `<details class="add-det"><summary>+ Thêm dòng công nợ phải trả (nhà cung cấp mới, hoặc kỳ chưa có trong file)</summary>
+  <div class="cn-form" data-loai="ap" data-them="1" data-moi="1">
+    <label>Mã nhà cung cấp *<input type="text" class="fld" list="dl-ncc" data-f="__ma" placeholder="chọn hoặc gõ mã mới"></label>
+    <label>Kỳ<input type="text" class="fld" data-f="__ky" value="${esc(ky)}"></label>
+    <label>Ngày hóa đơn *<input type="date" class="fld" data-f="ngay_hd"></label>
+    <label>Ngày đến hạn *<input type="date" class="fld" data-f="ngay_den_han"></label>
+    <label>Phải trả (VND) *<input type="number" class="fld" data-f="so_tien" step="1000" inputmode="numeric"></label>
+    <label>Đã trả (VND)<input type="number" class="fld" data-f="da_tra" step="1000" inputmode="numeric"></label>
+    <label>Ngày trả<input type="date" class="fld" data-f="ngay_tra"></label>
+    <label class="wide">Ghi chú<input type="text" class="fld" data-f="ghi_chu"></label>
+    <div class="cn-note">Nhà cung cấp chưa có trong danh mục thì điền thêm các ô dưới. Đã có thì bỏ trống.</div>
+    <label>Tên nhà cung cấp<input type="text" class="fld" data-f="__ten"></label>
+    <label>Ngành<select class="fld" data-f="__nganh">${NGANH.map((n) => `<option value="${n}">${n}</option>`).join("")}</select></label>
+    <label>Payment term (ngày)<input type="number" class="fld" data-f="__term"></label>
+    <label>Partnership phụ trách<input type="text" class="fld" data-f="__part"></label>
+    <div class="cn-act"><button type="button" class="btn primary cn-save">Thêm dòng</button></div>
+  </div></details>`;
+}
+
+/* ---------- Nhập GMV theo từng khách ---------- */
+function gmvKhCard(v: VM): string {
+  if (!v.canEdit) return "";
+  const { C, ky } = v;
+  const tay = C.D.gmv.filter((r) => r.tay && r.ky === ky);
+  const inp = (khoa: string, val: number | null, note = "") => {
+    const x = val == null ? "" : String(Number((val / unit().chia).toFixed(6)));
+    return `<td class="r"><input type="number" step="any" class="fld nq-in tay" data-nhom="gmvkh" data-ky="${esc(ky)}" data-khoa="${esc(khoa)}" data-tien="1" data-goc="${esc(x)}" data-tay="1"${note ? ` data-note="${esc(note)}"` : ""} value="${esc(x)}"></td>`;
+  };
+  const rows = tay.map((r) => {
+    const b = `${r.ma_kh}|${r.dich_vu}`;
+    return `<tr><td><b>${esc(v.C.cust.get(r.ma_kh)?.ten_viet_tat || v.C.cust.get(r.ma_kh)?.ten_kh || r.ma_kh)}</b><div class="t2">${esc(r.ma_kh)} · ${esc(r.dich_vu)}${r.ma_ncc ? " · NCC " + esc(r.ma_ncc) : ""}</div></td>${inp(b + "|gmv", r.gmv, r.ma_ncc || "")}${inp(b + "|gia_von", r.gia_von)}${inp(b + "|chiet_khau", r.chiet_khau)}</tr>`;
+  }).join("");
+  const nw = `<tr class="nq-new" data-nhom="gmvkh" data-ky="${esc(ky)}"><td><div class="nq-new-f"><input type="text" class="fld nq-ma" list="dl-kh" placeholder="Mã khách"><select class="fld nq-dv">${SVCS.map((s) => `<option>${s}</option>`).join("")}</select><input type="text" class="fld nq-ncc" list="dl-ncc" placeholder="Mã NCC (nếu có)"></div></td>
+    <td class="r"><input type="number" step="any" class="fld nq-v" data-sfx="|gmv" placeholder="GMV"></td><td class="r"><input type="number" step="any" class="fld nq-v" data-sfx="|gia_von" placeholder="Giá vốn"></td><td class="r"><input type="number" step="any" class="fld nq-v" data-sfx="|chiet_khau" placeholder="Chiết khấu"></td></tr>`;
+  const kh = `<div class="nq-kh"><span class="small">Khách mới chưa có trong danh mục:</span><input type="text" class="fld nq-kh-f" data-k="ten_kh" placeholder="Tên khách hàng"><select class="fld nq-kh-f" data-k="nhom"><option value="">Nhóm</option>${NHOM_OPT}</select><input type="text" class="fld nq-kh-f" data-k="pm" placeholder="PM"><input type="text" class="fld nq-kh-f" data-k="sales" placeholder="Sales"></div>`;
+  return card("Cập nhật trực tiếp", `GMV theo khách — kỳ ${esc(ky)}`, `${tay.length} dòng nhập tay`, `<div class="nq-form" data-nhom="gmvkh">
+    <div class="tw"><table class="nq"><thead><tr><th>Khách · dịch vụ</th><th class="r">GMV (${unit().nhan})</th><th class="r">Giá vốn (${unit().nhan})</th><th class="r">Chiết khấu KH (${unit().nhan})</th></tr></thead><tbody>${rows}${nw}</tbody></table></div>${kh}
+    <div class="nq-act"><span class="small">Thêm khách phát sinh trong kỳ mà file chưa có, hoặc sửa GMV một khách. Một dòng ở đây thay cho dòng file cùng khách + cùng dịch vụ. Số nhập theo đơn vị <b>${esc(unitLabel())}</b>; xóa ô GMV để bỏ dòng. Upload file GMV của kỳ này sẽ ghi đè các dòng nhập tay.</span><button type="button" class="btn primary nq-save">Lưu số đã nhập</button></div>
+  </div>`);
 }

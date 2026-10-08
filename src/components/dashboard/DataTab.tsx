@@ -38,19 +38,20 @@ export default function DataTab({ data, onDone, toast, canEdit }: { data: DataSe
     const order = SHEETS.map((s) => s.sheet);
     const sheets = res.sheets.slice().sort((a, b) => order.indexOf(a.spec.sheet) - order.indexOf(b.spec.sheet));
     const total = sheets.reduce((s, x) => s + Math.max(1, Math.ceil(x.rows.length / CHUNK)), 0);
-    let done = 0;
+    let done = 0, boTay = 0;
     try {
       for (const s of sheets) {
         for (let i = 0; i < Math.max(1, s.rows.length); i += CHUNK) {
           const r = await fetch("/api/dashboard/upload", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "chunk", sheet: s.spec.sheet, rows: s.rows.slice(i, i + CHUNK), first: i === 0, kys: s.kys }) });
-          const j = (await r.json()) as { error?: string };
+          const j = (await r.json()) as { error?: string; boTay?: number };
           if (!r.ok || j.error) throw new Error(j.error || `Lỗi ghi ${s.spec.sheet}`);
+          boTay += j.boTay || 0;
           done++; setProg(done / total);
         }
       }
       const summary = Object.fromEntries(sheets.map((s) => [s.spec.sheet, { rows: s.rows.length, kys: s.kys }]));
       await fetch("/api/dashboard/upload", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "log", fileName, summary }) });
-      toast(`Đã cập nhật ${sheets.length} sheet từ ${fileName}`);
+      toast(`Đã cập nhật ${sheets.length} sheet từ ${fileName}` + (boTay ? ` — đã thay ${boTay} số nhập tay trên web bằng số trong file` : ""));
       setRes(null);
       await onDone();
     } catch (e) {
@@ -90,6 +91,7 @@ export default function DataTab({ data, onDone, toast, canEdit }: { data: DataSe
                 <tbody>{res.sheets.map((s) => (<tr key={s.spec.sheet}><td className="num">{s.spec.sheet}</td><td>{MODE_LABEL[s.spec.mode]}</td><td className="r num">{n0(s.rows.length)}</td><td className="small">{s.kys.join(", ") || (s.spec.mode === "replace_all" ? "toàn bộ sổ" : "—")}</td></tr>))}</tbody>
               </table></div>
               {res.unknownSheets.length > 0 && <div className="small" style={{ marginTop: 8 }}>Bỏ qua sheet không thuộc template: {res.unknownSheets.join(", ")}</div>}
+              <div className="small" style={{ marginTop: 8 }}>Số liệu nhập tay trên web (công nợ, GMV, chi phí, kế hoạch, dòng tiền) của các kỳ có trong file sẽ bị <b>ghi đè</b> bằng số trong file. Kỳ không có trong file giữ nguyên.</div>
               <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                 <button className="btn primary" disabled={!!errors.length || busy || !res.sheets.length} onClick={commit}>{busy ? "Đang ghi…" : `Ghi ${res.sheets.length} sheet vào dashboard`}</button>
                 <button className="btn" disabled={busy} onClick={() => setRes(null)}>Hủy</button>

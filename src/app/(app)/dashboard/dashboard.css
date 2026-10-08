@@ -617,3 +617,70 @@
 .xd table.bk .fld { width: 142px; }
 .xd table.bk .fld.money { width: 124px; text-align: right; }
 .xd table.bk tr.r-edited > td:first-child { box-shadow: inset 3px 0 0 var(--color-border-accent, #B041FF); }
+
+/* --------------------------------------------------------------------------
+   XU HƯỚNG · GÓC NHÌN CEO · THÊM DÒNG TRỰC TIẾP
+   -------------------------------------------------------------------------- */
+/* Thanh điều khiển của tab (khoảng thời gian, nhóm khách, kịch bản) */
+.xd .ctl-bar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--gap-small) var(--gap-medium); padding: var(--padding-small) var(--padding-medium); }
+.xd .ctl-bar label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--color-content-subtle); }
+.xd .ctl-bar .ctl-t { font-size: 16px; font-weight: 600; line-height: 24px; color: var(--color-text-default); margin-right: auto; align-self: center; }
+.xd .seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; border-radius: var(--radius-rounded-12); background: var(--color-surface-secondary); }
+.xd .seg-b {
+  font-family: inherit; font-size: 13px; line-height: 20px; font-weight: 600; color: var(--color-content-subtle);
+  background: transparent; border: 0; border-radius: var(--radius-rounded-10); padding: 5px 12px; cursor: pointer;
+  transition: background-color var(--duration-normal) var(--ease-standard), color var(--duration-normal) var(--ease-standard);
+}
+.xd .seg-b:hover { color: var(--color-text-default); background: var(--color-surface-default-alpha); }
+.xd .seg-b.on { background: var(--color-surface-default); color: var(--color-content-primary); box-shadow: var(--elevation-sm); }
+.xd .sec-h { font-size: 18px; line-height: 28px; font-weight: 700; color: var(--color-text-default); letter-spacing: -0.02em; margin: var(--gap-small) 0 calc(-1 * var(--gap-xsmall)); }
+.xd tr.hl td { background: var(--color-surface-primary); }
+.xd .nowrap { white-space: nowrap; }
+.xd svg.spark { display: inline-block; vertical-align: middle; }
+
+/* Hai thanh trên một hàng: tỷ trọng GMV và tỷ trọng margin */
+.xd .pb .pb-tracks { display: flex; flex-direction: column; gap: 4px; }
+.xd .hb-track.thin { height: 8px; }
+.xd .hb-track .neg { position: absolute; left: 6px; top: -4px; font-size: 10px; font-style: normal; font-weight: 700; color: var(--color-content-negative); }
+.xd .pb-v { display: flex; flex-direction: column; font-size: 13px; line-height: 16px; }
+
+/* "Vì sao?" — phân tích nguyên nhân trong cảnh báo */
+.xd details.why { margin-top: 8px; border-top: 1px dashed var(--color-border-tertiary); padding-top: 6px; }
+.xd details.why > summary { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.xd .why-b { margin-top: 8px; display: flex; flex-direction: column; gap: 10px; }
+.xd .why-lead { margin: 0; font-size: 13px; line-height: 20px; color: var(--color-text-default); }
+.xd .why-i { padding: 8px 10px; border-radius: var(--radius-rounded-10); background: var(--color-canvas-secondary); border-left: 3px solid var(--color-icon-subtle); }
+.xd .why-i.critical { border-left-color: var(--color-content-negative); }
+.xd .why-i.high { border-left-color: var(--color-display-orange-default); }
+.xd .why-i.watch { border-left-color: var(--color-content-warning); }
+.xd .why-t { font-size: 13px; line-height: 20px; color: var(--color-text-default); font-weight: 600; margin-bottom: 4px; }
+.xd .why-i .hb-row { grid-template-columns: minmax(130px, 200px) minmax(0, 1fr) 110px; padding: 3px 0; }
+.xd .why-i .hb-track { height: 10px; }
+
+/* Dự báo dòng tiền */
+.xd .fc-ctl { display: flex; flex-wrap: wrap; gap: var(--gap-small); align-items: flex-end; margin-bottom: var(--gap-small); }
+.xd .fc-ctl label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--color-content-subtle); }
+.xd .fc-ctl .small { flex: 1; min-width: 240px; }
+.xd .answer { margin-top: var(--gap-small); padding: 10px 14px; border-radius: var(--radius-rounded-12); font-size: 14px; line-height: 22px; color: var(--color-text-default); }
+.xd .answer.bad { background: var(--color-surface-negative-subtle); border: 1px solid #e83c3f40; }
+.xd .answer.good { background: var(--color-surface-positive-subtle); border: 1px solid #3bb37b40; }
+.xd i.dot-c { display: inline-block; width: 10px; height: 10px; border-radius: var(--radius-pill); margin-right: 8px; vertical-align: -1px; }
+
+/* Thêm dòng mới trong bảng nhập nhanh */
+.xd .nq-v { width: 128px; text-align: right; }
+.xd tr.nq-new td { background: var(--color-canvas-secondary); }
+.xd tr.nq-new .nq-name { width: 100%; min-width: 180px; }
+.xd .nq-new-f { display: flex; gap: 6px; flex-wrap: wrap; }
+.xd .nq-new-f .fld { min-width: 96px; }
+.xd .nq-new-f .nq-ma, .xd .nq-new-f .nq-name { flex: 1; min-width: 130px; }
+.xd .nq-kh { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
+.xd .nq-kh .fld { min-width: 120px; }
+@media (max-width: 760px) {
+  .xd .ctl-bar { padding: var(--padding-small); }
+  .xd .why-i .hb-row { grid-template-columns: 100px minmax(0, 1fr) 90px; }
+}
+.xd .sc-n { display: flex; gap: 8px; align-items: flex-start; min-width: 190px; }
+.xd .sc-n .dot-c { margin: 5px 0 0; flex: 0 0 auto; }
+.xd .fc-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: var(--gap-medium); align-items: start; }
+.xd table.cmp td, .xd table.cmp th { padding-left: 8px; padding-right: 8px; }
+@media (max-width: 1200px) { .xd .fc-grid { grid-template-columns: minmax(0, 1fr); } }

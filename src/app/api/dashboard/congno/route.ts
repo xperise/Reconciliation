@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
-import { adminClient, guard } from "@/lib/dashboard/server";
+import { adminClient, guard, ensureCustomer, ensureSupplier } from "@/lib/dashboard/server";
 
 export const dynamic = "force-dynamic";
 
-/* Sửa công nợ trực tiếp trên web.
-   Ghi vào fin_ar_edit / fin_ap_edit chứ không ghi đè fin_ar / fin_ap, vì hai bảng
-   đó bị thay toàn bộ mỗi lần upload file template. Nhờ vậy số sửa trên web không
-   bao giờ bị mất khi kế toán upload lại sổ. */
+/* Sửa / thêm công nợ trực tiếp trên web.
+   Ghi vào fin_ar_edit / fin_ap_edit, tách khỏi fin_ar / fin_ap (hai bảng này bị thay
+   toàn bộ mỗi lần upload file). Khi upload file sổ công nợ, các dòng sửa tay của
+   những kỳ có trong file bị xóa — số trong file ghi đè (xem api/dashboard/upload).
+   Dòng thêm mới có thể kèm khách / NCC mới: chỉ thêm vào danh mục khi mã chưa có. */
 
 type Body = {
   loai: "ar" | "ap";
@@ -17,6 +18,8 @@ type Body = {
   xoa?: boolean;
   reset?: boolean;            // bỏ phần sửa tay, quay về số trong file
   fields?: Record<string, string | number | null>;
+  khach?: Record<string, unknown>;   // khách mới (chỉ dùng khi mã chưa có trong danh mục)
+  ncc?: Record<string, unknown>;     // nhà cung cấp mới
 };
 
 const AR_FIELDS = ["ngay_gui_bk", "ngay_hd", "ngay_den_han", "so_tien", "da_thu", "ngay_thu_du", "ngay_thu_gan_nhat", "ghi_chu"];
@@ -67,15 +70,20 @@ export async function POST(req: Request) {
     }
 
     const fields = clean(b.fields || {}, isAr ? AR_FIELDS : AP_FIELDS);
+    let taoMoi = 0;
     if (b.tu_tao) {
       if (fields.so_tien == null) return NextResponse.json({ error: "Dòng mới phải có số tiền" }, { status: 400 });
       if (fields.ngay_den_han == null) return NextResponse.json({ error: "Dòng mới phải có ngày đến hạn" }, { status: 400 });
+      if (!isAr && fields.ngay_hd == null) return NextResponse.json({ error: "Dòng phải trả mới phải có ngày hóa đơn" }, { status: 400 });
+      // khách / NCC chưa có trong danh mục → thêm vào, nếu không đủ thông tin thì báo lỗi trước khi ghi công nợ
+      try { taoMoi = isAr ? await ensureCustomer(ma, b.khach) : await ensureSupplier(ma, b.ncc); }
+      catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 400 }); }
     }
 
     const row = { [idCol]: ma, ky, so_ct, ...fields, tu_tao: !!b.tu_tao, xoa: !!b.xoa, updated_by: g.user.email, updated_at: new Date().toISOString() };
     const { error } = await sb.from(table).upsert(row, { onConflict: `${idCol},ky,so_ct` });
     if (error) throw new Error(error.message);
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, taoMoi: taoMoi ? (isAr ? "khách " + ma : "NCC " + ma) : null });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
   }
