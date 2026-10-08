@@ -276,7 +276,7 @@ export function customerProfit(C: Ctx, ky: string, B?: AP): Profitability {
    ========================================================================== */
 export interface LtvRow { g: string; nw: number; spend: number; cac: number | null; contrib: number | null; churn: number | null; life: number; ltv: number | null; ratio: number | null; payback: number | null; act: number }
 export interface LtvSeries { ky: string; nw: number; spend: number; mkt: number; sal: number; hd: number; cac: number | null }
-export interface LtvCac { rows: LtvRow[]; all: LtvRow; series: LtvSeries[]; window: string[]; salesShare: number; salesShareAuto: boolean; cap: number; firstData: string | null; notes: string[] }
+export interface LtvCac { rows: LtvRow[]; all: LtvRow; seg: { ts: LtvRow; m: LtvRow }; series: LtvSeries[]; window: string[]; salesShare: number; salesShareAuto: boolean; cap: number; firstData: string | null; notes: string[] }
 
 export function ltvCac(C: Ctx, ky: string, B?: AP): LtvCac {
   const D = C.D;
@@ -313,11 +313,12 @@ export function ltvCac(C: Ctx, ky: string, B?: AP): LtvCac {
   const profitWin = (win.length ? win : months.slice(-W)).map((m) => customerProfit(C, m, B));
   const churnMonths = months.filter((m) => m !== firstData).slice(-6);
 
-  const mkRow = (g: string | null): LtvRow => {
-    const inG = (k: string) => g == null || grpOf(C, k) === g;
+  const mkRow = (g: string | null, set?: string[]): LtvRow => {
+    const gs = set || (g == null ? null : [g]);
+    const inG = (k: string) => gs == null || gs.includes(grpOf(C, k));
     const nwKeys = win.flatMap((m) => newIn(m)).filter(inG);
     const nwAll = win.flatMap((m) => newIn(m)).length;
-    const hdG = sum(win, (m) => sum(periodOf(C, m).contracts.filter((c) => c.payKy === m && (g == null || c.nhom === g)), (c) => c.payout) * fHd);
+    const hdG = sum(win, (m) => sum(periodOf(C, m).contracts.filter((c) => c.payKy === m && (gs == null || gs.includes(c.nhom))), (c) => c.payout) * fHd);
     const spend = (nwAll > 0 ? (shared * nwKeys.length) / nwAll : g == null ? shared : 0) + hdG;
     const cac = nwKeys.length ? spend / nwKeys.length : null;
     // đóng góp = lợi nhuận ròng cộng lại chi phí phục vụ (chi phí cố định không đổi theo số khách)
@@ -335,7 +336,7 @@ export function ltvCac(C: Ctx, ky: string, B?: AP): LtvCac {
   };
   if (!salesShare) notes.push("Chưa xác định được phần lương thuộc Sales (DM_NHAN_SU trống và chưa khai tl_luong_sales) nên CAC chỉ gồm Marketing và thưởng hợp đồng.");
   if (!sum(series, (s) => s.mkt)) notes.push("Sheet CHI_PHI chưa có khoản Marketing — CAC đang thấp hơn thực tế.");
-  return { rows: GROUPS.map((g) => mkRow(g)), all: mkRow(null), series, window: win, salesShare, salesShareAuto: !(manualShare > 0), cap, firstData, notes };
+  return { rows: GROUPS.map((g) => mkRow(g)), all: mkRow(null), seg: { ts: mkRow("Travel & SaaS", ["N1"]), m: mkRow("Mobility", ["N2", "N3", "N4", "N5"]) }, series, window: win, salesShare, salesShareAuto: !(manualShare > 0), cap, firstData, notes };
 }
 
 /* ==========================================================================
@@ -646,11 +647,11 @@ export function whyMargin(C: Ctx, ky: string, ax: "T" | "M", F: Fmt): WhyBlock {
 }
 
 /** Gắn phần "Vì sao?" cho các cảnh báo có tham chiếu */
-export function explain(C: Ctx, P: Period, AL: Alert[], F: Fmt): Alert[] {
+export function explain(C: Ctx, P: Period, AL: Alert[], F: Fmt, scope = "tổng công ty"): Alert[] {
   const why = (ref: AlertRef): WhyBlock | undefined => {
     if (ref.k === "gmvtot") {
       const b = gmvBridge(C, P.ky, () => true);
-      const w = bridgeWhy(C, P.ky, "GMV tổng công ty", b, P.totTgt, F);
+      const w = bridgeWhy(C, P.ky, "GMV " + scope, b, P.totTgt, F);
       const gaps = P.lines.filter((l) => l.tgt > 0).map((l) => ({ l, g: l.tgt - l.act })).filter((x) => x.g > 0).sort((a, b) => b.g - a.g);
       const totGap = sum(gaps, (x) => x.g);
       if (gaps.length) w.items.unshift({

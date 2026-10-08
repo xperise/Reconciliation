@@ -30,10 +30,16 @@ export function barChart(o: BarOpts): string {
   o.labels.forEach((lb, j) => {
     const cx = pl + gw * j + gw / 2, x0 = cx - (bw * k) / 2;
     const dr = o.drills?.[j] ? ` data-drill="${esc(o.drills[j] as string)}" class="hit"` : "";
+    let totTxt = "";
     if (o.stack) {
       let acc = 0;
       o.series.forEach((se) => { const v = se.vals[j] || 0; if (!v) return; s += `<rect${dr} x="${x0 + 1}" y="${y(acc + v)}" width="${bw - 2}" height="${Math.max(0, y(acc) - y(acc + v))}" style="fill:${col(se.c)};opacity:${se.op ?? 1}"><title>${esc(lb)} · ${esc(se.name)}: ${ft(v)}</title></rect>`; acc += v; });
-      if (o.showTot && acc) s += `<text x="${cx}" y="${y(acc) - 4}" text-anchor="middle" style="fill:var(--ink)">${ft(acc)}</text>`;
+      if (o.showTot && acc) {
+        // nhãn tổng tránh đè lên vạch kế hoạch
+        const tg0 = o.targets?.[j];
+        const yy = tg0 != null && isFinite(tg0) && Math.abs(y(tg0) - (y(acc) - 4)) < 12 ? Math.min(y(tg0), y(acc)) - 6 : y(acc) - 4;
+        totTxt = `<text x="${cx}" y="${yy}" text-anchor="middle" style="fill:var(--ink);paint-order:stroke;stroke:var(--surface);stroke-width:3px">${ft(acc)}</text>`;
+      }
     } else o.series.forEach((se, q) => {
       const v = se.vals[j]; if (v == null || !isFinite(v)) return;
       const x = x0 + q * bw, c = se.cf ? se.cf(v, j) : se.c, top = Math.min(y(v), y(0));
@@ -42,17 +48,26 @@ export function barChart(o: BarOpts): string {
     });
     const tg = o.targets?.[j];
     if (tg != null && isFinite(tg)) s += `<line x1="${x0 - 4}" x2="${x0 + bw * k + 4}" y1="${y(tg)}" y2="${y(tg)}" style="stroke:var(--ink);stroke-width:2"><title>${esc(o.tName || "Kế hoạch")}: ${ft(tg)}</title></line>`;
+    s += totTxt;
     s += `<text class="lbl" x="${cx}" y="${H - 10}" text-anchor="middle">${esc(lb)}</text>`;
   });
   return s + `</svg>` + (o.noLegend ? "" : legend(o.series.map((se): LegendItem => [se.name, se.c, se.op]).concat(o.targets ? [[o.tName || "Kế hoạch", "ink", 1, true]] : [])));
 }
 
 export interface LineSeries { name: string; c: string; vals: (number | null)[]; dash?: boolean; nodot?: boolean; w?: number }
-export function lineChart(o: { labels: string[]; series: LineSeries[]; h?: number; W?: number; max?: number; ft?: Fmt; fy?: Fmt; mark?: number; markLabel?: string }): string {
+export function lineChart(o: { labels: string[]; series: LineSeries[]; h?: number; W?: number; max?: number; ft?: Fmt; fy?: Fmt; mark?: number; markLabel?: string;
+  /** phóng trục Y theo khoảng dữ liệu thay vì bắt đầu từ 0 — dùng cho tỷ lệ % dao động hẹp */ fit?: boolean }): string {
   const W = o.W || 640, H = o.h || 220, pl = 48, pr = 26, pt = 12, pb = 28, n = o.labels.length;
   const all = o.series.flatMap((s) => s.vals).filter((v): v is number => v != null && isFinite(v));
-  const lo = Math.min(0, ...all), min = lo < 0 ? -niceMax(-lo * 1.1) : 0;
-  const max = o.max || niceMax(Math.max(...all, 1) * 1.05);
+  let min: number, max: number;
+  if (o.fit && all.length) {
+    const a = Math.min(...all), b = Math.max(...all), sp = Math.max(b - a, Math.abs(b) * 0.05, 0.5);
+    min = a - sp * 0.4; max = b + sp * 0.4;
+  } else {
+    const lo = Math.min(0, ...all);
+    min = lo < 0 ? -niceMax(-lo * 1.1) : 0;
+    max = o.max || niceMax(Math.max(...all, 1) * 1.05);
+  }
   const y = (v: number) => pt + (H - pt - pb) * (1 - (v - min) / (max - min)), x = (j: number) => pl + (W - pl - pr) * (n <= 1 ? 0.5 : j / (n - 1));
   const ft = o.ft || n0, fy = o.fy || n0;
   let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img">`;

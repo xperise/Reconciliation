@@ -3,30 +3,51 @@
 import "./dashboard.css";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DataSet } from "@/lib/dashboard/types";
-import { makeCtx, hasActual, mergeEdits } from "@/lib/dashboard/calc";
+import { makeCtx, hasActual, mergeEdits, segCtx, Seg } from "@/lib/dashboard/calc";
 import { renderView, kpiStrip, drillPanel, buildVM, VM, ViewState } from "@/lib/dashboard/views";
 import { kyIdx, kyAdd, tr, todayIso, setUnit, UNITS, UnitKey } from "@/lib/dashboard/util";
 import DataTab from "@/components/dashboard/DataTab";
 
+// Hai tầng điều hướng: PHẦN (Tổng quan · Travel & SaaS · Mobility) → TAB chỉ số trong phần đó.
 // [key, nhãn, icon RemixIcon] — bộ icon của Xperise Design System, không dùng emoji
-const TABS: [string, string, string][] = [
-  ["overview", "Tổng quan", "ri-compass-3-line"],
-  ["ceo", "Góc nhìn CEO", "ri-briefcase-4-line"],
-  ["trend", "Xu hướng", "ri-stock-line"],
-  ["revenue", "Doanh thu & Margin", "ri-line-chart-line"],
-  ["customers", "Khách hàng", "ri-group-line"],
-  ["cash", "Dòng tiền", "ri-wallet-3-line"],
-  ["ar", "Công nợ phải thu", "ri-arrow-down-circle-line"],
-  ["ap", "Công nợ phải trả", "ri-arrow-up-circle-line"],
-  ["kpi", "KPI & Hoa hồng", "ri-award-line"],
-  ["alerts", "Cảnh báo", "ri-alarm-warning-line"],
-  ["data", "Dữ liệu", "ri-database-2-line"],
+type Sec = "all" | Seg;
+const SECTIONS: [Sec, string, string][] = [
+  ["all", "Tổng quan", "ri-dashboard-3-line"],
+  ["ts", "Travel & SaaS", "ri-plane-line"],
+  ["m", "Mobility", "ri-taxi-line"],
 ];
+const TABS: Record<Sec, [string, string, string][]> = {
+  all: [
+    ["home", "Điều hành", "ri-compass-3-line"],
+    ["cash", "Dòng tiền", "ri-wallet-3-line"],
+    ["kpi", "KPI & Hoa hồng", "ri-award-line"],
+    ["alerts", "Cảnh báo", "ri-alarm-warning-line"],
+    ["data", "Dữ liệu", "ri-database-2-line"],
+  ],
+  ts: [
+    ["revenue", "Doanh thu & Margin", "ri-line-chart-line"],
+    ["customers", "Khách hàng", "ri-group-line"],
+    ["ar", "Công nợ phải thu", "ri-arrow-down-circle-line"],
+    ["ap", "Công nợ phải trả", "ri-arrow-up-circle-line"],
+    ["opex", "Chi phí", "ri-money-dollar-circle-line"],
+    ["kpiseg", "KPI & Hoa hồng", "ri-award-line"],
+    ["alerts", "Cảnh báo", "ri-alarm-warning-line"],
+  ],
+  m: [
+    ["revenue", "Doanh thu & Margin", "ri-line-chart-line"],
+    ["customers", "Khách hàng", "ri-group-line"],
+    ["ar", "Công nợ phải thu", "ri-arrow-down-circle-line"],
+    ["kpiseg", "KPI & Hoa hồng", "ri-award-line"],
+    ["alerts", "Cảnh báo", "ri-alarm-warning-line"],
+  ],
+};
+const hasTab = (sec: Sec, t: string) => TABS[sec].some(([k]) => k === t);
 
 export default function DashboardPage() {
   const [data, setData] = useState<DataSet | null>(null);
   const [err, setErr] = useState("");
-  const [tab, setTab] = useState("overview");
+  const [sec, setSec] = useState<Sec>("all");
+  const [tab, setTab] = useState("home");
   const [ky, setKy] = useState("");
   const [toastMsg, setToastMsg] = useState<{ m: string; err: boolean } | null>(null);
   // Mã tra cứu đang mở khi bấm vào một phần của biểu đồ
@@ -57,8 +78,26 @@ export default function DashboardPage() {
     setKy(withAct.slice(-1)[0] || ctx.periods.filter((p) => kyIdx(p) <= now).slice(-1)[0] || ctx.periods[0] || "");
   }, [ctx, ky, data]);
 
-  const base: VM | null = useMemo(() => (ctx && ky ? buildVM(ctx, ky, data, {}) : null), [ctx, ky]);
+  // Tổng quan dùng số toàn công ty; hai phần còn lại dựng từ dữ liệu đã tách theo mảng
+  const base: VM | null = useMemo(() => {
+    if (!ctx || !ky) return null;
+    return sec === "all" ? buildVM(ctx, ky, data, {}) : buildVM(segCtx(ctx, sec), ky, data, {}, { seg: sec, Cc: ctx });
+  }, [ctx, ky, sec]);
   const vm: VM | null = useMemo(() => (base ? { ...base, st } : null), [base, st]);
+
+  /** Đi tới một tab: "ar" (trong phần đang xem), hoặc "ts:revenue" (sang phần khác) */
+  function go(target: string) {
+    const [a, b] = target.includes(":") ? target.split(":") : ["", target];
+    let s2: Sec = (a as Sec) || sec, t2 = b;
+    if (!a && !hasTab(s2, t2)) s2 = hasTab("all", t2) ? "all" : sec;
+    if (!hasTab(s2, t2)) t2 = TABS[s2][0][0];
+    setSec(s2); setTab(t2); setDrillKey(null);
+    window.scrollTo({ top: 0 });
+  }
+  function pickSec(s2: Sec) {
+    setSec(s2); setDrillKey(null);
+    if (!hasTab(s2, tab)) setTab(TABS[s2][0][0]);
+  }
 
   /** Đổi một lựa chọn của người xem (nút có data-st / data-v, hoặc ô chọn có data-st) */
   function setView(k: string, raw: string) {
@@ -232,7 +271,7 @@ export default function DashboardPage() {
     }
     if (t.closest(".al-form")) return;
     const g = t.closest("[data-go]") as HTMLElement | null;
-    if (g) { e.preventDefault(); setTab(g.dataset.go || "overview"); window.scrollTo({ top: 0 }); }
+    if (g) { e.preventDefault(); go(g.dataset.go || "home"); }
   };
   const onChange = (e: React.ChangeEvent<HTMLDivElement>) => {
     const t = e.target as unknown as HTMLSelectElement;
@@ -241,13 +280,13 @@ export default function DashboardPage() {
   const onKey = (e: React.KeyboardEvent) => {
     const t = e.target as HTMLElement;
     if (e.key === "Escape" && drillKey) { setDrillKey(null); return; }
-    if ((e.key === "Enter" || e.key === " ") && t.dataset.go) { e.preventDefault(); setTab(t.dataset.go); }
+    if ((e.key === "Enter" || e.key === " ") && t.dataset.go) { e.preventDefault(); go(t.dataset.go); }
   };
 
   const snap = data?.snapshots.find((s) => s.ky === ky);
   async function lock() {
     if (!vm) return;
-    const P = vm.P;
+    const P = vm.Pc; // luôn chốt số toàn công ty
     const payload = { x: P.x, H: P.H, totAct: P.totAct, totTgt: P.totTgt, pT: P.pT.v, pM: P.pM.v, pm: P.pmPeople.map((p) => ({ name: p.name, total: Math.round(p.total), now: Math.round(p.now), laterMax: Math.round(p.laterMax) })), sales: P.sales.map((s) => ({ name: s.name, total: Math.round(s.total) })), partners: P.partners.map((s) => ({ name: s.name, total: Math.round(s.total) })), companyKeep: Math.round(P.companyKeep), comm: Math.round(P.comm) };
     const r = await fetch("/api/dashboard/snapshot", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ky, data: payload }) });
     const j = await r.json();
@@ -267,9 +306,9 @@ export default function DashboardPage() {
 
   return (
     <div className="xd" onClick={onClick} onKeyDown={onKey} onChange={onChange}>
-      <nav className="xd-tabs no-print" aria-label="Dashboard quản trị"><div className="xd-tabs-in">
-        <div className="xd-tablist">
-          {TABS.map(([k, l, ic]) => (<button key={k} className={"xd-tab" + (tab === k ? " on" : "")} onClick={() => { setTab(k); setDrillKey(null); }}><i className={ic} aria-hidden="true" />{l}{k === "alerts" && nCrit > 0 && <span className="cnt">{nCrit}</span>}</button>))}
+      <nav className="xd-tabs no-print" aria-label="Dashboard quản trị"><div className="xd-tabs-in xd-top">
+        <div className="xd-secs" role="tablist" aria-label="Phần">
+          {SECTIONS.map(([k, l, ic]) => (<button key={k} role="tab" aria-selected={sec === k} className={"xd-sec" + (sec === k ? " on" : "")} onClick={() => pickSec(k)}><i className={ic} aria-hidden="true" />{l}</button>))}
         </div>
         <div className="ctl"><label htmlFor="xdDv">Đơn vị</label>
           <select id="xdDv" value={donVi} onChange={(e) => { const k = e.target.value as UnitKey; setDonVi(k); setSoLe(k === "ty" ? 2 : k === "trieu" ? 1 : 0); }}>
@@ -285,6 +324,11 @@ export default function DashboardPage() {
             {(ctx?.periods || []).map((p) => (<option key={p} value={p}>{p}{ctx && !hasActual(ctx, p) ? " (chưa có thực tế)" : ""}</option>))}
           </select>
           <button className="btn" onClick={() => { load(); toast("Đã tải lại dữ liệu"); }}>Tải lại</button></div>
+      </div>
+      <div className="xd-tabs-in">
+        <div className="xd-tablist">
+          {TABS[sec].map(([k, l, ic]) => (<button key={k} className={"xd-tab" + (tab === k ? " on" : "")} onClick={() => { setTab(k); setDrillKey(null); }}><i className={ic} aria-hidden="true" />{l}{k === "alerts" && nCrit > 0 && <span className="cnt">{nCrit}</span>}</button>))}
+        </div>
       </div></nav>
       <div className="xd-page">
         {err && <div className="card notice">Lỗi tải dữ liệu: {err}</div>}
@@ -293,11 +337,11 @@ export default function DashboardPage() {
           <div className="card notice">Chưa có dữ liệu. Vào tab <a href="#" data-go="data">Dữ liệu</a> để tải template và upload file đầu tiên.</div>
         )}
         {vm && tab !== "data" && <section className="kpis" dangerouslySetInnerHTML={{ __html: kpiStrip(vm) }} />}
-        {vm && tab === "kpi" && vm.P.hasActual && (snap || canEdit) && (
+        {vm && sec === "all" && tab === "kpi" && vm.Pc.hasActual && (snap || canEdit) && (
           <div className="card lockbar">
             {snap ? (<>
               <span className="pill dot p-stable">Đã chốt {new Date(snap.locked_at).toLocaleString("vi-VN")}</span>
-              <span className="small">Tổng chi hoa hồng đã chốt <b className="num">{tr(snapComm)}</b> · theo dữ liệu hiện tại <b className="num">{tr(vm.P.comm)}</b>{Math.abs(snapComm - vm.P.comm) > 1000 ? " — dữ liệu đã thay đổi sau khi chốt" : ""}</span>
+              <span className="small">Tổng chi hoa hồng đã chốt <b className="num">{tr(snapComm)}</b> · theo dữ liệu hiện tại <b className="num">{tr(vm.Pc.comm)}</b>{Math.abs(snapComm - vm.Pc.comm) > 1000 ? " — dữ liệu đã thay đổi sau khi chốt" : ""}</span>
               <span className="spacer" />{canEdit && <button className="btn danger" onClick={unlock}>Mở khóa</button>}
             </>) : (<>
               <span className="small">Số hoa hồng kỳ {ky} đang tính theo dữ liệu hiện tại và sẽ thay đổi nếu upload lại. Chốt để lưu lại số đã duyệt.</span>

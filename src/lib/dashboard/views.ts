@@ -2,7 +2,7 @@
 import { Ctx, Period, AR, AP, Cash, Alert, AR_BUCKETS, TIERS, tier, tierIdx, AXIS_NAME, Axis, num, hasActual,
   CustRow, GroupBlock, ArCust, ApSup, CashDetail, PaySchedule, drill, MANUAL_LINES, MANUAL_TARGETS, CASH_IN, CASH_OUT, CASH_SIGNED,
   calcPeriod, calcAR, calcAP, calcCash, alerts, customerRows, customersByGroup, arByCustomer, apBySupplier, cashDetail, paySchedule,
-  WhyBlock, cashDir } from "./calc";
+  WhyBlock, cashDir, onTimeByGroup, Seg, SEG_NAME, SEG_DV, SEG_GROUPS, segCtx, segComm, SegComm } from "./calc";
 import { barChart, lineChart, waterfall, hBullet, hStack, divBars, donut, tierChart, legend, pill, stCls, xC, empty, LegendItem, pairBars, scatter, spark } from "./charts";
 import { esc, ty, tyN, tr, trN, n0, pc, sum, ok, N1, N2, kyShort, fmtDate, kyIdx, days, unit, unitLabel, axisNum, exact, leVua, tyLe, kyAdd, kyOfDate, kyEnd } from "./util";
 import type { AlertAction, DataSet } from "./types";
@@ -20,23 +20,42 @@ export interface VM {
   AA: Record<string, AlertAction>;
   canEdit: boolean;
   st: ViewState;
+  /** Đang xem một mảng (Travel & SaaS / Mobility); không có = toàn công ty */
+  seg?: Seg;
+  /** Ngữ cảnh và kỳ của TOÀN CÔNG TY — dùng cho hoa hồng, số nhập tay, lợi nhuận theo khách */
+  Cc: Ctx; Pc: Period;
+  /** Hoa hồng thuộc về mảng đang xem */
+  sc?: SegComm;
 }
 /** Định dạng tiền tự thêm số lẻ khi số nhỏ so với đơn vị đang chọn */
 const tien = (x: number) => { const v = x || 0; return `${tyLe(v, leVua(v))} ${unit().nhan}`; };
 const F = { tien, pc };
 
 /** Dựng toàn bộ số liệu cho một kỳ — dùng chung cho trang và cho kiểm thử */
-export function buildVM(C: Ctx, ky: string, data: DataSet | null, st: ViewState = {}): VM {
-  const P = calcPeriod(C, ky), A = calcAR(C), B = calcAP(C, A.dso), CS = calcCash(C);
+export function buildVM(C: Ctx, ky: string, data: DataSet | null, st: ViewState = {}, opt: { seg?: Seg; Cc?: Ctx } = {}): VM {
+  const seg = opt.seg, Cc = opt.Cc || C;
+  const Pc = periodOf(Cc, ky);
+  let P = seg ? calcPeriod(C, ky) : Pc;
+  let sc: SegComm | undefined;
+  if (seg) {
+    // Hoa hồng của mảng lấy từ bảng toàn công ty (hệ số bậc thưởng tính trên %đạt toàn công ty)
+    sc = segComm(Cc, Pc, seg);
+    const ebitda = ok(P.opexOp) ? P.gp - sc.total - (P.opexOp as number) : null;
+    P = { ...P, comm: sc.total, ebitda, netProfit: ok(ebitda) && P.belowAmt ? ebitda - P.belowAmt : null };
+  }
+  const A = calcAR(C), B = calcAP(C, A.dso), CS = calcCash(C);
   const CR = customerRows(C, ky), ARC = arByCustomer(C);
   const AA: Record<string, AlertAction> = {};
   (data?.alertActions || []).forEach((x) => { AA[x.id] = x; });
-  const AL = explain(C, P, alerts(C, P, A, B, CS, { ty, pc, tien }, { CR, ARC }), F);
+  const scope = seg ? "mảng " + SEG_NAME[seg] : "tổng công ty";
+  const AL = explain(C, P, alerts(C, P, A, B, CS, { ty, pc, tien }, { CR, ARC, scope }), F, scope);
   return {
     C, P, A, B, CS, AL, ky, CR, GB: customersByGroup(C, ky, CR), ARC, APS: apBySupplier(C),
-    CD: cashDetail(C), PS: paySchedule(C, ky, P), AA, canEdit: !!data?.me?.canEdit, st,
+    CD: cashDetail(C), PS: paySchedule(Cc, ky, Pc), AA, canEdit: !!data?.me?.canEdit, st, seg, Cc, Pc, sc,
   };
 }
+/** Các trục (mảng con) hiển thị trong phần đang xem */
+const segAxes = (v: VM): Axis[] => (v.seg === "ts" ? ["T", "S", "F"] : v.seg === "m" ? ["M", "S"] : ["T", "M", "S", "F"]);
 // Bảng màu biểu đồ lấy từ Display palette của Xperise Design System.
 // Tuổi nợ là thang tuần tự (xanh → vàng → cam → đỏ → đỏ đậm); các mảng và
 // nhóm khách là thang phân loại, chọn các hue cách xa nhau để dễ phân biệt.
@@ -67,19 +86,55 @@ const noActual = (ky: string) => `<div class="card notice">Kỳ ${esc(ky)} chưa
 
 /* ---------- KPI strip ---------- */
 export function kpiStrip(v: VM): string {
+  if (v.seg) return segStrip(v);
   const { P, A, CS } = v;
   const cTot = sum(P.cust.groups, (g) => g.act), cTgt = sum(P.cust.groups, (g) => g.tgt || 0);
   const lastBal = CS.halves.filter((h) => h.h.startsWith(v.ky)).slice(-1)[0]?.bal ?? CS.halves.slice(-1)[0]?.bal ?? null;
   // [nhãn, giá trị, phụ đề, mức thước đo, màu trạng thái, tab khi bấm, icon RemixIcon]
   const k: [string, string, string, number, string, string, string][] = [
-    ["GMV kỳ", ty(P.totAct), P.totTgt ? `${pc(P.x)} của ${ty(P.totTgt)} kế hoạch` : "chưa có kế hoạch", P.x ?? 0, stCls(P.x), "revenue", "ri-shopping-bag-3-line"],
-    ["Margin net", ty(P.gp), P.mgTgtTot ? `${pc(P.gp / P.mgTgtTot)} kế hoạch · ${pc(P.totAct ? P.gp / P.totAct : null, 2)} GMV` : "", P.mgTgtTot ? P.gp / P.mgTgtTot : 0, stCls(P.mgTgtTot ? P.gp / P.mgTgtTot : null), "revenue", "ri-percent-line"],
-    ["EBITDA", ok(P.ebitda) ? ty(P.ebitda) : "—", ok(P.ebitda) ? `${pc(P.gp ? P.ebitda / P.gp : null)} trên margin net` : "chưa có sheet CHI_PHI kỳ này", ok(P.ebitda) && P.gp ? Math.max(0, P.ebitda / P.gp) : 0, ok(P.ebitda) ? (P.ebitda < 0 ? "critical" : "stable") : "muted", "revenue", "ri-funds-line"],
+    ["GMV kỳ", ty(P.totAct), P.totTgt ? `${pc(P.x)} của ${ty(P.totTgt)} kế hoạch` : "chưa có kế hoạch", P.x ?? 0, stCls(P.x), "home", "ri-shopping-bag-3-line"],
+    ["Margin net", ty(P.gp), P.mgTgtTot ? `${pc(P.gp / P.mgTgtTot)} kế hoạch · ${pc(P.totAct ? P.gp / P.totAct : null, 2)} GMV` : "", P.mgTgtTot ? P.gp / P.mgTgtTot : 0, stCls(P.mgTgtTot ? P.gp / P.mgTgtTot : null), "home", "ri-percent-line"],
+    ["EBITDA", ok(P.ebitda) ? ty(P.ebitda) : "—", ok(P.ebitda) ? `${pc(P.gp ? P.ebitda / P.gp : null)} trên margin net` : "chưa có sheet CHI_PHI kỳ này", ok(P.ebitda) && P.gp ? Math.max(0, P.ebitda / P.gp) : 0, ok(P.ebitda) ? (P.ebitda < 0 ? "critical" : "stable") : "muted", "ts:opex", "ri-funds-line"],
     ["Tiền cuối kỳ (dự kiến)", CS.hasOpen && ok(lastBal) ? ty(lastBal) : "—", CS.hasOpen ? `đầu kỳ ${ty(CS.open)}` : "chưa nhập số dư đầu kỳ (THAM_SO)", CS.hasOpen && ok(lastBal) && CS.open ? Math.min(1, Math.max(0, lastBal / CS.open)) : 0, CS.hasOpen && ok(lastBal) ? (lastBal < 0 ? "critical" : "stable") : "muted", "cash", "ri-wallet-3-line"],
+    ["Nợ phải thu quá hạn", A.tot ? pc(A.od / A.tot) : "—", A.tot ? `${ty(A.od)} / ${ty(A.tot)} · DSO ${ok(A.dso) ? n0(A.dso) + " ngày" : "—"}` : "chưa có sổ công nợ", A.tot ? A.od / A.tot : 0, !A.tot ? "muted" : A.od / A.tot > 0.4 ? "critical" : A.od / A.tot > 0.25 ? "high" : "stable", "home", "ri-time-line"],
+    ["Khách hàng active", n0(cTot), cTgt ? `của ${n0(cTgt)} kế hoạch` : "", cTgt ? cTot / cTgt : 0, stCls(cTgt ? cTot / cTgt : null), "home", "ri-group-line"],
+  ];
+  return kpiTiles(k);
+}
+type Tile = [string, string, string, number, string, string, string];
+const kpiTiles = (k: Tile[]) => k.map(([l, val, s, m, c, go, ic]) => `<div class="kpi" data-go="${go}" tabindex="0" role="button"><div class="kpi-l"><i class="${ic}" aria-hidden="true"></i>${esc(l)}</div><div class="kpi-n c-${c}">${val}</div><div class="kpi-s">${esc(s)}</div><div class="meter"><i style="width:${Math.min(100, Math.max(0, m * 100))}%;background:var(--${c === "muted" ? "line" : c})"></i></div></div>`).join("");
+
+/** Tỷ lệ thu đúng hạn gộp các nhóm của một mảng, theo giá trị — lấy kỳ nợ gần nhất đã có
+ *  khoản đến hạn (kỳ đang xem thường chưa đến hạn nên chưa đánh giá được) */
+function onTimeLatest(C: Ctx, ky: string, seg?: Seg): { rate: number | null; ky: string } {
+  const gs = seg ? SEG_GROUPS[seg] : ["N1", "N2", "N3", "N4", "N5"];
+  for (let i = 0; i < 4; i++) {
+    const k = kyAdd(ky, -i);
+    const o = onTimeByGroup(C, k);
+    const os = gs.map((g) => o[g]).filter((x) => x && ok(x.rate));
+    const judged = sum(os, (x) => x.billed - x.notDue);
+    if (judged > 0) return { rate: sum(os, (x) => x.onTime) / judged, ky: k };
+  }
+  return { rate: null, ky };
+}
+function segOnTime(v: VM): number | null { return onTimeLatest(v.Cc, v.ky, v.seg).rate; }
+function segStrip(v: VM): string {
+  const { P, A, sc } = v;
+  const ts = v.seg === "ts";
+  const cTot = sum(P.cust.groups, (g) => g.act), cTgt = sum(P.cust.groups, (g) => g.tgt || 0);
+  const otL = onTimeLatest(v.Cc, v.ky, v.seg), ot = otL.rate, th = num(v.C.D, "nguong_dung_han");
+  const after = P.gp - (sc?.total || 0);
+  const k: Tile[] = [
+    ["GMV kỳ", ty(P.totAct), P.totTgt ? `${pc(P.x)} của ${ty(P.totTgt)} kế hoạch` : "chưa có kế hoạch", P.x ?? 0, stCls(P.x), "revenue", "ri-shopping-bag-3-line"],
+    ["Margin net", ty(P.gp), `${pc(P.totAct ? P.gp / P.totAct : null, 2)} GMV` + (P.mgTgtTot ? ` · ${pc(P.gp / P.mgTgtTot)} kế hoạch` : ""), P.mgTgtTot ? P.gp / P.mgTgtTot : 0, stCls(P.mgTgtTot ? P.gp / P.mgTgtTot : null), "revenue", "ri-percent-line"],
+    ts
+      ? ["EBITDA mảng", ok(P.ebitda) ? ty(P.ebitda) : "—", ok(P.ebitda) ? `sau hoa hồng ${ty(sc?.total || 0)} và chi phí ${ty(P.opexOp as number)}` : "chưa có sheet CHI_PHI kỳ này", ok(P.ebitda) && P.gp ? Math.max(0, (P.ebitda as number) / P.gp) : 0, ok(P.ebitda) ? ((P.ebitda as number) < 0 ? "critical" : "stable") : "muted", "opex", "ri-funds-line"]
+      : ["Margin sau hoa hồng", ty(after), `hoa hồng ${ty(sc?.total || 0)} · chưa có chi phí riêng`, P.gp ? Math.max(0, after / P.gp) : 0, after < 0 ? "critical" : "stable", "kpiseg", "ri-funds-line"],
+    ["Thu đúng hạn kỳ " + kyShort(otL.ky), ok(ot) ? pc(ot, 0) : "—", ok(ot) ? `ngưỡng ${pc(th, 0)} · kỳ nợ ${otL.ky}` : "chưa có khoản nào đến hạn", ot ?? 0, !ok(ot) ? "muted" : (ot as number) >= th ? "stable" : (ot as number) >= 0.7 ? "high" : "critical", "ar", "ri-calendar-check-line"],
     ["Nợ phải thu quá hạn", A.tot ? pc(A.od / A.tot) : "—", A.tot ? `${ty(A.od)} / ${ty(A.tot)} · DSO ${ok(A.dso) ? n0(A.dso) + " ngày" : "—"}` : "chưa có sổ công nợ", A.tot ? A.od / A.tot : 0, !A.tot ? "muted" : A.od / A.tot > 0.4 ? "critical" : A.od / A.tot > 0.25 ? "high" : "stable", "ar", "ri-time-line"],
     ["Khách hàng active", n0(cTot), cTgt ? `của ${n0(cTgt)} kế hoạch` : "", cTgt ? cTot / cTgt : 0, stCls(cTgt ? cTot / cTgt : null), "customers", "ri-group-line"],
   ];
-  return k.map(([l, val, s, m, c, go, ic]) => `<div class="kpi" data-go="${go}" tabindex="0" role="button"><div class="kpi-l"><i class="${ic}" aria-hidden="true"></i>${esc(l)}</div><div class="kpi-n c-${c}">${val}</div><div class="kpi-s">${esc(s)}</div><div class="meter"><i style="width:${Math.min(100, Math.max(0, m * 100))}%;background:var(--${c === "muted" ? "line" : c})"></i></div></div>`).join("");
+  return kpiTiles(k);
 }
 
 /* ---------- Cảnh báo ---------- */
@@ -103,60 +158,45 @@ function whyHTML(w?: WhyBlock, open = false): string {
   return `<details class="why"${open ? " open" : ""}><summary><i class="ri-search-eye-line" aria-hidden="true"></i>Vì sao?</summary><div class="why-b">${whyBody(w)}</div></details>`;
 }
 
-/* ---------- 1. Tổng quan ---------- */
-function overview(v: VM): string {
-  const { P, A, CS, AL } = v;
-  let t = "";
-  if (P.hasActual) {
-    t = `Kỳ ${v.ky}, GMV đạt ${ty(P.totAct)}`;
-    t += P.totTgt ? `, tương đương ${pc(P.x)} kế hoạch, nên hệ số bậc thưởng PM và Sales là ${pc(P.H, 0)}.` : ` (chưa có kế hoạch kỳ này).`;
-    const weak = P.lines.filter((l) => l.tgt > 0 && l.act / l.tgt < 0.85).map((l) => l.name.split(" — ")[0]);
-    if (weak.length) t += ` Phần hụt tập trung ở ${weak.join(", ")}.`;
-    else if (ok(P.x) && P.x >= 1) t += " Tất cả các mảng đều bám hoặc vượt kế hoạch.";
-    if (ok(P.ebitda)) t += P.ebitda < 0 ? ` EBITDA âm ${ty(-P.ebitda)} sau hoa hồng và chi phí vận hành.` : ` EBITDA dương ${ty(P.ebitda)}.`;
-  } else t = `Kỳ ${v.ky} chưa có số liệu GMV thực tế.`;
-  if (A.o60 > 0) t += ` Có ${ty(A.o60)} nợ phải thu đã quá 60 ngày` + (A.top && A.conc >= 0.15 ? `, riêng ${A.top.ten} chiếm ${pc(A.conc, 0)} tổng dư nợ.` : ".");
-  const cnt = { critical: 0, high: 0, watch: 0 };
-  AL.forEach((a) => cnt[a.sev]++);
-  const chips = ([["critical", "Khẩn"], ["high", "Cao"], ["watch", "Theo dõi"]] as const).map(([s, l]) => `<span class="pill dot p-${cnt[s] ? s : "neutral"}" style="cursor:pointer" data-go="alerts">${l} ${cnt[s]}</span>`).join("");
-  const groups: [string, Axis][] = [["Travel", "T"], ["Mobility", "M"], ["SaaS", "S"], ["F&B", "F"]];
-  const av = groups.map((g) => sum(P.lines.filter((l) => l.axis === g[1]), (l) => l.act) / unit().chia), tv = groups.map((g) => sum(P.lines.filter((l) => l.axis === g[1]), (l) => l.tgt) / unit().chia);
-  const gmv = barChart({ labels: groups.map((g) => g[0]), series: [{ name: "Thực tế", c: "accent", vals: av, cf: (x, j) => (tv[j] ? xC(x / tv[j]) : "ink-3") }], targets: tv, drills: groups.map((g) => `axis:${g[1]}`), showVal: true, fv: axisNum, ft: (x) => axisNum(x) + " " + unit().nhan, fy: axisNum, h: 250, noLegend: true }) + legend([["≥ 100% kế hoạch", "stable"], ["90–100%", "watch"], ["70–90%", "high"], ["< 70%", "critical"], ["Kế hoạch", "ink", 1, true]]);
-  const cash = CS.halves.length ? lineChart({ labels: CS.halves.map((h) => h.h.replace("-", " ").replace(".2026", "")), series: [{ name: CS.hasOpen ? "Số dư dự kiến" : "Dòng tiền ròng lũy kế", c: "accent", vals: CS.halves.map((h) => (h.bal - (CS.hasOpen ? 0 : CS.open)) / unit().chia) }], ft: (x) => axisNum(x) + " " + unit().nhan, fy: axisNum, h: 200 }) : empty("Chưa có sheet DONG_TIEN");
-  const ar = donut(A.bk.map((x, k): [number, string, string, string] => [x, BCLS[k], AR_BUCKETS[k], `ar:${k}`]), ty(A.tot), "tổng phải thu", { ft: ty, size: 140 });
-  const kpi = `<div class="stat-row">${stat("%đạt GMV", pc(P.x), stCls(P.x))}${stat("Hệ số", pc(P.H, 0))}${stat("Nấc", ok(P.x) ? tierIdx(P.x) + 1 + "/7" : "—")}</div>` +
-    hBullet([{ l: "Team PM", v: P.pmPaid, txt: tr(P.pmPaid), dr: "team:PM" }, { l: "Team Sales", v: P.salesPaid, txt: tr(P.salesPaid), c: "high", dr: "team:Sales" }, { l: "Team Partnership", v: P.partPaid, txt: tr(P.partPaid), c: "stable", dr: "team:Partnership" }, { l: "Công ty giữ lại", v: P.companyKeep, txt: tr(P.companyKeep), c: "neutral-bar" }]) +
-    `<div class="small" style="margin-top:8px">Tổng chi hoa hồng <b class="num">${tr(P.comm)}</b></div>`;
-  return `<div class="card banner"><div class="eyebrow">Tóm tắt điều hành</div><p>${esc(t)}</p><div class="chips">${chips}</div></div>
-   <div class="g57">${card("Tăng trưởng", "GMV theo mảng — thực tế và kế hoạch", unitLabel() + " · vạch = kế hoạch", gmv)}${card("Cần xử lý", "Cảnh báo ưu tiên", `<a href="#" data-go="alerts" class="small">Xem tất cả</a>`, alertHTML(AL.slice(0, 5)))}</div>
-   <div class="g3">${card("Dòng tiền", "Số dư tiền dự kiến", unitLabel() + " · theo nửa tháng", cash)}${card("Công nợ phải thu", "Cơ cấu tuổi nợ", asOfTxt(v.C), ar)}${card("KPI", "Hệ số bậc thưởng & hoa hồng", "kỳ " + esc(v.ky), kpi)}</div>`;
-}
-
 /* ---------- 2. Doanh thu & Margin ---------- */
 function revenue(v: VM): string {
   const { P, C } = v;
   if (!P.hasActual && !P.hasTarget) return noActual(v.ky) + quickRevenue(v);
   const agg = (a: Axis) => { const rs = P.lines.filter((l) => l.axis === a); return { rs, tgt: sum(rs, (l) => l.tgt), act: sum(rs, (l) => l.act), mgNet: sum(rs, (l) => l.mgNet), mgGross: sum(rs, (l) => l.mgGross), mgT: sum(rs, (l) => l.mgT) }; };
   const items: Parameters<typeof hBullet>[0] = [];
-  (["T", "M", "S", "F"] as Axis[]).forEach((a) => {
+  const AXS = segAxes(v).filter((a) => agg(a).act || agg(a).tgt);
+  AXS.forEach((a) => {
     const g = agg(a);
     if (g.tgt > 0) { const x = g.act / g.tgt; items.push({ l: AXIS_NAME[a], v: x, t: 1, c: xC(x), txt: pc(x, 0), txt2: `${tyN(g.act)} / ${tyN(g.tgt)} ${unit().nhan}`, vc: stCls(x), bold: true, dr: `axis:${a}` }); }
     else items.push({ l: AXIS_NAME[a], v: 0, txt: g.act ? ty(g.act) : "—", txt2: "chưa có kế hoạch", bold: true, dr: `axis:${a}` });
     if (g.rs.length > 1) g.rs.forEach((l) => { if (!l.tgt) return; const x = l.act / l.tgt; items.push({ l: "   " + l.name, v: x, t: 1, c: xC(x), txt: pc(x, 0), txt2: `${tyN(l.act)} / ${tyN(l.tgt)}`, vc: stCls(x), dr: `line:${l.k}` }); });
   });
-  if (P.totTgt) items.push({ l: "Tổng công ty", v: P.x, t: 1, c: xC(P.x), txt: pc(P.x, 0), txt2: `${tyN(P.totAct)} / ${tyN(P.totTgt)} ${unit().nhan}`, vc: stCls(P.x), bold: true });
-  const gm = (["T", "M", "S", "F"] as Axis[]).map((a) => ({ a, n: AXIS_NAME[a], g: agg(a).act, m: agg(a).mgNet, mT: agg(a).mgT }));
-  const mix = `<div class="small" style="margin-bottom:4px">GMV</div>` + donut(gm.map((x): [number, string, string, string] => [x.g, AXC[x.a], x.n, `axis:${x.a}`]), ty(P.totAct), "GMV", { ft: ty, size: 130 }) +
-    `<div class="small" style="margin:12px 0 4px">Margin net</div>` + donut(gm.map((x): [number, string, string, string] => [x.m, AXC[x.a], x.n, `mgaxis:${x.a}`]), ty(P.gp), "margin net", { ft: ty, size: 130 });
+  if (P.totTgt) items.push({ l: v.seg ? "Tổng " + SEG_NAME[v.seg] : "Tổng công ty", v: P.x, t: 1, c: xC(P.x), txt: pc(P.x, 0), txt2: `${tyN(P.totAct)} / ${tyN(P.totTgt)} ${unit().nhan}`, vc: stCls(P.x), bold: true });
+  const gm = AXS.map((a) => ({ a, n: AXIS_NAME[a], g: agg(a).act, m: agg(a).mgNet, mT: agg(a).mgT }));
+  // Trong một mảng: chia theo dòng dịch vụ / nhóm khách; toàn công ty: chia theo mảng
+  const LC_ = ["cyan", "purple", "blue", "orange", "green", "yellow"].map((h) => `color-display-${h}-default`);
+  const parts = v.seg
+    ? P.lines.filter((l) => l.act || l.mgNet).map((l, i) => ({ g: l.act, m: l.mgNet, c: l.grp ? GC[l.grp] : LC_[i % LC_.length], n: l.name, dg: `line:${l.k}`, dm: `mgline:${l.k}` }))
+    : gm.map((x) => ({ g: x.g, m: x.m, c: AXC[x.a], n: x.n, dg: `axis:${x.a}`, dm: `mgaxis:${x.a}` }));
+  const mix = `<div class="small" style="margin-bottom:4px">GMV</div>` + donut(parts.map((x): [number, string, string, string] => [x.g, x.c, x.n, x.dg]), ty(P.totAct), "GMV", { ft: ty, size: 130 }) +
+    `<div class="small" style="margin:12px 0 4px">Margin net</div>` + donut(parts.map((x): [number, string, string, string] => [x.m, x.c, x.n, x.dm]), ty(P.gp), "margin net", { ft: ty, size: 130 });
   // xu hướng
   const idx = kyIdx(v.ky), trend = C.periods.filter((p) => kyIdx(p) <= idx + 3).slice(-7);
   const axAct = (p: string, a: Axis) => { if (!hasActual(C, p) || kyIdx(p) > idx) return null; return sum(C.D.gmv.filter((r) => r.ky === p), (r) => (lineAxis(C, r) === a ? r.gmv : 0)) / unit().chia; };
   const axTgt = (p: string, keys: (keyof import("./types").Target)[]) => { const T = C.D.targets.find((t) => t.ky === p); return T ? sum(keys, (k) => Number(T[k] || 0)) / unit().chia || null : null; };
-  const trendHTML = trend.length ? lineChart({ labels: trend.map(kyShort), series: [
-    { name: "Travel thực tế", c: "accent", vals: trend.map((p) => axAct(p, "T")) }, { name: "Travel kế hoạch", c: "accent", vals: trend.map((p) => axTgt(p, ["gmv_hotel", "gmv_flight"])), dash: true, nodot: true, w: 1.5 },
-    { name: "Mobility thực tế", c: "stable", vals: trend.map((p) => axAct(p, "M")) }, { name: "Mobility kế hoạch", c: "stable", vals: trend.map((p) => axTgt(p, ["gmv_n2", "gmv_n3", "gmv_n4", "gmv_n5"])), dash: true, nodot: true, w: 1.5 }],
-    ft: (x) => axisNum(x) + " " + unit().nhan, fy: axisNum }) : empty("Chưa có dữ liệu");
-  const wf = ok(P.opexOp) ? waterfall([{ l: "Margin gross toàn bộ", v: P.travelMg + P.mobGross + P.saasMg + P.fnbMg, kind: "total" }, { l: "Chiết khấu KH Mobility", v: -P.disc }, { l: "Hoa hồng các team", v: -P.comm }, { l: "Chi phí vận hành", v: -(P.opexOp as number) }, { l: "EBITDA", v: P.ebitda as number, kind: "total" }]) : empty("Chưa có sheet CHI_PHI cho kỳ này — cần để tính EBITDA");
+  const trSeries = [
+    { ax: "T" as Axis, name: "Travel", c: "accent", keys: ["gmv_hotel", "gmv_flight"] as (keyof import("./types").Target)[] },
+    { ax: "M" as Axis, name: "Mobility", c: "stable", keys: ["gmv_n2", "gmv_n3", "gmv_n4", "gmv_n5"] as (keyof import("./types").Target)[] },
+    { ax: "S" as Axis, name: "SaaS", c: "info", keys: (v.seg === "m" ? ["gmv_saas_m"] : v.seg === "ts" ? ["gmv_saas_t"] : ["gmv_saas_t", "gmv_saas_m"]) as (keyof import("./types").Target)[] },
+  ].filter((x) => AXS.includes(x.ax) && (v.seg || x.ax !== "S"));
+  const trendHTML = trend.length ? lineChart({ labels: trend.map(kyShort), series: trSeries.flatMap((x) => [
+    { name: `${x.name} thực tế`, c: x.c, vals: trend.map((p) => axAct(p, x.ax)) },
+    { name: `${x.name} kế hoạch`, c: x.c, vals: trend.map((p) => axTgt(p, x.keys)), dash: true, nodot: true, w: 1.5 },
+  ]), ft: (x) => axisNum(x) + " " + unit().nhan, fy: axisNum }) : empty("Chưa có dữ liệu");
+  const gross = P.travelMg + P.mobGross + P.saasMg + P.fnbMg;
+  const wf = ok(P.opexOp) ? waterfall([{ l: "Margin gross", v: gross, kind: "total" }, ...(P.disc ? [{ l: "Chiết khấu KH Mobility", v: -P.disc }] : []), { l: "Hoa hồng các team", v: -P.comm }, { l: "Chi phí vận hành", v: -(P.opexOp as number) }, { l: "EBITDA", v: P.ebitda as number, kind: "total" }])
+    : v.seg === "m" ? waterfall([{ l: "Margin gross", v: gross, kind: "total" }, { l: "Chiết khấu KH Mobility", v: -P.disc }, { l: "Hoa hồng các team", v: -P.comm }, { l: "Margin sau hoa hồng", v: gross - P.disc - P.comm, kind: "total" }]) + `<div class="small">Chi phí vận hành chưa tách riêng cho Mobility nên dừng ở margin sau hoa hồng.</div>`
+    : empty("Chưa có sheet CHI_PHI cho kỳ này — cần để tính EBITDA");
   const mv = gm.map((x) => x.m);
   const mgAmt = barChart({ labels: gm.map((x) => x.n + (x.a === "M" ? " (net)" : "")), series: [{ name: "Margin thực tế", c: "accent", vals: mv, cf: (x, j) => (gm[j].mT ? xC(x / gm[j].mT) : "ink-3") }], targets: gm.map((x) => x.mT || null), drills: gm.map((x) => `mgaxis:${x.a}`), showVal: true, fv: (x) => tyN(x), ft: tr, fy: (x) => tyN(x), h: 240, noLegend: true }) + legend([["≥ 100%", "stable"], ["90–100%", "watch"], ["70–90%", "high"], ["< 70%", "critical"], ["Kế hoạch", "ink", 1, true]]);
   const hotel = P.lines.find((l) => l.k === "hotel"), fl = P.lines.find((l) => l.k === "flight");
@@ -171,15 +211,15 @@ function revenue(v: VM): string {
   const mgPct = hBullet(mg.filter((m) => ok(m[1])).map(([n, a, t, sub]) => { const x = ok(a) && ok(t) && t ? a / t : null; return { l: n, sub, v: x, t: 1, c: xC(x), txt: pc(a, 2), txt2: "target " + pc(t, 2), vc: stCls(x) }; }), { max: 1.3 }) + `<div class="small" style="margin-top:6px">Thanh thể hiện %đạt so với target (trục 0–130%).</div>`;
   const row = (n: string, tgt: number, act: number, mT: number | null, mA: number | null, mgv: number, dv: number | null, cls = "") => `<tr class="${cls}"><td>${esc(n)}</td><td class="r num">${tyN(tgt)}</td><td class="r num">${tyN(act)}</td><td class="r num c-${stCls(tgt ? act / tgt : null)}">${pc(tgt ? act / tgt : null)}</td><td class="r num">${pc(mT)}</td><td class="r num">${pc(mA, 2)}</td><td class="r num">${tyN(mgv)}</td><td class="r num ${ok(dv) && dv < 0 ? "c-critical" : ""}">${ok(dv) ? tyN(dv) : "—"}</td></tr>`;
   let tbl = `<table><thead><tr><th>Mảng / nhóm (${unitLabel()})</th><th class="r">GMV KH</th><th class="r">GMV TT</th><th class="r">%đạt</th><th class="r">%Margin KH</th><th class="r">%Margin TT</th><th class="r">Margin net TT</th><th class="r">Chênh lệch margin</th></tr></thead><tbody>`;
-  (["T", "M", "S", "F"] as Axis[]).forEach((a) => { const g = agg(a); tbl += row(AXIS_NAME[a], g.tgt, g.act, null, g.act ? g.mgGross / g.act : null, g.mgNet, g.mgT ? g.mgNet - g.mgT : null, "tot"); g.rs.forEach((l) => { tbl += row(l.name, l.tgt, l.act, l.mT, l.act ? l.mgGross / l.act : null, l.mgNet, l.tgt ? l.mgNet - l.mgT : null, "sub"); }); });
-  tbl += row("Tổng công ty", P.totTgt, P.totAct, null, P.totAct ? (P.travelMg + P.mobGross + P.saasMg + P.fnbMg) / P.totAct : null, P.gp, P.mgTgtTot ? P.gp - P.mgTgtTot : null, "tot") + `</tbody></table>`;
+  AXS.forEach((a) => { const g = agg(a); tbl += row(AXIS_NAME[a], g.tgt, g.act, null, g.act ? g.mgGross / g.act : null, g.mgNet, g.mgT ? g.mgNet - g.mgT : null, "tot"); g.rs.forEach((l) => { tbl += row(l.name, l.tgt, l.act, l.mT, l.act ? l.mgGross / l.act : null, l.mgNet, l.tgt ? l.mgNet - l.mgT : null, "sub"); }); });
+  tbl += row(v.seg ? "Tổng " + SEG_NAME[v.seg] : "Tổng công ty", P.totTgt, P.totAct, null, P.totAct ? (P.travelMg + P.mobGross + P.saasMg + P.fnbMg) / P.totAct : null, P.gp, P.mgTgtTot ? P.gp - P.mgTgtTot : null, "tot") + `</tbody></table>`;
   const pl = (l: string, x: number | null, cls = "") => `<tr class="${cls}"><td>${esc(l)}</td><td class="r num">${ok(x) ? tyN(x) : "<span class='c-muted'>chưa có dữ liệu</span>"}</td><td class="r num">${ok(x) && P.totAct ? pc(x / P.totAct, 2) : ""}</td></tr>`;
   const opexLines = P.opexRows.filter((o) => !["Khấu hao", "Lãi vay", "Thuế TNDN"].includes(o.khoan_muc)).map((o) => pl("   (−) " + o.khoan_muc, -o.so_tien)).join("");
   const plTbl = `<table style="margin-top:16px"><thead><tr><th>P&L quản trị (${unitLabel()})</th><th class="r">Giá trị</th><th class="r">% GMV</th></tr></thead><tbody>${pl("GMV", P.totAct, "tot")}${pl("Margin gross", P.travelMg + P.mobGross + P.saasMg + P.fnbMg)}${pl("(−) Chiết khấu khách hàng", -P.disc)}${pl("Margin net", P.gp, "tot")}${pl("(−) Hoa hồng các team", -P.comm)}${opexLines}${pl("EBITDA", P.ebitda, "tot")}${pl("(−) Khấu hao, lãi vay, thuế", P.belowAmt ? -P.belowAmt : null)}${pl("Lợi nhuận ròng", P.netProfit, "tot")}</tbody></table>`;
   return (P.hasActual ? "" : noActual(v.ky)) + sumRevenue(v) + `<div class="g75">${card("Chi tiết theo mảng", "%đạt GMV theo mảng & nhóm khách", "vạch đen = 100% kế hoạch", hBullet(items, { max: 1.3 }))}${card("Cơ cấu", "GMV và margin đến từ đâu", "kỳ " + esc(v.ky), mix)}</div>
    ${custRevenueCards(v)}
    ${custContribCards(v)}
-   <div class="g2">${card("Xu hướng", "GMV Travel & Mobility theo tháng", unitLabel() + ` · <a href="#" data-go="trend">xem theo quý / năm</a>`, trendHTML)}${card("Từ margin tới EBITDA", "Waterfall lợi nhuận kỳ", unitLabel(), wf)}</div>
+   <div class="g2">${card("Xu hướng", `GMV ${v.seg ? SEG_NAME[v.seg] : "Travel & Mobility"} theo tháng`, unitLabel() + ` · <a href="#" data-go="home">xem theo quý / năm</a>`, trendHTML)}${card(v.seg === "m" ? "Từ margin tới lợi nhuận" : "Từ margin tới EBITDA", "Waterfall lợi nhuận kỳ", unitLabel(), wf)}</div>
    <div class="g2">${card("Lợi nhuận gộp", "Margin theo mảng — thực tế và kế hoạch", unitLabel() + " · vạch = kế hoạch", mgAmt)}${card("Hiệu quả đàm phán NCC", "% Margin theo ngành so với target", "vạch đen = target", mgPct)}</div>
    ${details("Xem bảng số liệu chi tiết (GMV, margin, P&L)", tbl + plTbl)}
    ${quickRevenue(v)}`;
@@ -195,28 +235,36 @@ function lineAxis(C: Ctx, r: import("./types").GmvRow): Axis | null {
 /* ---------- 3. Khách hàng ---------- */
 function customers(v: VM): string {
   const { P, C } = v;
-  const G = P.cust.groups;
+  const G = v.seg ? P.cust.groups.filter((g) => SEG_GROUPS[v.seg as Seg].includes(g.g)) : P.cust.groups;
   const items = G.map((g) => { const x = g.tgt ? g.act / g.tgt : null; return { l: `${g.g} — ${GNAME[g.g]}`, sub: P.cust.hasPrev ? `Δ ${g.d > 0 ? "+" : ""}${n0(g.d)} so với tháng trước` : "", v: x, t: 1, c: xC(x), txt: g.tgt ? pc(x, 0) : n0(g.act), txt2: g.tgt ? `${n0(g.act)} / ${n0(g.tgt)} KH` : "chưa có kế hoạch", vc: stCls(x), dr: `custcount:${g.g}` }; });
   const ta = sum(G, (g) => g.tgt || 0), aa = sum(G, (g) => g.act);
   if (ta) items.push({ l: "Tổng khách hàng", sub: "", v: aa / ta, t: 1, c: xC(aa / ta), txt: pc(aa / ta, 0), txt2: `${n0(aa)} / ${n0(ta)} KH`, vc: stCls(aa / ta), bold: true } as (typeof items)[number] & { bold: boolean });
-  const mix = donut(["N2", "N3", "N4", "N5"].map((g): [number, string, string, string] => [sum(P.lines.filter((l) => l.grp === g), (l) => l.act), GC[g], `${g} — ${GNAME[g]}`, `group:${g}`]), ty(P.mAct), "GMV Mobility", { ft: ty });
+  const mix = v.seg === "ts"
+    ? donut(SEG_DV.ts.map((dv): [number, string, string, string] => [sum(v.CR, (r) => r.bySvc[dv] || 0), SVC_C[dv], dv, `svc:${dv}`]), ty(P.totAct), "GMV Travel & SaaS", { ft: ty })
+    : donut(["N2", "N3", "N4", "N5"].map((g): [number, string, string, string] => [sum(P.lines.filter((l) => l.grp === g), (l) => l.act), GC[g], `${g} — ${GNAME[g]}`, `group:${g}`]), ty(P.mAct), "GMV Mobility", { ft: ty });
   const idx = kyIdx(v.ky), ps = C.periods.filter((p) => kyIdx(p) <= idx + 3).slice(-6);
   const countsFor = (p: string) => { const by = new Map<string, number>(); C.D.gmv.filter((r) => r.ky === p).forEach((r) => by.set(r.ma_kh, (by.get(r.ma_kh) || 0) + r.gmv)); return by; };
-  const stackSeries = ["N1", "N2", "N3", "N4", "N5"].map((g) => ({ name: g, c: GC[g], vals: ps.map((p) => { if (kyIdx(p) > idx || !hasActual(C, p)) return null; const by = countsFor(p); return Array.from(by.entries()).filter(([k, x]) => x > 0 && C.cust.get(k)?.nhom === g).length; }) }));
-  const tg = ps.map((p) => { const T = C.D.targets.find((t) => t.ky === p); return T ? (T.kh_n1 || 0) + (T.kh_n2 || 0) + (T.kh_n3 || 0) + (T.kh_n4 || 0) + (T.kh_n5 || 0) : null; });
+  const stackSeries = (v.seg ? SEG_GROUPS[v.seg] : ["N1", "N2", "N3", "N4", "N5"]).map((g) => ({ name: g, c: GC[g], vals: ps.map((p) => { if (kyIdx(p) > idx || !hasActual(C, p)) return null; const by = countsFor(p); return Array.from(by.entries()).filter(([k, x]) => x > 0 && C.cust.get(k)?.nhom === g).length; }) }));
+  const tg = ps.map((p) => { const T = C.D.targets.find((t) => t.ky === p); const t = T ? (T.kh_n1 || 0) + (T.kh_n2 || 0) + (T.kh_n3 || 0) + (T.kh_n4 || 0) + (T.kh_n5 || 0) : 0; return t || null; });
   const stack = ps.length ? barChart({ labels: ps.map(kyShort), stack: true, showTot: true, series: stackSeries, targets: tg, tName: "Tổng kế hoạch", h: 260, bw: 44 }) : empty("Chưa có dữ liệu");
   const mv = divBars(P.cust.movers.map((m) => ({ l: m.ten, sub: `${m.g} · PM ${m.pm} · ${tr(m.a)} → ${tr(m.b)}`, v: m.d, c: m.d < -0.3 ? "critical" : m.d < 0 ? "high" : "stable", txt: (m.d > 0 ? "+" : "") + pc(m.d, 0), dr: `cust:${m.ma_kh}` })), 0.6);
   const tbl = `<table><thead><tr><th>Nhóm</th><th class="r">Kế hoạch</th><th class="r">Thực tế</th><th class="r">%đạt</th><th class="r">Δ tháng trước</th><th class="r">GMV nhóm (${unit().nhan})</th><th class="r">GMV / KH (${unit().nhan})</th></tr></thead><tbody>${G.map((g) => `<tr><td>${g.g} — ${GNAME[g.g]}</td><td class="r num">${n0(g.tgt)}</td><td class="r num">${n0(g.act)}</td><td class="r num">${pc(g.tgt ? g.act / g.tgt : null)}</td><td class="r num">${n0(g.d)}</td><td class="r num">${tyN(g.gmv)}</td><td class="r num">${g.act ? tyN(g.gmv / g.act) : "—"}</td></tr>`).join("")}</tbody></table>`;
-  return (P.hasActual ? "" : noActual(v.ky)) + sumCustomers(v) + `<div class="g75">${card("Số lượng khách hàng", "%đạt số khách theo nhóm N1–N5", "vạch = 100% · KH active = có GMV trong kỳ", hBullet(items, { max: 1.3 }))}${card("Cơ cấu GMV Mobility", "GMV theo nhóm N2–N5", "kỳ " + esc(v.ky), mix)}</div>
-   <div class="g2">${card("Tiến độ", "Số khách active theo nhóm", "vạch = tổng kế hoạch", stack)}${card("Giữ chân Top 200", "Biến động GMV so với tháng trước (N2, N4)", "đỏ = giảm quá 30%", mv)}</div>
+  return (P.hasActual ? "" : noActual(v.ky)) + sumCustomers(v) + `<div class="g75">${card("Số lượng khách hàng", "%đạt số khách theo nhóm N1–N5", "vạch = 100% · KH active = có GMV trong kỳ", hBullet(items, { max: 1.3 }))}${v.seg === "ts" ? card("Cơ cấu GMV", "GMV theo dịch vụ", "kỳ " + esc(v.ky), mix) : card("Cơ cấu GMV Mobility", "GMV theo nhóm N2–N5", "kỳ " + esc(v.ky), mix)}</div>
+   ${v.seg === "ts" ? card("Tiến độ", "Số khách active theo tháng", "vạch = kế hoạch", `<div class="chart-cap">${stack}</div>`) : `<div class="g2">${card("Tiến độ", "Số khách active theo nhóm", "vạch = tổng kế hoạch", stack)}${card("Giữ chân Top 200", "Biến động GMV so với tháng trước (N2, N4)", "đỏ = giảm quá 30%", mv)}</div>`}
    ${groupCustomerCards(v)}
+   ${v.seg ? profitCards(v, companyProfit(v)) : ""}
    ${details("Xem bảng số liệu khách hàng", tbl)}`;
+}
+/** Lợi nhuận theo khách tính trên dữ liệu toàn công ty (hoa hồng, chi phí, DPO đều là số chung) */
+function companyProfit(v: VM): Profitability {
+  const A = calcAR(v.Cc);
+  return customerProfit(v.Cc, v.ky, calcAP(v.Cc, A.dso));
 }
 
 /* ---------- 4. Dòng tiền ---------- */
 function cash(v: VM): string {
   const { CS } = v;
-  const fc = forecastCards(v, cashForecast(v.C, v.A, v.B, CS, 12, v.st.rate ?? null), false);
+  const fc = forecastCards(v, cashForecast(v.C, v.A, v.B, CS, 12, v.st.rate ?? null), true);
   if (!CS.halves.length) return `<div class="card notice">Chưa có sheet DONG_TIEN. Upload ở tab <a href="#" data-go="data">Dữ liệu</a>, hoặc nhập thẳng số tổng theo nửa tháng ngay bên dưới.</div>` + cashCustCards(v) + cashDetailCards(v) + quickCash(v);
   // nhãn gọn: bỏ năm khi mọi kỳ cùng năm, để chữ không bị cắt ở mép phải
   const nams = Array.from(new Set(CS.halves.map((h) => h.h.slice(4, 9))));
@@ -340,6 +388,7 @@ function sumRevenue(v: VM): string {
   if (P.totTgt) lead += `, đạt ${pc(P.x)} kế hoạch`;
   lead += `; margin net ${ty(P.gp)}, tương đương ${pc(P.totAct ? P.gp / P.totAct : null, 2)} GMV.`;
   if (ok(P.ebitda)) lead += P.ebitda < 0 ? ` EBITDA âm ${ty(-P.ebitda)}.` : ` EBITDA ${ty(P.ebitda)}.`;
+  else if (v.seg === "m") lead += ` Sau hoa hồng còn ${ty(P.gp - P.comm)}.`;
   else lead += " Chưa có sheet CHI_PHI nên chưa tính được EBITDA.";
   const weak = P.lines.filter((l) => l.tgt > 0 && l.act / l.tgt < 0.9).sort((a, b) => a.act / a.tgt - b.act / b.tgt);
   if (weak.length) pts.push([`Hụt kế hoạch: ${weak.slice(0, 3).map((l) => `${l.name.split(" — ")[0]} ${pc(l.act / l.tgt, 0)}`).join(" · ")}`, weak[0].act / weak[0].tgt < 0.7 ? "critical" : "high"]);
@@ -482,18 +531,19 @@ function sumAlerts(v: VM): string {
    DOANH THU THEO TỪNG KHÁCH HÀNG
    ========================================================================== */
 const SVC_C: Record<string, string> = { Hotel: D("blue"), Flight: D("cyan"), Mobility: D("purple"), "SaaS Travel": D("green"), "SaaS Mobility": D("green", "medium"), "F&B": D("orange") };
-const SVCS = ["Hotel", "Flight", "Mobility", "SaaS Travel", "SaaS Mobility", "F&B"];
+const SVCS_ALL = ["Hotel", "Flight", "Mobility", "SaaS Travel", "SaaS Mobility", "F&B"];
 
 function custRevenueCards(v: VM): string {
   const { CR, P } = v;
   if (!CR.length) return "";
+  const SVCS = v.seg ? SEG_DV[v.seg] : SVCS_ALL;
   const top = CR.slice(0, 15);
   const stack = hStack(top.map((r) => ({
     l: r.ten, sub: `${r.nhom} · PM ${r.pm} · ${pc(r.share, 1)} GMV`, dr: `cust:${r.ma_kh}`,
     parts: SVCS.filter((k) => (r.bySvc[k] || 0) > 0).map((k): [number, string, string] => [r.bySvc[k], SVC_C[k], k]),
     txt: tyN(r.gmv), txt2: `margin ${pc(r.mgPct, 1)}`,
   })), { ft: ty, legend: SVCS.map((k): LegendItem => [k, SVC_C[k]]) }) +
-    `<div class="small" style="margin-top:6px">Hiển thị 15/${CR.length} khách có GMV lớn nhất trong kỳ.</div>`;
+    (CR.length > 15 ? `<div class="small" style="margin-top:6px">Hiển thị 15/${CR.length} khách có GMV lớn nhất trong kỳ.</div>` : "");
   const movers = CR.filter((r) => r.d != null && r.prev > 10e6);
   movers.sort((a, b) => (a.d as number) - (b.d as number));
   const pick = [...movers.slice(0, 7), ...movers.slice(-5).filter((m) => (m.d as number) > 0)];
@@ -766,7 +816,9 @@ function alertBoard(v: VM): string {
 
 export function renderView(tab: string, v: VM): string {
   switch (tab) {
-    case "overview": return overview(v);
+    case "home": return homeView(v);
+    case "opex": return opexView(v);
+    case "kpiseg": return v.seg ? segKpi(v) : kpi(v);
     case "revenue": return revenue(v);
     case "customers": return customers(v);
     case "cash": return cash(v);
@@ -774,8 +826,6 @@ export function renderView(tab: string, v: VM): string {
     case "ap": return ap(v);
     case "kpi": return kpi(v);
     case "alerts": return alertsView(v);
-    case "trend": return trendView(v);
-    case "ceo": return ceoView(v);
     default: return "";
   }
 }
@@ -859,8 +909,11 @@ const nguonTay = (C: Ctx, nhom: string, ky: string, khoa: string) => (C.D.manual
 /** Nhập GMV, giá vốn và kế hoạch của kỳ đang xem. */
 export function quickRevenue(v: VM): string {
   if (!v.canEdit) return "";
-  const { C, P, ky } = v;
-  const gRows: QRow[][] = MANUAL_LINES.map((L) => {
+  const { P, ky } = v;
+  const C = v.Cc; // số nhập tay và kế hoạch đầy đủ nằm ở dữ liệu toàn công ty
+  const segL = MANUAL_LINES.filter((L) => !v.seg || SEG_DV[v.seg].includes(L.dv));
+  const segT = MANUAL_TARGETS.filter((f) => !v.seg || TGT_OF[v.seg].includes(String(f.k)));
+  const gRows: QRow[][] = segL.map((L) => {
     const ln = P.lines.find((x) => x.k === L.k);
     return [
       { khoa: `${L.k}|gmv`, ten: L.ten, v: ln && ln.act ? ln.act : null, tay: nguonTay(C, "gmv", ky, `${L.k}|gmv`), sub: ln && ln.act > 0 && !nguonTay(C, "gmv", ky, `${L.k}|gmv`) ? "đang lấy từ file" : "" },
@@ -868,7 +921,7 @@ export function quickRevenue(v: VM): string {
     ];
   });
   const T = C.D.targets.find((t) => t.ky === ky);
-  const tRows: QRow[][] = MANUAL_TARGETS.map((f) => [{
+  const tRows: QRow[][] = segT.map((f) => [{
     khoa: String(f.k), ten: f.ten, tien: f.tien,
     v: T ? ((T[f.k] as number | null) || null) : null, tay: nguonTay(C, "target", ky, String(f.k)),
   }]);
@@ -881,8 +934,21 @@ export function quickRevenue(v: VM): string {
   return gmvKhCard(v) + `<div class="g2">
     ${quickCard("Nhập nhanh", `GMV & giá vốn kỳ ${esc(ky)}`, "ô nền tím là số đang nhập tay", "gmv", ky, [`GMV (${unit().nhan})`, `Giá vốn (${unit().nhan})`], gRows, huong)}
     ${quickCard("Nhập nhanh", `Kế hoạch kỳ ${esc(ky)}`, "GMV theo đơn vị đang chọn, số khách là số nguyên", "target", ky, ["Giá trị"], tRows, huong)}
-  </div>
-  ${quickCard("Nhập nhanh", `Chi phí vận hành kỳ ${esc(ky)}`, "cần có để tính EBITDA và lợi nhuận ròng", "opex", ky, [`Số tiền (${unit().nhan})`], cRows, huong, opNew)}`;
+  </div>` + (v.seg ? "" : quickCard("Nhập nhanh", `Chi phí vận hành kỳ ${esc(ky)}`, "cần có để tính EBITDA và lợi nhuận ròng", "opex", ky, [`Số tiền (${unit().nhan})`], cRows, huong, opNew));
+}
+const TGT_OF: Record<Seg, string[]> = {
+  ts: ["gmv_hotel", "gmv_flight", "gmv_saas_t", "gmv_fnb", "kh_n1", "opex_budget"],
+  m: ["gmv_n2", "gmv_n3", "gmv_n4", "gmv_n5", "gmv_saas_m", "kh_n2", "kh_n3", "kh_n4", "kh_n5"],
+};
+/** Ô nhập chi phí vận hành của kỳ — dùng ở tab Chi phí */
+function quickOpex(v: VM): string {
+  if (!v.canEdit) return "";
+  const C = v.Cc, ky = v.ky;
+  const mucChi = Array.from(new Set([...C.D.opex.map((o) => o.khoan_muc), "Lương & nhân sự", "Marketing", "Vận hành & công nghệ", "Thuê văn phòng", "Khấu hao", "Lãi vay", "Thuế TNDN"]));
+  const cRows: QRow[][] = mucChi.map((m) => [{ khoa: m, ten: m, v: C.D.opex.find((o) => o.ky === ky && o.khoan_muc === m)?.so_tien ?? null, tay: nguonTay(C, "opex", ky, m) }]);
+  const huong = `Số tiền nhập theo đơn vị đang chọn — <b>${esc(unitLabel())}</b>. Để trống là xóa số nhập tay, quay lại số trong file. Upload sheet CHI_PHI của cùng kỳ sẽ ghi đè số nhập tay.`;
+  const opNew = `<tr class="nq-new" data-nhom="opex" data-ky="${esc(ky)}"><td><input type="text" class="fld nq-name" placeholder="+ Thêm khoản mục chi phí"></td><td class="r"><input type="number" step="any" class="fld nq-v" data-sfx="" placeholder="—"></td></tr>`;
+  return quickCard("Cập nhật trực tiếp", `Chi phí vận hành kỳ ${esc(ky)}`, "cần có để tính EBITDA và lợi nhuận ròng", "opex", ky, [`Số tiền (${unit().nhan})`], cRows, huong, opNew);
 }
 
 /** Nhập dòng tiền kế hoạch / thực hiện theo nửa tháng. */
@@ -973,7 +1039,7 @@ function custContribCards(v: VM): string {
     x: r.gmv / unit().chia, y: (r.mgPct || 0) * 100, r: Math.abs(r.mgNet), l: r.ten, c: GC[r.nhom] || "ink-3", dr: `cust:${r.ma_kh}`,
     tip: `${r.ten} (${r.nhom}) · GMV ${tien(r.gmv)} · margin net ${tien(r.mgNet)} (${pc(r.mgPct, 2)})`,
   })), { xl: `GMV (${unitLabel()}, thang log)`, yl: "% margin net", fx: logTick, fy: pctN, qx: med / unit().chia, qy: P.totAct ? (100 * P.gp) / P.totAct : 0, logX: true, clip: true, h: 400 }) +
-    legend(GROUPS.map((g): LegendItem => [`${g} — ${GNAME[g]}`, GC[g]])) +
+    legend((v.seg ? SEG_GROUPS[v.seg] : GROUPS).map((g): LegendItem => [`${g} — ${GNAME[g]}`, GC[g]])) +
     `<div class="small" style="margin-top:6px">Đường đứt dọc = GMV trung vị, ngang = %margin bình quân công ty. Góc phải dưới là khách lớn nhưng margin mỏng — cần xem lại giá. Chấm càng to margin net càng lớn; chấm rỗng ở mép là giá trị vượt khung.</div>`;
   const note = totM > 0 ? `${n80} / ${CR.length} khách tạo ra 80% margin net` + (neg.length ? ` · ${neg.length} khách margin âm (${tien(sum(neg, (r) => r.mgNet))})` : "") : "chưa có margin dương";
   return `<div class="g2">${card("Đóng góp theo khách", "Khách nào tạo doanh thu, khách nào tạo margin", note, pair)}${card("Bản đồ khách hàng", "Quy mô GMV so với % margin net", "kỳ " + esc(v.ky) + " · bấm chấm để xem chi tiết", sc)}</div>`;
@@ -1029,7 +1095,7 @@ function cashCustCards(v: VM): string {
 }
 
 /* ==========================================================================
-   TAB XU HƯỚNG — xem theo tháng / quý / năm trong một khoảng thời gian
+   XU HƯỚNG — chọn khoảng thời gian và cách gom (tháng / quý / năm)
    ========================================================================== */
 const GRAN_L: Record<Gran, string> = { m: "tháng", q: "quý", y: "năm" };
 function trendRange(v: VM) {
@@ -1049,141 +1115,17 @@ function ctlBar(v: VM, all: string[], from: string, to: string, gran: Gran): str
 const dlt = (a: number | null, b: number | null | undefined) => (a == null || b == null || !b ? null : (a - b) / Math.abs(b));
 const dTxt = (d: number | null, good = 1) => (d == null ? "" : `<span class="c-${d * good >= 0 ? "stable" : "critical"}">${d >= 0 ? "▲" : "▼"}${pc(Math.abs(d), 0)}</span>`);
 
-function trendView(v: VM): string {
-  const { C } = v;
-  const gran: Gran = v.st.gran || "m";
-  const { all, from, to } = trendRange(v);
-  const cashFn = (m: string) => { const hs = v.CS.halves.filter((h) => h.h.startsWith(m)); return hs.length ? { thu: sum(hs, (h) => h.thu), chi: sum(hs, (h) => h.chi) } : null; };
-  const T = trendData(C, from, to, gran, cashFn);
-  const B = T.buckets.filter((b) => b.gmv || b.tgt || b.arBilled || b.collected);
-  const ctl = ctlBar(v, all, from, to, gran);
-  if (!B.length) return ctl + `<div class="card notice">Khoảng ${esc(from)} – ${esc(to)} chưa có số liệu.</div>`;
-  const u = unit().chia, ft = (x: number) => axisNum(x) + " " + unit().nhan;
-  const lab = B.map((b) => b.label + (b.full ? "" : "*"));
-  const W = B.length > 10 ? 1100 : B.length > 6 ? 900 : 720;
-  const first = B[0], last = B[B.length - 1];
-  const firstData = C.periods.find((p) => hasActual(C, p)) || "";
-
-  // Tóm tắt
-  const pts: [string, string][] = [];
-  const dG = dlt(last.gmv, first.gmv);
-  let lead = `Từ ${first.label} đến ${last.label} (${B.length} ${GRAN_L[gran]}): GMV ${tien(first.gmv)} → ${tien(last.gmv)}` + (dG != null ? ` (${dG >= 0 ? "tăng" : "giảm"} ${pc(Math.abs(dG), 0)})` : "") + `; tổng cả khoảng ${tien(sum(B, (b) => b.gmv))}.`;
-  if (ok(first.mgPct) && ok(last.mgPct)) lead += ` %margin net ${pc(first.mgPct, 2)} → ${pc(last.mgPct, 2)}.`;
-  const eb = B.filter((b) => b.ebitda != null);
-  if (eb.length) pts.push([`EBITDA cộng dồn ${tien(sum(eb, (b) => b.ebitda as number))}; ${eb.filter((b) => (b.ebitda as number) < 0).length}/${eb.length} ${GRAN_L[gran]} âm`, eb.some((b) => (b.ebitda as number) < 0) ? "high" : "stable"]);
-  const best = B.slice().sort((a, b) => b.gmv - a.gmv)[0], worst = B.slice().sort((a, b) => a.gmv - b.gmv)[0];
-  if (B.length > 1) pts.push([`GMV cao nhất ${best.label} ${tien(best.gmv)}, thấp nhất ${worst.label} ${tien(worst.gmv)}`, "neutral"]);
-  const xs = B.filter((b) => ok(b.x));
-  if (xs.length) pts.push([`Đạt kế hoạch: ${xs.map((b) => `${b.label} ${pc(b.x, 0)}`).join(" · ")}`, xs.some((b) => (b.x as number) < 0.85) ? "high" : "stable"]);
-  pts.push([`Khách active ${n0(first.act)} → ${n0(last.act)}; thêm ${n0(sum(B, (b) => b.nw))} khách mới, rời bỏ ${n0(sum(B, (b) => b.lost))}`, sum(B, (b) => b.nw) >= sum(B, (b) => b.lost) ? "stable" : "high"]);
-  const py = T.prevYear.get(last.key);
-  if (py && py.gmv) pts.push([`So cùng kỳ năm trước (${py.label}): GMV ${dlt(last.gmv, py.gmv)! >= 0 ? "tăng" : "giảm"} ${pc(Math.abs(dlt(last.gmv, py.gmv) as number), 0)}`, last.gmv >= py.gmv ? "stable" : "high"]);
-  const coll = sum(B, (b) => b.collected), bill = sum(B, (b) => b.arBilled);
-  if (bill) pts.push([`Bảng kê phát hành ${tien(bill)}, tiền thu về trong khoảng ${tien(coll)} (${pc(coll / bill, 0)})`, coll / bill < 0.8 ? "high" : "neutral"]);
-  const band = execBand("Tóm tắt xu hướng", lead, pts);
-
-  // Biểu đồ
-  const gmvC = barChart({ labels: lab, series: [{ name: "GMV thực tế", c: "accent", vals: B.map((b) => b.gmv / u), cf: (x, j) => (B[j].tgt ? xC(B[j].gmv / B[j].tgt) : "accent") }], targets: B.map((b) => (b.tgt ? b.tgt / u : null)), ft, fy: axisNum, h: 250, W, noLegend: true }) +
-    legend([["≥ 100% kế hoạch", "stable"], ["90–100%", "watch"], ["70–90%", "high"], ["< 70%", "critical"], ["Không có kế hoạch", "accent"], ["Kế hoạch", "ink", 1, true]]);
-  const pctS = [{ name: "% margin net / GMV", c: "accent", vals: B.map((b) => (ok(b.mgPct) ? (b.mgPct as number) * 100 : null)) }];
-  if (B.some((b) => b.ebitda != null && b.gmv)) pctS.push({ name: "% EBITDA / GMV", c: D("blue"), vals: B.map((b) => (b.ebitda != null && b.gmv ? (100 * b.ebitda) / b.gmv : null)) });
-  const pctC = lineChart({ labels: lab, series: pctS, ft: (x) => N2.format(x) + "%", fy: (x) => N1.format(x) + "%", h: 250, W });
-  const plC = barChart({ labels: lab, series: [
-    { name: "Margin net", c: "stable", vals: B.map((b) => b.mg / u) },
-    { name: "Hoa hồng", c: "high", vals: B.map((b) => b.comm / u), op: 0.75 },
-    { name: "Chi phí vận hành", c: "critical", vals: B.map((b) => (b.opex == null ? null : b.opex / u)), op: 0.6 },
-    { name: "EBITDA", c: D("blue"), vals: B.map((b) => (b.ebitda == null ? null : b.ebitda / u)), cf: (x) => (x < 0 ? D("red", "strong") : D("blue")) },
-  ], ft, fy: axisNum, h: 260, W, bw: 22 });
-  const axC = barChart({ labels: lab, stack: true, showTot: true, series: (["T", "M", "S", "F"] as Axis[]).map((a) => ({ name: AXIS_NAME[a], c: AXC[a], vals: B.map((b) => b.axis[a] / u) })), ft, fy: axisNum, h: 250, W, bw: 40 });
-  const custC = barChart({ labels: lab, series: [
-    { name: "Khách active", c: "accent", vals: B.map((b) => b.act) },
-    { name: "Khách mới", c: "stable", vals: B.map((b) => b.nw) },
-    { name: "Khách rời bỏ", c: "critical", vals: B.map((b) => b.lost) },
-  ], h: 240, W, bw: 22 });
-  const arC = barChart({ labels: lab, series: [
-    { name: "Bảng kê phát hành", c: "accent", vals: B.map((b) => b.arBilled / u) },
-    { name: "Tiền thu về", c: "stable", vals: B.map((b) => b.collected / u) },
-  ], ft, fy: axisNum, h: 240, W, bw: 26 });
-
-  // Bảng số liệu với mũi tên tăng/giảm
-  const rowsDef: [string, (b: TrendBucket) => number | null, "money" | "pct" | "n", number][] = [
-    ["GMV", (b) => b.gmv, "money", 1], ["Kế hoạch GMV", (b) => b.tgt || null, "money", 1], ["% đạt kế hoạch", (b) => b.x, "pct", 1],
-    ["Margin net", (b) => b.mg, "money", 1], ["% margin net", (b) => b.mgPct, "pct", 1], ["Hoa hồng", (b) => b.comm, "money", -1],
-    ["Chi phí vận hành", (b) => b.opex, "money", -1], ["EBITDA", (b) => b.ebitda, "money", 1],
-    ["Khách active", (b) => b.act, "n", 1], ["Khách mới", (b) => (b.months.includes(firstData) ? null : b.nw), "n", 1], ["Khách rời bỏ", (b) => (b.months.includes(firstData) ? null : b.lost), "n", -1],
-    ["Bảng kê phát hành", (b) => b.arBilled, "money", 1], ["Tiền thu về", (b) => b.collected, "money", 1],
-    ["Thu theo kế hoạch dòng tiền", (b) => b.cashIn, "money", 1], ["Chi theo kế hoạch dòng tiền", (b) => b.cashOut, "money", -1],
-  ];
-  const fmtCell = (x: number | null, k: string) => (x == null ? "—" : k === "money" ? tyN(x) : k === "pct" ? pc(x, 1) : n0(x));
-  const body = rowsDef.filter(([, f]) => B.some((b) => f(b) != null && f(b) !== 0)).map(([l, f, k, good]) => `<tr><td>${esc(l)}</td>${B.map((b, i) => {
-    const x = f(b), p = i ? f(B[i - 1]) : null, y = T.prevYear.get(b.key);
-    const dd = k === "pct" ? (x != null && p != null ? x - p : null) : dlt(x, p);
-    const yy = y ? f(y) : null, dy = k === "pct" ? null : dlt(x, yy);
-    return `<td class="r"><span class="num">${fmtCell(x, k)}</span>${dd != null ? `<div class="t2">${k === "pct" ? `<span class="c-${dd * good >= 0 ? "stable" : "critical"}">${dd >= 0 ? "▲" : "▼"}${N1.format(Math.abs(dd) * 100)}đ</span>` : dTxt(dd, good)}</div>` : ""}${dy != null ? `<div class="t2">cùng kỳ ${dTxt(dy, good)}</div>` : ""}</td>`;
-  }).join("")}<td class="r">${spark(B.map((b) => f(b)), good > 0 ? "accent" : "high")}</td></tr>`).join("");
-  const tbl = `<table><thead><tr><th>Chỉ tiêu (${unitLabel()})</th>${B.map((b) => `<th class="r">${esc(b.label)}${b.full ? "" : "*"}</th>`).join("")}<th class="r">Xu hướng</th></tr></thead><tbody>${body}</tbody></table>` +
-    `<div class="small" style="margin-top:6px">▲▼ so với ${GRAN_L[gran]} liền trước; "cùng kỳ" so với cùng ${GRAN_L[gran]} năm trước khi có dữ liệu; % margin và % đạt so bằng điểm phần trăm (đ).${B.some((b) => !b.full) ? ` Dấu * = ${GRAN_L[gran]} chưa đủ tháng trong khoảng đã chọn.` : ""}</div>`;
-
-  // Khách hàng theo thời gian
-  const cs = T.custs.filter((c) => c.totG > 0);
-  const firstB = 0, lastB = B.length - 1;
-  const idxOf = (b: TrendBucket) => T.buckets.indexOf(b);
-  const fI = idxOf(B[firstB]), lI = idxOf(B[lastB]);
-  const moves = cs.map((c) => ({ c, d: c.gmv[lI] - c.gmv[fI] })).filter((x) => x.d !== 0).sort((a, b) => a.d - b.d);
-  const pick = [...moves.slice(0, 7).filter((x) => x.d < 0), ...moves.slice(-7).filter((x) => x.d > 0).reverse()];
-  const rng = Math.max(...pick.map((x) => Math.abs(x.d)), 1);
-  const mv = B.length > 1 ? divBars(pick.map((x) => ({ l: x.c.ten, sub: `${x.c.nhom} · PM ${x.c.pm} · ${tien(x.c.gmv[fI])} → ${tien(x.c.gmv[lI])}`, v: x.d, c: x.d < 0 ? "critical" : D("green"), txt: (x.d > 0 ? "+" : "−") + tien(Math.abs(x.d)), dr: `cust:${x.c.ma_kh}` })), rng) : empty(`Chọn khoảng có ít nhất 2 ${GRAN_L[gran]} để so sánh`);
-  const ctbl = `<table><thead><tr><th>Khách hàng</th>${B.map((b) => `<th class="r">${esc(b.label)}</th>`).join("")}<th class="r">Xu hướng</th><th class="r">Đầu → cuối</th><th class="r">Tổng margin net</th><th class="r">% margin</th></tr></thead><tbody>${cs.slice(0, 40).map((c) => {
-    const vals = B.map((b) => c.gmv[idxOf(b)]);
-    const d = dlt(vals[vals.length - 1], vals[0]);
-    return `<tr><td>${esc(c.ten)}<div class="t2">${esc(c.nhom)} · PM ${esc(c.pm)}</div></td>${vals.map((x) => `<td class="r num">${x ? tyN(x) : "–"}</td>`).join("")}<td class="r">${spark(vals)}</td><td class="r num">${d == null ? (vals[0] ? "—" : vals[vals.length - 1] ? `<span class="c-stable">mới</span>` : "—") : dTxt(d)}</td><td class="r num ${c.totM < 0 ? "c-critical" : ""}">${tyN(c.totM)}</td><td class="r num">${pc(c.totG ? c.totM / c.totG : null, 1)}</td></tr>`;
-  }).join("")}</tbody></table>${cs.length > 40 ? `<div class="small" style="margin-top:6px">Hiển thị 40/${cs.length} khách có GMV lớn nhất trong khoảng.</div>` : ""}`;
-
-  return ctl + band +
-    `<div class="g75">${card("Doanh thu", `GMV theo ${GRAN_L[gran]} — thực tế và kế hoạch`, unitLabel() + " · vạch = kế hoạch", gmvC)}${card("Chất lượng", "Biên lợi nhuận theo thời gian", "% trên GMV", pctC)}</div>` +
-    `<div class="g2">${card("Lợi nhuận", "Margin net, hoa hồng, chi phí và EBITDA", unitLabel(), plC)}${card("Cơ cấu", "GMV theo mảng", unitLabel(), axC)}</div>` +
-    `<div class="g2">${card("Khách hàng", "Khách active, khách mới, khách rời bỏ", "số khách", custC)}${card("Thu tiền", "Bảng kê phát hành và tiền thu về", unitLabel(), arC)}</div>` +
-    card("Bảng tăng / giảm", `Các chỉ tiêu chính theo ${GRAN_L[gran]}`, unitLabel(), `<div class="tw">${tbl}</div>`) +
-    `<div class="g57">${card("Ai tạo ra thay đổi", `Khách tăng / giảm GMV nhiều nhất (${esc(B[firstB].label)} → ${esc(B[lastB].label)})`, unitLabel(), mv)}${card("Khách hàng theo thời gian", `GMV từng khách theo ${GRAN_L[gran]}`, unitLabel(), `<div class="tw" style="max-height:520px">${ctbl}</div>`)}</div>`;
-}
-
 /* ==========================================================================
-   TAB GÓC NHÌN CEO
+   PHÂN TÍCH CẤP ĐIỀU HÀNH — lợi nhuận theo khách, LTV / CAC, dự báo dòng tiền
    ========================================================================== */
-function ceoView(v: VM): string {
-  const { C, ky, A, B, CS, P } = v;
-  const PF = customerProfit(C, ky, B);
-  const LC = ltvCac(C, ky, B);
-  const FC = cashForecast(C, A, B, CS, 12, v.st.rate ?? null);
-  // Tóm tắt
-  const pts: [string, string][] = [];
-  let lead = "";
-  if (P.hasActual && PF.rows.length) {
-    const loss = PF.rows.filter((r) => r.net < 0);
-    lead = `Kỳ ${ky}: ${PF.rows.length} khách tạo ${tien(PF.tot.mgNet)} margin net; sau hoa hồng, chi phí phục vụ và chi phí vốn còn ${tien(PF.tot.net)} lợi nhuận ròng.`;
-    if (loss.length) pts.push([`${loss.length} khách lỗ ròng, tổng ${tien(sum(loss, (r) => r.net))}; nặng nhất ${loss[loss.length - 1].ten} (${loss[loss.length - 1].nhom}) ${tien(loss[loss.length - 1].net)}`, "critical"]);
-    ["N2", "N4"].forEach((g) => {
-      const rs = PF.rows.filter((r) => r.nhom === g);
-      if (!rs.length) return;
-      const top = rs[0];
-      pts.push([`${g}: lợi nhuận ròng ${tien(sum(rs, (r) => r.net))} từ ${rs.length} khách, dẫn đầu ${top.ten} ${tien(top.net)}; ${rs.filter((r) => r.net < 0).length} khách lỗ`, rs.some((r) => r.net < 0) ? "high" : "stable"]);
-    });
-  } else lead = `Kỳ ${ky} chưa có GMV thực tế nên chưa tính được lợi nhuận theo khách.`;
-  if (ok(LC.all.ratio)) pts.push([`LTV/CAC toàn công ty ${N1.format(LC.all.ratio as number)}× — ${(LC.all.ratio as number) >= 3 ? "kênh thu hút khách đang có lời" : (LC.all.ratio as number) >= 1 ? "có lời nhưng mỏng (chuẩn ≥ 3×)" : "chi để có khách nhiều hơn khách mang lại"}`, (LC.all.ratio as number) >= 3 ? "stable" : (LC.all.ratio as number) >= 1 ? "high" : "critical"]);
-  const warn = FC.results.find((r) => r.sc.key === "warn"), base = FC.results.find((r) => r.sc.key === "base");
-  if (warn) pts.push([`Nếu thu đúng hạn chỉ ${Math.round(warn.sc.rate * 100)}%: số dư tuần tới ${tien(warn.weeks[0]?.bal ?? FC.start)}, ${warn.firstNeg != null ? `ÂM từ tuần ${warn.firstNeg + 1} (${fmtDate(warn.weeks[warn.firstNeg].to)})` : `không âm trong 12 tuần, thấp nhất ${tien(warn.min)}`}`, warn.firstNeg != null ? "critical" : "stable"]);
-  if (base && base.firstNeg != null) pts.push([`Ngay cả kịch bản cơ sở cũng âm tiền từ tuần ${base.firstNeg + 1}`, "critical"]);
-  const top = v.AL.find((a) => a.why && a.sev === "critical") || v.AL.find((a) => a.why);
-  if (top?.why?.items[0]) pts.push([`${top.msg.split(" đạt ")[0]} — ${top.why.items[0].t}`, "high"]);
-  return execBand("Góc nhìn CEO", lead, pts) + profitCards(v, PF) + ltvCards(v, LC) + forecastCards(v, FC, true) + causeCards(v);
-}
-
 /* ---------- Lợi nhuận ròng theo khách ---------- */
 function profitCards(v: VM, PF: Profitability): string {
-  if (!PF.rows.length) return card("Lợi nhuận theo khách", "Khách nào thực sự có lời", "", empty("Kỳ này chưa có GMV thực tế"));
-  const g = v.st.cpG && v.st.cpG !== "all" ? v.st.cpG : null;
-  const rows = g ? PF.rows.filter((r) => r.nhom === g) : PF.rows;
-  const seg = `<div class="seg">${["all", ...GROUPS].map((x) => `<button type="button" class="seg-b${(g || "all") === x ? " on" : ""}" data-st="cpG" data-v="${x}">${x === "all" ? "Tất cả" : x}</button>`).join("")}</div>`;
+  const GS = v.seg ? SEG_GROUPS[v.seg] : GROUPS;
+  const baseRows = PF.rows.filter((r) => GS.includes(r.nhom) || (!v.seg && !GROUPS.includes(r.nhom)));
+  if (!baseRows.length) return card("Lợi nhuận theo khách", "Khách nào thực sự có lời", "", empty("Kỳ này chưa có GMV thực tế"));
+  const g = v.st.cpG && v.st.cpG !== "all" && GS.includes(v.st.cpG) ? v.st.cpG : null;
+  const rows = g ? baseRows.filter((r) => r.nhom === g) : baseRows;
+  const seg = GS.length < 2 ? "" : `<div class="seg">${["all", ...GS].map((x) => `<button type="button" class="seg-b${(g || "all") === x ? " on" : ""}" data-st="cpG" data-v="${x}">${x === "all" ? "Tất cả" : x}</button>`).join("")}</div>`;
   const S = (f: (r: CustProfit) => number) => sum(rows, f);
   const wf = waterfall([
     { l: "Margin net", v: S((r) => r.mgNet), kind: "total" },
@@ -1203,38 +1145,16 @@ function profitCards(v: VM, PF: Profitability): string {
   })), { xl: `GMV (${unitLabel()}, thang log)`, yl: "% lợi nhuận ròng / GMV", fx: logTick, fy: pctN, qx: med / unit().chia, qy: 0, logX: true, clip: true, h: 420 }) +
     `<div class="small" style="margin-top:6px">Dưới đường ngang = khách lỗ sau khi trừ mọi chi phí phân bổ. Chấm đỏ là khách lỗ; chấm rỗng ở mép = giá trị vượt khung, rê chuột để xem số thật.</div>`;
   // theo nhóm
-  const grp = GROUPS.map((x) => { const rs = PF.rows.filter((r) => r.nhom === x); return { g: x, n: rs.length, net: sum(rs, (r) => r.net), loss: rs.filter((r) => r.net < 0).length, gmv: sum(rs, (r) => r.gmv), mg: sum(rs, (r) => r.mgNet) }; }).filter((x) => x.n);
+  const grp = GS.map((x) => { const rs = baseRows.filter((r) => r.nhom === x); return { g: x, n: rs.length, net: sum(rs, (r) => r.net), loss: rs.filter((r) => r.net < 0).length, gmv: sum(rs, (r) => r.gmv), mg: sum(rs, (r) => r.mgNet) }; }).filter((x) => x.n);
   const gtbl = `<table class="cmp"><thead><tr><th>Nhóm</th><th class="r">Khách</th><th class="r">GMV</th><th class="r">Margin net</th><th class="r">Lợi nhuận ròng</th><th class="r">% GMV</th><th class="r">TB / khách</th><th class="r">Khách lỗ</th></tr></thead><tbody>${grp.map((x) => `<tr class="${x.g === "N2" || x.g === "N4" ? "hl" : ""}"><td><b>${x.g}</b><div class="t2 nowrap">${GNAME[x.g]}</div></td><td class="r num">${x.n}</td><td class="r num">${tyN(x.gmv)}</td><td class="r num">${tyN(x.mg)}</td><td class="r num ${x.net < 0 ? "c-critical" : ""}">${tn(x.net)}</td><td class="r num">${pc(x.gmv ? x.net / x.gmv : null, 2)}</td><td class="r num">${tn(x.net / x.n)}</td><td class="r num ${x.loss ? "c-critical" : ""}">${x.loss}</td></tr>`).join("")}</tbody></table>`;
   const tbl = `<table><thead><tr><th>Khách hàng</th><th>Nhóm</th><th>PM</th><th class="r">GMV</th><th class="r">Margin net</th><th class="r">HH PM</th><th class="r">HH Sales</th><th class="r">Partnership</th><th class="r">Phục vụ</th><th class="r">Vốn</th><th class="r">Ngày ứng vốn</th><th class="r">Lợi nhuận ròng</th><th class="r">% GMV</th><th class="r">Thưởng HĐ (CAC)</th></tr></thead><tbody>${rows.map((r) => `<tr><td>${esc(r.ten)}</td><td>${esc(r.nhom)}</td><td>${esc(r.pm)}</td><td class="r num">${tyN(r.gmv)}</td><td class="r num">${tyN(r.mgNet)}</td><td class="r num">${tyN(r.pmC)}</td><td class="r num">${tyN(r.salesC + r.saasC)}</td><td class="r num">${tyN(r.partC)}</td><td class="r num">${tyN(r.cts)}</td><td class="r num">${tyN(r.capital)}</td><td class="r num">${r.capDays == null ? "—" : n0(r.capDays)}</td><td class="r num ${r.net < 0 ? "c-critical" : ""}">${tyN(r.net)}</td><td class="r num">${pc(r.netPct, 1)}</td><td class="r num">${r.hd ? tyN(r.hd) : "–"}</td></tr>`).join("")}
     <tr class="tot"><td>Tổng ${rows.length} khách</td><td></td><td></td><td class="r num">${tyN(S((r) => r.gmv))}</td><td class="r num">${tyN(S((r) => r.mgNet))}</td><td class="r num">${tyN(S((r) => r.pmC))}</td><td class="r num">${tyN(S((r) => r.salesC + r.saasC))}</td><td class="r num">${tyN(S((r) => r.partC))}</td><td class="r num">${tyN(S((r) => r.cts))}</td><td class="r num">${tyN(S((r) => r.capital))}</td><td></td><td class="r num">${tyN(S((r) => r.net))}</td><td></td><td class="r num">${tyN(S((r) => r.hd))}</td></tr></tbody></table>`;
   const ctsL = PF.ctsMode === "gmv" ? "theo tỷ trọng GMV" : PF.ctsMode === "khach" ? "chia đều mỗi khách active" : "một nửa theo GMV, một nửa chia đều mỗi khách";
   const method = `Hoa hồng chia về khách theo đúng nguồn tạo ra nó (PM theo margin net trong nhóm, Sales và Partnership theo margin của trục Travel / Mobility). Chi phí phục vụ = chi phí vận hành trừ Marketing (${tien(PF.ctsPool)}), phân bổ ${ctsL} — đổi bằng tham số cts_phan_bo = gmv | khach | tron. Chi phí vốn = giá trị bảng kê × (ngày thu − ngày hóa đơn − DPO ${n0(PF.dpo)} ngày) × lãi suất ${pc(PF.rate, 0)}/năm (tham số lai_suat_von_nam); khoản chưa thu tính tới hôm nay. Đối chiếu: tổng lợi nhuận khách + chi phí vốn = EBITDA + Marketing ${tien(PF.marketing)} + thưởng HĐ ${tien(PF.tot.hd)}${Math.abs(PF.unalloc) > 1000 ? ` + hoa hồng chưa chia được về khách ${tien(PF.unalloc)}` : ""}.`;
-  return `<div class="card ctl-bar"><span class="ctl-t">Lợi nhuận ròng theo khách — kỳ ${esc(v.ky)}</span>${seg}</div>` +
+  return `<div class="card ctl-bar"><span class="ctl-t">Lợi nhuận ròng theo khách${v.seg ? " " + SEG_NAME[v.seg] : ""} — kỳ ${esc(v.ky)}</span>${seg}</div>` +
     `<div class="g2">${card("Từ margin tới lợi nhuận", g ? `Nhóm ${g}: margin net còn lại bao nhiêu` : "Margin net còn lại bao nhiêu sau mọi chi phí", unitLabel(), wf)}${card("Theo nhóm", "Lợi nhuận ròng theo nhóm khách", unitLabel() + " · tô nền N2, N4", `<div class="tw">${gtbl}</div>`)}</div>` +
     `<div class="g2">${card("Lời / lỗ theo khách", "Khách nào thực sự mang lại lợi nhuận ròng", unitLabel() + " · bấm để xem chi tiết", bars)}${card("Bản đồ lợi nhuận", "Quy mô so với % lợi nhuận ròng", "kỳ " + esc(v.ky) + " · trục GMV dạng log", sc)}</div>` +
     details(`Xem bảng lợi nhuận ròng của ${rows.length} khách (${unitLabel()})`, tbl + `<div class="small" style="margin-top:8px">${esc(method)}</div>`);
-}
-
-/* ---------- LTV / CAC ---------- */
-function ltvCards(v: VM, LC: ReturnType<typeof ltvCac>): string {
-  const a = LC.all;
-  const rc = (x: number | null) => (!ok(x) ? "" : x >= 3 ? "stable" : x >= 1 ? "high" : "critical");
-  const stats = `<div class="stat-row">${stat("LTV / khách", ok(a.ltv) ? tien(a.ltv as number) : "—")}${stat("CAC / khách mới", ok(a.cac) ? tien(a.cac as number) : "—")}${stat("LTV / CAC", ok(a.ratio) ? N1.format(a.ratio as number) + "×" : "—", rc(a.ratio))}${stat("Hoàn vốn", ok(a.payback) ? N1.format(a.payback as number) + " tháng" : "—")}${stat("Rời bỏ / tháng", ok(a.churn) ? pc(a.churn, 1) : "—")}${stat("Vòng đời", N1.format(a.life) + " tháng")}</div>`;
-  const rows = LC.rows.filter((r) => r.act || r.nw);
-  const chart = barChart({ labels: rows.map((r) => r.g), series: [
-    { name: "LTV", c: "stable", vals: rows.map((r) => (ok(r.ltv) ? (r.ltv as number) / unit().chia : null)) },
-    { name: "CAC", c: "critical", vals: rows.map((r) => (ok(r.cac) ? (r.cac as number) / unit().chia : null)), op: 0.8 },
-  ], ft: (x) => axisNum(x) + " " + unit().nhan, fy: axisNum, h: 240, bw: 34 });
-  const tbl = `<table><thead><tr><th>Nhóm</th><th class="r">Khách active</th><th class="r">Khách mới (${LC.window.length} tháng)</th><th class="r">Chi phí thu hút</th><th class="r">CAC</th><th class="r">Lợi nhuận ròng / khách / tháng</th><th class="r">Rời bỏ / tháng</th><th class="r">Vòng đời (tháng)</th><th class="r">LTV</th><th class="r">LTV / CAC</th><th class="r">Hoàn vốn (tháng)</th></tr></thead><tbody>${[...rows, a].map((r) => `<tr class="${r.g === "Tổng" ? "tot" : r.g === "N2" || r.g === "N4" ? "hl" : ""}"><td>${r.g === "Tổng" ? "Toàn công ty" : `${r.g} — ${GNAME[r.g]}`}</td><td class="r num">${n0(r.act)}</td><td class="r num">${n0(r.nw)}</td><td class="r num">${tyN(r.spend)}</td><td class="r num">${ok(r.cac) ? tyN(r.cac) : "—"}</td><td class="r num ${ok(r.contrib) && (r.contrib as number) < 0 ? "c-critical" : ""}">${ok(r.contrib) ? tyN(r.contrib) : "—"}</td><td class="r num">${ok(r.churn) ? pc(r.churn, 1) : "—"}</td><td class="r num">${N1.format(r.life)}</td><td class="r num">${ok(r.ltv) ? tyN(r.ltv) : "—"}</td><td class="r num c-${rc(r.ratio) || "muted"}">${ok(r.ratio) ? N1.format(r.ratio as number) + "×" : "—"}</td><td class="r num">${ok(r.payback) ? N1.format(r.payback as number) : "—"}</td></tr>`).join("")}</tbody></table>`;
-  const ser = LC.series.filter((s) => s.ky !== LC.firstData).slice(-8);
-  const trendC = ser.length ? barChart({ labels: ser.map((s) => `${s.ky.slice(0, 3)} · ${s.nw} KH`), stack: true, showTot: true, series: [
-    { name: "Marketing", c: D("orange"), vals: ser.map((s) => s.mkt / unit().chia) },
-    { name: `Lương & nhân sự × ${pc(LC.salesShare, 0)} (phần Sales)`, c: D("purple"), vals: ser.map((s) => s.sal / unit().chia) },
-    { name: "Thưởng hợp đồng mới", c: D("cyan"), vals: ser.map((s) => s.hd / unit().chia) },
-  ], ft: (x) => axisNum(x) + " " + unit().nhan, fy: axisNum, h: 240, bw: 40 }) + `<div class="small" style="margin-top:6px">Nhãn cột ghi số khách mới trong tháng. CAC tháng = cột ÷ số khách mới.</div>` : empty("Cần ít nhất 2 tháng dữ liệu");
-  const method = `Khách mới = khách có GMV lần đầu trong tháng (tháng đầu tiên có dữ liệu ${LC.firstData || "—"} không tính). CAC tính trên ${LC.window.length} tháng gần nhất (${LC.window.join(", ") || "—"}, tham số cac_so_thang). Phần lương tính vào chi phí thu hút: ${pc(LC.salesShare, 0)}${LC.salesShareAuto ? " = số người team Sales / tổng DM_NHAN_SU (khai tl_luong_sales để đổi)" : " (tham số tl_luong_sales)"}. LTV = lợi nhuận ròng bình quân một khách mỗi tháng (sau hoa hồng, chi phí phục vụ, chi phí vốn) × vòng đời; vòng đời = 1 ÷ tỷ lệ rời bỏ bình quân 6 tháng, tối đa ${LC.cap} tháng (ltv_thang_toi_da).`;
-  return `<div class="g75">${card("Hiệu quả thu hút khách", "LTV so với CAC theo nhóm", unitLabel(), stats + chart)}${card("Chi phí thu hút theo tháng", "Tiền bỏ ra để có khách mới", unitLabel(), trendC)}</div>` +
-    details("Xem bảng LTV / CAC chi tiết và cách tính", `<div class="tw">${tbl}</div><div class="small" style="margin-top:8px">${esc(method)}</div>${LC.notes.length ? `<ul class="small">${LC.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}`);
 }
 
 /* ---------- Dự báo dòng tiền nhiều kịch bản ---------- */
@@ -1249,7 +1169,7 @@ function forecastCards(v: VM, FC: Forecast, full: boolean): string {
   const ans = warn ? `<div class="answer ${warn.firstNeg != null ? "bad" : "good"}"><b>Nếu tỷ lệ thu đúng hạn giảm xuống ${Math.round(warn.sc.rate * 100)}% (mức cảnh báo cao):</b> số dư cuối tuần tới ${tien(warn.weeks[0]?.bal ?? FC.start)}; ${warn.firstNeg != null ? `<b>bắt đầu âm từ tuần ${warn.firstNeg + 1}</b> (${fmtDate(warn.weeks[warn.firstNeg].to)}), đáy ${tien(warn.min)} ở tuần ${warn.minWeek + 1}.` : `không âm trong 12 tuần, thấp nhất ${tien(warn.min)}${warn.minWeek >= 0 ? ` ở tuần ${warn.minWeek + 1}` : ""}.`}</div>` : "";
   const rateSel = `<label>Thử tỷ lệ thu đúng hạn<select class="fld" data-st="rate"><option value="">— chọn —</option>${[1, 0.95, 0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6, 0.5, 0.4, 0.3].map((x) => `<option value="${x}"${v.st.rate === x ? " selected" : ""}>${Math.round(x * 100)}%</option>`).join("")}</select></label>`;
   const head = `<div class="fc-ctl">${rateSel}<span class="small">Tỷ lệ lịch sử ${pc(FC.baseRate, 0)} · khoản trễ về sau bình quân ${n0(FC.baseDelay)} ngày · xuất phát từ ${esc(FC.startNote)}: <b class="num">${tien(FC.start)}</b></span></div>`;
-  if (!full) return card("Dự báo 12 tuần", "Số dư tiền theo kịch bản thu tiền", `<a href="#" data-go="ceo" class="small">Xem chi tiết</a>`, head + chart + ans);
+  if (!full) return card("Dòng tiền 12 tuần tới", "Số dư tiền theo kịch bản thu tiền", `<a href="#" data-go="cash" class="small">Xem chi tiết</a>`, head + chart + ans);
   const scSel = FC.results.find((r) => r.sc.key === (v.st.fcScn || (v.st.rate != null ? "custom" : "base"))) || FC.results[1] || FC.results[0];
   const segSc = `<div class="seg">${FC.results.map((r) => `<button type="button" class="seg-b${r === scSel ? " on" : ""}" data-st="fcScn" data-v="${r.sc.key}">${esc(r.sc.name.split(" — ")[0])}</button>`).join("")}</div>`;
   const wk = `<table><thead><tr><th>Tuần</th><th class="r">Thu nợ hiện có</th><th class="r">Thu bảng kê sắp phát hành*</th><th class="r">Trả NCC hiện có</th><th class="r">Trả NCC ước tính*</th><th class="r">Chi phí vận hành</th><th class="r">Hoa hồng</th><th class="r">Ròng</th><th class="r">Số dư</th></tr></thead><tbody>${scSel.weeks.map((w) => `<tr><td>T${w.i + 1} <span class="small">${fmtDate(w.from).slice(0, 5)}–${fmtDate(w.to).slice(0, 5)}</span></td><td class="r num">${w.inAr ? tyN(w.inAr) : "–"}</td><td class="r num">${w.inEst ? tyN(w.inEst) : "–"}</td><td class="r num">${w.outAp ? tyN(w.outAp) : "–"}</td><td class="r num">${w.outEst ? tyN(w.outEst) : "–"}</td><td class="r num">${tyN(w.outOpex)}</td><td class="r num">${w.outComm ? tyN(w.outComm) : "–"}</td><td class="r num ${w.net < 0 ? "c-critical" : ""}">${tyN(w.net)}</td><td class="r num ${w.bal < 0 ? "c-critical" : ""}"><b>${tyN(w.bal)}</b></td></tr>`).join("")}</tbody></table>`;
@@ -1257,30 +1177,6 @@ function forecastCards(v: VM, FC: Forecast, full: boolean): string {
   const assum = `Giả định: phải thu còn mở ${tien(As.arOpen)} (quá hạn ${tien(As.arOverdue)}) về theo ngày đến hạn — phần đúng hạn về đúng ngày, phần còn lại về trễ theo số ngày trễ lịch sử × hệ số kịch bản (thuận lợi 0,8 · cơ sở 1 · cảnh báo 1,3 · xấu 2, thêm 10% không thu được). Bảng kê các tháng sau ${esc(As.lastArKy || "—")} ước theo GMV tháng (thực tế, hoặc kế hoạch) × tỷ lệ bảng kê / GMV lịch sử, bình quân ${tien(As.avgBill)}/tháng; hóa đơn NCC ước theo giá vốn, bình quân ${tien(As.avgAp)}/tháng, rải 4 lần trong tháng; chi phí vận hành ${tien(As.opexMonth)}/tháng (không tính khấu hao); hoa hồng ${tien(As.commMonth)}/tháng chi ngày 10 tháng sau. * là số ước tính.`;
   return card("Dự báo dòng tiền", "Số dư tiền 12 tuần tới theo kịch bản thu tiền", unitLabel(), head + `<div class="fc-grid"><div>${chart}</div><div><div class="tw">${sumTbl}</div>${ans}</div></div>`) +
     card("Chi tiết theo tuần", "Tiền vào, tiền ra từng tuần", unitLabel(), segSc + `<div class="tw" style="margin-top:10px">${wk}</div><div class="small" style="margin-top:8px">${esc(assum)}</div>`);
-}
-
-/* ---------- Phân tích nguyên nhân ---------- */
-function causeCards(v: VM): string {
-  const { C, P, ky } = v;
-  const out: string[] = [];
-  if (P.hasActual && hasActual(C, kyAdd(ky, -1))) {
-    const b = gmvBridge(C, ky, () => true);
-    const wf = waterfall([
-      { l: `GMV ${kyAdd(ky, -1)}`, v: b.prev, kind: "total" }, { l: `Khách mới (${b.nNew})`, v: b.nw }, { l: `Khách tăng (${b.nUp})`, v: b.up },
-      { l: `Khách giảm (${b.nDown})`, v: b.down }, { l: `Khách ngừng (${b.nLost})`, v: b.lost }, { l: `GMV ${ky}`, v: b.cur, kind: "total" },
-    ]);
-    const pm = `<table><thead><tr><th>PM</th><th class="r">${esc(kyAdd(ky, -1))}</th><th class="r">${esc(ky)}</th><th class="r">Thay đổi</th><th class="r">%</th><th class="r">Khách phát sinh</th></tr></thead><tbody>${b.byPm.map((p) => `<tr><td>${esc(p.pm)}</td><td class="r num">${tyN(p.a)}</td><td class="r num">${tyN(p.b)}</td><td class="r num ${p.d < 0 ? "c-critical" : "c-stable"}">${p.d >= 0 ? "+" : ""}${tyN(p.d)}</td><td class="r num">${dTxt(dlt(p.b, p.a))}</td><td class="r num">${p.n}</td></tr>`).join("")}</tbody></table>`;
-    out.push(`<div class="g2">${card("Vì sao GMV thay đổi", `Cầu nối GMV ${esc(kyAdd(ky, -1))} → ${esc(ky)}`, unitLabel(), wf)}${card("Theo người phụ trách", "GMV thay đổi theo PM", unitLabel(), `<div class="tw">${pm}</div>`)}</div>`);
-  }
-  // Thu đúng hạn: nhóm thấp nhất
-  const th = num(C.D, "nguong_dung_han");
-  const low = Object.entries(P.onTime).filter(([, o]) => ok(o.rate)).sort((a, b) => (a[1].rate as number) - (b[1].rate as number));
-  const ws = low.filter(([, o]) => (o.rate as number) < th).slice(0, 2);
-  if (ws.length) out.push(`<div class="g2">${ws.map(([g, o]) => card("Vì sao thu tiền chậm", `Nhóm ${g} — thu đúng hạn ${pc(o.rate, 0)}`, `ngưỡng ${pc(th, 0)}`, whyBody(whyOnTime(C, ky, g, F)))).join("")}</div>`);
-  const withWhy = v.AL.filter((a) => a.why && a.ref?.k !== "ontime");
-  if (withWhy.length) out.push(card("Nguyên nhân từng cảnh báo", "Bấm vào cảnh báo để xem bóc tách", `${withWhy.length} cảnh báo · kỳ ${esc(ky)}`, withWhy.map((a, i) => `<div class="alert ${a.sev}">${pill({ critical: "Khẩn", high: "Cao", watch: "Theo dõi" }[a.sev], a.sev)}<div><div class="msg">${esc(a.msg)}</div>${whyHTML(a.why, i === 0)}</div><div class="own">${esc(a.area)}<br>${esc(a.own)}</div></div>`).join("")));
-  if (!out.length) return card("Phân tích nguyên nhân", "Vì sao chỉ số lệch", "", empty("Kỳ này không có chỉ số nào lệch đáng kể"));
-  return `<div class="sec-h">Phân tích nguyên nhân</div>` + out.join("");
 }
 
 /* ---------- Thêm dòng công nợ (khách / NCC mới hoặc kỳ mới) ---------- */
@@ -1340,11 +1236,264 @@ function gmvKhCard(v: VM): string {
     const b = `${r.ma_kh}|${r.dich_vu}`;
     return `<tr><td><b>${esc(v.C.cust.get(r.ma_kh)?.ten_viet_tat || v.C.cust.get(r.ma_kh)?.ten_kh || r.ma_kh)}</b><div class="t2">${esc(r.ma_kh)} · ${esc(r.dich_vu)}${r.ma_ncc ? " · NCC " + esc(r.ma_ncc) : ""}</div></td>${inp(b + "|gmv", r.gmv, r.ma_ncc || "")}${inp(b + "|gia_von", r.gia_von)}${inp(b + "|chiet_khau", r.chiet_khau)}</tr>`;
   }).join("");
-  const nw = `<tr class="nq-new" data-nhom="gmvkh" data-ky="${esc(ky)}"><td><div class="nq-new-f"><input type="text" class="fld nq-ma" list="dl-kh" placeholder="Mã khách"><select class="fld nq-dv">${SVCS.map((s) => `<option>${s}</option>`).join("")}</select><input type="text" class="fld nq-ncc" list="dl-ncc" placeholder="Mã NCC (nếu có)"></div></td>
+  const nw = `<tr class="nq-new" data-nhom="gmvkh" data-ky="${esc(ky)}"><td><div class="nq-new-f"><input type="text" class="fld nq-ma" list="dl-kh" placeholder="Mã khách"><select class="fld nq-dv">${(v.seg ? SEG_DV[v.seg] : SVCS_ALL).map((s) => `<option>${s}</option>`).join("")}</select><input type="text" class="fld nq-ncc" list="dl-ncc" placeholder="Mã NCC (nếu có)"></div></td>
     <td class="r"><input type="number" step="any" class="fld nq-v" data-sfx="|gmv" placeholder="GMV"></td><td class="r"><input type="number" step="any" class="fld nq-v" data-sfx="|gia_von" placeholder="Giá vốn"></td><td class="r"><input type="number" step="any" class="fld nq-v" data-sfx="|chiet_khau" placeholder="Chiết khấu"></td></tr>`;
   const kh = `<div class="nq-kh"><span class="small">Khách mới chưa có trong danh mục:</span><input type="text" class="fld nq-kh-f" data-k="ten_kh" placeholder="Tên khách hàng"><select class="fld nq-kh-f" data-k="nhom"><option value="">Nhóm</option>${NHOM_OPT}</select><input type="text" class="fld nq-kh-f" data-k="pm" placeholder="PM"><input type="text" class="fld nq-kh-f" data-k="sales" placeholder="Sales"></div>`;
   return card("Cập nhật trực tiếp", `GMV theo khách — kỳ ${esc(ky)}`, `${tay.length} dòng nhập tay`, `<div class="nq-form" data-nhom="gmvkh">
     <div class="tw"><table class="nq"><thead><tr><th>Khách · dịch vụ</th><th class="r">GMV (${unit().nhan})</th><th class="r">Giá vốn (${unit().nhan})</th><th class="r">Chiết khấu KH (${unit().nhan})</th></tr></thead><tbody>${rows}${nw}</tbody></table></div>${kh}
     <div class="nq-act"><span class="small">Thêm khách phát sinh trong kỳ mà file chưa có, hoặc sửa GMV một khách. Một dòng ở đây thay cho dòng file cùng khách + cùng dịch vụ. Số nhập theo đơn vị <b>${esc(unitLabel())}</b>; xóa ô GMV để bỏ dòng. Upload file GMV của kỳ này sẽ ghi đè các dòng nhập tay.</span><button type="button" class="btn primary nq-save">Lưu số đã nhập</button></div>
   </div>`);
+}
+
+/* ==========================================================================
+   TỔNG QUAN ĐIỀU HÀNH — một trang gộp Tổng quan + Góc nhìn CEO + Xu hướng.
+   Chỉ giữ những gì dùng để ra quyết định ngay:
+     1. Tóm tắt điều hành            4. Dòng tiền 12 tuần tới (kịch bản)
+     2. Hai mảng đặt cạnh nhau       5. Vì sao GMV đổi · khách lời / lỗ · tuổi nợ
+     3. Xu hướng tháng / quý / năm
+   ========================================================================== */
+interface SegSnap { seg: Seg; P: Period; prev: number | null; sc: SegComm; A: AR; ot: number | null; act: number; actPrev: number | null; net: number; loss: number; ltv: import("./insight").LtvRow }
+function segSnap(v: VM, seg: Seg, PF: Profitability, LC: ReturnType<typeof ltvCac>): SegSnap {
+  const Cs = segCtx(v.C, seg), ky = v.ky;
+  const P = periodOf(Cs, ky);
+  const prevK = kyAdd(ky, -1);
+  const prev = hasActual(Cs, prevK) ? periodOf(Cs, prevK).totAct : null;
+  const sc = segComm(v.C, v.P, seg);
+  const gs = SEG_GROUPS[seg];
+  const rows = PF.rows.filter((r) => gs.includes(r.nhom));
+  return {
+    seg, P, prev, sc, A: calcAR(Cs), ot: onTimeLatest(v.C, ky, seg).rate,
+    act: sum(P.cust.groups.filter((g) => gs.includes(g.g)), (g) => g.act),
+    actPrev: prev != null ? sum(P.cust.groups.filter((g) => gs.includes(g.g)), (g) => g.prev) : null,
+    net: sum(rows, (r) => r.net), loss: rows.filter((r) => r.net < 0).length, ltv: LC.seg[seg],
+  };
+}
+
+function homeView(v: VM): string {
+  const { C, P, A, B, CS, ky } = v;
+  const PF = customerProfit(C, ky, B);
+  const LC = ltvCac(C, ky, B);
+  const FC = cashForecast(C, A, B, CS, 12, v.st.rate ?? null);
+  const S = (["ts", "m"] as Seg[]).map((s) => segSnap(v, s, PF, LC));
+
+  /* ---- 1. Tóm tắt ---- */
+  const pts: [string, string][] = [];
+  let lead = P.hasActual ? `Kỳ ${ky}: GMV ${ty(P.totAct)}` + (P.totTgt ? ` (${pc(P.x)} kế hoạch)` : "") + `, margin net ${ty(P.gp)}` + (ok(P.ebitda) ? `, EBITDA ${ty(P.ebitda as number)}.` : ".") : `Kỳ ${ky} chưa có GMV thực tế.`;
+  S.forEach((x) => {
+    if (!x.P.totAct && !x.P.totTgt) return;
+    const d = x.prev ? (x.P.totAct - x.prev) / x.prev : null;
+    pts.push([`${SEG_NAME[x.seg]}: GMV ${tien(x.P.totAct)}${x.P.totTgt ? ` = ${pc(x.P.x, 0)} kế hoạch` : ""}${d != null ? ` (${d >= 0 ? "+" : "−"}${pc(Math.abs(d), 0)} so tháng trước)` : ""}, margin ${pc(x.P.totAct ? x.P.gp / x.P.totAct : null, 2)}`, !ok(x.P.x) ? "neutral" : (x.P.x as number) >= 0.9 ? "stable" : (x.P.x as number) >= 0.7 ? "high" : "critical"]);
+  });
+  const warn = FC.results.find((r) => r.sc.key === "warn"), base = FC.results.find((r) => r.sc.key === "base");
+  if (base) pts.push([base.firstNeg != null ? `Tiền mặt: kịch bản cơ sở ÂM từ tuần ${base.firstNeg + 1} (${fmtDate(base.weeks[base.firstNeg].to)}), đáy ${tien(base.min)}` : `Tiền mặt: kịch bản cơ sở không âm 12 tuần tới, thấp nhất ${tien(base.min)}`, base.firstNeg != null ? "critical" : "stable"]);
+  if (warn && base && warn.firstNeg != null && (base.firstNeg == null || warn.firstNeg < base.firstNeg)) pts.push([`Nếu thu đúng hạn chỉ ${Math.round(warn.sc.rate * 100)}%: âm tiền sớm hơn, từ tuần ${warn.firstNeg + 1}`, "critical"]);
+  if (A.o60 > 0) pts.push([`${tien(A.o60)} nợ phải thu quá 60 ngày (${pc(A.tot ? A.o60 / A.tot : null, 0)} tổng)` + (A.top && A.conc >= 0.15 ? `; ${A.top.ten} chiếm ${pc(A.conc, 0)} dư nợ` : ""), "critical"]);
+  const loss = PF.rows.filter((r) => r.net < 0);
+  if (loss.length) pts.push([`${loss.length}/${PF.rows.length} khách lỗ ròng sau hoa hồng, chi phí phục vụ và chi phí vốn — tổng ${tien(sum(loss, (r) => r.net))}`, "high"]);
+  const top = v.AL.find((a) => a.why && a.sev === "critical") || v.AL.find((a) => a.why);
+  if (top?.why?.items[0]) pts.push([`${top.msg.split(" đạt ")[0]} — ${top.why.items[0].t}`, "high"]);
+  const cnt = { critical: 0, high: 0, watch: 0 };
+  v.AL.forEach((a) => cnt[a.sev]++);
+  const chips = ([["critical", "Khẩn"], ["high", "Cao"], ["watch", "Theo dõi"]] as const).map(([s2, l]) => `<span class="pill dot p-${cnt[s2] ? s2 : "neutral"}" style="cursor:pointer" data-go="alerts">${l} ${cnt[s2]}</span>`).join("");
+  const band = `<div class="card banner"><div class="eyebrow">Tóm tắt điều hành</div><p>${esc(lead)}</p>${pts.length ? `<ul class="band-list">${pts.map(([t, c]) => `<li class="bl-${c}">${esc(t)}</li>`).join("")}</ul>` : ""}<div class="chips" style="margin-top:10px">${chips}</div></div>`;
+
+  /* ---- 2. Hai mảng đặt cạnh nhau ---- */
+  const col = (x: SegSnap | null) => {
+    const p = x ? x.P : P, a = x ? x.A : A;
+    const comm = x ? x.sc.total : P.comm, after = p.gp - comm;
+    const ebitda = x ? (x.seg === "ts" ? p.ebitda : null) : P.ebitda;
+    const d = x ? (x.prev ? (p.totAct - x.prev) / x.prev : null) : (hasActual(C, kyAdd(ky, -1)) ? dlt(P.totAct, periodOf(C, kyAdd(ky, -1)).totAct) : null);
+    const ot = x ? x.ot : segOnTime(v);
+    const lt = x ? x.ltv : LC.all;
+    const net = x ? x.net : PF.tot.net, ls = x ? x.loss : loss.length;
+    const act = x ? x.act : sum(P.cust.groups, (g) => g.act);
+    return [
+      `<b class="num">${tyN(p.totAct)}</b>${d != null ? `<div class="t2">${dTxt(d)} so tháng trước</div>` : ""}`,
+      p.totTgt ? `<span class="num c-${stCls(p.x)}">${pc(p.x, 0)}</span><div class="t2">${tyN(p.totTgt)} kế hoạch</div>` : "—",
+      `<span class="num">${tyN(p.gp)}</span><div class="t2">${pc(p.totAct ? p.gp / p.totAct : null, 2)} GMV</div>`,
+      `<span class="num">${tyN(comm)}</span>`,
+      `<span class="num ${after < 0 ? "c-critical" : ""}">${tyN(after)}</span>`,
+      ok(ebitda) ? `<span class="num ${(ebitda as number) < 0 ? "c-critical" : ""}">${tyN(ebitda)}</span>` : `<span class="c-muted small">${x?.seg === "m" ? "chưa tách chi phí" : "—"}</span>`,
+      `<span class="num ${net < 0 ? "c-critical" : ""}">${tyN(net)}</span><div class="t2">${ls} khách lỗ</div>`,
+      `<span class="num">${n0(act)}</span>`,
+      `<span class="num">${tyN(a.tot)}</span><div class="t2 ${a.tot && a.od / a.tot > 0.25 ? "c-critical" : ""}">quá hạn ${pc(a.tot ? a.od / a.tot : null, 0)}</div>`,
+      ok(ot) ? `<span class="num c-${(ot as number) >= num(C.D, "nguong_dung_han") ? "stable" : (ot as number) >= 0.7 ? "high" : "critical"}">${pc(ot, 0)}</span>` : "—",
+      ok(lt.ratio) ? `<span class="num c-${(lt.ratio as number) >= 3 ? "stable" : (lt.ratio as number) >= 1 ? "high" : "critical"}">${N1.format(lt.ratio as number)}×</span><div class="t2">CAC ${tn(lt.cac || 0)}</div>` : "—",
+    ];
+  };
+  const labels = ["GMV", "% đạt kế hoạch", "Margin net", "Hoa hồng", "Margin sau hoa hồng", "EBITDA", "Lợi nhuận ròng theo khách", "Khách active", "Nợ phải thu", `Thu đúng hạn (kỳ nợ ${onTimeLatest(C, ky).ky})`, "LTV / CAC"];
+  const cols = [col(S[0]), col(S[1]), col(null)];
+  const cmp = `<table class="cmp seg-cmp"><thead><tr><th>${esc(unitLabel())}</th><th class="r"><a href="#" data-go="ts:revenue">Travel & SaaS <i class="ri-arrow-right-up-line"></i></a></th><th class="r"><a href="#" data-go="m:revenue">Mobility <i class="ri-arrow-right-up-line"></i></a></th><th class="r">Toàn công ty</th></tr></thead><tbody>${labels.map((l, i) => `<tr${i === 6 || i === 10 ? ' class="hl"' : ""}><td>${esc(l)}</td>${cols.map((c) => `<td class="r">${c[i]}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+  const cmpCard = card("Hai mảng kinh doanh", "Mảng nào đang kéo, mảng nào đang níu", "bấm tên mảng để xem chi tiết", `<div class="tw">${cmp}</div><div class="small" style="margin-top:6px">Chi phí vận hành hiện chỉ có cho Travel & SaaS, nên EBITDA Mobility chưa tính. Hoa hồng tách theo trục từ bảng hoa hồng toàn công ty.</div>`);
+  const AREA_RANK: Record<string, number> = { "Thanh khoản": 0, GMV: 1, "Công nợ": 2, "Thu đúng hạn": 3, Margin: 4, "Chi phí": 5, "Thu tiền": 6, "Payment term": 7, "Dòng tiền": 8, "Khách hàng": 9, "Dữ liệu": 10 };
+  const SEV: Record<string, number> = { critical: 0, high: 1, watch: 2 };
+  const ranked = v.AL.slice().sort((a, b) => SEV[a.sev] - SEV[b.sev] || (AREA_RANK[a.area] ?? 9) - (AREA_RANK[b.area] ?? 9));
+  const alertCard = card("Cần xử lý", "Việc ưu tiên", `<a href="#" data-go="alerts" class="small">Xem tất cả ${v.AL.length}</a>`, alertHTML(ranked.slice(0, 5)));
+
+  /* ---- 3. Xu hướng ---- */
+  const trend = homeTrend(v);
+
+  /* ---- 4–5. Dòng tiền, nguyên nhân, khách, công nợ ---- */
+  const fc = forecastCards(v, FC, false);
+  let bridge = card("Vì sao GMV thay đổi", "Cầu nối GMV kỳ trước → kỳ này", "", empty("Chưa có số liệu kỳ trước để so sánh"));
+  if (P.hasActual && hasActual(C, kyAdd(ky, -1))) {
+    const b = gmvBridge(C, ky, () => true);
+    bridge = card("Vì sao GMV thay đổi", `Cầu nối GMV ${esc(kyAdd(ky, -1))} → ${esc(ky)}`, unitLabel(), waterfall([
+      { l: `GMV ${kyShort(kyAdd(ky, -1))}`, v: b.prev, kind: "total" }, { l: `Khách mới (${b.nNew})`, v: b.nw }, { l: `Khách tăng (${b.nUp})`, v: b.up },
+      { l: `Khách giảm (${b.nDown})`, v: b.down }, { l: `Khách ngừng (${b.nLost})`, v: b.lost }, { l: `GMV ${kyShort(ky)}`, v: b.cur, kind: "total" },
+    ]) + (b.byPm.length ? `<div class="small" style="margin:10px 0 2px">Thay đổi GMV theo PM phụ trách</div>` + divBars(b.byPm.slice().sort((x, y) => x.d - y.d).slice(0, 6).map((p) => ({ l: "PM " + p.pm, sub: `${tien(p.a)} → ${tien(p.b)} · ${p.n} khách`, v: p.d, c: p.d < 0 ? "critical" : D("green"), txt: (p.d >= 0 ? "+" : "−") + tien(Math.abs(p.d)) })), Math.max(...b.byPm.map((p) => Math.abs(p.d)), 1)) : ""));
+  }
+  const pos = PF.rows.filter((r) => r.net > 0).slice(0, 6), neg = PF.rows.filter((r) => r.net < 0).slice(-6).reverse();
+  const pick = [...pos, ...neg], rng = Math.max(...pick.map((r) => Math.abs(r.net)), 1);
+  const profit = card("Lợi nhuận theo khách", "Khách nào thực sự có lời", unitLabel() + " · chi tiết ở tab Khách hàng của từng mảng", pick.length ? divBars(pick.map((r) => ({ l: r.ten, sub: `${r.nhom} · PM ${r.pm} · GMV ${tien(r.gmv)}`, v: r.net, c: r.net < 0 ? "critical" : D("green"), txt: (r.net < 0 ? "−" : "") + tien(Math.abs(r.net)), dr: `cust:${r.ma_kh}` })), rng) : empty("Kỳ này chưa có GMV thực tế"));
+  const arCard = card("Rủi ro thu tiền", "Công nợ phải thu theo tuổi nợ", asOfTxt(C), `<div class="stat-row">${stat("Quá hạn", pc(A.tot ? A.od / A.tot : null, 0), A.tot && A.od / A.tot > 0.25 ? "critical" : "")}${stat("> 60 ngày", ty(A.o60), A.o60 ? "critical" : "")}${stat("DSO", ok(A.dso) ? n0(A.dso) + " ngày" : "—")}</div>` +
+    donut(A.bk.map((x, k): [number, string, string, string] => [x, BCLS[k], AR_BUCKETS[k], `ar:${k}`]), ty(A.tot), "tổng phải thu", { ft: ty, size: 140 }));
+
+  return band +
+    `<div class="g75">${cmpCard}${alertCard}</div>` +
+    trend +
+    `<div class="g2">${fc}${bridge}</div>` +
+    `<div class="g2">${profit}${arCard}</div>` +
+    details("Xem bảng LTV / CAC theo nhóm khách và cách tính", ltvTable(LC));
+}
+
+/** Xu hướng gọn cho trang tổng quan: GMV hai mảng, % margin, bảng tăng / giảm */
+function homeTrend(v: VM): string {
+  const { C } = v;
+  const gran: Gran = v.st.gran || "m";
+  const { all, from, to } = trendRange(v);
+  const cashFn = (m: string) => { const hs = v.CS.halves.filter((h) => h.h.startsWith(m)); return hs.length ? { thu: sum(hs, (h) => h.thu), chi: sum(hs, (h) => h.chi) } : null; };
+  const T = trendData(C, from, to, gran, cashFn);
+  const Ts = trendData(segCtx(C, "ts"), from, to, gran), Tm = trendData(segCtx(C, "m"), from, to, gran);
+  const keep = T.buckets.map((b, i) => (b.gmv || b.tgt || b.collected ? i : -1)).filter((i) => i >= 0);
+  const B = keep.map((i) => T.buckets[i]), BS = keep.map((i) => Ts.buckets[i]), BM = keep.map((i) => Tm.buckets[i]);
+  const ctl = `<div class="trend-ctl">${ctlBar(v, all, from, to, gran).replace('<div class="card ctl-bar">', '<div class="ctl-bar in">')}</div>`;
+  if (!B.length) return card("Xu hướng", "Tăng / giảm theo thời gian", "", ctl + empty(`Khoảng ${from} – ${to} chưa có số liệu`));
+  const u = unit().chia, ft = (x: number) => axisNum(x) + " " + unit().nhan;
+  const lab = B.map((b) => b.label + (b.full ? "" : "*"));
+  const gmvC = barChart({ labels: lab, stack: true, showTot: true, series: [
+    { name: "Travel & SaaS", c: D("cyan"), vals: BS.map((b) => b.gmv / u) },
+    { name: "Mobility", c: D("purple"), vals: BM.map((b) => b.gmv / u) },
+  ], targets: B.map((b) => (b.tgt ? b.tgt / u : null)), tName: "Kế hoạch toàn công ty", ft, fy: axisNum, h: 250, bw: 40 });
+  const pct = (b: TrendBucket) => (ok(b.mgPct) ? (b.mgPct as number) * 100 : null);
+  const mgC = lineChart({ labels: lab, series: [
+    { name: "Travel & SaaS", c: D("cyan"), vals: BS.map(pct) },
+    { name: "Mobility", c: D("purple"), vals: BM.map(pct) },
+    { name: "Toàn công ty", c: "ink", vals: B.map(pct), dash: true, w: 1.5 },
+  ], ft: (x) => N2.format(x) + "%", fy: (x) => N2.format(x) + "%", h: 250, fit: true });
+  const firstData = C.periods.find((p) => hasActual(C, p)) || "";
+  const rowsDef: [string, (b: TrendBucket, i: number) => number | null, "money" | "pct" | "n", number][] = [
+    ["GMV Travel & SaaS", (_, i) => BS[i].gmv, "money", 1], ["GMV Mobility", (_, i) => BM[i].gmv, "money", 1],
+    ["Margin net", (b) => b.mg, "money", 1], ["EBITDA", (b) => b.ebitda, "money", 1],
+    ["Khách active", (b) => b.act, "n", 1], ["Khách mới", (b) => (b.months.includes(firstData) ? null : b.nw), "n", 1],
+    ["Tiền thu về", (b) => b.collected, "money", 1],
+  ];
+  const body = rowsDef.filter(([, f]) => B.some((b, i) => f(b, i) != null && f(b, i) !== 0)).map(([l, f, k, good]) => `<tr><td>${esc(l)}</td>${B.map((b, i) => {
+    const x = f(b, i), p = i ? f(B[i - 1], i - 1) : null, d = dlt(x, p);
+    return `<td class="r"><span class="num">${x == null ? "—" : k === "money" ? tyN(x) : n0(x)}</span>${d != null ? `<div class="t2">${dTxt(d, good)}</div>` : ""}</td>`;
+  }).join("")}<td class="r">${spark(B.map((b, i) => f(b, i)))}</td></tr>`).join("");
+  const tbl = `<table class="cmp"><thead><tr><th>${esc(unitLabel())}</th>${lab.map((l) => `<th class="r">${esc(l)}</th>`).join("")}<th class="r">Xu hướng</th></tr></thead><tbody>${body}</tbody></table>`;
+  return card("Xu hướng", `GMV và margin theo ${GRAN_L[gran]}, hai mảng`, unitLabel(), ctl +
+    `<div class="g2 in">${`<div><div class="small" style="margin-bottom:4px">GMV theo mảng · vạch = kế hoạch</div>${gmvC}</div>`}${`<div><div class="small" style="margin-bottom:4px">% margin net trên GMV</div>${mgC}</div>`}</div>` +
+    `<div class="tw" style="margin-top:12px">${tbl}</div>${B.some((b) => !b.full) ? `<div class="small" style="margin-top:6px">* ${GRAN_L[gran]} chưa đủ tháng trong khoảng đã chọn.</div>` : ""}`);
+}
+
+/** Bảng LTV / CAC (không có biểu đồ) */
+function ltvTable(LC: ReturnType<typeof ltvCac>): string {
+  const rc = (x: number | null) => (!ok(x) ? "muted" : x >= 3 ? "stable" : x >= 1 ? "high" : "critical");
+  const rows = [...LC.rows.filter((r) => r.act || r.nw), LC.seg.ts, LC.seg.m, LC.all];
+  const name = (g: string) => (g === "Tổng" ? "Toàn công ty" : GNAME[g] ? `${g} — ${GNAME[g]}` : g);
+  return `<div class="tw"><table><thead><tr><th>Nhóm</th><th class="r">Khách active</th><th class="r">Khách mới (${LC.window.length} tháng)</th><th class="r">CAC</th><th class="r">Đóng góp / khách / tháng</th><th class="r">Rời bỏ / tháng</th><th class="r">Vòng đời (tháng)</th><th class="r">LTV</th><th class="r">LTV / CAC</th><th class="r">Hoàn vốn (tháng)</th></tr></thead><tbody>${rows.map((r) => `<tr class="${GNAME[r.g] ? "" : "tot"}"><td>${esc(name(r.g))}</td><td class="r num">${n0(r.act)}</td><td class="r num">${n0(r.nw)}</td><td class="r num">${ok(r.cac) ? tyN(r.cac) : "—"}</td><td class="r num">${ok(r.contrib) ? tyN(r.contrib) : "—"}</td><td class="r num">${ok(r.churn) ? pc(r.churn, 1) : "—"}</td><td class="r num">${N1.format(r.life)}</td><td class="r num">${ok(r.ltv) ? tyN(r.ltv) : "—"}</td><td class="r num c-${rc(r.ratio)}">${ok(r.ratio) ? N1.format(r.ratio as number) + "×" : "—"}</td><td class="r num">${ok(r.payback) ? N1.format(r.payback as number) : "—"}</td></tr>`).join("")}</tbody></table></div>
+    <div class="small" style="margin-top:8px">CAC = (Marketing + ${pc(LC.salesShare, 0)} Lương & nhân sự + thưởng hợp đồng mới) ÷ số khách có GMV lần đầu, ${LC.window.length} tháng gần nhất. Đóng góp = margin net − hoa hồng − chi phí vốn. Vòng đời = 1 ÷ tỷ lệ rời bỏ bình quân, tối đa ${LC.cap} tháng. Đổi bằng tham số cac_so_thang, tl_luong_sales, ltv_thang_toi_da.</div>${LC.notes.length ? `<ul class="small">${LC.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}`;
+}
+
+/* ==========================================================================
+   CHI PHÍ VẬN HÀNH (Travel & SaaS)
+   ========================================================================== */
+const OPEX_C = [D("purple"), D("cyan"), D("orange"), D("blue"), D("green"), D("yellow"), D("red"), D("gray"), D("purple", "medium"), D("cyan", "medium")];
+const BELOW = ["Khấu hao", "Lãi vay", "Thuế TNDN"];
+function opexView(v: VM): string {
+  const { C, P, ky } = v;
+  const kyPrev = kyAdd(ky, -1);
+  const rows = C.D.opex.filter((o) => o.ky === ky && !BELOW.includes(o.khoan_muc));
+  const prevRows = C.D.opex.filter((o) => o.ky === kyPrev && !BELOW.includes(o.khoan_muc));
+  const tot = sum(rows, (o) => o.so_tien), totPrev = sum(prevRows, (o) => o.so_tien);
+  const T = C.D.targets.find((t) => t.ky === ky);
+  const budget = T?.opex_budget || null;
+  const months = monthsBetween(kyAdd(ky, -5), ky).filter((m) => C.D.opex.some((o) => o.ky === m));
+  const cats = Array.from(new Set(C.D.opex.filter((o) => months.includes(o.ky) && !BELOW.includes(o.khoan_muc)).map((o) => o.khoan_muc)))
+    .sort((a, b) => sum(C.D.opex.filter((o) => o.khoan_muc === b), (o) => o.so_tien) - sum(C.D.opex.filter((o) => o.khoan_muc === a), (o) => o.so_tien));
+  const val = (m: string, c: string) => sum(C.D.opex.filter((o) => o.ky === m && o.khoan_muc === c), (o) => o.so_tien);
+  if (!rows.length && !months.length) return `<div class="card notice">Chưa có sheet CHI_PHI. Upload ở tab <a href="#" data-go="data">Dữ liệu</a>, hoặc nhập thẳng ngay bên dưới.</div>` + quickOpex(v);
+
+  const d = totPrev ? (tot - totPrev) / totPrev : null;
+  const pts: [string, string][] = [];
+  let lead = `Chi phí vận hành kỳ ${ky}: ${tien(tot)}` + (d != null ? `, ${d >= 0 ? "tăng" : "giảm"} ${pc(Math.abs(d), 0)} so tháng trước` : "") + (P.gp ? `, bằng ${pc(tot / P.gp, 0)} margin net Travel & SaaS.` : ".");
+  if (budget) pts.push([`So ngân sách ${tien(budget)}: ${tot > budget ? "vượt " + tien(tot - budget) : "còn " + tien(budget - tot)} (${pc(tot / budget, 0)})`, tot > budget ? "critical" : "stable"]);
+  const chg = cats.map((c) => ({ c, a: val(kyPrev, c), b: val(ky, c) })).map((x) => ({ ...x, d: x.b - x.a })).sort((a, b) => b.d - a.d);
+  const up = chg.filter((x) => x.d > 0).slice(0, 3);
+  if (up.length && totPrev) pts.push([`Tăng nhiều nhất: ${up.map((x) => `${x.c} +${tien(x.d)}`).join(" · ")}`, "high"]);
+  const big = chg.slice().sort((a, b) => b.b - a.b)[0];
+  if (big && tot) pts.push([`Khoản lớn nhất: ${big.c} ${tien(big.b)} (${pc(big.b / tot, 0)} tổng chi phí)`, "neutral"]);
+  if (P.totAct) pts.push([`Chi phí trên GMV Travel & SaaS: ${pc(tot / P.totAct, 2)}`, "neutral"]);
+  if (ok(P.ebitda)) pts.push([`EBITDA Travel & SaaS sau chi phí: ${tien(P.ebitda as number)}`, (P.ebitda as number) < 0 ? "critical" : "stable"]);
+
+  const stats = `<div class="stat-row">${stat("Chi phí vận hành", ty(tot))}${stat("So tháng trước", d == null ? "—" : (d >= 0 ? "+" : "−") + pc(Math.abs(d), 0), d != null && d > 0.1 ? "critical" : "")}${stat("So ngân sách", budget ? pc(tot / budget, 0) : "—", budget && tot > budget ? "critical" : "")}${stat("Trên margin net", pc(P.gp ? tot / P.gp : null, 0), P.gp && tot > P.gp ? "critical" : "")}</div>`;
+  const stack = months.length ? barChart({ labels: months.map((m) => m.slice(0, 3) + "." + m.slice(6)), stack: true, showTot: true, series: cats.map((c, i) => ({ name: c, c: OPEX_C[i % OPEX_C.length], vals: months.map((m) => val(m, c) / unit().chia) })), targets: months.map((m) => { const b = C.D.targets.find((t) => t.ky === m)?.opex_budget; return b ? b / unit().chia : null; }), tName: "Ngân sách", ft: (x) => axisNum(x) + " " + unit().nhan, fy: axisNum, h: 260, bw: 44 }) : empty("Chưa có dữ liệu");
+  const cmp = hBullet(chg.slice().sort((a, b) => b.b - a.b).map((x) => ({ l: x.c, sub: x.a ? `tháng trước ${tien(x.a)}` : "tháng trước không có", v: x.b, t: x.a || null, c: x.a && x.b > x.a * 1.15 ? "critical" : x.a && x.b < x.a ? "stable" : "accent", txt: tyN(x.b), txt2: x.a ? `${x.d >= 0 ? "+" : "−"}${pc(Math.abs(x.d) / x.a, 0)}` : "mới", vc: x.a && x.b > x.a * 1.15 ? "critical" : "" })));
+  const tbl = `<table><thead><tr><th>Khoản mục (${unitLabel()})</th>${months.map((m) => `<th class="r">${m.slice(0, 3)}.${m.slice(6)}</th>`).join("")}<th class="r">Xu hướng</th></tr></thead><tbody>${cats.map((c) => `<tr><td>${esc(c)}</td>${months.map((m, i) => { const x = val(m, c), p = i ? val(months[i - 1], c) : null; const dd = dlt(x, p); return `<td class="r"><span class="num">${x ? tyN(x) : "–"}</span>${dd != null ? `<div class="t2">${dTxt(dd, -1)}</div>` : ""}</td>`; }).join("")}<td class="r">${spark(months.map((m) => val(m, c)), "high")}</td></tr>`).join("")}
+    <tr class="tot"><td>Tổng</td>${months.map((m) => `<td class="r num">${tyN(sum(cats, (c) => val(m, c)))}</td>`).join("")}<td></td></tr></tbody></table>`;
+  const below = C.D.opex.filter((o) => o.ky === ky && BELOW.includes(o.khoan_muc));
+  const al = v.AL.filter((a) => a.area === "Chi phí");
+  return execBand("Tóm tắt chi phí", lead, pts) +
+    `<div class="g57">${card("Kỳ " + ky, "Chi phí theo khoản mục so với tháng trước", unitLabel() + " · vạch = tháng trước", stats + cmp)}${card("Xu hướng", "Chi phí vận hành 6 tháng", unitLabel() + " · vạch = ngân sách", stack)}</div>` +
+    (al.length ? card("Cảnh báo chi phí", "Khoản nào đang tăng bất thường", `${al.length} cảnh báo`, alertHTML(al)) : "") +
+    details("Xem bảng chi phí theo tháng" + (below.length ? " (khấu hao, lãi vay, thuế tính riêng dưới EBITDA)" : ""), tbl) + quickOpex(v);
+}
+
+/* ==========================================================================
+   KPI & HOA HỒNG CỦA MỘT MẢNG — tách từ bảng hoa hồng toàn công ty
+   ========================================================================== */
+function segKpi(v: VM): string {
+  const seg = v.seg as Seg, ts = seg === "ts", Pc = v.Pc, sc = v.sc as SegComm, D0 = v.Cc.D;
+  if (!Pc.hasActual) return noActual(v.ky);
+  const pool = ts ? Pc.pT : Pc.pM;
+  const rPm = num(D0, ts ? "pm_ty_le_travel" : "pm_ty_le_mobility"), rS = num(D0, ts ? "sales_ty_le_travel" : "sales_ty_le_mobility");
+  const fHd = sum(D0.staff.filter((s) => s.team === "Sales"), (s) => s.tl_pool_hd || 0);
+  const tl = num(D0, "pm_tra_ngay");
+  const lead = `Hoa hồng thuộc mảng ${SEG_NAME[seg]} kỳ ${v.ky}: ${tien(sc.total)} — PM ${tien(sc.pm)}, Sales ${tien(sc.sales + sc.hd + sc.saas)}, Partnership ${tien(sc.part)}. Hệ số bậc thưởng ${pc(Pc.H, 0)} áp chung toàn công ty (%đạt GMV toàn công ty ${pc(Pc.x)}).`;
+  const pts: [string, string][] = [[`Quỹ ${ts ? "Travel" : "Mobility"} ${tien(pool.v)} = margin ${pc(pool.m, 2)} × GMV, ${pool.peak == null ? "chưa có peak" : `peak ${tien(pool.peak)}`}`, "neutral"]];
+  if (v.P.gp) pts.push([`Hoa hồng bằng ${pc(sc.total / v.P.gp, 0)} margin net của mảng`, sc.total / v.P.gp > 0.5 ? "high" : "neutral"]);
+  const ot = segOnTime(v);
+  if (ok(ot) && (ot as number) < num(D0, "nguong_dung_han")) pts.push([`Thu đúng hạn ${pc(ot, 0)} — phần trả sau của PM bị giảm tương ứng`, "high"]);
+  const poolHTML = hStack([
+    { l: "Hình thành quỹ", sub: `margin ${pc(pool.m, 2)}`, parts: [[pool.vb, ts ? "accent" : "stable", "Từ GMV nền"], [pool.vs, ts ? "accent" : "stable", "Từ GMV thặng dư", 0.45]], txt: tien(pool.v) },
+    { l: "Phân bổ (trước hệ số)", parts: [[pool.v * rPm, "accent", `Team PM ${pc(rPm, 0)}`], [pool.v * rS, "high", `Team Sales ${pc(rS, 0)}`], [pool.v * Math.max(0, 1 - rPm - rS), "neutral-bar", "Công ty"]], txt: tien(pool.v) },
+  ], { ft: tien, legend: [["Từ GMV nền / Team PM", "accent"], ["Team Sales", "high"], ["Công ty giữ lại", "neutral-bar"]] });
+  const axisOf = (p: { travel: number; mobility: number }) => (ts ? p.travel : p.mobility);
+  const pms = Pc.pmPeople.filter((p) => axisOf(p) > 0).map((p) => { const a = axisOf(p), r = p.total ? a / p.total : 0; return { p, a, now: p.now * r, later: p.later * r, lost: (p.laterMax - p.later) * r }; });
+  const pmHTML = pms.length ? hStack(pms.map((x) => ({ l: x.p.name, sub: x.p.groups.filter((g) => SEG_GROUPS[seg].includes(g)).join(", "), parts: [[x.now, "accent", `Trả ngay ${pc(tl, 0)}`], [x.later, "stable", "Trả sau — dự kiến"], [x.lost, "critical", "Mất do thu trễ", 0.55]] as [number, string, string, number?][], txt: tien(x.now + x.later), txt2: `trên ${tien(x.a)}` })), { ft: tien, legend: [[`Trả ngay ${pc(tl, 0)}`, "accent"], ["Trả sau — dự kiến", "stable"], ["Mất do khách thu trễ", "critical", 0.55]] }) : empty("Chưa có PM phụ trách nhóm của mảng này (PHAN_BO_PM)");
+  const wT = Pc.pT.v * num(D0, "sales_ty_le_travel"), wM = Pc.pM.v * num(D0, "sales_ty_le_mobility"), shareG = wT + wM > 0 ? (ts ? wT : wM) / (wT + wM) : 0;
+  const hdSeg = fHd ? sc.hd / fHd : 0, saasSeg = fHd ? sc.saas / fHd : 0;
+  const sales = D0.staff.filter((s) => s.team === "Sales").map((s) => { const g = (Pc.sales.find((x) => x.name === s.ho_ten)?.gmv || 0) * shareG, h = hdSeg * (s.tl_pool_hd || 0), sa = saasSeg * (s.tl_pool_hd || 0); return { n: s.ho_ten, g, h, sa, t: g + h + sa }; }).filter((x) => x.t > 0);
+  const salesHTML = sales.length ? hStack(sales.map((x) => ({ l: x.n, parts: [[x.g, "accent", "Pool GMV"], [x.h, "high", "Thưởng hợp đồng"], [x.sa, "stable", "Hoa hồng SaaS"]] as [number, string, string][], txt: tien(x.t) })), { ft: tien, legend: [["Pool GMV (nhân hệ số)", "accent"], ["Thưởng hợp đồng", "high"], ["Hoa hồng SaaS", "stable"]] }) : empty("Không có khoản Sales nào thuộc mảng này");
+  const parts = Pc.partners.filter((p) => axisOf(p) > 0);
+  const partS = ts ? Pc.partT : Pc.partM, score = ts ? Pc.scoreT : Pc.scoreM;
+  const partHTML = barChart({ labels: ["%đạt GMV", "%đạt Margin", "%đạt PT", "Điểm KPI"], series: [{ name: SEG_NAME[seg], c: ts ? "accent" : "stable", vals: [partS.g, partS.m, partS.pt, score] }], targets: [1, 1, 1, 1], tName: "100%", showVal: true, fv: (x) => pc(x, 0), ft: (x) => pc(x), fy: (x) => pc(x, 0), h: 220, noLegend: true, max: Math.max(1.25, ...[partS.g, partS.m, partS.pt, score].filter(ok)) * 1.08 }) +
+    `<div class="stat-row" style="margin-top:10px">${parts.map((p) => stat(p.name, tien(axisOf(p)))).join("") || stat("Partnership", "—")}${stat("Payment term", ok(partS.term) ? `${n0(partS.term)}/${partS.target} ngày` : "—")}</div>`;
+  const grpSet = SEG_GROUPS[seg];
+  const cv = Pc.contracts.filter((c) => grpSet.includes(c.nhom) && (c.monthNo <= num(D0, "thoi_han_hd_thang") + 1 || c.payKy === v.ky)).sort((a, b) => b.ratio - a.ratio);
+  const conHTML = cv.length ? hBullet(cv.slice(0, 15).map((c) => {
+    const st = c.status === "dat" ? [`đạt${c.payKy === v.ky ? " — trả kỳ này " + tien(c.payout) : " (" + c.payKy + ")"}`, "stable"] : c.status === "het_han" ? [`hết hạn — trả ${tien(c.payout)}`, "high"] : [`còn ${Math.max(0, num(D0, "thoi_han_hd_thang") - c.monthNo)} tháng`, "watch"];
+    return { l: c.ten, sub: `${c.nhom} · ${c.sales} · tháng ${Math.min(c.monthNo, num(D0, "thoi_han_hd_thang"))}`, v: Math.min(c.ratio, 1.2), t: 1, c: st[1], txt: pc(c.ratio, 0), txt2: st[0], vc: st[1] };
+  }), { max: 1.2 }) : empty("Chưa có hợp đồng mới của mảng này trong 6 tháng gần nhất");
+  const th = num(D0, "nguong_dung_han");
+  const otK = onTimeLatest(v.Cc, v.ky, seg).ky, OT = onTimeByGroup(v.Cc, otK);
+  const on = hBullet(grpSet.map((g) => { const o = OT[g]; const c = !ok(o?.rate) ? "ink-3" : (o.rate as number) >= th ? "stable" : (o.rate as number) >= 0.7 ? "high" : "critical"; return { l: g, sub: GNAME[g], v: o?.rate ?? null, t: th, c, txt: pc(o?.rate ?? null, 0), txt2: ok(o?.rate) ? `trả sau còn ${pc((1 - tl) * (o.rate as number), 1)}` : "chưa có dữ liệu", vc: c === "ink-3" ? "" : c, dr: `argroup:${g}` }; }), { max: 1 });
+  return execBand("Hoa hồng " + SEG_NAME[seg], lead, pts) +
+    `<div class="g57">${card("Áp dụng chung", "Đường hệ số bậc thưởng toàn công ty", ok(Pc.x) ? `nấc <b class="num">${tierIdx(Pc.x as number) + 1}/7</b>` : "chưa có kế hoạch", tierChart(Pc.x, Pc.H, TIERS, tier))}${card("Quỹ " + (ts ? "Travel" : "Mobility"), "Hình thành và phân bổ quỹ", unitLabel(), poolHTML)}</div>` +
+    `<div class="g2">${card("Team PM", "Hoa hồng PM phần " + SEG_NAME[seg], unitLabel(), pmHTML)}${card("Team Sales", "Thu nhập Sales phần " + SEG_NAME[seg], unitLabel(), salesHTML)}</div>` +
+    `<div class="g2">${card("Team Partnership", "%đạt từng chỉ tiêu & điểm KPI", unitLabel(), partHTML)}${card("Hợp đồng mới", "Tiến độ đạt ngưỡng thưởng", "vạch = ngưỡng", conHTML)}</div>` +
+    card("Ảnh hưởng hoa hồng PM", "Tỷ lệ thu đúng hạn theo nhóm", `vạch = ngưỡng ${pc(th, 0)} · kỳ nợ ${esc(otK)}`, on) +
+    `<div class="card small">Lịch chi trả và chốt hoa hồng của cả công ty ở <a href="#" data-go="kpi">Tổng quan → KPI & Hoa hồng</a>.</div>`;
 }

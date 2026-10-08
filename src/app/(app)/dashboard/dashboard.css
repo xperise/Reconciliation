@@ -684,3 +684,36 @@
 .xd .fc-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: var(--gap-medium); align-items: start; }
 .xd table.cmp td, .xd table.cmp th { padding-left: 8px; padding-right: 8px; }
 @media (max-width: 1200px) { .xd .fc-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* --------------------------------------------------------------------------
+   ĐIỀU HƯỚNG HAI TẦNG — phần (Tổng quan · Travel & SaaS · Mobility) rồi tới tab
+   -------------------------------------------------------------------------- */
+.xd .xd-top { padding: 8px 0; border-bottom: 1px solid var(--color-border-tertiary); justify-content: space-between; flex-wrap: wrap; row-gap: 8px; }
+.xd .xd-secs { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--radius-rounded-12); background: var(--color-surface-secondary); margin-right: auto; }
+.xd .xd-sec {
+  display: inline-flex; align-items: center; gap: 6px; border: 0; cursor: pointer; white-space: nowrap;
+  background: transparent; border-radius: var(--radius-rounded-10); padding: 6px 14px;
+  font-family: inherit; font-size: 14px; font-weight: 600; line-height: 20px; color: var(--color-content-subtle);
+  transition: background-color var(--duration-normal) var(--ease-standard), color var(--duration-normal) var(--ease-standard);
+}
+.xd .xd-sec i { font-size: 16px; }
+.xd .xd-sec:hover { color: var(--color-content-default); }
+.xd .xd-sec.on { background: var(--color-action-theme-primary); color: var(--color-text-inversed); box-shadow: var(--elevation-sm); }
+/* tab tầng 2 nhẹ hơn để phân biệt với phần */
+.xd .xd-tab.on { background: var(--color-surface-primary); color: var(--color-content-primary); box-shadow: inset 0 -2px 0 var(--color-action-theme-primary); border-radius: var(--radius-rounded-10) var(--radius-rounded-10) 4px 4px; }
+.xd .xd-tab.on i { color: var(--color-content-primary); }
+.xd .xd-tab.on .cnt { background: var(--color-surface-negative-subtle); color: var(--color-content-negative); }
+
+/* Bảng so sánh hai mảng trên trang Tổng quan */
+.xd table.seg-cmp th a { color: var(--color-content-primary); text-decoration: none; }
+.xd table.seg-cmp th a:hover { text-decoration: underline; }
+.xd table.seg-cmp td:first-child { color: var(--color-text-default); font-weight: 500; }
+.xd table.seg-cmp td .t2 { white-space: nowrap; }
+.xd .g2.in { gap: var(--gap-medium); margin-top: var(--gap-small); }
+.xd .ctl-bar.in { padding: 0 0 var(--gap-small); border-bottom: 1px dashed var(--color-border-tertiary); margin-bottom: var(--gap-small); }
+@media (max-width: 760px) { .xd .xd-sec { padding: 6px 10px; font-size: 13px; } .xd .xd-secs { width: 100%; } }
+/* màu trạng thái vẫn thắng màu số mặc định trong ô bảng */
+.xd td .num.c-critical, .xd td.num.c-critical { color: var(--color-content-negative); }
+.xd td .num.c-high, .xd td.num.c-high { color: var(--color-display-orange-default); }
+.xd td .num.c-stable, .xd td.num.c-stable { color: var(--color-content-positive); }
+.xd td .num.c-watch, .xd td.num.c-watch { color: var(--color-content-warning); }

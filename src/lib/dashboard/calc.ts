@@ -118,7 +118,7 @@ function lines(C: Ctx, ky: string): Line[] {
     const mgGross = act - cost, mgNet = mgGross - disc;
     const mgT = l.axis === "M" ? tgt * (mT - ck) : tgt * mT;
     return { k: l.k, name: l.name, axis: l.axis, grp: l.grp, tgt, act, cost, disc, mgGross, mgNet, mT, mgT, hasTarget: tgt > 0 };
-  }).filter((l) => l.k !== "mob_other" || l.act > 0);
+  }).filter((l) => l.act !== 0 || l.tgt > 0);
 }
 
 /* ---------------- Tính một kỳ ---------------- */
@@ -457,14 +457,14 @@ function alertId(ky: string, area: string, msg: string): string {
   }
   return `${ky}-${h1.toString(36)}${h2.toString(36)}`;
 }
-export interface AlertInput { CR: CustRow[]; ARC: ArCust[] }
+export interface AlertInput { CR: CustRow[]; ARC: ArCust[]; scope?: string }
 export function alerts(C: Ctx, P: Period, A: AR, B: AP, CS: Cash, fmt: { ty: (v: number) => string; pc: (v: number, d?: number) => string; tien?: (v: number) => string }, X?: AlertInput): Alert[] {
   const L: Alert[] = [];
   const tien = fmt.tien || fmt.ty;
   const add = (sev: Alert["sev"], area: string, msg: string, act: string, own: string, ref?: AlertRef) => L.push({ id: alertId(P.ky, area, msg), sev, area, msg, act, own, ref });
   if (P.hasActual) {
     if (ok(P.x) && P.x < 0.85)
-      add(P.x < 0.7 ? "critical" : "high", "GMV", `GMV tổng công ty đạt ${fmt.pc(P.x)} kế hoạch (${fmt.ty(P.totAct)} / ${fmt.ty(P.totTgt)})`,
+      add(P.x < 0.7 ? "critical" : "high", "GMV", `GMV ${X?.scope || "tổng công ty"} đạt ${fmt.pc(P.x)} kế hoạch (${fmt.ty(P.totAct)} / ${fmt.ty(P.totTgt)})`,
         "Xem phần Vì sao để biết hụt ở mảng nào, khách nào, PM nào; ưu tiên xử lý chỗ hụt lớn nhất.", "Ban điều hành", { k: "gmvtot" });
     P.lines.filter((l) => l.tgt > 0 && l.act / l.tgt < 0.85).sort((a, b) => a.act / a.tgt - b.act / b.tgt).forEach((l) => {
       const x = l.act / l.tgt;
@@ -1311,4 +1311,80 @@ export function drill(s: DrillSrc, key: string): Drill | null {
     return mk(`Phải chi trong kỳ ${ky}`, `${rows.length} người · phần trả sau đến từ kỳ ${s.PS.kyNguon}`, rows, "money", "phần trả sau kỳ trước");
   }
   return null;
+}
+
+
+/* ==========================================================================
+   TÁCH SỐ LIỆU THEO MẢNG KINH DOANH
+   Travel & SaaS : Hotel, Flight, SaaS Travel, F&B · khách nhóm N1 · toàn bộ công nợ
+                   phải trả và chi phí vận hành (hiện chỉ phát sinh cho mảng này)
+   Mobility      : Mobility, SaaS Mobility · khách nhóm N2–N5
+   Dòng tiền theo kế hoạch nửa tháng là số toàn công ty — chỉ xem ở phần Tổng quan.
+   ========================================================================== */
+export type Seg = "ts" | "m";
+export const SEG_NAME: Record<Seg, string> = { ts: "Travel & SaaS", m: "Mobility" };
+export const SEG_DV: Record<Seg, string[]> = { ts: ["Hotel", "Flight", "SaaS Travel", "F&B"], m: ["Mobility", "SaaS Mobility"] };
+export const SEG_GROUPS: Record<Seg, string[]> = { ts: ["N1"], m: ["N2", "N3", "N4", "N5"] };
+const TGT_FIELDS: Record<Seg, string[]> = {
+  ts: ["gmv_hotel", "gmv_flight", "gmv_saas_t", "gmv_fnb", "kh_n1", "opex_budget"],
+  m: ["gmv_n2", "gmv_n3", "gmv_n4", "gmv_n5", "gmv_saas_m", "kh_n2", "kh_n3", "kh_n4", "kh_n5"],
+};
+/** Khách thuộc mảng nào: theo nhóm trong danh mục; khách chưa có nhóm thì theo dịch vụ đã dùng */
+export function segOfCustomer(D: DataSet, ma: string, nhomOf?: Map<string, string>): Seg {
+  const g = nhomOf ? nhomOf.get(ma) : D.customers.find((c) => c.ma_kh === ma)?.nhom;
+  if (g) return g === "N1" ? "ts" : "m";
+  return D.gmv.some((r) => r.ma_kh === ma && SEG_DV.m.includes(r.dich_vu)) ? "m" : "ts";
+}
+/** Bộ dữ liệu chỉ còn phần của một mảng. Nhận dữ liệu ĐÃ gộp số nhập tay (mergeEdits). */
+export function segmentData(D: DataSet, seg: Seg): DataSet {
+  const nhomOf = new Map(D.customers.map((c) => [c.ma_kh, c.nhom]));
+  const mine = (ma: string) => segOfCustomer(D, ma, nhomOf) === seg;
+  const keep = new Set(TGT_FIELDS[seg]);
+  const targets = D.targets.map((t) => {
+    const o = { ...t } as unknown as Record<string, unknown>;
+    Object.keys(o).forEach((k) => { if (k !== "ky" && !keep.has(k)) o[k] = null; });
+    return o as unknown as typeof t;
+  });
+  const params = { ...D.params };
+  delete params.so_du_tien_dau_ky; // số dư tiền là của toàn công ty
+  return {
+    ...D, params, targets,
+    gmv: D.gmv.filter((r) => SEG_DV[seg].includes(r.dich_vu)),
+    ar: D.ar.filter((r) => mine(r.ma_kh)),
+    ap: seg === "ts" ? D.ap : [],
+    opex: seg === "ts" ? D.opex : [],
+    cash: [],
+    contracts: D.contracts.filter((c) => (c.nhom === "N1") === (seg === "ts")),
+    alloc: D.alloc.filter((a) => (a.nhom === "N1") === (seg === "ts")),
+    arEdits: [], apEdits: [], manual: [],
+  };
+}
+const segCache = new WeakMap<Ctx, Partial<Record<Seg, Ctx>>>();
+/** Ngữ cảnh tính toán của một mảng, dựng từ ngữ cảnh toàn công ty (có bộ nhớ đệm) */
+export function segCtx(C: Ctx, seg: Seg): Ctx {
+  let m = segCache.get(C);
+  if (!m) { m = {}; segCache.set(C, m); }
+  if (!m[seg]) {
+    const S = makeCtx(segmentData(C.D, seg));
+    // giữ đủ danh sách kỳ của toàn công ty để chọn kỳ nhất quán giữa các phần
+    m[seg] = { ...S, periods: C.periods };
+  }
+  return m[seg] as Ctx;
+}
+
+/** Hoa hồng thuộc về một mảng, tách từ bảng hoa hồng toàn công ty (hệ số áp chung) */
+export interface SegComm { pm: number; sales: number; hd: number; saas: number; part: number; total: number }
+export function segComm(C: Ctx, Pc: Period, seg: Seg): SegComm {
+  const D = C.D;
+  const wT = Pc.pT.v * num(D, "sales_ty_le_travel"), wM = Pc.pM.v * num(D, "sales_ty_le_mobility");
+  const shareGmv = wT + wM > 0 ? (seg === "ts" ? wT : wM) / (wT + wM) : 0;
+  const fHd = sum(D.staff.filter((s) => s.team === "Sales"), (s) => s.tl_pool_hd || 0);
+  const saasT = Pc.lines.find((l) => l.k === "saas_t")?.mgGross || 0, saasM = Pc.lines.find((l) => l.k === "saas_m")?.mgGross || 0;
+  const saasAll = sum(Pc.sales, (s) => s.hdSaas);
+  const saas = saasT + saasM > 0 ? (saasAll * (seg === "ts" ? Math.max(0, saasT) : Math.max(0, saasM))) / (Math.max(0, saasT) + Math.max(0, saasM) || 1) : 0;
+  const pm = sum(Pc.pmPeople, (p) => (seg === "ts" ? p.travel : p.mobility));
+  const sales = sum(Pc.sales, (s) => s.gmv) * shareGmv;
+  const hd = sum(Pc.contracts.filter((c) => c.payKy === Pc.ky && (c.nhom === "N1") === (seg === "ts")), (c) => c.payout) * fHd;
+  const part = sum(Pc.partners, (p) => (seg === "ts" ? p.travel : p.mobility));
+  return { pm, sales, hd, saas, part, total: pm + sales + hd + saas + part };
 }
