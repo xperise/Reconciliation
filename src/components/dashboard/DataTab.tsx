@@ -77,6 +77,7 @@ export default function DataTab({ data, onDone, toast, canEdit }: { data: DataSe
             <div className="card-note"><a href="/dashboard/templates/Xperise_Dashboard_Template.xlsx" download>Tải template trống</a> · <a href="/dashboard/templates/Xperise_Dashboard_FileMau_DuLieuThu.xlsx" download>File mẫu có dữ liệu thử</a></div></div>
           {!canEdit ? <div className="empty">Chỉ Quản trị và Kế toán được upload dữ liệu. Bạn đang ở chế độ chỉ xem.</div> : (
           <label className={"drop" + (over ? " over" : "")} onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={(e) => { e.preventDefault(); setOver(false); pick(e.dataTransfer.files[0]); }}>
+            <i className={busy && !res ? "ri-loader-4-line" : "ri-upload-cloud-2-line"} aria-hidden="true" />
             <b>{busy && !res ? "Đang đọc file…" : "Kéo thả file Excel vào đây hoặc bấm để chọn"}</b>
             Chỉ cần điền các sheet có thay đổi · sheet trống được bỏ qua
             <input ref={inp} type="file" accept=".xlsx,.xls" hidden onChange={(e) => pick(e.target.files?.[0])} />
