@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabaseBrowser } from '@/lib/supabase/client';
 
@@ -9,6 +9,19 @@ export default function LoginPage() {
   const [matKhau, setMatKhau] = useState('');
   const [loi, setLoi] = useState('');
   const [dangGui, setDangGui] = useState(false);
+
+  // Bị đẩy ra vì hồ sơ không đọc được hoặc tài khoản bị khoá: dọn phiên hỏng
+  // rồi báo rõ lý do, thay vì để người dùng bấm đăng nhập mãi không vào được.
+  useEffect(() => {
+    const loiUrl = new URLSearchParams(window.location.search).get('loi');
+    if (!loiUrl) return;
+    supabaseBrowser().auth.signOut().catch(() => {});
+    setLoi(
+      loiUrl === 'khoa'
+        ? 'Tài khoản đã bị khoá. Liên hệ quản trị viên để mở lại.'
+        : 'Tài khoản chưa được cấp quyền xem phần nào, hoặc hồ sơ người dùng chưa được tạo. Liên hệ quản trị viên.',
+    );
+  }, []);
 
   async function dangNhap(e: React.FormEvent) {
     e.preventDefault();

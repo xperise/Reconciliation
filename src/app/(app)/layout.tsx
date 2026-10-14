@@ -8,7 +8,8 @@ export const dynamic = 'force-dynamic';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await currentUser();
-  if (!user) redirect('/login');
+  // Kèm ?loi= để middleware không đá ngược lại vào trong (vòng lặp chuyển hướng)
+  if (!user) redirect('/login?loi=ho_so');
 
   const sb = supabaseAdmin();
   const [choDuyet, thongBao] = await Promise.all([

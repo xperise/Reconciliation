@@ -24,29 +24,61 @@ export async function middleware(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   const path = req.nextUrl.pathname;
 
-  if (!user && path !== '/login') {
-    return NextResponse.redirect(new URL('/login', req.url));
+  /**
+   * Chuyển hướng phải mang theo cookie phiên vừa được làm mới. Thiếu bước này,
+   * token mới bị vứt đi trong khi refresh token cũ đã dùng một lần → mất phiên
+   * và bị đá về trang đăng nhập. Tài khoản chỉ xem được một tab dính nặng nhất
+   * vì gần như request nào cũng bị chuyển hướng.
+   */
+  const chuyenHuong = (to: string) => {
+    if (to === path) return res; // không bao giờ tự chuyển về chính nó
+    const r = NextResponse.redirect(new URL(to, req.url));
+    res.cookies.getAll().forEach((c) => r.cookies.set(c));
+    return r;
+  };
+
+  if (!user) {
+    return path === '/login' ? res : chuyenHuong('/login');
   }
-  if (!user) return res;
+
+  const { data: profile, error: loiHoSo } = await supabase
+    .from('profiles').select('*').eq('id', user.id).maybeSingle();
+
+  /**
+   * Không đọc được hồ sơ, chưa có hồ sơ, hoặc tài khoản đã khoá: đưa về trang
+   * đăng nhập kèm lý do. Không áp luật phân quyền tab trong trường hợp này —
+   * hồ sơ rỗng nghĩa là không có quyền nào, hai nhánh chuyển hướng sẽ đá qua
+   * đá lại vô tận và trình duyệt báo ERR_TOO_MANY_REDIRECTS.
+   */
+  if (loiHoSo || !profile || profile.is_active === false) {
+    if (path === '/login') return res;
+    const to = new URL('/login', req.url);
+    to.searchParams.set('loi', profile && profile.is_active === false ? 'khoa' : 'ho_so');
+    const r = NextResponse.redirect(to);
+    res.cookies.getAll().forEach((c) => r.cookies.set(c));
+    return r;
+  }
 
   // Quyền xem tab: không có quyền thì chuyển sang tab còn lại
-  const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
   const access = tabAccess(profile);
-  const home = access.xperise ? '/' : '/mlx';
+  const home = access.xperise ? '/' : access.mlx ? '/mlx' : access.dashboard ? '/dashboard' : '/login';
 
   if (path === '/login') {
-    return NextResponse.redirect(new URL(home, req.url));
+    // Có ?loi= nghĩa là trang trong ứng dụng vừa đẩy ra vì phiên không dùng được;
+    // để trang đăng nhập hiện ra (và tự đăng xuất) thay vì đá ngược vào trong.
+    if (req.nextUrl.searchParams.has('loi')) return res;
+    return chuyenHuong(home);
   }
   if (path.startsWith('/api/dashboard') && !access.dashboard) {
     return NextResponse.json({ error: 'Tài khoản không có quyền xem Dashboard' }, { status: 403 });
   }
   if (isDashboardPath(path)) {
-    if (!access.dashboard) return NextResponse.redirect(new URL(home, req.url));
+    if (!access.dashboard) return chuyenHuong(home);
     return res;
   }
   if (!path.startsWith('/api/')) {
-    if (isMlxPath(path) && !access.mlx) return NextResponse.redirect(new URL('/', req.url));
-    if (!isMlxPath(path) && !access.xperise) return NextResponse.redirect(new URL('/mlx', req.url));
+    if (isMlxPath(path) && !access.mlx) return chuyenHuong(home);
+    if (!isMlxPath(path) && !access.xperise) return chuyenHuong(home);
   }
   return res;
 }
