@@ -39,11 +39,23 @@ export interface RawRow {
   khoangCach: number | string | null;
 }
 
+/** Nguồn dữ liệu của một file tải lên */
+export type Source = 'XPAY' | 'CMS';
+
 export interface ParsedRawFile {
   fileName: string;
-  /** Phần tên công ty tách từ tên file */
+  /**
+   * XPAY = file raw xuất từ hệ thống xpay (tiêu đề cột ngay dòng đầu).
+   * CMS  = bảng kê đã format sẵn do hệ thống CMS xuất ra.
+   */
+  source: Source;
+  /** Tên công ty đọc được (CMS lấy trong file, XPAY lấy từ tên file) */
   companyFromFile: string;
-  /** Kỳ tách từ tên file (null nếu không đọc được) */
+  /** Mã khách hàng / mã hợp đồng đọc được, dùng để khớp master data */
+  codeFromFile: string;
+  /** MST đọc được trong file CMS */
+  mstFromFile: string;
+  /** Kỳ đọc được (null nếu không xác định được) */
   periodFromFile: Period | null;
   rows: RawRow[];
   /** Số dòng 0đ đã loại khỏi file xuất */

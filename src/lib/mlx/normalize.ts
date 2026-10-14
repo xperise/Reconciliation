@@ -24,10 +24,25 @@ export function lastDayOfMonth(p: Period): number {
   return new Date(Date.UTC(p.year, p.month, 0)).getUTCDate();
 }
 
-/** "Từ ngày 01/08/2026 Đến ngày 31/08/2026" */
+/**
+ * Chu kỳ bảng kê chạy từ ngày 26 tháng trước đến ngày 25 của tháng kỳ,
+ * khớp với cách hệ thống CMS xuất bảng kê.
+ * Kỳ tháng 09/2026 → "Từ ngày 26/08/2026 Đến ngày 25/09/2026".
+ */
+export function periodRange(p: Period): { start: Date; end: Date } {
+  return {
+    start: new Date(Date.UTC(p.year, p.month - 2, 26)),
+    end: new Date(Date.UTC(p.year, p.month - 1, 25)),
+  };
+}
+
+const ngayVN = (d: Date) =>
+  `${pad2(d.getUTCDate())}/${pad2(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
+
+/** "Từ ngày 26/08/2026 Đến ngày 25/09/2026" */
 export function periodRangeText(p: Period): string {
-  const mm = pad2(p.month);
-  return `Từ ngày 01/${mm}/${p.year} Đến ngày ${lastDayOfMonth(p)}/${mm}/${p.year}`;
+  const { start, end } = periodRange(p);
+  return `Từ ngày ${ngayVN(start)} Đến ngày ${ngayVN(end)}`;
 }
 
 /** Nhãn kỳ dùng trong tên file: T08.2026 */

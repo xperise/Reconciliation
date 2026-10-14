@@ -8,10 +8,10 @@ import { buildStatement, outputNames } from '@/lib/mlx/buildStatement';
 import { downloadBlob, loadExcelJS, XLSX_MIME } from '@/lib/mlx/download';
 import { findRelated, HistoryNotReadyError, saveStatement, sha256, type StatementRecord } from '@/lib/mlx/history';
 import { loadCustomers } from '@/lib/mlx/masterData';
-import { matchCustomer } from '@/lib/mlx/matching';
+import { hintsFromFile, matchCustomer } from '@/lib/mlx/matching';
 import { inputToPeriod, kyLabel, periodLabel, periodToInput, periodToKy } from '@/lib/mlx/normalize';
 import { parseRawFile } from '@/lib/mlx/parseRaw';
-import type { MlxCustomer, ParsedRawFile, Period } from '@/lib/mlx/types';
+import type { MlxCustomer, ParsedRawFile, Period, RawRow } from '@/lib/mlx/types';
 
 type Item = {
   uid: string;
@@ -24,11 +24,28 @@ type Item = {
   period: Period | null;
 };
 
-/** Trạng thái so với lịch sử */
+/** Trạng thái của một bảng kê sẽ xuất, so với lịch sử đã lưu */
 type Kind =
   | { type: 'new' }
-  | { type: 'replace'; old: StatementRecord[] } // cùng khách + kỳ nhưng file raw khác → thay bản cũ
-  | { type: 'duplicate'; reason: string }; // đã xử lý trước đó / trùng trong lô
+  | { type: 'replace'; old: StatementRecord[] } // kỳ này đã có bảng kê từ bộ file khác
+  | { type: 'duplicate'; reason: string }; // đúng bộ file này đã xử lý rồi
+
+/**
+ * Một bảng kê sẽ xuất ra: gom mọi file của cùng một khách trong cùng một kỳ,
+ * bất kể đến từ XPAY hay CMS.
+ */
+type Group = {
+  key: string;
+  customerId: string;
+  period: Period;
+  files: Item[];
+  rows: RawRow[];
+  total: number;
+  zeroRows: number;
+  /** Khoá nhận dạng bộ file nguồn: các hash thành phần sắp xếp rồi nối lại */
+  hash: string;
+  kind: Kind;
+};
 
 const fmt = new Intl.NumberFormat('vi-VN');
 
@@ -66,7 +83,7 @@ export default function ConverterView() {
     setItems((prev) =>
       prev.map((it) =>
         it.status === 'ready' && !it.customerId && it.parsed
-          ? { ...it, customerId: matchCustomer(it.parsed.companyFromFile, customers)?.id ?? '' }
+          ? { ...it, customerId: matchCustomer(hintsFromFile(it.parsed), customers)?.id ?? '' }
           : it,
       ),
     );
@@ -78,7 +95,7 @@ export default function ConverterView() {
     () => [...new Set(items.filter((i) => i.status === 'ready').map((i) => periodToKy(i.period ?? defaultPeriod)))],
     [items, defaultPeriod],
   );
-  const lookupKey = `${[...hashes].sort().join(",")}|${[...kys].sort().join(",")}`;
+  const lookupKey = `${[...hashes].sort().join(',')}|${[...kys].sort().join(',')}`;
   useEffect(() => {
     if (!hashes.length && !kys.length) {
       setRelated([]);
@@ -93,7 +110,10 @@ export default function ConverterView() {
           setHistoryError('');
         }
       })
-      .catch((e: Error) => !cancelled && setHistoryError(e instanceof HistoryNotReadyError ? e.message : `Không tra được lịch sử: ${e.message}`))
+      .catch((e: Error) =>
+        !cancelled &&
+        setHistoryError(e instanceof HistoryNotReadyError ? e.message : `Không tra được lịch sử: ${e.message}`),
+      )
       .finally(() => !cancelled && setChecking(false));
     return () => {
       cancelled = true;
@@ -124,7 +144,7 @@ export default function ConverterView() {
           try {
             const buf = await file.arrayBuffer();
             const [hash, parsed] = await Promise.all([sha256(buf.slice(0)), parseRawFile(ExcelJS, file.name, buf)]);
-            const matched = matchCustomer(parsed.companyFromFile, customers);
+            const matched = matchCustomer(hintsFromFile(parsed), customers);
             setItems((prev) =>
               prev.map((it) =>
                 it.uid === uid
@@ -148,78 +168,125 @@ export default function ConverterView() {
   const update = (uid: string, patch: Partial<Item>) =>
     setItems((prev) => prev.map((it) => (it.uid === uid ? { ...it, ...patch } : it)));
 
-  // Phân loại từng file: mới / thay bản cũ / trùng
-  const kinds = useMemo(() => {
-    const map = new Map<string, Kind>();
-    const seenInBatch = new Map<string, number>();
-    items.forEach((it, idx) => {
-      if (it.status !== 'ready' || !it.hash) return;
-      const ky = periodToKy(it.period ?? defaultPeriod);
-      const batchKey = `${it.hash}|${it.customerId}|${ky}`;
-      if (seenInBatch.has(batchKey)) {
-        map.set(it.uid, { type: 'duplicate', reason: `Trùng với file #${seenInBatch.get(batchKey)! + 1} trong lần tải này` });
-        return;
-      }
-      seenInBatch.set(batchKey, idx);
-      const same = related.find((r) => r.source_hash === it.hash && r.ky === ky && r.customer_id === it.customerId);
-      if (same) {
-        map.set(it.uid, {
-          type: 'duplicate',
-          reason: `Đã xử lý ngày ${new Date(same.created_at).toLocaleDateString('vi-VN')} (${same.file_name})`,
-        });
-        return;
-      }
-      const old = it.customerId ? related.filter((r) => r.customer_id === it.customerId && r.ky === ky) : [];
-      map.set(it.uid, old.length ? { type: 'replace', old } : { type: 'new' });
-    });
-    return map;
-  }, [items, related, defaultPeriod]);
+  /**
+   * Gom file thành các bảng kê sẽ xuất.
+   * Một khách + một kỳ = một bảng kê, dù dữ liệu đến từ mấy file.
+   * Trong bảng kê, giao dịch XPAY xếp trước, CMS xếp sau.
+   */
+  const { groups, groupOfFile, trungTrongLo } = useMemo(() => {
+    const map = new Map<string, Group>();
+    const groupOfFile = new Map<string, string>(); // uid → group key
+    const trungTrongLo = new Map<string, string>(); // uid → lý do bị bỏ
+    const hashesOfGroup = new Map<string, Set<string>>();
 
-  const isDup = (it: Item) => kinds.get(it.uid)?.type === 'duplicate';
-  const active = items.filter((i) => !isDup(i)); // file mới (kể cả đang đọc/lỗi)
+    for (const it of items) {
+      if (it.status !== 'ready' || !it.parsed || !it.customerId || !byId.has(it.customerId)) continue;
+      const period = it.period ?? defaultPeriod;
+      const key = `${it.customerId}|${periodToKy(period)}`;
+
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          customerId: it.customerId,
+          period,
+          files: [],
+          rows: [],
+          total: 0,
+          zeroRows: 0,
+          hash: '',
+          kind: { type: 'new' },
+        });
+        hashesOfGroup.set(key, new Set());
+      }
+      const daCo = hashesOfGroup.get(key)!;
+      if (it.hash && daCo.has(it.hash)) {
+        trungTrongLo.set(it.uid, 'Trùng nội dung với file khác trong lần tải này');
+        continue;
+      }
+      if (it.hash) daCo.add(it.hash);
+      map.get(key)!.files.push(it);
+      groupOfFile.set(it.uid, key);
+    }
+
+    for (const g of map.values()) {
+      // XPAY trước, CMS sau; trong mỗi nguồn giữ nguyên thứ tự tải lên
+      const thuTu = (it: Item) => (it.parsed?.source === 'CMS' ? 1 : 0);
+      g.files.sort((a, b) => thuTu(a) - thuTu(b));
+      g.rows = g.files.flatMap((f) => f.parsed!.rows);
+      g.total = g.files.reduce((n, f) => n + f.parsed!.total, 0);
+      g.zeroRows = g.files.reduce((n, f) => n + f.parsed!.zeroRows, 0);
+      g.hash = g.files
+        .map((f) => f.hash ?? '')
+        .sort()
+        .join('+');
+
+      const ky = periodToKy(g.period);
+      const cungKhachCungKy = related.filter((r) => r.customer_id === g.customerId && r.ky === ky);
+      const giongHet = cungKhachCungKy.find((r) => r.source_hash === g.hash);
+      g.kind = giongHet
+        ? {
+            type: 'duplicate',
+            reason: `Đã xử lý ngày ${new Date(giongHet.created_at).toLocaleDateString('vi-VN')} (${giongHet.file_name})`,
+          }
+        : cungKhachCungKy.length
+          ? { type: 'replace', old: cungKhachCungKy }
+          : { type: 'new' };
+    }
+
+    return { groups: [...map.values()], groupOfFile, trungTrongLo };
+  }, [items, byId, defaultPeriod, related]);
+
+  const groupByKey = useMemo(() => new Map(groups.map((g) => [g.key, g])), [groups]);
+  const kindOfFile = (uid: string) => groupByKey.get(groupOfFile.get(uid) ?? '')?.kind;
+  const groupOf = (uid: string) => groupByKey.get(groupOfFile.get(uid) ?? '');
+
+  /** File bị bỏ qua: trùng trong lô, hoặc thuộc bảng kê đã xử lý trước đó */
+  const boQua = (it: Item) => trungTrongLo.has(it.uid) || kindOfFile(it.uid)?.type === 'duplicate';
+
+  const sapXuat = groups.filter((g) => g.kind.type !== 'duplicate');
+  const active = items.filter((i) => !boQua(i));
   const ready = active.filter((i) => i.status === 'ready');
   const matched = ready.filter((i) => i.customerId && byId.has(i.customerId));
   const dupCount = items.length - active.length;
-  const totalRows = matched.reduce((n, i) => n + (i.parsed?.rows.length ?? 0), 0);
-  const totalAmount = matched.reduce((n, i) => n + (i.parsed?.total ?? 0), 0);
+  const totalRows = sapXuat.reduce((n, g) => n + g.rows.length, 0);
+  const totalAmount = sapXuat.reduce((n, g) => n + g.total, 0);
+  const zeroTotal = sapXuat.reduce((n, g) => n + g.zeroRows, 0);
   const blocking = active.filter((i) => i.status !== 'ready' || !i.customerId || !byId.has(i.customerId)).length;
-  const canConfirm = matched.length > 0 && blocking === 0 && !busy && !checking && !historyError;
+  const canConfirm = sapXuat.length > 0 && blocking === 0 && !busy && !checking && !historyError;
 
   async function confirm() {
     if (!canConfirm) return;
     setBusy(true);
     setMessage(null);
-    const doneUids: string[] = [];
+    const doneKeys: string[] = [];
     const saveErrors: string[] = [];
     try {
       const ExcelJS = await loadExcelJS();
       const outputs: { fileName: string; buffer: ArrayBuffer }[] = [];
 
-      for (const it of matched) {
-        const customer = byId.get(it.customerId)!;
-        const period = it.period ?? defaultPeriod;
-        const out = await buildStatement(ExcelJS, { customer, period, rows: it.parsed!.rows });
-        const kind = kinds.get(it.uid);
+      for (const g of sapXuat) {
+        const customer = byId.get(g.customerId)!;
+        const out = await buildStatement(ExcelJS, { customer, period: g.period, rows: g.rows });
         try {
           await saveStatement(
             {
               customer_id: customer.id as string,
               ten_cong_ty: customer.ten_cong_ty,
               ten_viet_tat: customer.ten_viet_tat,
-              ky: periodToKy(period),
+              ky: periodToKy(g.period),
               file_name: out.fileName,
-              source_file_name: it.fileName,
-              source_hash: it.hash!,
-              row_count: it.parsed!.rows.length,
+              source_file_name: g.files.map((f) => f.fileName).join(' + '),
+              source_hash: g.hash,
+              row_count: g.rows.length,
               total_amount: out.total,
               payable_amount: out.payable,
               buffer: out.buffer,
             },
-            kind?.type === 'replace' ? kind.old : [],
+            g.kind.type === 'replace' ? g.kind.old : [],
           );
-          doneUids.push(it.uid);
+          doneKeys.push(g.key);
         } catch (e) {
-          saveErrors.push(`${it.fileName}: ${(e as Error).message}`);
+          saveErrors.push(`${customer.ten_cong_ty}: ${(e as Error).message}`);
         }
         outputs.push({ fileName: out.fileName, buffer: out.buffer });
       }
@@ -238,20 +305,25 @@ export default function ConverterView() {
         const JSZip = (await import('jszip')).default;
         const zip = new JSZip();
         outputs.forEach((o) => zip.file(o.fileName, o.buffer));
-        const periods = new Set(matched.map((i) => periodLabel(i.period ?? defaultPeriod)));
+        const periods = new Set(sapXuat.map((g) => periodLabel(g.period)));
         const suffix = periods.size === 1 ? [...periods][0] : new Date().toISOString().slice(0, 10);
         downloadBlob(await zip.generateAsync({ type: 'blob' }), `Bang_ke_MLX_${suffix}.zip`, 'application/zip');
       }
 
-      // File đã lưu lịch sử + file trùng → rời khỏi danh sách
-      const dupUids = items.filter(isDup).map((i) => i.uid);
-      setItems((prev) => prev.filter((i) => !doneUids.includes(i.uid) && !dupUids.includes(i.uid)));
+      // File đã lưu lịch sử + file bị bỏ qua → rời khỏi danh sách
+      const xong = new Set(
+        groups.filter((g) => doneKeys.includes(g.key)).flatMap((g) => g.files.map((f) => f.uid)),
+      );
+      setItems((prev) => prev.filter((i) => !xong.has(i.uid) && !boQua(i)));
 
-      const kyText = [...new Set(matched.map((i) => kyLabel(periodToKy(i.period ?? defaultPeriod))))].join(', ');
+      const kyText = [...new Set(sapXuat.map((g) => kyLabel(periodToKy(g.period))))].join(', ');
       setMessage(
         saveErrors.length
-          ? { type: 'err', text: `Đã tải ${outputs.length} file nhưng ${saveErrors.length} file chưa lưu được vào lịch sử: ${saveErrors.join(' · ')}` }
-          : { type: 'ok', text: `Đã tải ${outputs.length} file mới và lưu vào Lịch sử bảng kê (${kyText}).` },
+          ? {
+              type: 'err',
+              text: `Đã tải ${outputs.length} bảng kê nhưng ${saveErrors.length} bảng chưa lưu được vào lịch sử: ${saveErrors.join(' · ')}`,
+            }
+          : { type: 'ok', text: `Đã tải ${outputs.length} bảng kê và lưu vào Lịch sử bảng kê (${kyText}).` },
       );
     } catch (e) {
       setMessage({ type: 'err', text: `Lỗi khi tạo file: ${(e as Error).message}` });
@@ -265,31 +337,29 @@ export default function ConverterView() {
       {loadError && <div className={`${s.banner} ${s.bannerErr}`}>{loadError}</div>}
       {historyError && <div className={`${s.banner} ${s.bannerErr}`}>{historyError}</div>}
 
-      {/* KPI — chỉ tính file mới */}
+      {/* KPI — chỉ tính phần sẽ xuất ra */}
       <div className={s.kpis}>
         <div className={s.kpi}>
           <div className={s.kpiLabel}>File đã tải lên</div>
           <div className={s.kpiNum}>{active.length}</div>
           <div className={s.kpiSub}>
-            file mới{dupCount ? ` · bỏ qua ${dupCount} file đã xử lý` : ''}
-            {active.some((i) => i.status === 'error') ? ` · ${active.filter((i) => i.status === 'error').length} lỗi đọc` : ''}
+            {active.filter((i) => i.parsed?.source === 'XPAY').length} XPAY ·{' '}
+            {active.filter((i) => i.parsed?.source === 'CMS').length} CMS
+            {dupCount ? ` · bỏ qua ${dupCount}` : ''}
           </div>
         </div>
         <div className={s.kpi}>
-          <div className={s.kpiLabel}>Đã khớp khách hàng</div>
-          <div className={s.kpiNum}>
-            {matched.length}/{ready.length}
+          <div className={s.kpiLabel}>Bảng kê sẽ xuất</div>
+          <div className={s.kpiNum}>{sapXuat.length}</div>
+          <div className={s.kpiSub}>
+            đã khớp {matched.length}/{ready.length} file · master data {customers.length} khách
           </div>
-          <div className={s.kpiSub}>Master data: {customers.length} khách</div>
         </div>
         <div className={s.kpi}>
           <div className={s.kpiLabel}>Tổng giao dịch</div>
           <div className={s.kpiNum}>{fmt.format(totalRows)}</div>
           <div className={s.kpiSub}>
-            của {matched.length} file mới đã khớp
-            {matched.reduce((n, i) => n + (i.parsed?.zeroRows ?? 0), 0) > 0
-              ? ` · đã bỏ ${matched.reduce((n, i) => n + (i.parsed?.zeroRows ?? 0), 0)} dòng 0đ`
-              : ''}
+            gộp cả XPAY và CMS{zeroTotal > 0 ? ` · đã bỏ ${zeroTotal} dòng 0đ` : ''}
           </div>
         </div>
         <div className={s.kpi}>
@@ -304,7 +374,7 @@ export default function ConverterView() {
         <div className={s.cardHead}>
           <div>
             <div className={s.eyebrow}>Bước 1</div>
-            <h2 className={s.title}>Tải lên file raw</h2>
+            <h2 className={s.title}>Tải lên file XPAY và CMS</h2>
           </div>
           <div className={s.row}>
             <span className={s.label}>Kỳ mặc định</span>
@@ -317,7 +387,7 @@ export default function ConverterView() {
                 if (p) setDefaultPeriod(p);
               }}
             />
-            <span className={s.note}>Dùng khi tên file không có kỳ</span>
+            <span className={s.note}>Dùng khi file không cho biết kỳ</span>
           </div>
         </div>
         <div
@@ -334,9 +404,10 @@ export default function ConverterView() {
             addFiles(e.dataTransfer.files);
           }}
         >
-          <div className={s.dropTitle}>Kéo thả nhiều file .xlsx vào đây hoặc bấm để chọn</div>
+          <div className={s.dropTitle}>Kéo thả file raw XPAY và bảng kê CMS vào đây hoặc bấm để chọn</div>
           <div className={s.note} style={{ marginTop: 4 }}>
-            Tên file theo dạng <b>Tên công ty_Kỳ</b>. File đã xử lý trước đó sẽ tự bỏ qua, dòng 0đ được loại khỏi bảng kê.
+            Hệ thống tự nhận loại file, khớp khách theo tên công ty / mã hợp đồng / MST, rồi gộp giao dịch của cùng một
+            khách trong cùng một kỳ vào <b>một bảng kê</b>. Dòng 0đ và file đã xử lý trước đó được bỏ qua.
           </div>
           <input
             ref={inputRef}
@@ -359,7 +430,7 @@ export default function ConverterView() {
             <div className={s.eyebrow}>Bước 2</div>
             <h2 className={s.title}>Kiểm tra & xác nhận</h2>
             <div className={s.note}>
-              File tải về được lưu tự động vào <Link href="/mlx/lich-su">Lịch sử bảng kê</Link>
+              Bảng kê tải về được lưu tự động vào <Link href="/mlx/lich-su">Lịch sử bảng kê</Link>
             </div>
           </div>
           <div className={s.row}>
@@ -369,7 +440,7 @@ export default function ConverterView() {
               Xoá tất cả
             </button>
             <button className={`${s.btn} ${s.btnPrimary}`} onClick={confirm} disabled={!canConfirm}>
-              {busy ? 'Đang tạo…' : `Xác nhận & tải file mới${matched.length ? ` (${matched.length})` : ''}`}
+              {busy ? 'Đang tạo…' : `Xác nhận & tải bảng kê${sapXuat.length ? ` (${sapXuat.length})` : ''}`}
             </button>
           </div>
         </div>
@@ -388,12 +459,13 @@ export default function ConverterView() {
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>File raw</th>
+                  <th>File tải lên</th>
+                  <th>Nguồn</th>
                   <th>Khách hàng (master data)</th>
                   <th>Kỳ</th>
                   <th style={{ textAlign: 'right' }}>Số dòng</th>
                   <th style={{ textAlign: 'right' }}>Tổng tiền</th>
-                  <th>File xuất</th>
+                  <th style={{ minWidth: 230 }}>Bảng kê xuất ra</th>
                   <th>Trạng thái</th>
                   <th />
                 </tr>
@@ -402,14 +474,28 @@ export default function ConverterView() {
                 {items.map((it, idx) => {
                   const customer = byId.get(it.customerId);
                   const period = it.period ?? defaultPeriod;
-                  const kind = kinds.get(it.uid);
-                  const dup = kind?.type === 'duplicate';
+                  const g = groupOf(it.uid);
+                  const kind = g?.kind;
+                  const trungLo = trungTrongLo.get(it.uid);
+                  const bo = boQua(it);
+                  const src = it.parsed?.source;
                   return (
-                    <tr key={it.uid} className={dup ? s.rowDim : ''}>
+                    <tr key={it.uid} className={bo ? s.rowDim : ''}>
                       <td className={s.muted}>{idx + 1}</td>
                       <td>
                         <div className={s.fileName} title={it.fileName}>{it.fileName}</div>
-                        {it.parsed && <div className={s.note}>Tên đọc được: {it.parsed.companyFromFile}</div>}
+                        {it.parsed && (
+                          <div className={s.note}>
+                            Đọc được: {it.parsed.companyFromFile}
+                            {it.parsed.codeFromFile ? ` · mã ${it.parsed.codeFromFile}` : ''}
+                            {it.parsed.mstFromFile ? ` · MST ${it.parsed.mstFromFile}` : ''}
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        {src && (
+                          <span className={`${s.chip} ${src === 'CMS' ? s.srcCms : s.srcXpay}`}>{src}</span>
+                        )}
                       </td>
                       <td>
                         <CustomerPicker
@@ -436,7 +522,15 @@ export default function ConverterView() {
                         )}
                       </td>
                       <td className={s.num}>{it.parsed ? fmt.format(it.parsed.total) : '—'}</td>
-                      <td className={s.muted}>{customer ? outputNames(customer, period).fileName : '—'}</td>
+                      <td className={s.muted}>
+                        {customer ? outputNames(customer, period).fileName : '—'}
+                        {g && g.files.length > 1 && (
+                          <div className={s.note}>
+                            gộp {g.files.length} file · {fmt.format(g.rows.length)} dòng ·{' '}
+                            {fmt.format(g.total)}
+                          </div>
+                        )}
+                      </td>
                       <td>
                         {it.status === 'reading' && <span className={s.chip}>Đang đọc…</span>}
                         {it.status === 'error' && (
@@ -444,21 +538,32 @@ export default function ConverterView() {
                             Lỗi: {it.error}
                           </span>
                         )}
-                        {it.status === 'ready' && !customer && <span className={`${s.chip} ${s.chipWarn}`}>Chưa khớp khách</span>}
-                        {it.status === 'ready' && customer && kind?.type === 'new' && (
+                        {it.status === 'ready' && !customer && (
+                          <span className={`${s.chip} ${s.chipWarn}`}>Chưa khớp khách</span>
+                        )}
+                        {it.status === 'ready' && customer && trungLo && (
+                          <>
+                            <span className={s.chip} title={trungLo}>Trùng – bỏ qua</span>
+                            <div className={s.note}>{trungLo}</div>
+                          </>
+                        )}
+                        {it.status === 'ready' && customer && !trungLo && kind?.type === 'new' && (
                           <span className={`${s.chip} ${s.chipOk}`}>Mới</span>
                         )}
-                        {it.status === 'ready' && customer && kind?.type === 'replace' && (
-                          <span className={`${s.chip} ${s.chipWarn}`} title="Kỳ này đã có bảng kê cho khách này từ file raw khác">
+                        {it.status === 'ready' && customer && !trungLo && kind?.type === 'replace' && (
+                          <span
+                            className={`${s.chip} ${s.chipWarn}`}
+                            title="Kỳ này đã có bảng kê cho khách này từ bộ file khác"
+                          >
                             Mới · thay bản cũ
                           </span>
                         )}
-                        {dup && (
-                          <span className={s.chip} title={kind.reason}>
-                            Đã xử lý – bỏ qua
-                          </span>
+                        {it.status === 'ready' && customer && !trungLo && kind?.type === 'duplicate' && (
+                          <>
+                            <span className={s.chip} title={kind.reason}>Đã xử lý – bỏ qua</span>
+                            <div className={s.note}>{kind.reason}</div>
+                          </>
                         )}
-                        {dup && <div className={s.note}>{kind.reason}</div>}
                       </td>
                       <td>
                         <button

@@ -186,3 +186,7 @@
   flex: 0 0 auto; padding: 6px 12px; border-top: 1px solid var(--line);
   background: var(--surface-2); font-size: 11px; color: var(--ink-3);
 }
+
+/* ---- Chip nguồn dữ liệu (XPAY / CMS) -------------------------------- */
+.srcXpay { background: var(--accent-soft); color: var(--accent-deep); }
+.srcCms  { background: var(--high-soft);   color: var(--high); }

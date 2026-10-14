@@ -19,7 +19,7 @@ export const VAT_RATE = 0.08;
 export const COLUMNS = [
   { key: 'stt', header: 'STT', aliases: ['stt'], width: 6 },
   { key: 'soThe', header: 'Số thẻ', aliases: ['so the'], width: 22 },
-  { key: 'sanPham', header: 'Sản phẩm', aliases: ['san pham'], width: 11 },
+  { key: 'sanPham', header: 'Sản phẩm', aliases: ['san pham'], width: 15 },
   { key: 'ngayGiaoDich', header: 'Ngày giao dịch', aliases: ['ngay giao dich'], width: 20 },
   { key: 'ngayDiThucTe', header: 'Ngày đi thực tế', aliases: ['ngay di thuc te'], width: 20 },
   { key: 'ngayHieuLuc', header: 'Ngày hiệu lực', aliases: ['ngay hieu luc'], width: 20 },
