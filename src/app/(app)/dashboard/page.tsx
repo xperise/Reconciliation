@@ -7,6 +7,7 @@ import { makeCtx, hasActual, mergeEdits, segCtx, Seg } from "@/lib/dashboard/cal
 import { renderView, kpiStrip, drillPanel, buildVM, VM, ViewState } from "@/lib/dashboard/views";
 import { kyIdx, kyAdd, tr, todayIso, setUnit, UNITS, UnitKey } from "@/lib/dashboard/util";
 import DataTab from "@/components/dashboard/DataTab";
+import MobilityFrame from "@/components/dashboard/MobilityFrame";
 
 // Hai tầng điều hướng: PHẦN (Tổng quan · Travel & SaaS · Mobility) → TAB chỉ số trong phần đó.
 // [key, nhãn, icon RemixIcon] — bộ icon của Xperise Design System, không dùng emoji
@@ -33,15 +34,12 @@ const TABS: Record<Sec, [string, string, string][]> = {
     ["kpiseg", "KPI & Hoa hồng", "ri-award-line"],
     ["alerts", "Cảnh báo", "ri-alarm-warning-line"],
   ],
-  m: [
-    ["revenue", "Doanh thu & Margin", "ri-line-chart-line"],
-    ["customers", "Khách hàng", "ri-group-line"],
-    ["ar", "Công nợ phải thu", "ri-arrow-down-circle-line"],
-    ["kpiseg", "KPI & Hoa hồng", "ri-award-line"],
-    ["alerts", "Cảnh báo", "ri-alarm-warning-line"],
-  ],
+  // Mobility = dashboard XPAY (5 tab riêng bên trong khung: Tổng quan, Lộ trình 60 tỷ, Tiến độ khách hàng,
+  // Pattern di chuyển, Cập nhật số liệu) — xem components/dashboard/MobilityFrame.tsx
+  m: [],
 };
 const hasTab = (sec: Sec, t: string) => TABS[sec].some(([k]) => k === t);
+const firstTab = (sec: Sec) => TABS[sec][0]?.[0] ?? "";
 
 export default function DashboardPage() {
   const [data, setData] = useState<DataSet | null>(null);
@@ -57,6 +55,8 @@ export default function DashboardPage() {
   const [soLe, setSoLe] = useState(2);
   // Lựa chọn trên các tab Xu hướng / Góc nhìn CEO (khoảng thời gian, nhóm khách, kịch bản)
   const [st, setSt] = useState<ViewState>({ gran: "m", cpG: "all", rate: null });
+  // Mobility: tăng số này để tải lại khung dashboard sau khi nhập dữ liệu
+  const [mobKey, setMobKey] = useState(0);
   setUnit(donVi, soLe);
 
   const toast = useCallback((m: string, e = false) => { setToastMsg({ m, err: e }); setTimeout(() => setToastMsg(null), e ? 7000 : 3600); }, []);
@@ -80,7 +80,7 @@ export default function DashboardPage() {
 
   // Tổng quan dùng số toàn công ty; hai phần còn lại dựng từ dữ liệu đã tách theo mảng
   const base: VM | null = useMemo(() => {
-    if (!ctx || !ky) return null;
+    if (!ctx || !ky || sec === "m") return null;
     return sec === "all" ? buildVM(ctx, ky, data, {}) : buildVM(segCtx(ctx, sec), ky, data, {}, { seg: sec, Cc: ctx });
   }, [ctx, ky, sec]);
   const vm: VM | null = useMemo(() => (base ? { ...base, st } : null), [base, st]);
@@ -90,13 +90,13 @@ export default function DashboardPage() {
     const [a, b] = target.includes(":") ? target.split(":") : ["", target];
     let s2: Sec = (a as Sec) || sec, t2 = b;
     if (!a && !hasTab(s2, t2)) s2 = hasTab("all", t2) ? "all" : sec;
-    if (!hasTab(s2, t2)) t2 = TABS[s2][0][0];
+    if (!hasTab(s2, t2)) t2 = firstTab(s2);
     setSec(s2); setTab(t2); setDrillKey(null);
     window.scrollTo({ top: 0 });
   }
   function pickSec(s2: Sec) {
     setSec(s2); setDrillKey(null);
-    if (!hasTab(s2, tab)) setTab(TABS[s2][0][0]);
+    if (!hasTab(s2, tab)) setTab(firstTab(s2));
   }
 
   /** Đổi một lựa chọn của người xem (nút có data-st / data-v, hoặc ô chọn có data-st) */
@@ -301,6 +301,20 @@ export default function DashboardPage() {
   }
 
   const canEdit = !!data?.me?.canEdit;
+
+  /** Nạp file dữ liệu dashboard Mobility (JSON xuất từ bản claude.ai hoặc file Sao lưu) */
+  async function importMobility(f: File) {
+    if (!window.confirm(`Nạp "${f.name}" sẽ ghi đè toàn bộ số liệu dashboard Mobility hiện tại. Tiếp tục?`)) return;
+    try {
+      const body = await f.text();
+      JSON.parse(body);
+      const r = await fetch("/api/dashboard/mobility/import", { method: "POST", headers: { "Content-Type": "application/json" }, body });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j.error) throw new Error(j.error || `Lỗi ${r.status}`);
+      toast(`Đã nạp dữ liệu Mobility${j.docs ? ` (${j.docs} mục tiến độ khách hàng)` : ""}`);
+      setMobKey((k) => k + 1);
+    } catch (e) { toast("Không nạp được: " + (e instanceof Error ? e.message : String(e)), true); }
+  }
   const nCrit = vm ? vm.AL.filter((a) => a.sev === "critical").length : 0;
   const snapComm = snap ? Number((snap.data as { comm?: number }).comm || 0) : 0;
 
@@ -310,6 +324,11 @@ export default function DashboardPage() {
         <div className="xd-secs" role="tablist" aria-label="Phần">
           {SECTIONS.map(([k, l, ic]) => (<button key={k} role="tab" aria-selected={sec === k} className={"xd-sec" + (sec === k ? " on" : "")} onClick={() => pickSec(k)}><i className={ic} aria-hidden="true" />{l}</button>))}
         </div>
+        {sec === "m" ? (canEdit && <div className="ctl">
+          <label className="btn" title="Nạp file dữ liệu chép từ bản dashboard trên claude.ai (ghi đè số liệu hiện tại)">Nhập dữ liệu
+            <input type="file" accept=".json,application/json" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importMobility(f); }} /></label>
+          <a className="btn" href="/api/dashboard/mobility/import" title="Tải toàn bộ số liệu Mobility ra file để sao lưu">Sao lưu</a>
+        </div>) : (<>
         <div className="ctl"><label htmlFor="xdDv">Đơn vị</label>
           <select id="xdDv" value={donVi} onChange={(e) => { const k = e.target.value as UnitKey; setDonVi(k); setSoLe(k === "ty" ? 2 : k === "trieu" ? 1 : 0); }}>
             {(Object.keys(UNITS) as UnitKey[]).map((k) => (<option key={k} value={k}>{UNITS[k].ten}</option>))}
@@ -324,13 +343,14 @@ export default function DashboardPage() {
             {(ctx?.periods || []).map((p) => (<option key={p} value={p}>{p}{ctx && !hasActual(ctx, p) ? " (chưa có thực tế)" : ""}</option>))}
           </select>
           <button className="btn" onClick={() => { load(); toast("Đã tải lại dữ liệu"); }}>Tải lại</button></div>
+        </>)}
       </div>
-      <div className="xd-tabs-in">
+      {sec !== "m" && <div className="xd-tabs-in">
         <div className="xd-tablist">
           {TABS[sec].map(([k, l, ic]) => (<button key={k} className={"xd-tab" + (tab === k ? " on" : "")} onClick={() => { setTab(k); setDrillKey(null); }}><i className={ic} aria-hidden="true" />{l}{k === "alerts" && nCrit > 0 && <span className="cnt">{nCrit}</span>}</button>))}
         </div>
-      </div></nav>
-      <div className="xd-page">
+      </div>}</nav>
+      {sec === "m" ? <MobilityFrame reloadKey={mobKey} /> : <div className="xd-page">
         {err && <div className="card notice">Lỗi tải dữ liệu: {err}</div>}
         {!data && !err && <div className="empty">Đang tải dữ liệu…</div>}
         {data && !ctx?.periods.length && tab !== "data" && (
@@ -351,7 +371,7 @@ export default function DashboardPage() {
         )}
         {vm && tab !== "data" && <div className="view" dangerouslySetInnerHTML={{ __html: renderView(tab, vm) }} />}
         {data && tab === "data" && <DataTab data={data} onDone={load} toast={toast} canEdit={canEdit} />}
-      </div>
+      </div>}
       {vm && drillKey && <div dangerouslySetInnerHTML={{ __html: drillPanel(vm, drillKey) }} />}
       {toastMsg && <div className={"toast" + (toastMsg.err ? " err" : "")}>{toastMsg.m}</div>}
       {/* Gợi ý mã khi thêm dòng mới — dùng chung cho mọi form trên các tab */}

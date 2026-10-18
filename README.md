@@ -156,6 +156,14 @@ bấm được, dẫn sang danh sách đã lọc sẵn. Lọc theo kỳ, khách 
 
 **Hỗ trợ** — Hướng dẫn sử dụng dạng SOP tương tác, chia theo vai trò
 
+**Dashboard → Mobility** — Dashboard XPAY (Tổng quan, Lộ trình 60 tỷ, Tiến độ khách hàng,
+Pattern di chuyển, Cập nhật số liệu). Mã trang nằm ở `public/dashboard/mobility.html`, chạy
+trong khung của trang /dashboard; số liệu lưu ở bảng `mob_state`, dữ liệu CS/Sales nhập ở
+`mob_db` (chạy `supabase/migrations/19_dashboard_mobility.sql`). Quản trị/Kế toán: nút
+**Nhập dữ liệu** (nạp file JSON) và **Sao lưu** trên thanh Mobility; mọi người xem được
+Dashboard đều nhập được tiến độ khách hàng. Khi cập nhật file HTML, tăng `MOBILITY_BUILD`
+trong `src/components/dashboard/MobilityFrame.tsx`.
+
 ---
 
 ## Lịch gửi và kỳ đối soát
