@@ -190,3 +190,4 @@
 /* ---- Chip nguồn dữ liệu (XPAY / CMS) -------------------------------- */
 .srcXpay { background: var(--accent-soft); color: var(--accent-deep); }
 .srcCms  { background: var(--high-soft);   color: var(--high); }
+.srcBe   { background: var(--stable-soft); color: var(--stable); }

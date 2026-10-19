@@ -1,6 +1,9 @@
 'use client';
 import { useState, useTransition } from 'react';
-import { taoNguoiDung, doiTrangThaiNguoiDung, doiQuyenXemTab } from '@/app/actions';
+import {
+  taoNguoiDung, doiTrangThaiNguoiDung, doiQuyenXemTab,
+  doiMatKhauNguoiDung, xoaNguoiDung,
+} from '@/app/actions';
 
 /** Ô tick chọn tab được xem */
 function TabCheckboxes({ xperise, mlx, dashboard, onChange, disabled, locked }: {
@@ -35,7 +38,7 @@ export function CreateUser() {
   const [dangChay, start] = useTransition();
 
   const laAdmin = vaiTro === 'admin';
-  const coTab = laAdmin || xemXperise || xemMlx;
+  const coTab = laAdmin || xemXperise || xemMlx || xemDash;
 
   function tao() {
     setTb('');
@@ -87,8 +90,8 @@ export function CreateUser() {
             {laAdmin
               ? 'Quản trị luôn xem được cả 3 tab.'
               : coTab
-                ? 'Dashboard là quyền thêm — có số hoa hồng từng người.'
-                : 'Chọn ít nhất 1 tab.'}
+                ? 'Ba quyền độc lập — cấp mỗi Dashboard cũng được.'
+                : 'Chọn ít nhất 1 phần.'}
           </div>
         </div>
       </div>
@@ -115,7 +118,7 @@ export function AccessToggle({ id, xperise, mlx, dashboard, isAdmin }: {
   if (isAdmin) return <span className="text-xs text-[var(--ink-3)]">Cả 3 (Quản trị)</span>;
 
   function doi(nx: boolean, nm: boolean, nd: boolean) {
-    if (!nx && !nm) { setLoi('Giữ ít nhất 1 tab Xperise hoặc MLX'); return; }
+    if (!nx && !nm && !nd) { setLoi('Giữ ít nhất 1 phần'); return; }
     const [cx, cm, cd] = [x, m, d];
     setX(nx); setM(nm); setD(nd); setLoi('');
     start(async () => {
@@ -139,5 +142,81 @@ export function ToggleUser({ id, active }: { id: string; active: boolean }) {
             onClick={() => start(() => doiTrangThaiNguoiDung(id, !active))}>
       {active ? 'Khóa' : 'Mở khóa'}
     </button>
+  );
+}
+
+/** Đặt lại mật khẩu: bấm nút mới hiện ô nhập, tránh lộ ô mật khẩu trên cả bảng */
+export function DoiMatKhau({ id, email }: { id: string; email: string }) {
+  const [mo, setMo] = useState(false);
+  const [mk, setMk] = useState('');
+  const [tb, setTb] = useState<{ ok: boolean; text: string } | null>(null);
+  const [dangChay, start] = useTransition();
+
+  if (!mo) {
+    return (
+      <button className="btn btn-sm" onClick={() => { setMo(true); setTb(null); }}>
+        Đổi mật khẩu
+      </button>
+    );
+  }
+
+  function luu() {
+    setTb(null);
+    start(async () => {
+      try {
+        await doiMatKhauNguoiDung(id, mk);
+        setTb({ ok: true, text: 'Đã đổi mật khẩu.' });
+        setMk(''); setMo(false);
+      } catch (e) {
+        setTb({ ok: false, text: e instanceof Error ? e.message : 'Không đổi được mật khẩu.' });
+      }
+    });
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex items-center gap-2">
+        <input
+          className="field mono !h-8 !w-44"
+          type="text"
+          autoComplete="new-password"
+          placeholder="Mật khẩu mới"
+          value={mk}
+          onChange={(e) => setMk(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && mk.length >= 8) luu(); }}
+        />
+        <button className="btn btn-sm btn-primary" disabled={dangChay || mk.length < 8} onClick={luu}>
+          Lưu
+        </button>
+        <button className="btn btn-sm" disabled={dangChay} onClick={() => { setMo(false); setMk(''); }}>
+          Huỷ
+        </button>
+      </div>
+      <div className="text-[11px] text-[var(--ink-3)]">
+        {tb ? tb.text : `Tối thiểu 8 ký tự — cho ${email}`}
+      </div>
+    </div>
+  );
+}
+
+/** Xoá hẳn tài khoản, có hộp xác nhận */
+export function XoaUser({ id, email }: { id: string; email: string }) {
+  const [loi, setLoi] = useState('');
+  const [dangChay, start] = useTransition();
+
+  function xoa() {
+    if (!window.confirm(`Xoá hẳn tài khoản ${email}?\n\nNgười này sẽ không đăng nhập được nữa. Nhật ký thao tác cũ vẫn giữ lại. Thao tác không hoàn tác được.`)) return;
+    setLoi('');
+    start(async () => {
+      try { await xoaNguoiDung(id); }
+      catch (e) { setLoi(e instanceof Error ? e.message : 'Không xoá được.'); }
+    });
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <button className="btn btn-sm btn-danger" disabled={dangChay} onClick={xoa}>Xoá</button>
+      {loi && <div className="text-[11px] text-[var(--critical)] max-w-[260px] text-right">{loi}</div>}
+    </div>
   );
 }

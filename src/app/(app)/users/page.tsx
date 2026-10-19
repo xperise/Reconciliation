@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { PageHeader } from '@/components/PageHeader';
-import { AccessToggle, CreateUser, ToggleUser } from './user-form';
+import { AccessToggle, CreateUser, DoiMatKhau, ToggleUser, XoaUser } from './user-form';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,7 +55,13 @@ export default async function UsersPage() {
                   </span>
                 </td>
                 <td className="text-right">
-                  {u.id !== me.id && <ToggleUser id={u.id} active={u.is_active} />}
+                  {u.id !== me.id && (
+                    <div className="flex items-start justify-end gap-2 flex-wrap">
+                      <DoiMatKhau id={u.id} email={u.email} />
+                      <ToggleUser id={u.id} active={u.is_active} />
+                      <XoaUser id={u.id} email={u.email} />
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}

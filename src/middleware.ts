@@ -1,6 +1,6 @@
 import { createServerClient, type SetAllCookies } from '@supabase/ssr';
 import { NextRequest, NextResponse } from 'next/server';
-import { isDashboardPath, isMlxPath, tabAccess } from '@/lib/access';
+import { coQuyen, isDashboardPath, isMlxPath, tabAccess, trangChu } from '@/lib/access';
 
 /** Làm mới phiên đăng nhập và chặn truy cập khi chưa đăng nhập. */
 export async function middleware(req: NextRequest) {
@@ -61,7 +61,18 @@ export async function middleware(req: NextRequest) {
 
   // Quyền xem tab: không có quyền thì chuyển sang tab còn lại
   const access = tabAccess(profile);
-  const home = access.xperise ? '/' : access.mlx ? '/mlx' : access.dashboard ? '/dashboard' : '/login';
+
+  // Không được cấp phần nào: đưa về trang đăng nhập kèm lý do, nếu không
+  // mọi nhánh chuyển hướng bên dưới sẽ đá qua đá lại vô tận.
+  if (!coQuyen(access)) {
+    if (path === '/login') return res;
+    const to = new URL('/login', req.url);
+    to.searchParams.set('loi', 'khong_quyen');
+    const r = NextResponse.redirect(to);
+    res.cookies.getAll().forEach((c) => r.cookies.set(c));
+    return r;
+  }
+  const home = trangChu(access) ?? '/login';
 
   if (path === '/login') {
     // Có ?loi= nghĩa là trang trong ứng dụng vừa đẩy ra vì phiên không dùng được;

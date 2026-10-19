@@ -209,8 +209,9 @@ export default function ConverterView() {
     }
 
     for (const g of map.values()) {
-      // XPAY trước, CMS sau; trong mỗi nguồn giữ nguyên thứ tự tải lên
-      const thuTu = (it: Item) => (it.parsed?.source === 'CMS' ? 1 : 0);
+      // XPAY trước, rồi CMS, rồi Be; trong mỗi nguồn giữ nguyên thứ tự tải lên
+      const BAC: Record<string, number> = { XPAY: 0, CMS: 1, BE: 2 };
+      const thuTu = (it: Item) => BAC[it.parsed?.source ?? 'XPAY'] ?? 0;
       g.files.sort((a, b) => thuTu(a) - thuTu(b));
       g.rows = g.files.flatMap((f) => f.parsed!.rows);
       g.total = g.files.reduce((n, f) => n + f.parsed!.total, 0);
@@ -344,7 +345,8 @@ export default function ConverterView() {
           <div className={s.kpiNum}>{active.length}</div>
           <div className={s.kpiSub}>
             {active.filter((i) => i.parsed?.source === 'XPAY').length} XPAY ·{' '}
-            {active.filter((i) => i.parsed?.source === 'CMS').length} CMS
+            {active.filter((i) => i.parsed?.source === 'CMS').length} CMS ·{' '}
+            {active.filter((i) => i.parsed?.source === 'BE').length} Be
             {dupCount ? ` · bỏ qua ${dupCount}` : ''}
           </div>
         </div>
@@ -359,7 +361,7 @@ export default function ConverterView() {
           <div className={s.kpiLabel}>Tổng giao dịch</div>
           <div className={s.kpiNum}>{fmt.format(totalRows)}</div>
           <div className={s.kpiSub}>
-            gộp cả XPAY và CMS{zeroTotal > 0 ? ` · đã bỏ ${zeroTotal} dòng 0đ` : ''}
+            gộp cả XPAY, CMS và Be{zeroTotal > 0 ? ` · đã bỏ ${zeroTotal} dòng 0đ` : ''}
           </div>
         </div>
         <div className={s.kpi}>
@@ -374,7 +376,7 @@ export default function ConverterView() {
         <div className={s.cardHead}>
           <div>
             <div className={s.eyebrow}>Bước 1</div>
-            <h2 className={s.title}>Tải lên file XPAY và CMS</h2>
+            <h2 className={s.title}>Tải lên file XPAY, CMS và Be</h2>
           </div>
           <div className={s.row}>
             <span className={s.label}>Kỳ mặc định</span>
@@ -404,7 +406,7 @@ export default function ConverterView() {
             addFiles(e.dataTransfer.files);
           }}
         >
-          <div className={s.dropTitle}>Kéo thả file raw XPAY và bảng kê CMS vào đây hoặc bấm để chọn</div>
+          <div className={s.dropTitle}>Kéo thả file raw XPAY, bảng kê CMS và bảng kê Be vào đây hoặc bấm để chọn</div>
           <div className={s.note} style={{ marginTop: 4 }}>
             Hệ thống tự nhận loại file, khớp khách theo tên công ty / mã hợp đồng / MST, rồi gộp giao dịch của cùng một
             khách trong cùng một kỳ vào <b>một bảng kê</b>. Dòng 0đ và file đã xử lý trước đó được bỏ qua.
@@ -494,7 +496,9 @@ export default function ConverterView() {
                       </td>
                       <td>
                         {src && (
-                          <span className={`${s.chip} ${src === 'CMS' ? s.srcCms : s.srcXpay}`}>{src}</span>
+                          <span className={`${s.chip} ${src === 'CMS' ? s.srcCms : src === 'BE' ? s.srcBe : s.srcXpay}`}>
+                            {src === 'BE' ? 'Be' : src}
+                          </span>
                         )}
                       </td>
                       <td>

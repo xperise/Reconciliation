@@ -562,7 +562,7 @@ export async function taoNguoiDung(
 
   // Admin luôn xem được cả 2 tab; vai trò khác phải chọn ít nhất 1 tab
   if (vaiTro === 'admin') { xemXperise = true; xemMlx = true; xemDashboard = true; }
-  if (!xemXperise && !xemMlx) throw new Error('Chọn ít nhất 1 tab được xem (Xperise hoặc MLX).');
+  if (!xemXperise && !xemMlx && !xemDashboard) throw new Error('Chọn ít nhất 1 phần được xem (Xperise, MLX hoặc Dashboard).');
 
   const { data, error } = await sb.auth.admin.createUser({
     email: email.trim(),
@@ -577,7 +577,10 @@ export async function taoNguoiDung(
     .update({ xem_xperise: xemXperise, xem_mlx: xemMlx, xem_dashboard: xemDashboard })
     .eq('id', data.user!.id);
   if (qErr) {
-    throw new Error(`Đã tạo tài khoản nhưng chưa lưu được quyền xem tab (${qErr.message}). Kiểm tra đã chạy SQL 13_phan_quyen_tab.sql chưa, rồi chỉnh quyền trong bảng Người dùng.`);
+    throw new Error(
+      `Đã tạo tài khoản nhưng chưa lưu được quyền xem tab (${qErr.message}). ` +
+        `${loiRangBuocTab(qErr.message)}Vào bảng Người dùng chỉnh lại quyền sau khi xử lý.`,
+    );
   }
 
   await writeAudit({
@@ -589,17 +592,81 @@ export async function taoNguoiDung(
   revalidatePath('/users');
 }
 
+/**
+ * Bản 13 của CSDL có ràng buộc "phải có Xperise hoặc MLX". Khi cấp mỗi
+ * Dashboard, Postgres sẽ chặn cho tới khi chạy bản 20.
+ */
+function loiRangBuocTab(msg: string): string {
+  return /profiles_it_nhat_mot_tab|check constraint/i.test(msg)
+    ? 'Cần chạy supabase/migrations/20_xoa_tai_khoan.sql để cho phép cấp mỗi quyền Dashboard. '
+    : '';
+}
+
 export async function doiQuyenXemTab(userId: string, xemXperise: boolean, xemMlx: boolean, xemDashboard = false) {
   const user = await requireRole('admin');
-  if (!xemXperise && !xemMlx) throw new Error('Phải giữ ít nhất 1 tab Xperise hoặc MLX.');
+  if (!xemXperise && !xemMlx && !xemDashboard) throw new Error('Phải giữ ít nhất 1 phần: Xperise, MLX hoặc Dashboard.');
   const { error } = await supabaseAdmin().from('profiles')
     .update({ xem_xperise: xemXperise, xem_mlx: xemMlx, xem_dashboard: xemDashboard })
     .eq('id', userId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(loiRangBuocTab(error.message) + error.message);
   await writeAudit({
     actorId: user.id, actorEmail: user.email,
     action: 'user.access', entity: 'profiles', entityId: userId,
     note: `Tab được xem: ${[xemXperise && 'Xperise', xemMlx && 'MLX', xemDashboard && 'Dashboard'].filter(Boolean).join(', ')}`,
+  });
+  revalidatePath('/users');
+}
+
+/** Đặt lại mật khẩu cho một tài khoản đã có. Chỉ admin. */
+export async function doiMatKhauNguoiDung(userId: string, matKhauMoi: string) {
+  const user = await requireRole('admin');
+  const mk = matKhauMoi.trim();
+  if (mk.length < 8) throw new Error('Mật khẩu phải có tối thiểu 8 ký tự.');
+
+  const { error } = await supabaseAdmin().auth.admin.updateUserById(userId, { password: mk });
+  if (error) throw new Error(error.message);
+
+  // Không bao giờ ghi mật khẩu vào nhật ký
+  await writeAudit({
+    actorId: user.id, actorEmail: user.email,
+    action: 'user.password_reset', entity: 'profiles', entityId: userId,
+  });
+  revalidatePath('/users');
+}
+
+/**
+ * Xoá hẳn một tài khoản: xoá tài khoản đăng nhập, hồ sơ tự xoá theo (cascade).
+ * Những việc người đó đã làm (duyệt, tải tệp, nhật ký) vẫn giữ nguyên, chỉ bỏ
+ * liên kết người thực hiện — xem supabase/migrations/20_xoa_tai_khoan.sql.
+ */
+export async function xoaNguoiDung(userId: string) {
+  const user = await requireRole('admin');
+  if (userId === user.id) throw new Error('Không thể tự xoá tài khoản của chính mình.');
+
+  const sb = supabaseAdmin();
+  const { data: hoSo } = await sb.from('profiles').select('email, role').eq('id', userId).maybeSingle();
+  if (hoSo?.role === 'admin') {
+    const { count } = await sb.from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('role', 'admin').eq('is_active', true);
+    if ((count ?? 0) <= 1) throw new Error('Đây là tài khoản quản trị đang hoạt động duy nhất, không xoá được.');
+  }
+
+  const { error } = await sb.auth.admin.deleteUser(userId);
+  if (error) {
+    if (/foreign key|violates/i.test(error.message)) {
+      throw new Error(
+        'Chưa xoá được vì tài khoản này còn gắn với dữ liệu cũ (duyệt bảng kê, tệp đã tải lên…). ' +
+          'Chạy supabase/migrations/20_xoa_tai_khoan.sql trong SQL Editor rồi thử lại.',
+      );
+    }
+    throw new Error(error.message);
+  }
+
+  await writeAudit({
+    actorId: user.id, actorEmail: user.email,
+    action: 'user.delete', entity: 'profiles', entityId: userId,
+    note: hoSo?.email ?? '',
   });
   revalidatePath('/users');
 }

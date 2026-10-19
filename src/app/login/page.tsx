@@ -19,7 +19,9 @@ export default function LoginPage() {
     setLoi(
       loiUrl === 'khoa'
         ? 'Tài khoản đã bị khoá. Liên hệ quản trị viên để mở lại.'
-        : 'Tài khoản chưa được cấp quyền xem phần nào, hoặc hồ sơ người dùng chưa được tạo. Liên hệ quản trị viên.',
+        : loiUrl === 'khong_quyen'
+          ? 'Tài khoản chưa được cấp quyền xem phần nào (Xperise / MLX / Dashboard). Liên hệ quản trị viên.'
+          : 'Hồ sơ người dùng chưa được tạo hoặc không đọc được. Liên hệ quản trị viên.',
     );
   }, []);
 

@@ -1,5 +1,6 @@
 import type ExcelJS from 'exceljs';
 import { COLUMNS, type ColumnKey } from './config';
+import { boTienToBe, docSheetBe, laSheetBe } from './parseBe';
 import { normalizeText, parseFileName } from './normalize';
 import type { ParsedRawFile, Period, RawRow } from './types';
 
@@ -161,6 +162,26 @@ export async function parseRawFile(
 ): Promise<ParsedRawFile> {
   const wb: Workbook = new ExcelJSLib.Workbook();
   await wb.xlsx.load(data);
+
+  // ---- Bảng kê raw của Be: bảng rộng, tên cột song ngữ, không có cột Số thẻ
+  for (const ws of wb.worksheets) {
+    if (!laSheetBe(ws)) continue;
+    const be = docSheetBe(ws);
+    const giuLai = be.rows.filter((r) => (r.soTien ?? 0) !== 0);
+    const { company, period: kyTenFile } = parseFileName(fileName);
+    return {
+      fileName,
+      source: 'BE',
+      companyFromFile: boTienToBe(company),
+      codeFromFile: '',
+      mstFromFile: '',
+      // Kỳ tính từ ngày giao dịch đáng tin hơn ngày xuất file trong tên file
+      periodFromFile: be.period ?? kyTenFile,
+      rows: giuLai,
+      zeroRows: be.rows.length - giuLai.length,
+      total: giuLai.reduce((s, r) => s + (r.soTien ?? 0), 0),
+    };
+  }
 
   // Tìm sheet + dòng header có "STT" và "Số thẻ"
   let found: { ws: ExcelJS.Worksheet; headerRow: number } | null = null;

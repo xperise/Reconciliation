@@ -40,7 +40,7 @@ export interface RawRow {
 }
 
 /** Nguồn dữ liệu của một file tải lên */
-export type Source = 'XPAY' | 'CMS';
+export type Source = 'XPAY' | 'CMS' | 'BE';
 
 export interface ParsedRawFile {
   fileName: string;
