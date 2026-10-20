@@ -73,6 +73,21 @@ html,body{margin:0;background:#f7f7fa}
 const SKELETON_HEAD = "<!doctype html><html><head><meta charset=utf8><meta name=viewport content=\"width=device-width,initial-scale=1,viewport-fit=cover\"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>\n";
 const S = JSON.parse(document.getElementById('state').textContent);
 const P = S.params;
+/* Cùng một doanh nghiệp có 2 mã hợp đồng (ký phụ lục dưới mã mới): gộp về mã cũ — mã cũ giữ PIC, phân hạng,
+   lịch sử giao dịch; nhận thêm ngày ký phụ lục / khởi tạo XPAY của mã mới. Mỗi doanh nghiệp chỉ đếm 1 lần. */
+const MERGE = {'26000055': '20000020', '26000034': '24000290', '26000041': '20006788', '26000029': '20006419', '000000000ML': '109839192'};
+(() => {
+  const B = (S.book && S.book.rows) || [], C = (S.crm0 && S.crm0.rows) || {};
+  for (const [nw, old] of Object.entries(MERGE)) {
+    const ni = B.findIndex(r => r[0] === nw), ro = B.find(r => r[0] === old);
+    if (ni >= 0 && ro) { const rn = B[ni];
+      if (rn[6] === 'Y') ro[6] = 'Y'; if (rn[7] === 'Y') ro[7] = 'Y'; ro[4] = ro[4] || rn[4];
+      if (rn[5] > ro[5] && rn[5] < 6) ro[5] = rn[5]; if (rn[9] && /Hoàn tất/.test(rn[9])) ro[9] = rn[9];
+      B.splice(ni, 1); }
+    if (C[nw]) { const cn = C[nw], co = C[old] = C[old] || ['', '', '', '', '', 0, 0, 0]; if (!co[0] && cn[0]) co[0] = cn[0]; if (!co[1] && cn[1]) co[1] = cn[1]; delete C[nw]; }
+  }
+  (S.tx || []).forEach(t => { if (MERGE[t[2]]) t[2] = MERGE[t[2]]; });
+})();
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
@@ -974,7 +989,7 @@ function crmRows(d) {
   const first = {}, gm = {}, lo30 = addD(d, -29);
   S.tx.forEach(t => { if (t[0] > d) return; const f = first[t[2]]; if (!f || t[0] < f[0]) first[t[2]] = t;
     const g = gm[t[2]] = gm[t[2]] || {g: 0, n: 0, g30: 0, last: ''}; g.g += t[4]; g.n++; if (t[0] >= lo30) g.g30 += t[4]; if (t[0] > g.last) g.last = t[0]; });
-  const keys = new Set([...BK.rows.map(r => r[0]), ...Object.keys(first), ...Object.keys(DBX)]);
+  const keys = new Set([...BK.rows.map(r => r[0]), ...Object.keys(first), ...Object.keys(DBX)].filter(k => !MERGE[k]));
   const val = (v, def) => v == null ? def : v;
   CRM_ = [...keys].map(k => { const b = BOOK[k] || {}, c = C0.rows[k] || [], e = DBX[k] || {}, ms = e.ms || {}, f = first[k], g = gm[k] || {g: 0, n: 0, g30: 0, last: ''};
     const acts = [...(SEEDACT[k] || []), ...Object.entries(e.acts || {}).filter(([, a]) => a).map(([id, a]) => Object.assign({id}, a))].filter(a => a.d <= d || !isoOk(a.d)).sort((x, y) => (y.d || '').localeCompare(x.d || '') || (y.ts || 0) - (x.ts || 0));
