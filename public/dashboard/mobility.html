@@ -115,10 +115,21 @@ const driverId = (mnv, plate) => (mnv && String(mnv).trim()) ? String(mnv).trim(
 /* ---------- actuals ---------- */
 let ACT = {}, LASTDAY = null, BYDAY = {};
 const dy0 = d => addD(d, -1);
-const MMODE = k => ((S.mmode || {})[k]) || (k === 'appendix' ? 'auto' : 'manual');
+const MMODE = k => 'auto';
+const CRM_BASE_TS = Date.parse('2026-10-18T00:00:00+07:00');
+function crmMts() { let t = CRM_BASE_TS; for (const e of Object.values(typeof DBX === 'object' && DBX ? DBX : {})) if (e && e.mts > t) t = e.mts; return t; }
+function manualLast(d, k) { let best = ''; for (const [dd, o] of Object.entries(S.manual)) if (dd <= d && dd >= best && o[k] != null) best = dd;
+  return best ? {d: best, v: S.manual[best][k], ts: S.manual[best][k + '_ts'] || Date.parse(best + 'T00:00:00+07:00')} : null; }
+/* Phụ lục đã ký / DN đã khởi tạo XPAY: lấy số của tab Tiến độ khách hàng; số nhập tay chỉ dùng khi được nhập sau lần cập nhật gần nhất của tab đó */
+function countSrc(d, k) {
+  const ml = manualLast(d, k), au = LASTDAY ? autoCounts()[k] : null;
+  if (au == null) return ml ? {v: ml.v, src: 'manual', d: ml.d} : {v: null, src: ''};
+  if (ml && ml.ts > crmMts()) return {v: ml.v, src: 'manual', d: ml.d};
+  return {v: au, src: 'crm'};
+}
 let AUTOC_ = null;
 function autoCounts(fresh) { if (AUTOC_ && !fresh) return AUTOC_; const R = crmRows(LASTDAY || '9999').filter(r => !r.liq); AUTOC_ = {appendix: R.filter(r => done(r.pl)).length, onboard: R.filter(r => done(r.xp)).length}; return AUTOC_; }
-function manualAt(d, k) { if ((k === 'appendix' || k === 'onboard') && MMODE(k) === 'auto' && LASTDAY && d >= LASTDAY) return autoCounts()[k];
+function manualAt(d, k) { if ((k === 'appendix' || k === 'onboard') && LASTDAY && d >= LASTDAY) return countSrc(d, k).v;
   let v = null, best = ''; for (const [dd, o] of Object.entries(S.manual)) if (dd <= d && dd >= best && o[k] != null) { best = dd; v = o[k]; } return v; }
 function supplyAt(d) {
   const D = S.drv.dates; let units = 0, init = 0, act = 0, ok = 0, any = false;
@@ -144,8 +155,8 @@ function computeActuals() {
     let mtd = 0; for (let x = d.slice(0, 8) + '01'; x <= d; x = addD(x, 1)) (BYDAY[x] || []).forEach(t => mtd += t[4]);
     const sp = supplyAt(d);
     ACT[d] = {
-      gmv: td.reduce((a, t) => a + t[4], 0), trips: td.length, cards: uniq(td, t => t[3]), drivers: uniq(td, t => t[5]),
-      gmv30: w.reduce((a, t) => a + t[4], 0), trips30: w.length, cos30: uniq(w, t => t[2]), cards30: uniq(w, t => t[3]),
+      gmv: td.reduce((a, t) => a + t[4], 0), trips: td.length, cards: uniq(td, t => t[3]), drivers: uniq(td, t => t[5]), cos: uniq(td, t => t[2]),
+      gmv30: w.reduce((a, t) => a + t[4], 0), trips30: w.length, cos30: uniq(w, t => t[2]), cards30: uniq(w, t => t[3]), drivers30: uniq(w, t => t[5]),
       mtd, onboard: manualAt(d, 'onboard'), cards_issued: manualAt(d, 'cards_issued'),
       units: sp.units, init: sp.init, dact: sp.dact, ok40: sp.ok40, hasTx: d <= LASTDAY
     };
@@ -296,15 +307,34 @@ function renderOverview(d, C, A, p) {
   bul.push(`<li class="${status(ca.ratio)}">Doanh nghiệp active 30 ngày: <b>${nf(ca.t, 0)}</b> trên kế hoạch ${nf(ca.pl, 0)}. Tài xế có giao dịch hôm nay: <b>${nf(dr.t, 0)}</b>. Tài xế đã active: ${nf(A.dact, 0)} trên ${nf(A.init, 0)} tài xế khởi tạo.</li>`);
   if (behind.length) bul.push(`<li class="critical">Xa kế hoạch nhất: <b>${behind.slice().sort((a, b) => C[a.k].ratio - C[b.k].ratio).slice(0, 3).map(r => full(r.k) + ' (' + pct(C[r.k].ratio) + ')').join(', ')}</b>.</li>`);
   const mu = v => money(v) + ' ' + (UNIT.div === 1 ? 'đồng' : unitLabel());
-  const kp = [['GMV hôm nay', g, mu, `Kế hoạch ${mu(g.pl)} · đạt ${pct(g.ratio)}`], ['GMV lũy kế tháng', m, mu, `Kế hoạch ${mu(m.pl)} · đạt ${pct(m.ratio)}`],
-    ['Doanh nghiệp active 30 ngày', ca, n0, `Kế hoạch ${n0(ca.pl)} · đích 31/12 ${n0(P.act_tgt)}`], ['Tài xế có giao dịch hôm nay', dr, n0, `Kế hoạch ${n0(dr.pl)} · đạt ${pct(dr.ratio)}`]];
-  const ctT = manualAt(d, 'appendix'), ctY = (() => { let sm = 0, n = 0; for (let i = 1; i <= 7; i++) { const v = manualAt(addD(d, -i), 'appendix'); if (v != null) { sm += v; n++; } } return n ? sm / n : null; })(), obT = manualAt(d, 'onboard');
   let h = `<div class="banner"><b>${['Chủ nhật','Thứ hai','Thứ ba','Thứ tư','Thứ năm','Thứ sáu','Thứ bảy'][new Date(d + 'T00:00:00Z').getUTCDay()]} ${dmy(d)}: ngày ${T} trên 92 ngày của lộ trình, còn ${diffD(P.end, d)} ngày đến 31/12</b><ul>${bul.join('')}</ul></div>`;
-  h += `<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">${kp.map(([k, c, F, s]) => { const dl = (c.t != null && c.a7 != null) ? c.t - c.a7 : null, r = c.ratio;
-    const dd = dl == null ? '' : dl > 0 ? `<span class="up"><b>▲ ${F(dl)}</b></span>` : dl < 0 ? `<span class="dn"><b>▼ ${F(-dl)}</b></span>` : '<span>= 0</span>';
-    return `<div class="kpi"><div class="k">${k}</div><div class="v">${F(c.t)}</div><div class="s">${dd}${c.a7 ? ` <b class="${dl > 0 ? 'up' : dl < 0 ? 'dn' : ''}">(${pctCh(c.t, c.a7)})</b>` : ''} so với TB 7 ngày</div><div class="s">${s}</div><div class="meter"><i style="width:${Math.min(100, (r || 0) * 100)}%;background:var(--${status(r) === 'mute' ? 'ink-3' : status(r)})"></i></div></div>`; }).join('')}${(() => { const dl = ctT != null && ctY != null ? ctT - ctY : null;
-    const dd = dl == null ? '' : dl > 0 ? `<span class="up"><b>▲ ${n0(dl)}</b>${ctY ? ` <b>(${pctCh(ctT, ctY)})</b>` : ''}</span> so với TB 7 ngày` : dl < 0 ? `<span class="dn"><b>▼ ${n0(-dl)}</b> <b>(${pctCh(ctT, ctY)})</b></span> so với TB 7 ngày` : '<span>= 0</span> so với TB 7 ngày';
-    return `<div class="kpi"><div class="k">Phụ lục đã ký (lũy kế)</div><div class="v">${ctT == null ? '—' : n0(ctT)}</div><div class="s">${ctT == null ? 'Chưa nhập — tab Cập nhật số liệu, mục 3' : dd}</div><div class="s">${ctT != null && obT ? `Đã giao XPAY ${n0(obT)} · ${pct(obT / ctT)} số đã ký` : 'Số nhập tay'}</div><div class="meter"><i style="width:${ctT && obT ? Math.min(100, obT / ctT * 100) : 0}%;background:var(--accent)"></i></div></div>`; })()}</div>`;
+  const A0 = ACT[d] || {}, av = f => { let s = 0, n = 0; for (let i = 1; i <= 7; i++) { const x = ACT[addD(d, -i)]; if (!x || !x.trips) continue; s += f(x); n++; } return n ? s / n : null; };
+  const cmp = (t, a, F) => { if (t == null || a == null) return '<span class="lbl">chưa đủ dữ liệu 7 ngày</span>'; const dl = t - a;
+    return `${dl > 0 ? `<span class="up"><b>▲ ${F(dl)}</b>` : dl < 0 ? `<span class="dn"><b>▼ ${F(-dl)}</b>` : '<span><b>= 0</b>'}${a ? ' (' + pctCh(t, a) + ')' : ''}</span> so với TB 7 ngày (${F(a)})`; };
+  const bar = (r, col) => `<div class="meter"><i style="width:${Math.min(100, Math.max(0, (r || 0) * 100))}%;background:${col || `var(--${status(r) === 'mute' ? 'ink-3' : status(r)})`}"></i></div>`;
+  const tile = (k, v, s1, s2, mt) => `<div class="kpi"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s1 || ''}</div>${s2 ? `<div class="s">${s2}</div>` : ''}${mt || ''}</div>`;
+  const of = v => `<span style="font-size:14px;font-weight:600;color:var(--ink-2)"> / ${v}</span>`;
+  const plC = countSrc(d, 'appendix'), obC = countSrc(d, 'onboard');
+  const srcTxt = c => c.src === 'manual' ? `Số nhập tay ngày ${dmy(c.d)}` : c.src === 'crm' ? 'Lấy từ tab Tiến độ khách hàng' : 'Chưa có số';
+  const CRR = crmRows(d).filter(r => !r.liq), wsd = wkStart(d);
+  const cT = actsOn(CRR, 'call', d), mT = actsOn(CRR, 'meet', d), cW = actsBetween(CRR, 'call', wsd, d), mW = actsBetween(CRR, 'meet', wsd, d);
+  const tsum = f => PICS.reduce((s, p) => s + f(p), 0);
+  const cDt = tsum(p => tgtD(p, 'call', d)), mDt = tsum(p => tgtD(p, 'meet', d)), cWt = tsum(p => tgtW(p, 'call', d)), mWt = tsum(p => tgtW(p, 'meet', d));
+  const fr = (a, t) => t ? `${n0(a)}/${n0(Math.round(t))}` : n0(a);
+  const tiles = [
+    tile('GMV hôm nay', mu(g.t), cmp(g.t, g.a7, mu), `Kế hoạch ${mu(g.pl)} · đạt <b>${pct(g.ratio)}</b>`, bar(g.ratio)),
+    tile('GMV lũy kế tháng', mu(m.t), `Kế hoạch ${mu(m.pl)} · đạt <b>${pct(m.ratio)}</b>`, `Đích tháng 12: ${mu(P.dec)}`, bar(m.ratio)),
+    tile('DN đã ký phụ lục', plC.v == null ? '—' : n0(plC.v), srcTxt(plC), 'Lũy kế · không tính khách thanh lý chưa có giao dịch'),
+    tile('DN đã khởi tạo XPAY', obC.v == null ? '—' : n0(obC.v) + (plC.v ? of(n0(plC.v)) : ''), plC.v && obC.v != null ? `<b>${pct(obC.v / plC.v)}</b> số DN đã ký phụ lục` : '', srcTxt(obC), bar(plC.v ? obC.v / plC.v : 0, 'var(--accent)')),
+    tile('DN active hôm nay', n0(A0.cos || 0) + of(n0(A0.cos30 || 0)), cmp(A0.cos, av(x => x.cos), n0), `Trên ${n0(A0.cos30 || 0)} DN active 30 ngày`, bar(A0.cos30 ? A0.cos / A0.cos30 : 0, 'var(--accent)')),
+    tile('Thẻ active hôm nay', n0(A0.cards || 0) + of(n0(A0.cards30 || 0)), cmp(A0.cards, av(x => x.cards), n0), `Trên ${n0(A0.cards30 || 0)} thẻ active 30 ngày`, bar(A0.cards30 ? A0.cards / A0.cards30 : 0, 'var(--accent)')),
+    tile('Cuộc gọi · meeting hôm nay', `${n0(cT)}<span style="font-size:14px;font-weight:600;color:var(--ink-2)"> gọi · </span>${n0(mT)}<span style="font-size:14px;font-weight:600;color:var(--ink-2)"> meeting</span>`,
+      cDt || mDt ? `Chỉ tiêu ngày: ${fr(cT, cDt)} cuộc gọi · ${mDt ? `${n0(mT)}/${nf(mDt, 1)}` : n0(mT)} meeting` : 'Hôm nay không có chỉ tiêu ngày',
+      cWt || mWt ? `Tuần này: <b>${fr(cW, cWt)}</b> cuộc gọi · <b>${fr(mW, mWt)}</b> meeting` : `Tuần này: ${n0(cW)} cuộc gọi · ${n0(mW)} meeting (chưa có chỉ tiêu)`,
+      bar(cWt + mWt ? (cW + mW) / (cWt + mWt) : 0)),
+    tile('Tài xế active hôm nay', n0(A0.drivers || 0) + of(n0(A0.drivers30 || 0)), cmp(A0.drivers, av(x => x.drivers), n0), `Trên ${n0(A0.drivers30 || 0)} tài xế active 30 ngày`, bar(A0.drivers30 ? A0.drivers / A0.drivers30 : 0, 'var(--accent)')),
+  ];
+  h += `<div class="kpis">${tiles.join('')}</div>`;
   h += `<div class="card"><div class="hd"><div><div class="eyebrow">Bảng CEO · Demand & Supply</div><h2 class="card-title">Hôm nay vs trung bình 7 ngày vs lộ trình · kế hoạch ngày mai đã bù thâm hụt</h2></div><div class="card-note">Tiền: ${unitLabel()} · tại ${dmy(d)} · số liệu giao dịch đến ${dmy(LASTDAY)}</div></div>
     <div class="tw"><table><thead><tr><th class="l">Chỉ số</th><th>Hôm qua</th><th>TB 7 ngày gần nhất</th><th>Hôm nay</th><th>+/− TB 7 ngày</th><th>KH hôm nay</th><th>% đạt</th><th>Thâm hụt phải bù</th><th>KH ngày mai (gốc)</th><th>KH ngày mai (đã bù)</th><th>KH tuần</th><th>Đích T12 / 31/12</th><th>Còn thiếu</th><th class="l">Quyết định</th></tr></thead><tbody>`;
   for (const r of ROWS) {
@@ -374,9 +404,9 @@ function renderUpload() {
   h += `<div class="g2"><div class="drop"><b>1. Bảng kê taxi (.xlsx) — chọn được nhiều file</b><input type="file" id="ftx" accept=".xlsx,.xls" multiple><div class="hint">Gộp với dữ liệu cũ, bỏ trùng theo "Số giao dịch", loại giao dịch 0đ và nội bộ Xperise.<br><span style="font-weight:700">Lưu ý:</span> giao dịch có Đơn vị phát sinh là <span style="font-weight:700">CYGNUS™ Universal Transportation Service</span> và số tiền <span style="font-weight:700">0đ</span> là giao dịch khởi tạo/test — không tính vào bất kỳ thống kê nào.</div></div>
     <div class="drop"><b>2. File độ phủ tài xế (.xlsx, sheet "Nhập active")</b><input type="file" id="fdrv" accept=".xlsx,.xls"><div class="hint">Thay toàn bộ bảng tài xế bằng file mới. Ngày không nhập lấy số gần nhất.</div></div></div>
     <div class="drop" style="margin-top:12px"><b>3. Số lũy kế — tự tính hoặc nhập tay (áp cho ngày giao dịch mới nhất ${LASTDAY ? dmy(LASTDAY) : ''}) — có thể lưu riêng, không cần chọn file</b>
-      ${[['appendix', 'mct', 'Phụ lục đã ký', 'số khách đã ký phụ lục'], ['onboard', 'mob', 'DN đã giao XPAY', 'số khách đã giao thẻ']].map(([k, id, l, d]) => { const au = MMODE(k) === 'auto', ac = autoCounts()[k];
-        return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0"><span class="lbl" style="width:120px">${l}</span><select id="${id}m" data-auto="${ac}" data-for="${id}"><option value="auto" ${au ? 'selected' : ''}>Tự tính mỗi lần cập nhật (${n0(ac)})</option><option value="manual" ${au ? '' : 'selected'}>Nhập tay</option></select>
-          <input type="number" id="${id}" value="${au ? ac : (manualAt(LASTDAY, k) || '')}" ${au ? 'disabled' : ''}><span class="lbl">Tự tính = ${d} ở tab Tiến độ khách hàng, không tính khách thanh lý chưa có giao dịch</span></div>`; }).join('')}
+      ${[['appendix', 'mct', 'Phụ lục đã ký', 'số khách đã ký phụ lục'], ['onboard', 'mob', 'DN đã khởi tạo XPAY', 'số khách đã khởi tạo XPAY']].map(([k, id, l, d]) => { const cs = LASTDAY ? countSrc(LASTDAY, k) : {v: null, src: ''}, ac = autoCounts()[k];
+        return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0"><span class="lbl" style="width:120px">${l}</span><select id="${id}m" hidden><option value="auto" selected>auto</option></select>
+          <input type="number" id="${id}" value="${cs.v == null ? '' : cs.v}"><span class="lbl">Đang dùng: ${cs.src === 'manual' ? `số nhập tay ngày ${dmy(cs.d)}` : `số từ tab Tiến độ khách hàng (${n0(ac)})`}. Sửa số để nhập tay — số nhập tay được dùng cho tới khi tab Tiến độ khách hàng có cập nhật ${d} mới hơn.</span></div>`; }).join('')}
       <div style="display:flex;gap:8px;align-items:center;margin:8px 0"><span class="lbl" style="width:120px">Thẻ đã phát hành</span> <input type="number" id="mk" value="${manualAt(LASTDAY, 'cards_issued') || ''}"><span class="lbl">nhập tay</span></div></div>
     <div style="display:flex;gap:10px;margin-top:14px"><button class="btn" id="bprev">Kiểm tra file</button><button class="btn pri" id="bsave" ${PENDING ? '' : 'disabled'}>Lưu & cập nhật dashboard</button></div>
     <div class="log" id="ulog" style="margin-top:12px">${PENDING ? esc(PENDING.log) : 'Chọn file rồi bấm "Kiểm tra file".'}</div></div>`;
@@ -464,7 +494,8 @@ async function save() {
   const IDX_ = {}; S.tx.forEach(t => IDX_[t[1]] = t); (PENDING.fill || []).forEach(([id, a, b2, km, ts]) => { const t = IDX_[id]; if (!t) return; while (t.length < 9) t.push(''); if (!t[8] && ts) t[8] = ts; t[9] = a; t[10] = b2; t[11] = km; });
   S.mmode = {appendix: $('mctm').value, onboard: $('mobm').value};
   const last = S.tx[S.tx.length - 1][0], ob = Number($('mob').value), k = Number($('mk').value), ct = Number($('mct').value);
-  S.manual[last] = Object.assign({}, S.manual[last] || {}, ob ? {onboard: ob} : {}, k ? {cards_issued: k} : {}, ct ? {appendix: ct} : {});
+  const curOb = manualAt(last, 'onboard'), curCt = manualAt(last, 'appendix'), nowTs = Date.now();
+  S.manual[last] = Object.assign({}, S.manual[last] || {}, ob && ob !== curOb ? {onboard: ob, onboard_ts: nowTs} : {}, k ? {cards_issued: k} : {}, ct && ct !== curCt ? {appendix: ct, appendix_ts: nowTs} : {});
   const now = new Date(); S.meta.updated = now.toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'});
   const art = window.claude ? await claude.use('artifact') : null;
   if (!art) { $('ulog').textContent = 'Không lưu được: trang đang mở ngoài claude.ai.'; b.textContent = 'Lưu & cập nhật dashboard'; return; }
@@ -1226,6 +1257,7 @@ function bindJourney() {
       ms[f] = v === auto[f] ? null : v; });
     const st = $('crf_st').value, stAuto = b.tl ? 'Thanh lý' : '';
     const patch = {ms, pic: $('crf_pic').value === (c[2] || '') ? null : $('crf_pic').value, grp: $('crf_grp').value || null, st: st === stAuto ? null : st, note: $('crf_note').value.trim()};
+    if (['pl', 'xp'].some(f => (ms[f] == null ? null : ms[f]) !== (((DBX[k] || {}).ms || {})[f] == null ? null : DBX[k].ms[f]))) patch.mts = Date.now();
     $('crf_save').disabled = true; msg('Đang lưu…');
     try { await crmWrite(k, patch); msg('Đã lưu.'); CR.open = null; CRM_ = null; AUTOC_ = null; const y = window.scrollY; render(); window.scrollTo(0, y); } catch (e) { fail(e); $('crf_save').disabled = false; }
   };
