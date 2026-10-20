@@ -299,8 +299,8 @@ function render() {
   const dates = Object.keys(ACT).filter(x => x >= P.start).sort().reverse();
   const top = `<div class="top">
     <div class="brand" style="display:flex;align-items:center;gap:10px"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALkAAABACAYAAABGMNaNAAAoAUlEQVR42u19e3xdVZX/d619zs07aXJvWlrA8mibNLzUIiIgBQal8hAdSRGKKCJUBQccx586PtKM6E/mN44gjNrii4FCbfAF8lBhShwZ8VHlmSZteRRKS5p7k+ad3HP2Wr8/zr43t8m9aVIKYiern/tpm8fZ5+y99lrf9V1r7UOYkRl5jWV9o5agD28IBQezQVyBSlWUESGmQBgY22PEbF3xBzzhpajfbvp0BR477BiEshAG1RB4YE2DMAihPpCm4Hkvoce8iJUrh8aPRzNTPiOvjSgpgJYzcagwjhQKK5S8UiiqCKghwixLUg5CSU2aSwcNqjbUPFO87rCN/T2HpCpQY0eY0IvQDAlkWEkHQNgN1W6AegEeBNlBCD+DFVe9ACIAUADwZiZ/Rl4bIV2zRP1qANbHY37KG+lJ7KDq9Lxia5AITFg3a9CrV0H9j+dtnX//3Cfqd5QPzgIVgV+qhnQO77bzBttR29cG5W2x4fL2tGfb4QVJ9PSNoLpSEZQUI5auwJo1HoBgxpLPyGsqq69Uf+UaCib7Gf/21cdUDZavTQ6OHoMkgDRbeAhhRj1IzJzYtwjn7J7/5EF9tZdccU/RE+xMteYdcLWPlSsDAOCZ6Z+RVxOiAMD6c/UNZdsxL8IPypmvo0lZoUQA+I5vfzIoso8mZ+8+huYNCB0+bCmhxi8uL1rSt9B8pf1s+7nNJ8kbkwcfUx3GfnfHOeGnxCl4U5Ny1mhrU/TvsmAebr95/owln5FXXX6wVIuLS3CyGPx5xb3UEyk4KZqaGM3Ngq9/vQQHF38PpSUXYXAIZFWUIFRZ6mG4f+dxGxd+/0t/Ovuy8mLM2yUSQsEeMZf7wHCAdd0Gl6/8BQ1pkzI1kzidVqz9VjUofBO84HczlnxGXh0b7qy1KcIhImGFX4qR7DczCr763xI4tOTXKCu5CP0DIUREGYqKMk+H03cX7y494bHrz/nCS2VDb+lR+VmVx54BQwTSl0ZY4uH91RYPfW+Z1lIziY5ZdMAfHgGoHKP8hhkln5FXJ8x0fxvGQWy80uJh96XGlkjBb70pjurSX6Oo6GT0DYQAMZgJxUUGQ0OrsPxj5w9feeX2JVf+yf/E3WU7LrzPvHcoxJeKDZgZBAX3BQiLPZxYwXgwo+iNjesjne4pJzBKQTxvRsln5FVjUxRKpKgRxayeYZQAQGMjgB/8oBhFdDeKit6IgcFIwT3D8EyI4fQleP/VzVi/3qCpiTeuOT5ogvL6RjUX3k9fHg5xsU8IPAZDwQMBwmKDY8uBe9Y3akkjGqPdVD1QjBCzQJyYUfIZedXk4aUwTKggRQ17SKCpie9avtwi1vdDlJWdhP4cBWcaxEj6XKy4ei1Wr/axfLlFc7MAQDNIlreQXb1E/Yt/SXcOCc5mwoBvIkXvDxCWxfDWsB+3Lm8hK03KGOVakNZAtXJGyWfkVRUhlBIwK+2NNqC5Wei2m65FZeWF6O8PQMTwDIFpEIMjZ+MD1/wql/obLys3UrB6ifofeIAeGhW8i4ABj8Gk4P40gsoYGm97V/iP1EwSs8UNYKoCU+mBpOSEiBLN95lhkf4KcnorhazwxUjZnKGiutrvfe84ifHXMDhkoTAwDDCFSAfvwYc++ZvJFHy8oq94gH47nMZ7DCFtGFCFGUrDFsP833Xn6HHpioFFZKkc0JgHgLF0L3x5KxSA3S9PvrRAlrUV4bSVuhGMXSC0wmKSvED255fCuLHsXn72lQq78SZurtlQtERG7lW+h786u0IgVSBUoNQKFmLI/zBqRopoUEQNC4piHvoHV+DSax+cioJPsOgP0kNrl+klpQbrR4EwrcJVwrHfz9pxFzj4jdFSDpVCD4CgFTLFhZNX+Oy0D8qcX7lbYNEytvFqFtRU+uzHFVohLD4xWQllREUHTMzs7mrrGthj7EYYtED3wzONeZGl2ecTt5n2PqeNILRMSeE5E1Pts7QUNFTTv/Ze7rnFrdEowu7atFf643kdh3aNhAtpxKoSCcpKPfT3N+HSa9dNR8HzWPSWtWfplypj+JfeAKEV4P74swuwo6xba+U5jGqKEvWJc4moQVUDVd3DohORKCvDYkuqI3X3K1R0BiC1dbWXiZEaElJVJSISAsVGefSWvra+bmTI/HwSKabNKDX5dDqBzoTiLQo9nJSqQfCzy6VQhY5AsZuItivpYxA87AXeg53Pdu4af819eqal4PEbN14Xn8fgwwDME0iCiErdvA0xuEsgLwR+8Gzvk709+9mIvH4suUvO3LFM3+Qrrr+64cdv7Szuq+DDR6zOLfK0b+h+rPjE2djQ5OH05n30rEoblsKc3krhbcvCew4y5txHijvDVYvuM+xhQBsGH1HRJk9VXwbwM/bYqGqeVWSoUdQuqj2la3PXIwDMtKHLUnhoRVhTX3M1eXSTUQM1ClICewybtmv7Svr6J7k2ZSxRzcKag9njq6C4hIgOzW6JKNcVWRd1cEABIioBo4SI5hLRW0C4wrJNJhYn1gUSfL23pff5fXimMW/SCsECFMX9+CkAzgVwKhSLQCgHAUx7IkHV6Ln9wO+KL47/HoI7Ux2pH7nxJ96H24Q19TUfNGzepaKhqpppIYdo/kbD4vDa3sd7d2cNSebadTUfMsYsm8K1M9dSNvyPXW1dLxcyStQcfe2ip9C+8tTNsc7yoUoaYSvJUoOa3hdK0+bDQ6qEVateAWwjffg0FW1V+reSgcsrB8p/v37Bk/NBgcBWVmhqNIYTX36KAKCmvuYdhswDqpqGwowL1ISYfFXdZtP2jT3P9vRPAf/migFga+prTmTi/4Y6JSQIMcVUtDXZnjw9Z0wtBJMSixPXAPgCMydUFKoqqhoSkU8c1VZCIy0nouz0q6jNqj5AYBhmhoj0qOjnUh2p1W6cvT9XjuWfvXD2EdazHwJwIRMvyhnP+ZG8Lp1AYBAoc48q+icV/ViqI/WnCYruDESiPvEd9nmlhjq9iiM3upuvg1MdqR1ZxXTXjtfF15iYuUJDjb5De7+eWKlPdaQ6JvVATU1Mzc1S+s9rfz7oe+fR6PAolVQUL9ld+dU/fuMdn19y5Wp/45rpwZR8krnOkZ//yb88G5MvYmhgREtKiqqG9O7+f33/exhL4He3d/9aRL5ChordIng5n5iKWjJ0GPu8BoBkA7ipQRStbKisYfA6AnkADAjGXbdLrFySY63zKnjV/KpZifrEz4npBgAJCSVUVYVC2XAMQCBW1lmxH7Rq3wbFElgsEyufFZVWIjLEFAXZBAOFSighFNXs8XcS9YlvuYXaOxPTApuoT8yNL45/Q4w8bth8kcGLVFQ01FBFxxSb3Hh7zmdkRBSqVq2GGhLR8cTUGq+Ln+YUnAt5MxVNa6iBhnv9Y9WqdRtuKjEFVBXZ58j/J8jn7fNvBiU0N4s+9v/KBt/QW8npkJRHY8d2zdKmp8+84pvn9Ry+cc3KoKlJXxnD19TEG9esDIp+8O3DnnnzSx/VWJ9C4MOm6YMvnFBp67SCsREhlsJLdaS+JFYeII886DiXSfA01JA9Xh6vi69Ea/Q7e524iLUR3/q3kqH5KppZQCEQiZUV3Vu6X0IjTB5rwABk9tGz5/gl/gYy9G4NNYjMNDwohDwyqvqwVXt8qiN1UXd79392t3c/mmxP/rmro+uXqfbU9alNqdNAeJdCnydD7KxrtJEB1VAD9vhj8br4LQDsJBuY58+fX5yoT1wBwmOGzbUAyt2Gy/UUmqM4mY9AcwLSMYtuQPDUakigUmK6K14Xn+euES3+adH9quq9arUVhBAMf9zGyffJ0KfbVfQhKK5nw317GBN3bSL6mYRyF4AOAFLwmgwfig6xcktggq5J4yesiozFk34DVYWjWjTaTVpEy3ccZ30PtfGw8tYmKONhcKbOZR8onCjgV6XRovBW8ktquXbEqi98cH/Z7tO6Dx++bT6OiVx0xK5QTGIfUKsvEtNEpSMYtWqJ6Ybq+uqjXbBlJsHhBq0IE3WJL7DH52qoobOiIRnyxMrnurd0P4il8PIEfgQAc5fMLZVQfkGG3qihBiD4zgpaMmRU9KfJTckzezp6nsRSeG7jGbe4JvP/rrauBySQt4vIVopAsuQomi+BBOzzR2rqaz6HVoRu003YcENlQ4cQ0xoCzZZQAmcMCIAhQ4Y88ojJgLKKHQBQImLyyCOi/K6d4KloQExxIvqSw8vRwjdHkCfVkbq7q63rNCPmaACPEpNOMEa5Sw/0qdG3+mV+XbI9eWayI/nZrraugT2U0l072Z68N7kp2ZickzwahAaFPk8R+st4JVXoADGdkmxPHpXqSF3pSILC8K6lLboL4x3OzH06r7/tbX111NAfN10iYaXHb697J/69uZXCNUv2sXlnzWoPzc0h1t707ygvO1X7hkMtDwwniM7fcVxbkaBPjF2QcRUCgHdu3pkkoYsUmo93JhfIFRuYtQsWLChCY05QOB63RoHmO8jQl9Vq6KxvSB55GupPUptTX8tgwjy/zwAkPZD+Lhk6PkfBoxjBEKvo02VDZRe7ezdoReiuZd3XbPb/S+B3b+3eLip/r9DhCdg/46mIvxKvix/vNl2uogsaYbrauraKlTtBkXI5xTYA+kTkPg3182LlfCiOB6HeqKlT0QYROV1EPqOqbeM22XhFVwAXH7TgoFp3D7THRlsCv3Nz53MqerPbSPk9qEKIqJIDju3cuHMIS+DvxfMylsBHK0KbtiMEmutgSXQtJoKitevprkccXPX2Cusa14sLBqopjWHMHnz6nd3z/+yZyPoOBAjLi3DNHWfpVRk6cFoKnqEdb7/ho6govRYDgyEBrEU+JWLmL+d0HvFUT0yGY2pqcvGQxVJ4XZu7HoHgU2TI5IEtRq2GZOjY3Wb3N9CS170zWiCORrtdo9liKMRZ8C1i5TIA7JIyeQO7RH3iIvb4onEKnuvqP75t27YRN/7kzMhGBFgCv6ej50kors+BLbmKQUREINyQ1w23OG1n+QoAQ0y+ij4iIh8TKw2p9tQ5yY7kV1MdqbuT7cmNyU3JLZ2bO59LbU61pzpSD6c2pf61eKD4eAhaiCeMD8cNCTFVhH54RtYb5m60jQgBcDgS3quhpsAweS2pQsAgZV0BACiH7iU/ISiP6AA2fC4ZKnLwijJmTElb3GbIGKbJwTlRhokxFhhC6D/TMDD3gkGgP0YMVfBQAFvs4ea1y7RxWoqeUfC1N7wPxSXfxtCIhSqrb4BRDIxWBxdYxhYChiAwPCHruBResiN5o4SyzuHzMB8+J0Mfq6mruWCce8/gcAJwJzHNhmQxsKrqCFtu7N7a3VcAzxFaINVHVFep6tdVVF2gllk8S0wsIg8kNyV/k/EYU5oYpyBBUXCjhto9QUEcHGPmk2vrat+Zsd57GAGAejb1PA2LfxCSv0u2J09JbUp9p3tL90uOM/fc74wvKzBYAn/79u3DYHxYRDrBeZ9f3TydVBCFNoJ6t/XuVuhPiQl5IQuBIYBCz0IDYm6OaApZbSWms3LuSsEwEsqAn/bvz9loU5MNGwwIgbIMxIYq2pffQ8+Nsv2HEg9MBCsKDgRSxLjj9rP0/CkpekbBb/vGuxErXocwFKgSiCxKiphH5ZreFZc/21U+2k6WB8A2zXke1gJgr8j7iFrdRIa8CVaHwKoqTHzLrMWz5rvsF2dxeH3ievb4VAdTTAZDi8pHu7Z0Pe7cnc2L4wE1MXM5ezwXkp9pIKKb9qEeJVKQxydVEAWgArl6Mp64q6PrplRb6r/cpvaywWUrQgczZNzHYiMCLIXncPF9DgLYPFCDANTlKB7yeRRW/qEzH/nYicz6HFFra4/PiSsmY1dszYKaSoWerKrIrhuREtEGlzwz0+O0HwaIBgHanS4ONymULr3P+2HfKL5TGYMPILQCsgpTYvDjO9+pF67cSMGGpepNCEYVhA1NHlauDHDHjctRXPJjWGtgLUHVorLcx8DAav3g1d+HKvmjRe1E2A2YQS60kJ1PdA5atReq6nCExvd4OIZAiWmWUXMbAKDBJXzqat5HTP+UB4d/q7u9+9aCODxng6nqBxyLMp6vNyr6UnF/8QYA6jbXtDMIRPQzx9XTBDgmSgDOSNQn5jqF5TybxWQXfCque9z4rPyXAqqWuZ+DcrzHeLEAqGtz16Mi8lRBjB9BFij03c6A0CTcf/SMHk5k5kSWgYruiBxUoUmvkU9OW2Uh0g9CCgGnGKRNSzd4fhWu7k/jgRxFR6DgIh/r1i3TT5zeSmEma+rSpwwocHpziDtvvhpFxT9CGBpYCwAhKsp99A38Ct7cq05tavJApMZHCkA3EPYV2t0WS+H1dPQ8qVZXTobP2fDb4/Xx69CGdLwuXsfM31fVKBiMLLinof4ueVDyGgcv7GSceu2C2sOJ6GinbGb8ogF4ePv27cNO0aaXKXP1Fl7o/V5F+x0UGh9cW/a4FIRTnXJwgRqQfS0FUFXtzDLp+ZMt5XtAwPwez0JxmwM9kheyRNc6t2D8k5Fd0RiktCznegqGUav9fuA/4Db09LLCRAr2UoD2YsCMKgCcdpo0tkB6PbxvMMTDlUXwiRCKAGkLKfXxzfVn681rlsCjZpIlV/7JBzULVq0yWP8fN6G0+CakA4EIQAhRWe5jePg3CEf+Ho2N0opVAgB+CiMg9Cq8Lp4Eo0X8+ebUbRrqtwrg8wjHEv9zTX3Ne0H4LhFVRgn1qCZAVZPW2Pc7V16YcnLKZD17rEvc2ALVbf+TuzDThiwAvbz15S4A7Tk02QQ1U9WT91PRlpf9lES0ppDYAurrktXk4elJ6FlXUCeerFOrI3k2awRZRBWMhtqFtcfswb0X8KAgnOk8HGegCoD/ennry13TNiqZpFFgd0I4e6pVczPpKoBW/oKGdhucMxTgHmfRRRQYSMOWGFxVdZA8/J/njB69cc3xQey2bzfgqIM2oLjkagwMWUj0+Kio8DE4ci9Gh87GpZ8exKpVhOaxexTFkBW8tLcSW4tGmGR58lq1+geHz+24hTSqCib+CRGdkhMsWorKry7paet5oUDCJ9/2z6THNa9lErQXxKtTq6MxTpXbCoyTAWfH5irUFOtZTA5G1yxOz3wewChaEYLQt7drNaABk7IhgOlp63lBVR8sGIBGgTop63kFvZLzoPFF8UUEanA0JmehijqoMl2jEm0QoPiglwDbh+J0ScaENIOkCcorf0FDy+/H+YNp3Fjmw3gGLCTUFyCsUT6pOIj97tjP/GJN4I8+SsX+KegfDEmJ4HmMslKDwaFv4v0fPw+Xfnow0xydXcxKlLCiP8F40dur5YusbxDUBRf64v8ZjCrnzni8ic11+Q6HfyHZkfylS/hMKSonpUMKWGBWUQHhpQI1LtO1s89OwjODiOZjCXxsRDB5Zi9rcfco/Z27aG4i4GA+KR2mpIdCMQeEGgClCj3M8dD7ntKOynpJSX/gIAnlxfiRZT4PwHV54UZURalg/B0ZMtmkXQRV+mIa++U+QJWxO1i+PI07bupALFYGIIVVTQRdhWYibWpSbmtroeUty69duyz8YzGZr1crzxlR0IbKF+1d854sf7Zk6ApsqQIlhq3OUqMlhhCik4dG/0kvvur2CxrXm4aGRm1uhipW0arMWsVQriPYfPaDNDq13em463hd/Dw2fLerzyhUymNdgHh3sj15vgs0915KOTbGOvb4QjfZXk5sTSo6YHyzYNdTuzr3oniTKUem4OkjZOiWceNkx4Ki36TNAscqFKqrycKdgxYcVGuNXaqkZwA4HsACEKqzhWK521KjOpF8FpqIWEVfmG1mL2xra0tP8pwEQOcumVsaDAZbQJiX1/jANbwQGpKbklvyFFQZADZeF7+HDZ+rNkoEkkdGQ/15siP53ldYjhzJ+vUGy5fbQsGYAPjCRS8uHC0ZWXtfxQtvebpsG6BWIH4AhQcjBlWMw0rL/1giWLHp2gu2TDpco5rlLWSjeHpqAZvFUnip1tQ98UXx69jjzztFNwUs7m6btpe6gGdqpZSRxwARzcrLfETLOhIMBSPYD0JKvZMGf4oSNVoOIJ+SZxNQtQ21p6jqFSHCs4koQURjSiwIBSJEZACYPRT+lYtiKbydrTuH4nXx9Wz4Wg1VJlCKY171bAA3OsstudRh1XFVs2iETnLUYba+R6F37RNUySfLl1usXu2j3B4KSg/C0jBCYRR5peLRbH/ULL6u+K46+MOPY1fZIL1c0UCjpbOlyC8yYYAj+6t2vXvLsW1nvHzo1uEiXDLwrrDDV7MJITpHAwx5JRDjo4QClPd14YXlLWNH0k29ZiCyxia1OdUUr4tfTkxzs0Wz4/hWYqpknz8C4OvOck6Z6lPV0sIZawj7/MoaC2ZHymrJhgYGkyTHjRjxCnmc6sXVRxk1X4Xi3cQUlbLanHIIgkeGPAJBRUMoXlBoJwS7QagBYUme+ZueuLiEmP5TRa/ZI3E2EbKcD+DGPdbC1cT7af9tZKgm66H3D1SZeCdXrgxx500jEGqA4VnwTDlEqhBodcBSSYFfakb8mFRKUisH/qB9w5J4vrbn8q2nVp/ccwgzMJyqlJhRTvhiSgk4Ej56ig16FRiQUewOw6HNV24sDVdmTuqalpK7RE+8Lv7vbHiuqyg0eRMRoiCm6+N18dZUa54a6cLMB4ioeBLr6wWx4JWdxOusklFjxviW/BuKDOVtYKitq71MoTcRU5mKKkJItqw2Q5uqQlTuBfAjInq0bLjsxW3bto0AQPVR1Wd56j2QpVr3XSwATm5K/iVRl/gjGTohz7qwK7c9sWZBzSHdW7u3ZxHCrmyJ7TIXvEqmJkdDfWjn5p3J/QJVxmAggE/swOrVXagMDwLhIFiNw3AFoCUq4oekaYyaFEDP4YqHN6eoxX4Nar579ugiIzi8xBbFmeArI4RiGII+ELoheHkwhZdXbiwLPjRuYG+KCp4prr+YPf6k2uziaB5qihy2NCDcPnfJ3Dfv3LhzdAoYOtNpEHOWnPLQh0UxGyvaP75eKynnDOs8HmUEFkN7JIBaYBN1iWvg4QZYRBZ6rEYcrj7HQPAXYvqHZFvyt5nrJZHMzKOQpbL9dtSqgx9KeisRneCSaOMD6ZA8KmHiswB8PwtZHHVISmdms6eaBYvr9xtUGW/Ro37OF90HBXXjg4CuX29oOVnch00ANuWLS8atXNaCYwqp3jH82Yqwur76aGK6xblkytL9UfnoRI42KuSqSw+kv4nJ67QncsQFtgARlUooswomSaaj5KS1Bb9FBCLqmRXO6s56sciCn0WGblCrUW14bsAaKTiLyG84xm/vauv6LQCTU8tCDioJEe2/Xk4HJYxnfqxW+zN18vkYIxV9j4MfGcOk1YurF4NQr5lImGE01J7AD/YnVJmY7lIlqI4PyQlNTYz1jQZNTezYGQsoNTVFp2hFTRZ7/p5CaawMgCZslr03PgAar4tXEKiFiEodjQcigqg8B0UnGTpR7bigZ6zR4vLEosSvkq3J9ZO4vrEdGbn8fN8XYmIVnQeg/ZUqOYEOn8ytquq2rVu3jmayhYccckjJMA1/i6NHpHEGIsP+9KrVizuf6BzM0o8teLVF0Qizq2VXZ7wufq9jpuweGzCqNQIRnTp30dzEzs07k2hADG1IGzF/Rx6xhho6qEKi8uveJ3t79iNUKcyjj3+W5mbNZ/qamwujAAJNSmzwFBInAsL3yVC9q0dhR0mBhT9gAnO+ig7mqW+JJldUwFhd3VD9hmwh1+SbigospYAAZW3AvtRRjMsWqmp9XhYncvdKSn8BgPnz58cA6GjZ6Nls+AjnycwEBsMQQXFH95bul3L49ddSiME/zHbLjJ9XiQiBwARnjPNoy3JYJoKCWHn/sSqvA+G94vD6+GfY8AVZPtl19qjVL3Zt7nqk89nOXaqav/48t5BLzK2O9pq0j1J18lYoUjoJgGZYkmkbcESlvACOLpCQiWrLQQ8DgO/7GpHhsgyFO2GiBBJoAwBytdmvnbhCtS7TtUGsPFOgaEujFgicCwBoQ1B9RHUVKb3VUYcZVqU7XZz+9asEVV5HSp7T2cPMX8upKLTkkSeh3J/sSF6XqclIdaRWSyj3FegPzTRanJaoS3zB1cSYfVBP45bttLlL5pbm6ZyZSlKLARAX8fFsOJ5TbTemCAyjor0++Q8DwNY3bQ0d63OkSxPlzyxGtOTuHMz7WopiKQzakAbhTnfuwITyaAgIhDPmHDunDIBSjE4gQzVQiOsAUoX+uvfx3t37VAD3N6TkjBbY6iOrD2XitdnOnkypq9XtMY1diug0rMzpW6SiV6rVbtcMkK8/NASjubau9qS99ocWMuKilg3PTfen34HcY9+mRx8qKV2Qt3ovqvWAqt6/o31HymFS18YVHT08aTAFlLvNtLdcwP6HAa3Z+7w9W8c/ngxQFWI6OBwJ3+rgzTty5iGCKuB9q1X5G1JyQmPUCGA88yMiqs129gCiUCGhi3Zu3pnEWDZW0Aju3tL9kqp+omBrF8AEYiW9LV4Xr5iUoZ4MbER/f3IfIAuhFVJ1XNUsKBpVXGPAeGunACvf7GAAcpikwcn4SBBAoLopKIjZr+xKDq8PgN1ZKP/tzqGx+eIaIjrLzf8Z2RlkGBFJhkH44IEEVSYquaPKEi8nbiSP3jaus8dT0c90be767YTOnkzavyN1h4SyPi9siZISIRk6gkDROSfThy2ZGvaliYWJszPjTuk3o45w8Ua8fySP4q7riMZZcRYrv3InhbGjPl3hPrZHp6Xk5X4iTK70XgCKgbwBNLvyWasyzabd6XDmUfzwwwLNhZka81NnHz17jkKPzhyERExKoAd6nu3pPZCgyp5K7gLN2rray8ijj+8RaEa1Dz9NdaT+rWBnT+QuuYiKPi5WXgbnOVkp0x/q0SXxRfEPTPH8lvF37KmqhYebq4+orprSNRoQw0YEifrEEmL6PxPozgxtKBoKyafysTxK+odJPI9Rq0KGTqitq70sh1nJ8OQRhGtDumZxzZnM/K8u27l/j8521tcO27sLNDqzC7brbWA/RkRFyCTzIlbmRwcaVMlV8kxv5puV9dtq1TpXLsTkqdVnbWALd9hn3GUjaEf7jhQUK4mICnSsZBTiP2oX1B7pNsxUF1tU9S/O5R9uYuau+fPnF2ebqccaiU1ObTejDemahTWLQfgZgYrGgR9AEbLHBsBnetp7nnIBqs3FupbsvWp11G2OvNZcRUVJvxNfHP/oggULYhgrv9Xahto31tbXfo/BvyKiw6GTs0zpdDr3vPVpceaTNjpHILEKwKcyaRkwjFjZaWJmw4EGVfZIalQdV1Xpj/obiegIZ2XIceSiVk9ObU79EVOpQclQj4vi32OfP5ynlBXZxmaR/0m1p96eczIsxevi7cy8KI+lyySDzgVwGRt+nzvf7/eqerU7RzCvxOviK4jpRgLFXTKLc9B0yD77NrC3pDpSV+b1VGNlwGvY4ysKHJORQ1gTROQZUnpcoWkiWgjgzZnzGlV0u6qaPEVumVLbbamO1GG6b4jBALC1i2pPhsFv9+oxIk9t1Ootyfbkykl7cP9mlXysLuWenJOusjBFrFydak/9xzQenpyylhHRE0Q0P4ehGT+5ngRyXWpz6otucWQSJY/q1FXPmRXMeqjX6/0VDE6FAKoaArgfhIcAbIFiUFWriOlYKM4npuNVFTn11tHpU1GlIFT0W8lNyasy95AXzQI0r35edRrpjcQ0X21BRY+OdiDiLOhRwNGonqq+yMLnWNhb2fCbXOXf+LlJg/CYQkMSGgVjRbI9uRNTP96ZAHC8Lv4YGz467xhjgb+4WOSMVEdqw6ua5fyrwZWID/8ce3yu6xcEgFHyyFOrd0xTwbOTl+pI9avo5S4oC6EI3N+h6xVVtTpChj6bWJh4O6ZY3yIqxVu3bh0tHS49S63+wLEFHjGdR0Q3ENG9RPQwG/45MX2ZmI53p9pmjnUOARB55IHQKyIfdwrOKPz2BwWAHe07Ulbteaq6gzzyobAODuh4BdPoOM+0WBlRUbDHnqo+Gkhw6q6OXU8CqMgD5zJluj4RncDEJxHT6RRS6TQD0MjjMm5zwXI6Z973SIwREYvIcymTegTIvhDggBJO1Ceu8DzvqwBAhoqJyWOPi9RqOzGtxN46vfOLdU3Q/yWh3MgxjpEhn7w9/vhkqJgNe2r0/jl1cw7LcO6TmighC4C2nbAtSLYnPyxWLlHoM1ktyRzpbDUQK6NqNUDUpMvEZNhjD8AgBN+lgJakNqW+PYkFH0/RmZ6OnicDG5yior+k6AREk5MgkpzrGDIUM8YUA+gWK01JSi7t7eh9HgAT0YtkiPPwNJmTvPZ+jPJeOHMhWaeixB4XZ2Z9AqXIAIF+gjakM+feHGhK7oEgKvoJKxZGjavxFyam+9xBOLxPDx5tDCofLf/soBl8TkW9/BkeEva4KNBgDoDnp7is6hgATnWk1tY21P4cFheA0AjgLSDUEhNndM916aSU9HFhuc8T7yedmzufy8XbU968APdu7n0OwLJEfeJcED6o0JMJNJcyJ+4rICoDULSr6k/Fyq3ulK1szAJCk1iZC8URYMScDU8rdDcUXUq6DYTNLPyEV+XtxPTa/QQA9bT1vBCvi39aoQvdWe4egBVEVOI8hlFRVdV1bs0OyHcY0RS+/1o+OO0Nk0so70ltTv08Rzn3CIarjqmq9kP/MCKaIyrFbHlEjXamKb3NncSaG6Dt6zuD9jiwP14Xr/DImx9qmFBWD4Q+BHgpq9hjm2m8t/Bqj6qdD0UFWbIE6g9s0O2O0dtf65sdr3px9VEG5jHH7CgxGbHy51RH6vhcWHbgWfJGmLy8aGvW9e6P4HZyrD0AwsZ9fiObzY7RCnHv4ekpqJxjPY6vJLiSnI2CVEeqH8BTk7BNNo+3YABh19NdzxRkSTKVlvvOdigAgwXwsBVpVl7lDnsKM1uAwT9EzlsnDkwlf/UjaZ3C5BHwivodc8eIkGzu28zGDjWS6fSbTnGDAciLoMfOXZkEUuR55sy92im8PW5qc7MV6UR9YiGAd6tVzbzORa32mcD8KDeRdGAq+YEnkZK0/BXGfO1+bzpMC6MVoapexx7HNHRHThjyJJT1nc927joQacMDXclnJCPRwfpBbX3tO8FodJlsBqAqKkbNTc7THdDCM5pwQKwhTYB/rjspXhefp6Tfz2ZWNZs5/uWuzbueAHJKGGaUfEZep5Ll5d0nim82IqhaVHU4MT1ARAdnzzh0vCorfzUnnpix5DPy+pRDDjmkJLE4sTAnCLYAdM6xc2bX1tde7Rv/90R0TLbqcqyc+P6uzV2/dcVs9kCfpxlM/rcpBECDWFABwaOJ+sROVX2eQIGS1tpR20AeVUOAnIK0zCkEloU/hyiF/79CZpT8b1hMzFgL65Gho0jpqEj7KXrpbJgNMjNZ2JA88iWUbyS3JB8/0BmVGSU/QERFCQxRUcl5ARmQefN09gcRkiFfQ32qpLrk80BO7+qMks/I3wh0yQSU+U7oDciQr6q7wPj77Y9uH8a+1iPNBJ4z8leS8eUQmXocCwDssa+i2yikd7rzyaf0xo8ZJZ+R1w9cAaooOrl0j/Mp3avjA7FyGzGd2LWl63Hgfweb8rqHK+5lTPmKw8S5ZZ1R7yix4414A2F5+F0ROYNAcxTqk9KgkLzAyr8Rlju727r/kGPQ7P/Gyfr/PcuENKbpQu0AAAAASUVORK5CYII=" alt="xpay" style="height:28px;width:auto;display:block"><span>CEO Dashboard</span></div>
-    <div class="tabs">${[['ov','Tổng quan'],['zoom','Lộ trình 60 tỷ'],['jr','Tiến độ khách hàng'],['pat','Pattern di chuyển'],['up','Cập nhật số liệu']].map(([k, l]) => `<button class="tab ${TAB === k ? 'on' : ''}" data-tab="${k}">${l}</button>`).join('')}</div>
-    <div class="ctl"><span class="lbl">Ngày xem</span><select id="dsel">${dates.map(x => `<option value="${x}" ${x === d ? 'selected' : ''}>${wd(x)} ${dmy(x)}</option>`).join('')}</select>
+    <div class="tabs">${[['ov','Tổng quan'],['zoom','Lộ trình 60 tỷ'],['jr','Tiến độ khách hàng'],['up','Cập nhật số liệu']].map(([k, l]) => `<button class="tab ${TAB === k ? 'on' : ''}" data-tab="${k}">${l}</button>`).join('')}</div>
+    <div class="ctl">${TAB === 'jr' ? '' : `<span class="lbl">Ngày xem</span><select id="dsel">${dates.map(x => `<option value="${x}" ${x === d ? 'selected' : ''}>${wd(x)} ${dmy(x)}</option>`).join('')}</select>`}
       <span class="lbl">Đơn vị tiền</span><select id="usel">${Object.entries(UNITS).map(([k, u]) => `<option value="${k}" ${u === UNIT ? 'selected' : ''}>${u.label}</option>`).join('')}</select>
       <button class="btn pri" id="bxls">Xuất Excel</button></div></div>`;
   let body = '';
@@ -669,14 +669,15 @@ function purpose(a, b, km) {
 }
 const hourOf = ts => { const m = String(ts || '').match(/(\d{1,2}):(\d{2})/); return m ? +m[1] : null; };
 let PAT = {provs: [], period: 30, drill: null, all: false, msOpen: false};
+const patPer = () => PAT.rng ? rngLabel(PAT.rng[0], PAT.rng[1]) : PAT.period ? PAT.period + ' ngày' : 'toàn bộ';
 const provLabel = () => PAT.provs.length ? PAT.provs.join(', ') : 'tất cả khu vực';
 const STATUS = {'': 'Chưa xác minh', ok: 'Đủ xe', short: 'Thiếu xe'};
 const routeKey = x => { const [u, v] = [x.a.area, x.b.area].sort(); return u + ' ⇄ ' + v; };
 const csOf = k => { S.cs = S.cs || {}; return S.cs[k] = S.cs[k] || {pats: {}, custom: []}; };
 const patStatus = (key, id) => (((S.cs || {})[key] || {}).pats || {})[id] || {};
 function tripsFor(d) {
-  const lo = PAT.period ? addD(d, -PAT.period) : '0000';
-  return S.tx.filter(t => t[0] > lo && t[0] <= d && t.length > 9 && !LIQ.has(t[2])).map(t => {
+  const lo = PAT.rng ? addD(PAT.rng[0], -1) : PAT.period ? addD(d, -PAT.period) : '0000', hi = PAT.rng ? PAT.rng[1] : d;
+  return S.tx.filter(t => t[0] > lo && t[0] <= hi && t.length > 9 && !LIQ.has(t[2]) && (!PAT.keys || PAT.keys.has(t[2]))).map(t => {
     const a = place(t[9], t[6]), b = place(t[10], t[6]), km = Number(t[11]) || 0;
     const x = {id: t[1], d: t[0], key: t[2], name: (BYKEY[t[2]] || {}).name || t[7], card: t[3], amt: t[4], unit: t[6], a, b, km, h: hourOf(t[8]), wd: new Date(t[0] + 'T00:00:00Z').getUTCDay(), p: purpose(a, b, km), raw: [t[9], t[10]]};
     x.r = routeKey(x);
@@ -776,7 +777,7 @@ function drillPanel(T) {
     body += sec('Tuyến cần xe') + routeTable(routes) + sec('Doanh nghiệp có nhu cầu') + custTable(groupCusts(trips));
   }
   return `<div id="dmask" style="position:fixed;inset:0;background:#0006;z-index:30;display:flex;justify-content:flex-end"><div style="background:var(--surface-2);width:min(1000px,100%);height:100%;overflow:auto;padding:20px 24px;border-radius:20px 0 0 20px" id="dpanel">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:12px"><div><div class="eyebrow">Chi tiết · ${PAT.period ? PAT.period + ' ngày' : 'toàn bộ'}${PAT.provs.length ? ' · ' + esc(provLabel()) : ''}</div><h2 class="card-title" style="font-size:18px">${esc(title)}</h2></div><button class="btn" id="dclose" aria-label="Đóng">✕</button></div>${body}</div></div>`;
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:12px"><div><div class="eyebrow">Chi tiết · ${patPer()}${PAT.provs.length ? ' · ' + esc(provLabel()) : ''}</div><h2 class="card-title" style="font-size:18px">${esc(title)}</h2></div><button class="btn" id="dclose" aria-label="Đóng">✕</button></div>${body}</div></div>`;
 }
 /* ---- pattern khách: hệ thống tự ra + CS xác minh / thêm ---- */
 function sysPatterns(trips) {
@@ -818,13 +819,13 @@ function renderPattern(d) {
   const all = tripsFor(d), PS = new Set(PAT.provs), T = PS.size ? all.filter(t => PS.has(t.a.prov) || PS.has(t.b.prov)) : all;
   const routes = groupRoutes(T), allRoutes = groupRoutes(all), custs = groupCusts(T);
   const shortR = routes.filter(r => r.lvl === 3), fixR = routes.filter(r => r.lvl === 2), repR = routes.filter(r => r.lvl >= 1);
-  const per = PAT.period ? `${PAT.period} ngày đến ${dmy(d)}` : `toàn bộ đến ${dmy(d)}`;
+  const per = PAT.rng ? patPer() + (LASTDAY && PAT.rng[1] > LASTDAY ? ` (giao dịch có đến ${dmy(LASTDAY)})` : '') : PAT.period ? `${PAT.period} ngày đến ${dmy(d)}` : `toàn bộ đến ${dmy(d)}`;
   // gợi ý action
   const hc = topN(T.filter(t => t.h != null), t => t.h, 1)[0], peakT = hc ? T.filter(t => t.h === +hc[0]) : [];
   let unver = 0; custs.forEach(c => sysPatterns(c.trips).forEach(r => { if (!patStatus(c.key, 'C|' + r.k).status) unver++; }));
   const act = [];
   shortR.slice(0, 2).forEach(r => act.push(['critical', `<b>Bổ sung xe tuyến ${esc(r.k)}</b> khung ${r.band} (${r.wdb.toLowerCase()}) — báo ${esc(r.unit)}; khách ${esc((BYKEY[r.custs[0][0]] || {}).name || r.trips[0].name)} đang báo thiếu xe.`]));
-  fixR.filter(r => !r.short).slice(0, 2).forEach(r => act.push(['watch', `<b>Giữ xe cố định / đặt trước tuyến ${esc(r.k)}</b> lúc ${r.band}: ${r.n} chuyến trong ${PAT.period || 'toàn bộ'}${PAT.period ? ' ngày' : ''}, ${esc(r.unit)} — CS xác minh với ${esc((BYKEY[r.custs[0][0]] || {}).name || r.trips[0].name)} đã đủ xe chưa.`]));
+  fixR.filter(r => !r.short).slice(0, 2).forEach(r => act.push(['watch', `<b>Giữ xe cố định / đặt trước tuyến ${esc(r.k)}</b> lúc ${r.band}: ${r.n} chuyến trong ${patPer()}, ${esc(r.unit)} — CS xác minh với ${esc((BYKEY[r.custs[0][0]] || {}).name || r.trips[0].name)} đã đủ xe chưa.`]));
   if (hc) act.push(['watch', `<b>Giờ cao điểm ${hc[0]}h</b> (${hc[1]} chuyến): tập trung ở ${topN(peakT, t => t.a.prov, 2).map(e => e[0]).join(', ')} — báo đơn vị tăng xe trực khung này.`]);
   if (unver) act.push(['', `<b>${unver} pattern hệ thống chưa CS xác minh</b> — ưu tiên khách GMV cao: ${custs.slice(0, 3).map(c => esc(c.name)).join(', ')}.`]);
   let h = `<div class="banner"><b>Tóm tắt & gợi ý action · ${esc(provLabel())} · ${per}</b><ul>${act.map(([c, t]) => `<li class="${c}">${t}</li>`).join('') || '<li>Chưa đủ dữ liệu để gợi ý.</li>'}</ul></div>`;
@@ -841,14 +842,15 @@ function renderPattern(d) {
       </div></div>
     ${PAT.provs.map(p => `<span class="pill p-mute" style="display:inline-flex;gap:6px;align-items:center">${esc(p)}<a data-rmprov="${esc(p)}" style="cursor:pointer;font-weight:700" title="Bỏ">×</a></span>`).join('')}
     ${PAT.provs.length ? '<button class="btn" id="pmsclr" style="padding:5px 10px">Bỏ lọc</button>' : ''}
-    <span class="lbl" style="margin-left:12px">Thời gian</span><select id="pper">${[[7, '7 ngày'], [30, '30 ngày'], [0, 'Toàn bộ']].map(([v, l]) => `<option value="${v}" ${v === PAT.period ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>`;
+    ${PAT.rng ? '' : `<span class="lbl" style="margin-left:12px">Thời gian</span><select id="pper">${[[7, '7 ngày'], [30, '30 ngày'], [0, 'Toàn bộ']].map(([v, l]) => `<option value="${v}" ${v === PAT.period ? 'selected' : ''}>${l}</option>`).join('')}</select>`}</div></div>`;
   const kp = [['Chuyến', n0(T.length), per], ['Tuyến lặp lại (≥ 3 chuyến)', n0(repR.length), (() => { const m = repR.reduce((a, r) => a + r.n, 0); return `${n0(m)}/${n0(T.length)} chuyến · ${pct(m / Math.max(1, T.length))} tổng chuyến`; })()], ['Tuyến cố định ≥ 6 lần', n0(fixR.length), fixR[0] ? esc(fixR[0].k) : '—'], ['Tuyến CS báo thiếu xe', n0(shortR.length), shortR.length ? esc(shortR[0].k) : 'chưa có báo cáo']];
   h += `<div class="kpis">${kp.map(([k, v, s], i) => `<div class="kpi" ${i === 3 && shortR.length ? 'style="border-color:var(--critical)"' : ''}><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('')}</div>`;
   const card = (eb, t, note, body) => `<div class="card"><div class="hd"><div><div class="eyebrow">${eb}</div><h2 class="card-title">${t}</h2></div><div class="card-note">${note}</div></div>${body}</div>`;
   h += `<div class="g2" style="grid-template-columns:minmax(0,5fr) minmax(0,7fr)">${card('Khu vực', 'Nhu cầu xe theo khu vực', 'bấm tỉnh xem chi tiết', provChart(PS.size ? routes : allRoutes) + legend())}${card('Tuyến × khung giờ', 'Tuyến cần sắp xếp xe, vào giờ nào', 'bấm tuyến xem chi tiết', routeHeat(routes))}</div>`;
   h += `<div class="g2">${card('Khung giờ', 'Giờ cần xe trong ngày', 'bấm cột xem chi tiết · đỏ = thiếu xe', hourChart(T, true))}${card('Mục đích', 'Khách đi để làm gì', 'bấm thanh xem chi tiết · đỏ = thiếu xe', purpChart(T, true))}</div>`;
   const PI = patCustItems(custs, PAT.provs.length > 0);
-  h += card('Doanh nghiệp', 'Pattern theo doanh nghiệp', `nhóm theo khởi tạo XPAY và phân loại · bấm nhóm để mở / thu gọn · bấm dòng xem pattern công ty và từng thẻ`, `<div style="display:flex;gap:10px;align-items:center;margin-bottom:10px"><input id="pq" placeholder="Tìm tên doanh nghiệp…" value="${esc(PAT.q || '')}" style="font:13px var(--font-family-sans-serif);padding:6px 10px;border:1px solid var(--color-border-default);border-radius:10px;width:260px"><span class="lbl">${n0(PI.length)} khách${PAT.provs.length ? ' có chuyến trong khu vực đã chọn' : ` · ${n0(custs.length)} khách có chuyến trong kỳ`}</span></div><div class="tw"><table>${PAT_HEAD}<tbody>${groupedRows('pat', PI, patCustRow, 8, fold(PAT.q || ''), PAT.provs.length > 0)}</tbody></table></div>`);
+  if (PAT.rng) h += `<div class="hint" style="margin:0">Pattern của từng doanh nghiệp (tuyến, khung giờ, từng thẻ, CS xác minh xe) nằm trong hồ sơ khách ở <a href="#" data-crv="input" style="color:var(--accent)">Nhập liệu</a> — bấm tên khách để mở.</div>`;
+  else h += card('Doanh nghiệp', 'Pattern theo doanh nghiệp', `nhóm theo khởi tạo XPAY và phân loại · bấm dòng mở hồ sơ khách (tiến độ, cuộc gọi, pattern) ở tab Tiến độ khách hàng`, `<div style="display:flex;gap:10px;align-items:center;margin-bottom:10px"><input id="pq" placeholder="Tìm tên doanh nghiệp…" value="${esc(PAT.q || '')}" style="font:13px var(--font-family-sans-serif);padding:6px 10px;border:1px solid var(--color-border-default);border-radius:10px;width:260px"><span class="lbl">${n0(PI.length)} khách${PAT.provs.length ? ' có chuyến trong khu vực đã chọn' : ` · ${n0(custs.length)} khách có chuyến trong kỳ`}</span></div><div class="tw"><table>${PAT_HEAD}<tbody>${groupedRows('pat', PI, patCustRow, 8, fold(PAT.q || ''), PAT.provs.length > 0)}</tbody></table></div>`);
   const unks = {}; all.forEach(t => [[t.a, t.raw[0]], [t.b, t.raw[1]]].forEach(([x, raw]) => { if (x.src === 'none' && raw) { const k = String(raw).trim().toLowerCase(); unks[k] = (unks[k] || 0) + 1; } }));
   const ul = Object.entries(unks).sort((a, b) => b[1] - a[1]).slice(0, 30), dis = CANWRITE ? '' : 'disabled';
   const uniq = a => [...new Set(a.filter(Boolean))].sort((x, y) => x.localeCompare(y, 'vi'));
@@ -877,6 +879,7 @@ function collectCS(key) {
 function bindPattern() {
   const keep = fn => { const y = window.scrollY, py = $('dpanel') ? $('dpanel').scrollTop : 0; fn(); render(); window.scrollTo(0, y); if ($('dpanel') && fn.keepPanel) $('dpanel').scrollTop = py; };
   document.querySelectorAll('[data-drill]').forEach(el => el.onclick = ev => { ev.stopPropagation(); const v = el.dataset.drill;
+    if (v.startsWith('cust:')) { PAT.drill = null; TAB = 'jr'; CR.view = 'input'; CR.open = v.slice(5); CR.patOpen = true; try { localStorage.setItem('xpay_tab', TAB); } catch (e) {} render(); return; }
     keep(() => { PAT.drill = v; }); });
   const msp = $('pmsp');
   if (msp) {
@@ -1012,7 +1015,7 @@ function crmRows(d) {
     r.sub = g2Of(k);
     r.lastRes = acts[0] ? acts[0].res : '';
     r.stage = r.first ? 4 : done(r.meet) ? 3 : done(r.call) ? 2 : done(r.xp) ? 1 : 0;
-    r.todo = {nocall: !done(r.call), nomeet: !done(r.meet), unused: done(r.xp) && !r.gmv30, due: isoOk(r.nx) && r.nx <= d, nopic: !r.pic};
+    r.todo = {nocall: !done(r.call), nomeet: !done(r.meet), unused: done(r.xp) && !r.gmv30, due: isoOk(r.nx) && r.nx <= d, nopic: !r.pic && r.grp <= 3, g1: r.grp === 1, topnc: r.grp === 2 && !done(r.call), topnm: r.grp === 2 && done(r.call) && !done(r.meet), stopped: r.gmv > 0 && !r.gmv30, never: done(r.xp) && !r.gmv};
     r.sug = crmSuggest(r, d);
     return r; });
   CRMD_ = d; return CRM_;
@@ -1060,60 +1063,105 @@ function crmRerender(data) {
   if (CR.open && TAB === 'jr') { const m = $('crmmsg'); if (m && data) m.textContent = 'Dữ liệu vừa được cập nhật bởi người khác; đóng cửa sổ để xem bản mới.'; return; }
   if (TAB === 'jr' || (data && TAB === 'ov')) { if (TAB === 'ov') computeActuals(); const y = window.scrollY; render(); window.scrollTo(0, y); }
 }
+/* ---- khoảng thời gian (bộ chọn giống mẫu: lựa chọn nhanh + lịch 2 tháng + Áp dụng) ---- */
+const RNG0 = '2025-01-01';
+const PRESETS = [['today', 'Hôm nay'], ['yday', 'Hôm qua'], ['wtd', 'Tuần này'], ['mtd', 'Tháng này'], ['ytd', 'Năm nay'], ['l7', '7 ngày qua'], ['l30', '30 ngày qua'], ['l90', '3 tháng qua'], ['all', 'Toàn bộ']];
+function presetRange(k) { const t = TODAY;
+  switch (k) { case 'yday': return [addD(t, -1), addD(t, -1)]; case 'wtd': return [wkStart(t), t]; case 'mtd': return [t.slice(0, 8) + '01', t]; case 'ytd': return [t.slice(0, 5) + '01-01', t];
+    case 'l7': return [addD(t, -6), t]; case 'l30': return [addD(t, -29), t]; case 'l90': return [addD(t, -89), t]; case 'all': return [RNG0, t]; default: return [t, t]; } }
+if (!CR.from) { CR.from = TODAY; CR.to = TODAY; CR.preset = 'today'; }
+const rngLabel = (f, t) => f === t ? dmy(f) : `${dmy(f)} – ${dmy(t)}`;
+const ymAdd = (ym, n) => new Date(Date.UTC(+ym.slice(0, 4), +ym.slice(5, 7) - 1 + n, 1)).toISOString().slice(0, 7);
+let RP = {open: false, a: null, b: null, m: null, pre: ''};
+function monthGrid(ym, a, b) {
+  const w0 = new Date(ym + '-01T00:00:00Z').getUTCDay(), nd = new Date(Date.UTC(+ym.slice(0, 4), +ym.slice(5, 7), 0)).getUTCDate();
+  const lo = a && b ? (a < b ? a : b) : a, hi = a && b ? (a < b ? b : a) : a;
+  let h = `<div><div style="text-align:center;font-weight:600;margin-bottom:6px">Tháng ${+ym.slice(5, 7)}/${ym.slice(0, 4)}</div><div style="display:grid;grid-template-columns:repeat(7,34px);gap:2px;font-size:12.5px;text-align:center">` + ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'].map(x => `<div class="lbl" style="padding:4px 0">${x}</div>`).join('');
+  for (let i = 0; i < w0; i++) h += '<div></div>';
+  for (let dd = 1; dd <= nd; dd++) { const x = ym + '-' + String(dd).padStart(2, '0'), edge = x === lo || x === hi, inr = lo && hi && x > lo && x < hi, fut = x > TODAY;
+    h += `<div data-rpd="${x}" style="padding:7px 0;border-radius:${edge ? '50%' : '6px'};cursor:${fut ? 'default' : 'pointer'};${edge ? 'background:var(--accent);color:#fff;font-weight:700;' : inr ? 'background:var(--color-surface-primary);' : ''}${fut ? 'color:var(--ink-3);' : ''}${x === TODAY && !edge ? 'box-shadow:inset 0 0 0 1px var(--accent);' : ''}">${dd}</div>`; }
+  return h + '</div></div>';
+}
+function rangePicker() {
+  const lab = (PRESETS.find(p => p[0] === CR.preset) || [0, ''])[1];
+  let h = `<div style="position:relative"><button class="btn" id="rpb" style="min-width:250px;text-align:left">${lab ? '<b>' + lab + '</b> · ' : ''}${rngLabel(CR.from, CR.to)} ▾</button>`;
+  if (RP.open) { const m = RP.m || CR.to.slice(0, 7), m0 = ymAdd(m, -1), lo = RP.a && RP.b ? (RP.a < RP.b ? RP.a : RP.b) : RP.a, hi = RP.a && RP.b ? (RP.a < RP.b ? RP.b : RP.a) : null;
+    h += `<div id="rpp" style="position:absolute;top:calc(100% + 6px);left:0;width:max-content;max-width:calc(100vw - 32px);z-index:40;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px #00000026;padding:12px;display:flex;gap:14px;flex-wrap:wrap">
+      <div style="display:flex;flex-direction:column;gap:2px;min-width:140px;border-right:1px solid var(--line-soft);padding-right:10px">${PRESETS.map(([k, l]) => `<button class="tab ${RP.pre === k ? 'on' : ''}" data-rpp="${k}" style="text-align:left">${l}</button>`).join('')}</div>
+      <div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><button class="btn" data-rpm="-1" style="padding:3px 10px">‹</button><span class="lbl">${lo ? (hi ? rngLabel(lo, hi) : dmy(lo) + ' – chọn ngày kết thúc') : 'Chọn ngày bắt đầu'}</span><button class="btn" data-rpm="1" style="padding:3px 10px">›</button></div>
+        <div style="display:flex;gap:18px;flex-wrap:wrap">${monthGrid(m0, RP.a, RP.b)}${monthGrid(m, RP.a, RP.b)}</div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px"><button class="btn" id="rpx">Hủy</button><button class="btn pri" id="rpok">Áp dụng</button></div></div></div>`; }
+  return h + '</div>';
+}
+/* ---- pattern di chuyển của từng khách (dùng cho danh sách và hồ sơ khách) ---- */
+const mkTrip = t => { const a = place(t[9], t[6]), b = place(t[10], t[6]), km = Number(t[11]) || 0;
+  const x = {id: t[1], d: t[0], key: t[2], name: (BYKEY[t[2]] || {}).name || t[7], card: t[3], amt: t[4], unit: t[6], a, b, km, h: hourOf(t[8]), wd: new Date(t[0] + 'T00:00:00Z').getUTCDay(), p: purpose(a, b, km), raw: [t[9], t[10]]};
+  x.r = routeKey(x); x.short = patStatus(x.key, 'C|' + x.r).status === 'short' || patStatus(x.key, 'K|' + x.card + '|' + x.r).status === 'short'; return x; };
+let PSUM_ = null, PSUMD_ = null;
+function patSummary(d) {
+  if (PSUM_ && PSUMD_ === d) return PSUM_;
+  const lo = addD(d, -30), by = {};
+  S.tx.forEach(t => { if (t[0] > lo && t[0] <= d && t.length > 9) (by[t[2]] = by[t[2]] || []).push(mkTrip(t)); });
+  PSUM_ = {}; for (const [k, T] of Object.entries(by)) { const r = topN(T, x => x.r, 1)[0]; PSUM_[k] = {n: T.length, route: r ? r[0] : '', rn: r ? r[1] : 0, p: topN(T, x => x.p, 1)[0][0], band: hourBand(T.map(x => x.h)), short: T.filter(x => x.short).length}; }
+  PSUMD_ = d; return PSUM_;
+}
 /* ---- render ---- */
 function crmScope(R) { return R.filter(r => !CR.who || (CR.who === '_none' ? !r.pic : r.pic === CR.who)); }
 function actsOn(R, t, d, who) { let n = 0; R.forEach(r => r.acts.forEach(a => { if (a.t === t && a.d === d && (!who || a.who === who)) n++; })); return n; }
 function actsBetween(R, t, a0, a1, who) { let n = 0; R.forEach(r => r.acts.forEach(a => { if (a.t === t && a.d >= a0 && a.d <= a1 && (!who || a.who === who)) n++; })); return n; }
-const deltaTxt = (t, y) => { const dl = t - y; return dl > 0 ? `<span class="up"><b>▲ ${n0(dl)}</b>${y ? ' (' + pctCh(t, y) + ')' : ''}</span>` : dl < 0 ? `<span class="dn"><b>▼ ${n0(-dl)}</b> (${pctCh(t, y)})</span>` : '<span>= 0</span>'; };
+const deltaTxt = (t, y) => { const dl = t - y; return dl > 0 ? `<span class="up"><b>▲ ${n0(dl)}</b>${y ? ' (' + pctCh(t, y) + ')' : ''}</span>` : dl < 0 ? `<span class="dn"><b>▼ ${n0(-dl)}</b> (${pctCh(t, y)})</span>` : '<span class="lbl"><b>= 0</b></span>'; };
+const sgnCls = (t, y) => t > y ? 'up' : t < y ? 'dn' : '';
 function renderJourney() {
-  const d = CR.day, ALL = crmRows(d);
-  const tabs = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><div class="tabs" style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:3px">${[['dash', 'Dashboard'], ['input', 'Nhập liệu']].map(([k, l]) => `<button class="tab ${CR.view === k ? 'on' : ''}" data-crv="${k}">${l}</button>`).join('')}</div>
+  const f = CR.from, t = CR.to, d = t; CR.day = t;
+  const ALL = crmRows(d);
+  const tabs = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;position:relative;z-index:5"><div class="tabs" style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:3px">${[['dash', 'Dashboard tiến độ'], ['pat', 'Dashboard pattern di chuyển'], ['input', 'Nhập liệu']].map(([k, l]) => `<button class="tab ${CR.view === k ? 'on' : ''}" data-crv="${k}">${l}</button>`).join('')}</div>
     <span class="lbl" style="margin-left:8px">Người phụ trách</span><select id="crwho"><option value="">Tất cả (quản lý)</option>${PICS.map(p => `<option value="${p}" ${CR.who === p ? 'selected' : ''}>${p} · ${ROLE[p]}</option>`).join('')}<option value="_none" ${CR.who === '_none' ? 'selected' : ''}>Chưa phân công</option></select>
-    <span class="lbl" style="margin-left:8px">Ngày</span><input type="date" id="crday" value="${d}" style="font:13px var(--font-family-sans-serif);padding:5px 8px;border:1px solid var(--color-border-default);border-radius:10px">
+    <span class="lbl" style="margin-left:8px">Thời gian</span>${rangePicker()}
     <span class="lbl" style="margin-left:auto">${DBST === 'ok' ? `Dữ liệu nhập: đồng bộ trực tiếp${DBW === false ? ' · bạn chỉ có quyền xem' : ''}` : DBST === 'loading' ? 'Đang kết nối dữ liệu nhập…' : 'Chưa kết nối được dữ liệu nhập (chỉ xem số có sẵn)'}</span></div>`;
-  return tabs + (CR.view === 'dash' ? crmDash(ALL, d) : crmInput(ALL, d)) + (CR.open ? crmDrawer(ALL.find(r => r.key === CR.open), d) : '');
+  PAT.rng = [f, t]; PAT.keys = CR.who ? new Set(crmScope(ALL).map(r => r.key)) : null;
+  const body = CR.view === 'dash' ? crmDash(ALL, f, t) : CR.view === 'pat' ? renderPattern(t) : crmInput(ALL, d);
+  return tabs + body + (CR.open ? crmDrawer(ALL.find(r => r.key === CR.open), d) : '');
 }
-function crmDash(ALL, d) {
-  const R = crmScope(ALL).filter(r => !r.liq), dy = addD(d, -1), ws = wkStart(d), who = PICS.includes(CR.who) ? CR.who : '';
-  const ppl = who ? [who] : PICS;
-  const sum = f => ppl.reduce((a, p) => a + f(p), 0);
-  const actR = ALL; // hoạt động tính theo người thực hiện
-  const cT = who ? actsOn(actR, 'call', d, who) : actsOn(R, 'call', d), cY = who ? actsOn(actR, 'call', dy, who) : actsOn(R, 'call', dy);
-  const mT = who ? actsOn(actR, 'meet', d, who) : actsOn(R, 'meet', d), mY = who ? actsOn(actR, 'meet', dy, who) : actsOn(R, 'meet', dy);
-  const cW = who ? actsBetween(actR, 'call', ws, d, who) : actsBetween(R, 'call', ws, d), mW = who ? actsBetween(actR, 'meet', ws, d, who) : actsBetween(R, 'meet', ws, d);
-  const cWt = sum(p => tgtW(p, 'call', d)), mWt = sum(p => tgtW(p, 'meet', d)), cDt = sum(p => tgtD(p, 'call', d)), mDt = sum(p => tgtD(p, 'meet', d));
-  const xpW = R.filter(r => isoOk(r.xp) && r.xp >= ws && r.xp <= d).length, frW = R.filter(r => r.first && r.first >= ws && r.first <= d).length;
-  const wi = weekIdx(d), wlab = wi >= 0 ? `Tuần ${wi + 1} (${dm(ws)}–${dm(addD(ws, 6))})` : `Trước lộ trình (W1 bắt đầu ${dm(W1)})`;
+function crmDash(ALL, f, t) {
+  const d = t, R = crmScope(ALL).filter(r => !r.liq), who = PICS.includes(CR.who) ? CR.who : '', ppl = who ? [who] : PICS;
+  const len = diffD(t, f) + 1, pt = addD(f, -1), pf = addD(f, -len), lab = rngLabel(f, t);
+  const vsTxt = len === 1 ? 'so với ngày trước' : `so với ${len} ngày trước đó`;
+  const tgt = (kind, a, b, pp) => { let s = 0; for (let x = a; x <= b; x = addD(x, 1)) s += (pp ? [pp] : ppl).reduce((q, p) => q + tgtD(p, kind, x), 0); return s; };
+  const cnt = (kind, a, b, pp) => (pp || who) ? actsBetween(ALL, kind, a, b, pp || who) : actsBetween(R, kind, a, b);
+  const cT = cnt('call', f, t), cP = cnt('call', pf, pt), mT = cnt('meet', f, t), mP = cnt('meet', pf, pt), cTg = tgt('call', f, t), mTg = tgt('meet', f, t);
+  const touched = (a, b) => R.filter(r => r.acts.some(x => x.d >= a && x.d <= b && (!who || x.who === who))).length;
+  const kT = touched(f, t), kP = touched(pf, pt);
+  const xpIn = (a, b) => R.filter(r => isoOk(r.xp) && r.xp >= a && r.xp <= b).length, frIn = (a, b) => R.filter(r => r.first && r.first >= a && r.first <= b).length;
+  const xT = xpIn(f, t), xP = xpIn(pf, pt), fT = frIn(f, t), fP = frIn(pf, pt);
   const bul = [];
-  bul.push(`<li class="${cDt && cT < cDt ? 'critical' : 'stable'}">Hôm nay ${dmy(d)}: <b>${n0(cT)} cuộc gọi</b>, <b>${n0(mT)} meeting</b>. Hôm qua ${n0(cY)} cuộc gọi, ${n0(mY)} meeting.${cDt || mDt ? ` Chỉ tiêu ngày: ${n0(Math.round(cDt))} cuộc gọi, ${nf(mDt, 1)} meeting.` : ''}</li>`);
-  bul.push(`<li class="${(cWt && cW < cWt) || (mWt && mW < mWt) ? 'watch' : 'stable'}">${wlab}: ${n0(cW)}${cWt ? '/' + n0(cWt) : ''} cuộc gọi, ${n0(mW)}${mWt ? '/' + n0(mWt) : ''} meeting${!cWt && !mWt ? ' (chưa có chỉ tiêu tuần này)' : ''}. Khởi tạo XPAY trong tuần: ${n0(xpW)}, khách có doanh thu đầu: ${n0(frW)}.</li>`);
+  bul.push(`<li class="${cTg && cT < cTg ? 'critical' : 'stable'}">${lab}: <b>${n0(cT)} cuộc gọi</b> (${deltaTxt(cT, cP)}), <b>${n0(mT)} meeting</b> (${deltaTxt(mT, mP)}) ${vsTxt}.${cTg || mTg ? ` Chỉ tiêu kỳ: ${n0(Math.round(cTg))} cuộc gọi, ${nf(mTg, 1)} meeting.` : ' Kỳ này chưa có chỉ tiêu.'}</li>`);
+  bul.push(`<li class="${xT || fT ? 'stable' : 'watch'}">${n0(kT)} khách được liên hệ · khởi tạo XPAY trong kỳ: <b>${n0(xT)}</b> · khách có doanh thu đầu trong kỳ: <b>${n0(fT)}</b>.</li>`);
   const g1 = R.filter(r => r.grp === 1), nocall2 = R.filter(r => r.grp === 2 && r.todo.nocall), due = R.filter(r => r.todo.due), nopic = R.filter(r => (r.grp <= 2) && !r.pic);
   if (g1.length) bul.push(`<li class="critical"><b>${n0(g1.length)} khách đã ký phụ lục chưa khởi tạo XPAY</b>: báo Ops khởi tạo, phát thẻ.</li>`);
   if (nocall2.length) bul.push(`<li class="watch"><b>${n0(nocall2.length)} khách Top 200 chưa được gọi</b>.</li>`);
   if (due.length) bul.push(`<li class="watch"><b>${n0(due.length)} khách hẹn gọi lại đã đến hạn</b>.</li>`);
   if (nopic.length && !who) bul.push(`<li class="critical"><b>${n0(nopic.length)} khách nhóm 1–2 chưa có người phụ trách</b>: cần phân công.</li>`);
-  let h = `<div class="banner"><b>Tóm tắt${who ? ' · ' + who : CR.who === '_none' ? ' · chưa phân công' : ' · toàn đội'}</b><ul>${bul.join('')}</ul></div>`;
-  const tile = (k, v, s, r) => `<div class="kpi"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div>${r != null ? `<div class="meter"><i style="width:${Math.min(100, r * 100)}%;background:var(--${status(r) === 'mute' ? 'ink-3' : status(r)})"></i></div>` : ''}</div>`;
-  h += `<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">${[
-    tile('Cuộc gọi hôm nay', n0(cT), `${deltaTxt(cT, cY)} so với hôm qua${cDt ? ' · chỉ tiêu ' + n0(Math.round(cDt)) : ''}`, cDt ? cT / cDt : null),
-    tile('Meeting hôm nay', n0(mT), `${deltaTxt(mT, mY)} so với hôm qua${mDt ? ' · chỉ tiêu ' + nf(mDt, 1) : ''}`, mDt ? mT / mDt : null),
-    tile('Cuộc gọi tuần này', `${n0(cW)}${cWt ? '<span class="lbl"> / ' + n0(cWt) + '</span>' : ''}`, cWt ? `đạt ${pct(cW / cWt)} chỉ tiêu tuần` : 'chưa có chỉ tiêu tuần', cWt ? cW / cWt : null),
-    tile('Meeting tuần này', `${n0(mW)}${mWt ? '<span class="lbl"> / ' + n0(mWt) + '</span>' : ''}`, mWt ? `đạt ${pct(mW / mWt)} chỉ tiêu tuần` : 'chưa có chỉ tiêu tuần', mWt ? mW / mWt : null),
-    tile('Khách phụ trách', n0(R.length), `${n0(R.filter(r => done(r.call)).length)} đã gọi · ${n0(R.filter(r => done(r.meet)).length)} đã meeting`),
-    tile('Có doanh thu XPAY', n0(R.filter(r => r.first).length), `${n0(R.filter(r => r.todo.unused).length)} có thẻ chưa dùng 30 ngày`)].join('')}</div>`;
-  const card = (eb, t, note, body) => `<div class="card"><div class="hd"><div><div class="eyebrow">${eb}</div><h2 class="card-title">${t}</h2></div><div class="card-note">${note}</div></div>${body}</div>`;
-  // bảng theo người
+  let h = `<div class="banner"><b>Tóm tắt${who ? ' · ' + who : CR.who === '_none' ? ' · chưa phân công' : ' · toàn đội'} · ${lab}</b><ul>${bul.join('')}</ul></div>`;
+  const tile = (k, v, cls, s1, s2, r) => `<div class="kpi"><div class="k">${k}</div><div class="v ${cls || ''}">${v}</div><div class="s">${s1}</div>${s2 ? `<div class="s">${s2}</div>` : ''}${r != null ? `<div class="meter"><i style="width:${Math.min(100, r * 100)}%;background:var(--${status(r) === 'mute' ? 'ink-3' : status(r)})"></i></div>` : ''}</div>`;
+  h += `<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr))">${[
+    tile('Cuộc gọi', n0(cT), sgnCls(cT, cP), `${deltaTxt(cT, cP)} ${vsTxt}`, cTg ? `Chỉ tiêu ${n0(Math.round(cTg))} · đạt <b>${pct(cT / cTg)}</b>` : 'chưa có chỉ tiêu trong kỳ', cTg ? cT / cTg : null),
+    tile('Meeting', n0(mT), sgnCls(mT, mP), `${deltaTxt(mT, mP)} ${vsTxt}`, mTg ? `Chỉ tiêu ${nf(mTg, 1)} · đạt <b>${pct(mT / mTg)}</b>` : 'chưa có chỉ tiêu trong kỳ', mTg ? mT / mTg : null),
+    tile('Khách được liên hệ', n0(kT), sgnCls(kT, kP), `${deltaTxt(kT, kP)} ${vsTxt}`, `trên ${n0(R.length)} khách phụ trách`),
+    tile('Khởi tạo XPAY trong kỳ', n0(xT), sgnCls(xT, xP), `${deltaTxt(xT, xP)} ${vsTxt}`, `lũy kế ${n0(R.filter(r => done(r.xp)).length)} khách`),
+    tile('Khách có doanh thu đầu', n0(fT), sgnCls(fT, fP), `${deltaTxt(fT, fP)} ${vsTxt}`, `lũy kế ${n0(R.filter(r => r.first).length)} khách có doanh thu`),
+    tile('Khách phụ trách', n0(R.length), '', `${n0(R.filter(r => done(r.call)).length)} đã gọi · ${n0(R.filter(r => done(r.meet)).length)} đã meeting`, `${n0(R.filter(r => r.todo.unused).length)} có thẻ chưa dùng 30 ngày`)].join('')}</div>`;
+  const card = (eb, ti, note, body) => `<div class="card"><div class="hd"><div><div class="eyebrow">${eb}</div><h2 class="card-title">${ti}</h2></div><div class="card-note">${note}</div></div>${body}</div>`;
   if (!who) {
     const rows = [...PICS, '_none'].map(p => { const my = ALL.filter(r => !r.liq && (p === '_none' ? !r.pic : r.pic === p)), pp = p === '_none' ? null : p;
-      const ct = pp ? actsOn(ALL, 'call', d, pp) : 0, cy = pp ? actsOn(ALL, 'call', dy, pp) : 0, cw = pp ? actsBetween(ALL, 'call', ws, d, pp) : 0, mt = pp ? actsOn(ALL, 'meet', d, pp) : 0, mw = pp ? actsBetween(ALL, 'meet', ws, d, pp) : 0;
-      const tc = pp ? tgtW(pp, 'call', d) : 0, tm = pp ? tgtW(pp, 'meet', d) : 0, kp = tc || tm ? ((tc ? Math.min(1, cw / tc) : 0) + (tm ? Math.min(1, mw / tm) : 0)) / ((tc ? 1 : 0) + (tm ? 1 : 0)) : null;
+      const c1 = pp ? actsBetween(ALL, 'call', f, t, pp) : 0, c0 = pp ? actsBetween(ALL, 'call', pf, pt, pp) : 0, m1 = pp ? actsBetween(ALL, 'meet', f, t, pp) : 0, m0 = pp ? actsBetween(ALL, 'meet', pf, pt, pp) : 0;
+      const tc = pp ? tgt('call', f, t, pp) : 0, tm = pp ? tgt('meet', f, t, pp) : 0, kp = tc || tm ? ((tc ? Math.min(1, c1 / tc) : 0) + (tm ? Math.min(1, m1 / tm) : 0)) / ((tc ? 1 : 0) + (tm ? 1 : 0)) : null;
+      const cell = (a, b) => `<b class="${sgnCls(a, b)}">${n0(a)}</b> <span class="def ${sgnCls(a, b)}">${a === b ? '= kỳ trước' : (a > b ? '▲ ' : '▼ ') + n0(Math.abs(a - b)) + ' so với kỳ trước'}</span>`;
       return `<tr class="hit" data-crwho="${p}" style="cursor:pointer"><td class="l name">${p === '_none' ? 'Chưa phân công' : p}<span class="def">${ROLE[p] || 'quản lý chia khách'}</span></td><td>${n0(my.length)}</td><td>${n0(my.filter(r => done(r.call)).length)} <span class="lbl">(${my.length ? pct(my.filter(r => done(r.call)).length / my.length) : '—'})</span></td>
-        <td>${pp ? n0(ct) + ' <span class="lbl">/ ' + n0(cy) + '</span>' : '—'}</td><td>${pp ? n0(cw) + (tc ? '<span class="lbl"> / ' + n0(tc) + '</span>' : '') : '—'}</td><td>${pp ? n0(mt) : '—'}</td><td>${pp ? n0(mw) + (tm ? '<span class="lbl"> / ' + n0(tm) + '</span>' : '') : '—'}</td>
+        <td>${pp ? cell(c1, c0) : '—'}</td><td>${pp && tc ? n0(Math.round(tc)) : '—'}</td><td>${pp ? cell(m1, m0) : '—'}</td><td>${pp && tm ? nf(tm, 1) : '—'}</td>
         <td>${kp == null ? '<span class="lbl">—</span>' : `<span class="pill p-${status(kp)}">${pct(kp)}</span>`}</td><td>${n0(my.filter(r => r.todo.nocall).length)}</td><td>${n0(my.filter(r => r.todo.nomeet && r.grp <= 2).length)}</td><td>${n0(my.filter(r => r.todo.unused).length)}</td><td>${n0(my.filter(r => r.first).length)}</td><td>${money(my.reduce((a, r) => a + r.gmv, 0))}</td></tr>`; });
-    h += card('KPI từng người', 'Hôm nay, tuần này và tiến độ khách của mỗi người', `bấm dòng để xem riêng người đó · tiền: ${unitLabel()}`, `<div class="tw"><table><thead><tr><th class="l">Người</th><th>Khách</th><th>Đã gọi</th><th>Gọi hôm nay / hôm qua</th><th>Gọi tuần / chỉ tiêu</th><th>Meeting hôm nay</th><th>Meeting tuần / chỉ tiêu</th><th>Đạt KPI tuần</th><th>Chưa gọi</th><th>Top 200 chưa meeting</th><th>Có thẻ chưa dùng 30N</th><th>Có doanh thu</th><th>GMV lũy kế</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>
-      <div class="hint">Cuộc gọi, meeting tính theo người thực hiện và ngày ghi trong mỗi lần cập nhật. Chỉ tiêu theo file KPI Sales và AE: AE tính meeting/tuần, SDR (Nguyệt, Hiền) tính 75 cuộc gọi/tuần (nửa KPI SDR 150 cuộc). Chỉ tiêu ngày = tuần ÷ 5 ngày làm việc. Lộ trình bắt đầu W1 ${dmy(W1)}.</div>`);
+    h += card('KPI từng người', `Kết quả ${lab} so với kỳ trước và chỉ tiêu`, `bấm dòng để xem riêng người đó · xanh = tăng, đỏ = giảm · tiền: ${unitLabel()}`, `<div class="tw"><table><thead><tr><th class="l">Người</th><th>Khách</th><th>Đã gọi</th><th>Cuộc gọi trong kỳ</th><th>Chỉ tiêu gọi</th><th>Meeting trong kỳ</th><th>Chỉ tiêu meeting</th><th>Đạt KPI kỳ</th><th>Chưa gọi</th><th>Top 200 chưa meeting</th><th>Có thẻ chưa dùng 30N</th><th>Có doanh thu</th><th>GMV lũy kế</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>
+      <div class="hint">Cuộc gọi, meeting tính theo người thực hiện và ngày ghi trong mỗi lần cập nhật. Kỳ trước = cùng số ngày ngay trước kỳ đang xem. Chỉ tiêu theo file KPI Sales và AE: AE tính meeting/tuần, SDR (Nguyệt, Hiền) tính 75 cuộc gọi/tuần. Chỉ tiêu ngày = tuần ÷ 5 ngày làm việc, cộng dồn theo số ngày làm việc trong kỳ. Lộ trình bắt đầu W1 ${dmy(W1)}.</div>`);
   }
-  // tiến độ theo nhóm
   const G = [1, 2, 3, 4, 5], SC = ['#d9d9db', '#b9e9e2', '#5ed6c8', '#00a693', '#006e61'];
   const W = 1100, L = 330, rh = 36, bw = W - L - 90;
   let s = `<svg viewBox="0 0 ${W} ${G.length * rh + 6}" width="100%" style="max-width:${W}px;display:block">`;
@@ -1122,33 +1170,55 @@ function crmDash(ALL, d) {
     c.forEach((v, si) => { if (!v) return; const w = bw * v / Math.max(1, A.length); s += `<rect class="hit" data-crgo="${g}|${si}" x="${x}" y="${y + 7}" width="${Math.max(1, w - 1)}" height="22" fill="${SC[si]}" style="cursor:pointer"><title>${GRP[g]} · ${stageTxt[si]}: ${n0(v)} khách</title></rect>${w > 34 ? `<text x="${x + w / 2}" y="${y + 22}" text-anchor="middle" font-size="10.5" fill="${si >= 3 ? '#fff' : 'var(--ink)'}">${n0(v)}</text>` : ''}`; x += w; });
     s += `<text x="${L + bw + 8}" y="${y + 22}" font-size="12" font-weight="700" fill="var(--ink)">${n0(A.length)}</text>`; });
   s += `</svg><div class="legend" style="flex-wrap:wrap;margin-top:8px">${stageTxt.map((l, i) => `<span><i style="background:${SC[i]}"></i>${l}</span>`).join('')}</div>`;
-  h += card('Tiến độ theo nhóm khách', 'Mỗi nhóm đang ở bước nào', 'bấm ô màu để mở danh sách ở tab Nhập liệu', s);
-  // kết quả gọi / meeting
-  const lo = addD(d, -29), RC = {};
-  R.forEach(r => r.acts.forEach(a => { if (a.d >= lo && a.d <= d) { const k = a.res || 'Khác'; const o = RC[k] = RC[k] || {call: 0, meet: 0}; o[a.t === 'meet' ? 'meet' : 'call']++; } }));
+  h += card('Tiến độ theo nhóm khách', `Mỗi nhóm đang ở bước nào (tính đến ${dmy(t)})`, 'bấm ô màu để mở danh sách ở tab Nhập liệu', s);
+  const RC = {};
+  R.forEach(r => r.acts.forEach(a => { if (a.d >= f && a.d <= t && (!who || a.who === who)) { const k = a.res || 'Khác'; const o = RC[k] = RC[k] || {call: 0, meet: 0}; o[a.t === 'meet' ? 'meet' : 'call']++; } }));
   const re = Object.entries(RC).sort((a, b) => (b[1].call + b[1].meet) - (a[1].call + a[1].meet));
   let s2 = '';
-  if (!re.length) s2 = '<div class="hint">Chưa có cuộc gọi / meeting nào trong 30 ngày.</div>';
+  if (!re.length) s2 = `<div class="hint">Chưa có cuộc gọi / meeting nào trong ${lab}.</div>`;
   else { const mx = Math.max(...re.map(e => e[1].call + e[1].meet)), W2 = 640, L2 = 190;
     s2 = `<svg viewBox="0 0 ${W2} ${re.length * 26 + 6}" width="100%" style="max-width:${W2}px;display:block">` + re.map(([k, v], i) => { const y = 3 + i * 26, w1 = (W2 - L2 - 70) * v.call / mx, w2 = (W2 - L2 - 70) * v.meet / mx;
       return `<g class="hit" data-crres="${esc(k)}" style="cursor:pointer"><rect x="0" y="${y}" width="${W2}" height="24" fill="transparent"/><text x="${L2 - 8}" y="${y + 16}" text-anchor="end" font-size="12" fill="var(--ink)">${esc(k)}</text><rect x="${L2}" y="${y + 5}" width="${Math.max(w1, 0)}" height="15" fill="var(--color-display-cyan-default)"/><rect x="${L2 + w1}" y="${y + 5}" width="${w2}" height="15" fill="var(--color-display-purple-default)"/><text x="${L2 + w1 + w2 + 6}" y="${y + 16}" font-size="11.5" fill="var(--ink-2)">${v.call + v.meet}</text></g>`; }).join('') + `</svg><div class="legend" style="margin-top:6px"><span><i style="background:var(--color-display-cyan-default)"></i>Cuộc gọi</span><span><i style="background:var(--color-display-purple-default)"></i>Meeting</span></div>`; }
-  // xu hướng 14 ngày
-  const days = []; for (let i = 13; i >= 0; i--) days.push(addD(d, -i));
-  const cv = days.map(x => who ? actsOn(ALL, 'call', x, who) : actsOn(R, 'call', x)), mv = days.map(x => who ? actsOn(ALL, 'meet', x, who) : actsOn(R, 'meet', x)), tv = days.map(x => sum(p => tgtD(p, 'call', x)));
-  const W3 = 640, H3 = 190, mx3 = Math.max(1, ...cv.map((v, i) => v + mv[i]), ...tv), bw3 = (W3 - 40) / 14;
+  // xu hướng: theo ngày (tối đa 45 ngày, kỳ ngắn hơn 14 ngày thì hiện 14 ngày gần nhất), dài hơn thì theo tuần
+  let span = []; if (len < 14) for (let i = 13; i >= 0; i--) span.push(addD(t, -i)); else for (let x = f; x <= t; x = addD(x, 1)) span.push(x);
+  const weekly = span.length > 45, B = [];
+  if (weekly) { const m = {}; span.forEach(x => { const k = wkStart(x); if (!m[k]) { m[k] = {k, a: x, b: x}; B.push(m[k]); } m[k].b = x; }); }
+  else span.forEach(x => B.push({k: x, a: x, b: x}));
+  const cv = B.map(b => cnt('call', b.a, b.b)), mv = B.map(b => cnt('meet', b.a, b.b)), tv = B.map(b => tgt('call', b.a, b.b));
+  const W3 = 640, H3 = 190, mx3 = Math.max(1, ...cv.map((v, i) => v + mv[i]), ...tv), bw3 = (W3 - 40) / B.length;
   let s3 = `<svg viewBox="0 0 ${W3} ${H3 + 24}" width="100%" style="max-width:${W3}px;display:block">`;
-  days.forEach((x, i) => { const X = 30 + i * bw3, hc = H3 * cv[i] / mx3, hm = H3 * mv[i] / mx3;
-    s3 += `<rect x="${X + 3}" y="${H3 - hc}" width="${bw3 - 6}" height="${hc}" fill="var(--color-display-cyan-default)"><title>${dmy(x)}: ${cv[i]} cuộc gọi, ${mv[i]} meeting</title></rect><rect x="${X + 3}" y="${H3 - hc - hm}" width="${bw3 - 6}" height="${hm}" fill="var(--color-display-purple-default)"/>`;
+  B.forEach((b, i) => { const X = 30 + i * bw3, hc = H3 * cv[i] / mx3, hm = H3 * mv[i] / mx3, inR = b.b >= f && b.a <= t, op = inR ? 1 : .35;
+    s3 += `<rect x="${X + 2}" y="${H3 - hc}" width="${Math.max(1, bw3 - 4)}" height="${hc}" fill="var(--color-display-cyan-default)" opacity="${op}"><title>${weekly ? 'Tuần từ ' : ''}${dmy(b.a)}: ${cv[i]} cuộc gọi, ${mv[i]} meeting</title></rect><rect x="${X + 2}" y="${H3 - hc - hm}" width="${Math.max(1, bw3 - 4)}" height="${hm}" fill="var(--color-display-purple-default)" opacity="${op}"/>`;
     if (tv[i]) s3 += `<line x1="${X + 1}" x2="${X + bw3 - 1}" y1="${H3 - H3 * tv[i] / mx3}" y2="${H3 - H3 * tv[i] / mx3}" stroke="var(--critical)" stroke-dasharray="3 2"/>`;
-    s3 += `<text x="${X + bw3 / 2}" y="${H3 + 15}" text-anchor="middle" font-size="10" fill="var(--ink-3)">${dm(x)}</text>${cv[i] + mv[i] ? `<text x="${X + bw3 / 2}" y="${H3 - hc - hm - 4}" text-anchor="middle" font-size="10" fill="var(--ink-2)">${cv[i] + mv[i]}</text>` : ''}`; });
-  s3 += `</svg><div class="legend" style="margin-top:6px"><span><i style="background:var(--color-display-cyan-default)"></i>Cuộc gọi</span><span><i style="background:var(--color-display-purple-default)"></i>Meeting</span><span><i style="background:var(--critical);height:2px"></i>Chỉ tiêu gọi ngày</span></div>`;
-  h += `<div class="g2">${card('Kết quả', 'Khách phản hồi gì (30 ngày)', 'bấm thanh để xem các khách', s2)}${card('Xu hướng', 'Cuộc gọi và meeting 14 ngày', '', s3)}</div>`;
-  // việc cần làm của người đang xem
-  if (who || CR.who === '_none') {
-    const T = R.filter(r => r.todo.due || r.grp === 1 || (r.grp === 2 && (r.todo.nocall || r.todo.nomeet)) || r.todo.nocall || r.todo.unused).sort((a, b) => (b.todo.due - a.todo.due) || (a.grp - b.grp) || (b.pot - a.pot)).slice(0, 15);
-    h += card('Việc cần làm', `Khách ${who || 'chưa phân công'} cần xử lý tiếp`, 'bấm khách để cập nhật', `<div class="tw"><table><thead><tr><th class="l">Doanh nghiệp</th><th class="l">Nhóm</th><th class="l">Bước hiện tại</th><th class="l">Gợi ý</th></tr></thead><tbody>${T.map(r => `<tr class="hit" data-cropen="${esc(r.key)}" style="cursor:pointer"><td class="l name" style="color:var(--accent)">${esc(r.name)}</td><td class="l">${r.grp}. ${esc(GRP[r.grp])}</td><td class="l">${stageTxt[r.stage]}</td><td class="l" style="white-space:normal">${esc(r.sug[0])}</td></tr>`).join('') || '<tr><td colspan="4" class="l lbl">Không còn việc tồn.</td></tr>'}</tbody></table></div>`);
-  }
+    if (B.length <= 20 || i % Math.ceil(B.length / 15) === 0) s3 += `<text x="${X + bw3 / 2}" y="${H3 + 15}" text-anchor="middle" font-size="10" fill="var(--ink-3)">${dm(b.a)}</text>`;
+    if (cv[i] + mv[i] && B.length <= 31) s3 += `<text x="${X + bw3 / 2}" y="${H3 - hc - hm - 4}" text-anchor="middle" font-size="10" fill="var(--ink-2)">${cv[i] + mv[i]}</text>`; });
+  s3 += `</svg><div class="legend" style="margin-top:6px"><span><i style="background:var(--color-display-cyan-default)"></i>Cuộc gọi</span><span><i style="background:var(--color-display-purple-default)"></i>Meeting</span><span><i style="background:var(--critical);height:2px"></i>Chỉ tiêu gọi</span>${len < 14 ? '<span class="lbl">cột đậm = kỳ đang xem</span>' : ''}</div>`;
+  h += `<div class="g2">${card('Kết quả', `Khách phản hồi gì · ${lab}`, 'bấm thanh để xem các khách', s2)}${card('Xu hướng', `Cuộc gọi và meeting ${weekly ? 'theo tuần' : 'theo ngày'}`, '', s3)}</div>`;
   return h;
+}
+/* ---- việc cần ưu tiên (đầu phần Nhập liệu) ---- */
+const ACTK = [
+  ['due', 'Hẹn gọi lại đến hạn', 'critical', 'Gọi lại đúng hẹn trong hôm nay'],
+  ['g1', 'Đã ký phụ lục, chưa khởi tạo XPAY', 'critical', 'Báo Ops khởi tạo tài khoản, phát thẻ'],
+  ['topnc', 'Top 200 chưa gọi', 'high', 'Gọi giới thiệu XPAY / xác nhận đã nhận thẻ'],
+  ['stopped', 'Đã dùng, ngừng 30 ngày', 'high', 'Hỏi lý do ngừng, xử lý vướng mắc'],
+  ['topnm', 'Top 200 đã gọi, chưa meeting', 'watch', 'Đặt lịch gặp trực tiếp'],
+  ['never', 'Có thẻ, chưa từng dùng', 'watch', 'Kiểm tra đã phát thẻ cho nhân viên, hướng dẫn đặt xe'],
+  ['nopic', 'Chưa có người phụ trách', 'critical', 'Quản lý phân công'],
+];
+const prioScore = r => (r.todo.due ? 1000 : 0) + (r.grp === 1 ? 800 : 0) + (r.todo.topnc ? 600 : 0) + (r.todo.stopped ? 500 : 0) + (r.todo.topnm ? 400 : 0) + (r.todo.never ? 200 : 0) + Math.min(300, (r.pot || 0) * 3) + (r.grp === 2 ? Math.max(0, 100 - (r.grank || 200) / 2) : 0) + Math.min(100, (r.ml69 || 0) / 1e6);
+function crmAction(R, d) {
+  const A = R.filter(r => !r.liq && r.st !== 'Tạm dừng'), pot = L => L.reduce((a, r) => a + (r.pot || 0), 0);
+  const tiles = ACTK.map(([k, l, c, act]) => { const L = A.filter(r => r.todo[k]);
+    return `<div class="kpi hit" data-crtodo="${k}" style="cursor:pointer;${CR.todo === k ? 'border-color:var(--accent);box-shadow:0 0 0 2px var(--color-surface-primary)' : L.length && c === 'critical' ? 'border-color:#e83c3f55' : ''}"><div class="k">${l}</div><div class="v c-${L.length ? c : 'stable'}">${n0(L.length)}</div><div class="s">${act}</div>${L.length && pot(L) ? `<div class="s">tiềm năng ${nf(pot(L), 0)} triệu/tháng</div>` : ''}</div>`; }).join('');
+  const P = A.filter(r => ACTK.some(([k]) => r.todo[k])).map(r => Object.assign(r, {score: prioScore(r)})).sort((a, b) => b.score - a.score).slice(0, 15);
+  const why = r => ACTK.filter(([k]) => r.todo[k]).map(([k, l, c]) => `<span class="pill p-${c}" style="margin:1px 2px">${l}</span>`).join('');
+  return `<div class="card"><div class="hd"><div><div class="eyebrow">Hành động</div><h2 class="card-title">Việc cần ưu tiên${CR.who ? ' · ' + (CR.who === '_none' ? 'chưa phân công' : esc(CR.who)) : ''}</h2></div><div class="card-note">bấm ô để lọc danh sách bên dưới · bấm khách để cập nhật</div></div>
+    <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">${tiles}</div>
+    <h3 style="font-size:14px;margin:16px 0 8px">15 khách nên làm trước</h3>
+    <div class="tw"><table><thead><tr><th>#</th><th class="l">Doanh nghiệp</th><th class="l">PIC</th><th class="l">Lý do ưu tiên</th><th class="l">Việc nên làm</th><th>Tiềm năng (triệu/tháng)</th><th class="l">Liên hệ gần nhất</th></tr></thead><tbody>
+    ${P.map((r, i) => `<tr class="hit" data-cropen="${esc(r.key)}" style="cursor:pointer"><td>${i + 1}</td><td class="l name" style="color:var(--accent)">${esc(r.name)}<span class="def">${r.grp === 9 ? '' : r.grp + '. '}${esc(GRP[r.grp])}${r.rank ? ' · ' + esc(r.rank) : ''}</span></td><td class="l">${r.pic ? esc(r.pic) : '<b style="color:var(--critical)">Chưa phân công</b>'}</td><td class="l" style="white-space:normal;min-width:180px">${why(r)}</td><td class="l" style="white-space:normal;min-width:240px;font-size:12px">${esc(r.sug[0])}</td><td>${r.pot ? nf(r.pot, 1) : '—'}</td><td class="l">${r.acts[0] ? dmy(r.acts[0].d) + '<span class="def">' + esc(r.acts[0].res || '') + '</span>' : '<span class="lbl">chưa liên hệ</span>'}</td></tr>`).join('') || '<tr><td colspan="7" class="l lbl">Không còn việc tồn.</td></tr>'}
+    </tbody></table></div><div class="hint">Thứ tự ưu tiên: hẹn gọi lại đến hạn → đã ký phụ lục chưa có XPAY → Top 200 chưa gọi → khách đã dùng nhưng ngừng 30 ngày → Top 200 chưa meeting → có thẻ chưa từng dùng; cùng mức thì khách tiềm năng GMV cao, hạng Top 200 cao, giao dịch Mai Linh T6–T9 lớn đứng trước. Khách "Tạm dừng" không đưa vào danh sách.</div></div>`;
 }
 let CMORE = {}, COPEN = {};
 function crmInput(ALL, d) {
@@ -1159,16 +1229,17 @@ function crmInput(ALL, d) {
   const q = fold(CR.q); if (q) R = R.filter(r => fold(r.name).includes(q) || r.key.includes(q) || fold(r.gname).includes(q));
   const ed = DBST === 'ok' && DBW !== false;
   const TD = {'': 'Tất cả', nocall: 'Chưa gọi', nomeet: 'Chưa meeting', unused: 'Có thẻ chưa dùng 30 ngày', due: 'Hẹn gọi lại đến hạn', nopic: 'Chưa phân công'};
-  let h = `<div class="card" style="padding:12px 20px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="lbl">Việc</span>${Object.entries(TD).map(([k, l]) => `<button class="btn" data-crtodo="${k}" style="padding:5px 10px;${CR.todo === k ? 'background:var(--color-surface-primary);border-color:var(--accent);color:var(--color-action-theme-primary-active)' : ''}">${l}</button>`).join('')}
+  const ACTL = Object.fromEntries(ACTK.map(([k, l]) => [k, l])), PS = patSummary(d);
+  let h = crmAction(crmScope(ALL), d) + `<div class="card" style="padding:12px 20px" id="crlist"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="lbl">Việc</span>${Object.entries(TD).map(([k, l]) => `<button class="btn" data-crtodo="${k}" style="padding:5px 10px;${CR.todo === k ? 'background:var(--color-surface-primary);border-color:var(--accent);color:var(--color-action-theme-primary-active)' : ''}">${l}</button>`).join('')}
     <span class="lbl" style="margin-left:8px">Nhóm</span><select id="crgrp"><option value="">Tất cả nhóm</option>${[1, 2, 3, 4, 5, 9].map(g => `<option value="${g}" ${CR.grp === String(g) ? 'selected' : ''}>${g === 9 ? '' : g + '. '}${GRP[g]}</option>`).join('')}${CR.grp.includes('|') ? `<option value="${CR.grp}" selected>${GRP[CR.grp.split('|')[0]]} · ${stageTxt[CR.grp.split('|')[1]]}</option>` : ''}</select>
-    ${CR.res ? `<span class="pill p-mute">Kết quả: ${esc(CR.res)} <a id="crresx" style="cursor:pointer;font-weight:700">×</a></span>` : ''}
+    ${CR.res ? `<span class="pill p-mute">Kết quả: ${esc(CR.res)} <a id="crresx" style="cursor:pointer;font-weight:700">×</a></span>` : ''}${CR.todo && !(CR.todo in TD) ? `<span class="pill p-mute">Việc: ${esc(ACTL[CR.todo] || CR.todo)} <a data-crtodo="" style="cursor:pointer;font-weight:700">×</a></span>` : ''}
     <input id="crq" placeholder="Tìm tên, số hợp đồng, nhóm client…" value="${esc(CR.q)}" style="font:13px var(--font-family-sans-serif);padding:6px 10px;border:1px solid var(--color-border-default);border-radius:10px;width:250px"><span class="lbl">${n0(R.length)} khách</span>
     <span style="margin-left:auto;display:flex;gap:8px"><button class="btn" id="crxls">Tải Excel</button></span></div></div>`;
-  const row = r => `<tr class="hit" data-cropen="${esc(r.key)}" style="cursor:pointer"><td class="l name" style="min-width:240px;padding-left:34px;color:var(--accent)">${esc(r.name)}<span class="def">${r.pic ? 'PIC ' + esc(r.pic) : '<b style="color:var(--critical)">Chưa phân công</b>'} · HĐ ${esc(r.key)}${r.gname ? ' · ' + esc(r.gname) + (r.grank ? ' #' + r.grank : '') : ''}</span></td>
+  const row = r => `<tr class="hit" data-cropen="${esc(r.key)}" style="cursor:pointer"><td class="l name" style="min-width:240px;padding-left:34px;color:var(--accent)">${esc(r.name)}<span class="def">HĐ ${esc(r.key)}${r.gname ? ' · ' + esc(r.gname) + (r.grank ? ' #' + r.grank : '') : ''}</span></td><td class="l">${r.pic ? esc(r.pic) : '<b style="color:var(--critical)">Chưa phân công</b>'}</td>
     ${['pl', 'xp', 'call', 'meet'].map(f => `<td class="l">${done(r[f]) ? `<span class="c-stable">✓</span> ${isoOk(r[f]) ? dm(r[f]) : ''}${f === 'call' && r.calls.length > 1 ? `<span class="def">${r.calls.length} lần</span>` : ''}` : '<span class="lbl">—</span>'}</td>`).join('')}
-    <td class="l">${r.first ? dmy(r.first) : '<span class="lbl">chưa</span>'}</td><td>${r.gmv ? money(r.gmv) : '—'}<span class="def">${r.gmv30 ? '30N ' + nf(r.gmv30 / UNIT.div, UNIT.dec) : r.gmv ? 'ngừng 30N' : ''}</span></td>
+    <td class="l">${r.first ? dmy(r.first) : '<span class="lbl">chưa</span>'}</td><td>${r.gmv ? money(r.gmv) : '—'}<span class="def">${r.gmv30 ? '30N ' + nf(r.gmv30 / UNIT.div, UNIT.dec) : r.gmv ? 'ngừng 30N' : ''}</span></td><td class="l" style="white-space:normal;min-width:170px;font-size:12px">${PS[r.key] ? `${esc(PS[r.key].route)} <span class="lbl">(${PS[r.key].rn}/${PS[r.key].n} chuyến)</span><span class="def">${esc(PS[r.key].p)} · ${PS[r.key].band}${PS[r.key].short ? ' · <b style="color:var(--critical)">thiếu xe</b>' : ''}</span>` : (((S.cs || {})[r.key] || {}).custom || []).length ? '<span class="pill p-mute">CS đã khai báo</span>' : '<span class="lbl">—</span>'}</td>
     <td class="l" style="white-space:normal;max-width:160px">${r.lastRes ? esc(r.lastRes) : '<span class="lbl">—</span>'}${r.st ? `<span class="def" style="color:var(--critical)">${esc(r.st)}</span>` : ''}</td><td class="l" style="white-space:normal;min-width:220px;font-size:12px">${esc(r.sug[0])}</td></tr>`;
-  const NC = 9; let body = '';
+  const NC = 11; let body = '';
   if (q || CR.res || CR.todo || CR.grp.includes('|')) body = R.sort((a, b) => a.grp - b.grp || b.gmv - a.gmv || b.pot - a.pot).slice(0, 300).map(row).join('') + (R.length > 300 ? `<tr><td colspan="${NC}" class="l lbl">Hiện 300 / ${n0(R.length)} khách, lọc thêm để thu hẹp.</td></tr>` : '');
   else for (const g of [1, 2, 3, 4, 5, 9]) { const A = R.filter(r => r.grp === g); if (!A.length) continue;
     const sorter = g === 2 ? (a, b) => (a.grank || 999) - (b.grank || 999) || b.pot - a.pot : g === 3 ? (a, b) => b.pot - a.pot || b.b.peak - a.b.peak : (a, b) => b.gmv - a.gmv || b.ml69 - a.ml69 || (b.b.peak || 0) - (a.b.peak || 0);
@@ -1181,7 +1252,7 @@ function crmInput(ALL, d) {
       body += B.slice(0, mx).map(row).join('');
       if (B.length > mx) body += `<tr><td colspan="${NC}" class="l"><button class="btn crmore" data-crg="${esc(sid)}" style="padding:4px 10px">Xem thêm 50 / còn ${n0(B.length - mx)} khách</button></td></tr>`; } }
   h += `<div class="card"><div class="hd"><div><div class="eyebrow">Nhập liệu</div><h2 class="card-title">Tiến độ từng pháp nhân</h2></div><div class="card-note">bấm khách để cập nhật mốc, ghi cuộc gọi / meeting · ${ed ? 'lưu trực tiếp, ai mở dashboard cũng thấy ngay' : 'chế độ chỉ xem'}</div></div>
-    <div class="tw"><table><thead><tr><th class="l">Doanh nghiệp</th><th class="l">Ký phụ lục</th><th class="l">Khởi tạo XPAY</th><th class="l">Gọi khách</th><th class="l">Meeting</th><th class="l">Doanh thu đầu</th><th>GMV lũy kế</th><th class="l">Kết quả gần nhất</th><th class="l">Gợi ý tiếp theo</th></tr></thead><tbody>${body || `<tr><td colspan="${NC}" class="l lbl">Không có khách phù hợp.</td></tr>`}</tbody></table></div>
+    <div class="tw"><table><thead><tr><th class="l">Doanh nghiệp</th><th class="l">PIC</th><th class="l">Ký phụ lục</th><th class="l">Khởi tạo XPAY</th><th class="l">Gọi khách</th><th class="l">Meeting</th><th class="l">Doanh thu đầu</th><th>GMV lũy kế</th><th class="l">Pattern di chuyển 30 ngày</th><th class="l">Kết quả gần nhất</th><th class="l">Gợi ý tiếp theo</th></tr></thead><tbody>${body || `<tr><td colspan="${NC}" class="l lbl">Không có khách phù hợp.</td></tr>`}</tbody></table></div>
     <div class="hint">Nhóm tự xếp theo thứ tự: 1) đã ký phụ lục (ngày vào tủ) chưa khởi tạo XPAY; 2) Top 200 (mọi pháp nhân của nhóm client); 3) đã khởi tạo XPAY, 30 ngày chưa có giao dịch, xếp theo tiềm năng; 4) chưa ký phụ lục nhưng có giao dịch Mai Linh T6–T9; 5) còn lại, chia theo phân loại Mai Linh. Đổi nhóm, người phụ trách trong cửa sổ cập nhật. Doanh thu đầu và GMV lấy tự động từ bảng kê.</div></div>`;
   return h;
 }
@@ -1197,6 +1268,8 @@ function crmDrawer(r, d) {
       <div class="lbl" style="margin-top:4px">HĐ ${esc(r.key)}${r.gname ? ' · nhóm client ' + esc(r.gname) + (r.grank ? ' (hạng ' + r.grank + ')' : '') : ''}${r.rank ? ' · ' + esc(r.rank) : ''} · ${esc(r.sub)}${r.pot ? ' · tiềm năng ' + nf(r.pot, 1) + ' triệu/tháng' : ''}${r.picOld ? ' · PIC cũ ' + esc(r.picOld) : ''}</div></div><button class="btn" id="crclose">✕</button></div>
     <div class="kpis" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-top:12px">${[['GMV lũy kế', r.gmv ? money(r.gmv) : '—'], ['GMV 30 ngày', r.gmv30 ? money(r.gmv30) : '—'], ['Chuyến', n0(r.trips)], ['Giao dịch Mai Linh T6–T9', r.ml69 ? money(r.ml69) : '—']].map(([k, v]) => `<div class="kpi"><div class="k">${k}</div><div class="v" style="font-size:19px">${v}</div></div>`).join('')}</div>
     <div class="banner" style="margin-top:12px"><b>Gợi ý xử lý</b><ul>${r.sug.map(s => `<li class="watch">${esc(s)}</li>`).join('')}</ul></div>
+    ${(() => { const tr = S.tx.filter(t => t[2] === r.key && t.length > 9).map(mkTrip), ps = patSummary(d)[r.key];
+      return `<details class="card" style="margin-top:12px;padding:14px 20px" ${CR.patOpen ? 'open' : ''} id="crpat"><summary style="font-size:14px">Pattern di chuyển · ${tr.length ? `${n0(tr.length)} chuyến toàn bộ${ps ? ` · 30 ngày: ${esc(ps.route)} (${ps.rn} chuyến), ${esc(ps.p)}, ${ps.band}` : ''}` : 'chưa có chuyến XPAY'}</summary>${tr.length ? kpiRow(tr) : ''}${custPatterns(r.key, tr)}</details>`; })()}
     <div class="card" style="margin-top:12px"><h3 style="margin:0 0 6px;font-size:14px">Các mốc</h3>
       ${ms('pl', 'Ký phụ lục (vào tủ)')}${ms('xp', 'Khởi tạo XPAY')}${ms('call', 'Gọi khách', r.calls.length ? `${r.calls.length} lần · tự lấy ngày gọi gần nhất` : '')}${ms('meet', 'Meeting', r.meets.length ? `${r.meets.length} lần · tự lấy ngày gần nhất` : '')}
       <div style="display:flex;gap:8px;align-items:center;padding:6px 0"><span style="width:150px;font-weight:600">Doanh thu đầu tiên</span>${r.firstAmt != null ? `<span>${dmy(r.first)} · ${n0(r.firstAmt)} đồng <span class="lbl">(tự động từ bảng kê)</span></span>` : `<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-ms="first" ${done(r.first) ? 'checked' : ''} ${dis}> đã có</label><input type="date" data-msd="first" value="${isoOk(r.first) ? r.first : ''}" ${dis} style="${inp}"><span class="lbl">chưa thấy trong bảng kê</span>`}</div></div>
@@ -1240,11 +1313,22 @@ function bindJourney() {
   const keep = fn => { const y = window.scrollY; fn(); render(); window.scrollTo(0, y); };
   document.querySelectorAll('[data-crv]').forEach(b => b.onclick = () => keep(() => { CR.view = b.dataset.crv; }));
   if ($('crwho')) $('crwho').onchange = e => keep(() => { CR.who = e.target.value; try { localStorage.setItem('xpay_who', CR.who); } catch (er) {} });
-  if ($('crday')) $('crday').onchange = e => { if (isoOk(e.target.value)) keep(() => { CR.day = e.target.value; CRM_ = null; }); };
+  if ($('rpb')) $('rpb').onclick = e => { e.stopPropagation(); keep(() => { RP = {open: !RP.open, a: CR.from, b: CR.to, m: CR.to.slice(0, 7), pre: CR.preset}; }); };
+  if ($('rpp')) { $('rpp').onclick = e => e.stopPropagation();
+    document.querySelectorAll('[data-rpp]').forEach(b => b.onclick = () => keep(() => { const [a, z] = presetRange(b.dataset.rpp); RP.a = a; RP.b = z; RP.pre = b.dataset.rpp; RP.m = z.slice(0, 7); }));
+    document.querySelectorAll('[data-rpm]').forEach(b => b.onclick = () => keep(() => { RP.m = ymAdd(RP.m || CR.to.slice(0, 7), +b.dataset.rpm); }));
+    document.querySelectorAll('[data-rpd]').forEach(c => c.onclick = () => { const x = c.dataset.rpd; if (x > TODAY) return; keep(() => { RP.pre = ''; if (!RP.a || RP.b) { RP.a = x; RP.b = null; } else RP.b = x; }); });
+    $('rpx').onclick = () => keep(() => { RP.open = false; });
+    $('rpok').onclick = () => keep(() => { let a = RP.a || CR.from, z = RP.b || a; if (a > z) [a, z] = [z, a]; CR.from = a; CR.to = z; CR.preset = RP.pre || ''; CR.day = z; CRM_ = null; RP.open = false; }); }
+  if ($('rpp')) { const p = $('rpp'), r = p.getBoundingClientRect(), over = r.right - (document.documentElement.clientWidth - 16);
+    if (over > 0) p.style.left = Math.max(-over, 16 - p.parentElement.getBoundingClientRect().left) + 'px'; }
+  document.onmousedown = e => { if (RP.open && $('rpp') && !$('rpp').contains(e.target) && e.target.id !== 'rpb') keep(() => { RP.open = false; });
+    if (PAT.msOpen && $('pmsp') && !$('pmsp').contains(e.target) && e.target.id !== 'pmsb') { PAT.msOpen = false; $('pmsp').style.display = 'none'; } };
+  if ($('crpat')) $('crpat').ontoggle = e => { CR.patOpen = e.target.open; };
   document.querySelectorAll('[data-crwho]').forEach(el => el.onclick = () => keep(() => { CR.who = el.dataset.crwho; }));
   document.querySelectorAll('[data-crgo]').forEach(el => el.onclick = () => { CR.view = 'input'; CR.grp = el.dataset.crgo; CR.todo = ''; CR.res = ''; render(); window.scrollTo(0, 0); });
   document.querySelectorAll('[data-crres]').forEach(el => el.onclick = () => { CR.view = 'input'; CR.res = el.dataset.crres; CR.grp = ''; CR.todo = ''; render(); window.scrollTo(0, 0); });
-  document.querySelectorAll('[data-crtodo]').forEach(el => el.onclick = () => keep(() => { CR.todo = el.dataset.crtodo; }));
+  document.querySelectorAll('[data-crtodo]').forEach(el => el.onclick = () => { const pos = el.classList.contains('kpi'); keep(() => { CR.todo = pos && CR.todo === el.dataset.crtodo ? '' : el.dataset.crtodo; }); if (pos && $('crlist')) $('crlist').scrollIntoView({behavior: 'smooth'}); });
   if ($('crgrp')) $('crgrp').onchange = e => keep(() => { CR.grp = e.target.value; });
   if ($('crresx')) $('crresx').onclick = () => keep(() => { CR.res = ''; });
   if ($('crq')) $('crq').onchange = e => keep(() => { CR.q = e.target.value; });
@@ -1287,7 +1371,7 @@ function bindJourney() {
 }
 function bind() {
   document.querySelectorAll('[data-tab]').forEach(el => el.onclick = ev => { ev.preventDefault(); TAB = el.dataset.tab; try { localStorage.setItem('xpay_tab', TAB); } catch (e) {} render(); window.scrollTo(0, 0); });
-  $('dsel').onchange = e => { SEL = e.target.value; render(); };
+  if ($('dsel')) $('dsel').onchange = e => { SEL = e.target.value; render(); };
   $('usel').onchange = e => { UNIT = UNITS[e.target.value]; try { localStorage.setItem('xpay_unit', e.target.value); } catch (er) {} render(); };
   $('bxls').onclick = exportXlsx;
   if ($('bfull')) $('bfull').onclick = () => { CH.full = !CH.full; render(); };
@@ -1302,6 +1386,7 @@ function bind() {
 computeActuals();
 SEL = LASTDAY;
 try { const t = localStorage.getItem('xpay_tab'); if (t) TAB = t; } catch (e) {}
+if (TAB === 'pat') { TAB = 'jr'; CR.view = 'pat'; }
 render();
 crmInit();
 (async () => {
