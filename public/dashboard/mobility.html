@@ -130,7 +130,7 @@ const driverId = (mnv, plate) => (mnv && String(mnv).trim()) ? String(mnv).trim(
 /* ---------- actuals ---------- */
 let ACT = {}, LASTDAY = null, BYDAY = {};
 const dy0 = d => addD(d, -1);
-const MMODE = k => 'auto';
+const MMODE = k => ((S.cmode || {})[k]) || 'latest';  // latest = số nào cập nhật gần nhất · auto = tab Tiến độ khách hàng · manual = số nhập tay
 const CRM_BASE_TS = Date.parse('2026-10-18T00:00:00+07:00');
 function crmMts() { let t = CRM_BASE_TS; for (const e of Object.values(typeof DBX === 'object' && DBX ? DBX : {})) if (e && e.mts > t) t = e.mts; return t; }
 function manualLast(d, k) { let best = ''; for (const [dd, o] of Object.entries(S.manual)) if (dd <= d && dd >= best && o[k] != null) best = dd;
@@ -139,7 +139,9 @@ function manualLast(d, k) { let best = ''; for (const [dd, o] of Object.entries(
 function countSrc(d, k) {
   const ml = manualLast(d, k), au = LASTDAY ? autoCounts()[k] : null;
   if (au == null) return ml ? {v: ml.v, src: 'manual', d: ml.d} : {v: null, src: ''};
-  if (ml && ml.ts > crmMts()) return {v: ml.v, src: 'manual', d: ml.d};
+  const md = MMODE(k);
+  if (md === 'auto') return {v: au, src: 'crm'};
+  if (ml && (md === 'manual' || ml.ts > crmMts())) return {v: ml.v, src: 'manual', d: ml.d};
   return {v: au, src: 'crm'};
 }
 let AUTOC_ = null;
@@ -419,9 +421,12 @@ function renderUpload() {
   h += `<div class="g2"><div class="drop"><b>1. Bảng kê taxi (.xlsx) — chọn được nhiều file</b><input type="file" id="ftx" accept=".xlsx,.xls" multiple><div class="hint">Gộp với dữ liệu cũ, bỏ trùng theo "Số giao dịch", loại giao dịch 0đ và nội bộ Xperise.<br><span style="font-weight:700">Lưu ý:</span> giao dịch có Đơn vị phát sinh là <span style="font-weight:700">CYGNUS™ Universal Transportation Service</span> và số tiền <span style="font-weight:700">0đ</span> là giao dịch khởi tạo/test — không tính vào bất kỳ thống kê nào.</div></div>
     <div class="drop"><b>2. File độ phủ tài xế (.xlsx, sheet "Nhập active")</b><input type="file" id="fdrv" accept=".xlsx,.xls"><div class="hint">Thay toàn bộ bảng tài xế bằng file mới. Ngày không nhập lấy số gần nhất.</div></div></div>
     <div class="drop" style="margin-top:12px"><b>3. Số lũy kế — tự tính hoặc nhập tay (áp cho ngày giao dịch mới nhất ${LASTDAY ? dmy(LASTDAY) : ''}) — có thể lưu riêng, không cần chọn file</b>
-      ${[['appendix', 'mct', 'Phụ lục đã ký', 'số khách đã ký phụ lục'], ['onboard', 'mob', 'DN đã khởi tạo XPAY', 'số khách đã khởi tạo XPAY']].map(([k, id, l, d]) => { const cs = LASTDAY ? countSrc(LASTDAY, k) : {v: null, src: ''}, ac = autoCounts()[k];
-        return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0"><span class="lbl" style="width:120px">${l}</span><select id="${id}m" hidden><option value="auto" selected>auto</option></select>
-          <input type="number" id="${id}" value="${cs.v == null ? '' : cs.v}"><span class="lbl">Đang dùng: ${cs.src === 'manual' ? `số nhập tay ngày ${dmy(cs.d)}` : `số từ tab Tiến độ khách hàng (${n0(ac)})`}. Sửa số để nhập tay — số nhập tay được dùng cho tới khi tab Tiến độ khách hàng có cập nhật ${d} mới hơn.</span></div>`; }).join('')}
+      ${[['appendix', 'mct', 'Phụ lục đã ký', 'số khách đã ký phụ lục'], ['onboard', 'mob', 'DN đã khởi tạo XPAY', 'số khách đã khởi tạo XPAY']].map(([k, id, l, d]) => { const cs = LASTDAY ? countSrc(LASTDAY, k) : {v: null, src: ''}, ac = autoCounts()[k], md = MMODE(k), ml = manualLast(LASTDAY || '9999', k);
+        return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0"><span class="lbl" style="width:120px">${l}</span><select id="${id}m" data-auto="${ac}" data-man="${ml ? ml.v : ''}" data-for="${id}">
+            <option value="latest" ${md === 'latest' ? 'selected' : ''}>Theo số cập nhật gần nhất</option>
+            <option value="auto" ${md === 'auto' ? 'selected' : ''}>Tự động — tab Tiến độ khách hàng (${n0(ac)})</option>
+            <option value="manual" ${md === 'manual' ? 'selected' : ''}>Nhập tay${ml ? ` (${n0(ml.v)} · ngày ${dmy(ml.d)})` : ''}</option></select>
+          <input type="number" id="${id}" value="${cs.v == null ? '' : cs.v}" ${md === 'auto' ? 'disabled' : ''}><span class="lbl">Đang dùng: <b>${cs.src === 'manual' ? `số nhập tay ngày ${dmy(cs.d)}` : `số tự động từ tab Tiến độ khách hàng`}</b>. "Theo số cập nhật gần nhất": số nhập tay được dùng cho tới khi tab Tiến độ khách hàng có cập nhật ${d} mới hơn.</span></div>`; }).join('')}
       <div style="display:flex;gap:8px;align-items:center;margin:8px 0"><span class="lbl" style="width:120px">Thẻ đã phát hành</span> <input type="number" id="mk" value="${manualAt(LASTDAY, 'cards_issued') || ''}"><span class="lbl">nhập tay</span></div></div>
     <div style="display:flex;gap:10px;margin-top:14px"><button class="btn" id="bprev">Kiểm tra file</button><button class="btn pri" id="bsave" ${PENDING ? '' : 'disabled'}>Lưu & cập nhật dashboard</button></div>
     <div class="log" id="ulog" style="margin-top:12px">${PENDING ? esc(PENDING.log) : 'Chọn file rồi bấm "Kiểm tra file".'}</div></div>`;
@@ -441,11 +446,14 @@ const isoOf = v => {
 async function preview() {
   const log = [], fx = $('ftx').files, fd = $('fdrv').files[0];
   const mVals = {appendix: Number($('mct').value) || null, onboard: Number($('mob').value) || null, cards_issued: Number($('mk').value) || null};
-  const modeChg = [['appendix', 'mctm'], ['onboard', 'mobm']].some(([k, id]) => $(id).value !== MMODE(k));
-  const mChg = Object.entries(mVals).filter(([k, v]) => v != null && (v !== manualAt(LASTDAY, k) || modeChg));
+  const MDL = {latest: 'theo số cập nhật gần nhất', auto: 'tự động từ tab Tiến độ khách hàng', manual: 'số nhập tay'}, LB = {appendix: 'Phụ lục đã ký', onboard: 'DN đã khởi tạo XPAY', cards_issued: 'Thẻ đã phát hành'}, SID = {appendix: 'mctm', onboard: 'mobm'};
+  const modes = ['appendix', 'onboard'].filter(k => $(SID[k]).value !== MMODE(k)).map(k => `${LB[k]}: tính ${MDL[$(SID[k]).value]}`);
+  const modeChg = modes.length > 0;
+  const mChg = Object.entries(mVals).filter(([k, v]) => v != null && !(SID[k] && $(SID[k]).value === 'auto') && v !== (SID[k] ? (manualLast(LASTDAY, k) || {}).v : manualAt(LASTDAY, k)) && !(SID[k] && $(SID[k]).value === 'latest' && v === manualAt(LASTDAY, k)));
+  const mTxt = [...modes, ...mChg.map(([k, v]) => `${LB[k]} nhập tay ${n0(v)}`)].join('; ');
   if (!fx.length && !fd) {
-    if (!mChg.length) { $('ulog').textContent = 'Chưa chọn file nào và số nhập tay không thay đổi.'; return; }
-    PENDING = {add: [], drv: null, fill: [], log: `Cập nhật số nhập tay cho ngày ${dmy(LASTDAY)}: ` + mChg.map(([k, v]) => ({appendix: 'Phụ lục đã ký', onboard: 'DN đã giao XPAY', cards_issued: 'Thẻ đã phát hành'}[k] + ' ' + n0(v))).join(', ') + '.'};
+    if (!mChg.length && !modeChg) { $('ulog').textContent = 'Chưa chọn file nào và số nhập tay / cách tính không thay đổi.'; return; }
+    PENDING = {add: [], drv: null, fill: [], log: `Cập nhật cho ngày ${dmy(LASTDAY)}: ${mTxt}.`};
     $('ulog').textContent = PENDING.log; $('bsave').disabled = false; return;
   }
   try { await loadScript(XLSX_URL); } catch (e) { $('ulog').textContent = e.message; return; }
@@ -489,8 +497,8 @@ async function preview() {
   if (days.length) log.push(`Ngày có giao dịch mới: ${days.map(dm).join(', ')} · GMV mới ${nf(add.reduce((a, t) => a + t[4], 0), 0)} VND.`);
   const unk = [...new Set(add.filter(t => t[2].startsWith('XPAY-')).map(t => t[7]))];
   if (unk.length) log.push(`Khách chưa có trong sổ ML (xếp "Ngoài phân bổ"): ${unk.join('; ')}`);
-  if (mChg.length) log.push('Số nhập tay thay đổi: ' + mChg.map(([k, v]) => ({appendix: 'Phụ lục đã ký', onboard: 'DN đã giao XPAY', cards_issued: 'Thẻ đã phát hành'}[k] + ' ' + n0(v))).join(', ') + '.');
-  PENDING = (add.length || drv || fill.length || mChg.length) ? {add, drv, fill, log: log.join('\n')} : null;
+  if (mTxt) log.push('Số lũy kế: ' + mTxt + '.');
+  PENDING = (add.length || drv || fill.length || mChg.length || modeChg) ? {add, drv, fill, log: log.join('\n')} : null;
   if (!PENDING) log.push('Không có dữ liệu mới để lưu.');
   $('ulog').textContent = log.join('\n'); $('bsave').disabled = !PENDING;
 }
@@ -507,8 +515,8 @@ async function save() {
   S.tx.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
   if (PENDING.drv) S.drv = PENDING.drv;
   const IDX_ = {}; S.tx.forEach(t => IDX_[t[1]] = t); (PENDING.fill || []).forEach(([id, a, b2, km, ts]) => { const t = IDX_[id]; if (!t) return; while (t.length < 9) t.push(''); if (!t[8] && ts) t[8] = ts; t[9] = a; t[10] = b2; t[11] = km; });
-  S.mmode = {appendix: $('mctm').value, onboard: $('mobm').value};
-  const last = S.tx[S.tx.length - 1][0], ob = Number($('mob').value), k = Number($('mk').value), ct = Number($('mct').value);
+  S.cmode = {appendix: $('mctm').value, onboard: $('mobm').value};
+  const last = S.tx[S.tx.length - 1][0], k = Number($('mk').value), ob = S.cmode.onboard === 'auto' ? 0 : Number($('mob').value), ct = S.cmode.appendix === 'auto' ? 0 : Number($('mct').value);
   const curOb = manualAt(last, 'onboard'), curCt = manualAt(last, 'appendix'), nowTs = Date.now();
   S.manual[last] = Object.assign({}, S.manual[last] || {}, ob && ob !== curOb ? {onboard: ob, onboard_ts: nowTs} : {}, k ? {cards_issued: k} : {}, ct && ct !== curCt ? {appendix: ct, appendix_ts: nowTs} : {});
   const now = new Date(); S.meta.updated = now.toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'});
@@ -1286,7 +1294,8 @@ function bind() {
   if ($('blog')) $('blog').onclick = () => { CH.log = !CH.log; render(); };
   if ($('bprev')) $('bprev').onclick = preview;
   if ($('bsave')) $('bsave').onclick = save;
-  ['mctm', 'mobm'].forEach(id => { if ($(id)) $(id).onchange = e => { const i = $(e.target.dataset.for); i.disabled = e.target.value === 'auto'; if (i.disabled) i.value = e.target.dataset.auto; }; });
+  ['mctm', 'mobm'].forEach(id => { if ($(id)) $(id).onchange = e => { const s = e.target, i = $(s.dataset.for); i.disabled = s.value === 'auto';
+    if (s.value === 'auto') i.value = s.dataset.auto; else if (s.value === 'manual' && s.dataset.man) i.value = s.dataset.man; }; });
   bindPattern();
   bindJourney();
 }
