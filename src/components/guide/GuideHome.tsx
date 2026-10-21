@@ -4,9 +4,10 @@ import './guide.css';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { AUDIENCES, SERVICES, audienceLabel, type Guide } from '@/lib/guide/meta';
+import ImportBundle from './ImportBundle';
 
 const fold = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
-export const audPill = (a: string) => (a === 'internal' ? 'hd-pill-int' : a === 'khach-hang' ? 'hd-pill-kh' : 'hd-pill-dv');
+export const audPill = (a: string) => (a === 'internal' ? 'hd-pill-int' : a === 'khach-hang' ? 'hd-pill-kh' : a === 'tai-xe' ? 'hd-pill-tx' : 'hd-pill-dv');
 const plain = (md: string) => md.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/[#>*_`|[\]-]+/g, ' ').replace(/\s+/g, ' ');
 
 export default function GuideHome({ guides, canEdit, error }: { guides: Guide[]; canEdit: boolean; error?: string }) {
@@ -35,9 +36,10 @@ export default function GuideHome({ guides, canEdit, error }: { guides: Guide[];
         <div>
           <div className="hd-eyebrow">Tài liệu</div>
           <h1 style={{ margin: '4px 0 2px', fontSize: 22 }}>Hướng dẫn sử dụng</h1>
-          <div className="hd-muted">Theo từng mảng dịch vụ, cho Internal, Khách hàng và Đơn vị. Xem và làm theo trên web, hoặc xuất PDF để gửi đi.</div>
+          <div className="hd-muted">Theo từng mảng dịch vụ, cho Internal, Khách hàng, Đơn vị và Tài xế. Xem và làm theo trên web; tải tài liệu đính kèm để gửi cho khách khi cần.</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          {canEdit && <ImportBundle />}
           {canEdit && <Link className="hd-btn hd-btn-pri" href="/huong-dan/moi"><i className="ri-add-line" /> Tạo hướng dẫn</Link>}
         </div>
       </div>
@@ -71,6 +73,7 @@ export default function GuideHome({ guides, canEdit, error }: { guides: Guide[];
                       <span className={`hd-pill ${audPill(g.audience)}`}>{audienceLabel(g.audience)}</span>
                       {g.status !== 'phat-hanh' && <span className="hd-pill hd-pill-draft">Nháp</span>}
                       <span className="hd-pill">v{g.version}</span>
+                      {!!g.files?.length && <span className="hd-pill" style={{ background: 'var(--hd-neg-soft)', color: 'var(--hd-neg)' }}><i className="ri-attachment-2" style={{ marginRight: 3 }} />{g.files.length} tệp</span>}
                     </div>
                     <h3>{g.title}</h3>
                     {g.summary && <p>{g.summary}</p>}

@@ -140,3 +140,32 @@
   .hd-cover-band { margin: 0 0 18mm; }
   .hd-print { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* ---- tệp đính kèm, việc hay làm, nhóm mục lục, xem ảnh ---- */
+.hd-files { padding: 16px 18px; margin-bottom: 16px; border-color: #00a69340; }
+.hd-file { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--hd-line-2); }
+.hd-file:first-of-type { border-top: 0; }
+.hd-file-ic { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; font-size: 19px; flex-shrink: 0; background: var(--hd-neg-soft); color: var(--hd-neg); }
+.hd-file-ic.doc { background: var(--hd-info-soft); color: var(--hd-info); }
+.hd-file-ic.xls { background: var(--hd-pos-soft); color: var(--hd-pos); }
+.hd-file-ic.ppt { background: #ed81181a; color: #ed8118; }
+.hd-file-ic.img { background: var(--hd-accent-soft); color: var(--hd-accent); }
+.hd-file b { display: block; font-size: 14px; }
+.hd-drop { border: 1.5px dashed var(--hd-line); border-radius: 12px; padding: 14px; text-align: center; color: var(--hd-ink-3); font-size: 13px; cursor: pointer; }
+.hd-drop[data-on="true"] { border-color: var(--hd-primary); background: var(--hd-primary-soft); color: #007a6c; }
+.hd-tasks { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.hd-task { padding: 12px 14px; cursor: pointer; text-align: left; font: inherit; border: 1px solid var(--hd-line-2); }
+.hd-task:hover { border-color: var(--hd-primary); }
+.hd-task b { display: block; font-size: 13.5px; color: var(--hd-ink); margin-bottom: 3px; }
+.hd-task span { font-size: 12px; color: var(--hd-ink-3); }
+.hd-toc .hd-toc-g { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--hd-ink-3); padding: 12px 10px 4px; }
+.hd-toc .hd-toc-g:first-of-type { padding-top: 2px; }
+.hd-sec-g { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--hd-primary); margin: 6px 4px 8px; }
+.hd-md img { cursor: zoom-in; max-height: 560px; object-fit: contain; display: block; margin: 6px 0; }
+.hd-lb { position: fixed; inset: 0; z-index: 80; background: rgba(10, 24, 20, .86); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; cursor: zoom-out; }
+.hd-lb img { max-width: 96vw; max-height: 86vh; border-radius: 10px; background: #fff; }
+.hd-lb div { color: #fff; margin-top: 10px; font-size: 13px; }
+.hd-int { background: var(--hd-neg-soft); color: var(--hd-neg); }
+.hd-pill-tx { background: #ed81181a; color: #b45f0b; }
+.hd-print .hd-pgroup { font-size: 9.5pt; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #00a693; margin: 0 0 3mm; }
+.hd-print .hd-md img { max-height: 120mm; cursor: default; }

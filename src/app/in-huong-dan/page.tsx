@@ -2,7 +2,7 @@
 import '@/components/guide/guide.css';
 import { redirect } from 'next/navigation';
 import { renderMd } from '@/lib/guide/md';
-import { audienceLabel, serviceLabel } from '@/lib/guide/meta';
+import { audienceLabel, hasOwnNumber, serviceLabel } from '@/lib/guide/meta';
 import { getGuides, guideUser } from '@/lib/guide/server';
 import PrintBar from '@/components/guide/PrintBar';
 
@@ -54,7 +54,8 @@ export default async function InHuongDan({ searchParams }: { searchParams: { s?:
             {!one && <><div className="hd-eyebrow">{gi + 1}. {serviceLabel(x.service)} · {audienceLabel(x.audience)} · v{x.version}</div><h1 className="hd-pguide-t">{x.title}</h1>{x.summary && <p className="hd-muted" style={{ fontSize: '10.5pt', marginTop: 0 }}>{x.summary}</p>}</>}
             {x.sections.map((s, i) => (
               <section key={s.id} className="hd-psec">
-                <h2>{one ? '' : `${gi + 1}.`}{i + 1}. {s.title}</h2>
+                {s.group && s.group !== x.sections[i - 1]?.group && <div className="hd-pgroup">{s.group}</div>}
+                <h2>{hasOwnNumber(s.title) ? '' : `${one ? '' : `${gi + 1}.`}${i + 1}. `}{s.title}</h2>
                 <div className="hd-md" dangerouslySetInnerHTML={{ __html: renderMd(s.md, `${s.id}-${i}`).html }} />
               </section>
             ))}

@@ -4,7 +4,7 @@ import './guide.css';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { renderMd } from '@/lib/guide/md';
-import { AUDIENCES, SERVICES, STATUSES, newId, type Guide, type GuideSection } from '@/lib/guide/meta';
+import { AUDIENCES, SERVICES, STATUSES, newId, type Guide, type GuideExtras, type GuideSection } from '@/lib/guide/meta';
 import { dsPhienBan, layPhienBan, luuHuongDan, xoaHuongDan, type VersionRow } from '@/app/(app)/huong-dan/actions';
 
 type Meta = { title: string; service: string; audience: string; summary: string; version: string; owner: string; status: string; sort: number };
@@ -33,6 +33,8 @@ export default function GuideEditor({ guide, onCancel }: { guide?: Guide; onCanc
     title: guide?.title || '', service: guide?.service || 'mobility', audience: guide?.audience || 'internal', summary: guide?.summary || '',
     version: guide?.version || '1.0', owner: guide?.owner || '', status: guide?.status || 'nhap', sort: guide?.sort ?? 100,
   });
+  const [ex, setEx] = useState<GuideExtras>(guide?.extras || {});
+  const [taskTxt, setTaskTxt] = useState((guide?.extras?.tasks || []).map((x) => [x.t, x.d || '', x.sec].join(' | ')).join('\n'));
   const [secs, setSecs] = useState<GuideSection[]>(guide?.sections?.length ? guide.sections : [{ id: newId(), title: 'Giới thiệu', md: '' }]);
   const [prev, setPrev] = useState(true);
   const [note, setNote] = useState('');
@@ -76,7 +78,8 @@ export default function GuideEditor({ guide, onCancel }: { guide?: Guide; onCanc
     if (!m.title.trim()) { setErr('Cần có tiêu đề.'); return; }
     start(async () => {
       try {
-        const r = await luuHuongDan({ id: guide?.id || null, ...m, sections: secs, note });
+        const tasks = taskTxt.split('\n').map((l) => l.split('|').map((x) => x.trim())).filter((p) => p[0] && p[2]).map((p) => ({ t: p[0], d: p[1] || undefined, sec: p[2] }));
+        const r = await luuHuongDan({ id: guide?.id || null, ...m, sections: secs, note, extras: { ...ex, tasks } });
         setDirty(false); setNote(''); setOk('Đã lưu.');
         if (!guide || guide.slug !== r.slug) router.replace(`/huong-dan/${r.slug}`); else { router.refresh(); onCancel?.(); }
       } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
@@ -137,6 +140,16 @@ export default function GuideEditor({ guide, onCancel }: { guide?: Guide; onCanc
           <div><label className="hd-label">Tóm tắt (hiện ở danh sách và trang bìa PDF)</label><input className="hd-input" value={m.summary} onChange={(e) => setMeta('summary', e.target.value)} /></div>
           <div><label className="hd-label">Người phụ trách nội dung</label><input className="hd-input" value={m.owner} onChange={(e) => setMeta('owner', e.target.value)} placeholder="Team Vận hành" /></div>
         </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 10, marginTop: 10, alignItems: 'end' }}>
+          <div><label className="hd-label">Dành cho (hiện ở đầu bài)</label><input className="hd-input" value={ex.who || ''} onChange={(e) => { setEx({ ...ex, who: e.target.value }); setDirty(true); }} placeholder="Ví dụ: Tổng đài viên điều xe" /></div>
+          <div><label className="hd-label">Dùng trên (cổng / app)</label><input className="hd-input" value={ex.portal || ''} onChange={(e) => { setEx({ ...ex, portal: e.target.value }); setDirty(true); }} placeholder="mobility.xperise.com" /></div>
+          <label style={{ display: 'flex', gap: 6, fontSize: 13, paddingBottom: 8 }}><input type="checkbox" checked={!!ex.internal} onChange={(e) => { setEx({ ...ex, internal: e.target.checked }); setDirty(true); }} /> Nội bộ, không gửi khách</label>
+        </div>
+        <div style={{ marginTop: 10 }}>
+          <label className="hd-label">Việc hay làm — mỗi dòng: Tên việc | mô tả ngắn | mã mục (bấm vào sẽ nhảy tới mục đó)</label>
+          <textarea className="hd-textarea" style={{ minHeight: 80 }} value={taskTxt} onChange={(e) => { setTaskTxt(e.target.value); setDirty(true); }} placeholder={'Phát hành thẻ XPAY | 6 giai đoạn từ in phôi đến gán thẻ | ' + (secs[0]?.id || 'ma-muc')} />
+          <div className="hd-muted" style={{ fontSize: 11.5 }}>Mã mục: {secs.map((x) => x.id).join(' · ')}</div>
+        </div>
         <div className="hd-muted" style={{ marginTop: 10 }}>Bài <b>Nháp</b> chỉ người có quyền sửa thấy. Chuyển sang <b>Đã phát hành</b> để mọi người có quyền xem tab Hướng dẫn thấy. Bài cho Khách hàng / Đơn vị: xuất PDF để gửi.</div>
       </div>
 
@@ -144,7 +157,9 @@ export default function GuideEditor({ guide, onCancel }: { guide?: Guide; onCanc
         <div key={s.id} className="hd-card hd-ed-sec" onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); addImages(s.id, e.clipboardData.files); } }} onDrop={(e) => { if (e.dataTransfer.files.length) { e.preventDefault(); addImages(s.id, e.dataTransfer.files); } }} onDragOver={(e) => e.preventDefault()}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <b style={{ color: 'var(--hd-primary)', minWidth: 22 }}>{i + 1}.</b>
+            <input className="hd-input" style={{ width: 190, flexShrink: 0 }} value={s.group || ''} onChange={(e) => setSec(s.id, { group: e.target.value })} placeholder="Nhóm (không bắt buộc)" title="Các mục cùng nhóm đứng chung 1 tiêu đề trong mục lục" />
             <input className="hd-input" style={{ fontWeight: 600 }} value={s.title} onChange={(e) => setSec(s.id, { title: e.target.value })} placeholder="Tên mục (hiện trong mục lục)" />
+            <span className="hd-muted" style={{ fontSize: 11, flexShrink: 0 }} title="Mã mục — dùng cho link #s-…">#{s.id}</span>
             <button className="hd-btn hd-btn-sm" title="Lên" disabled={!i} onClick={() => move(i, -1)}><i className="ri-arrow-up-line" /></button>
             <button className="hd-btn hd-btn-sm" title="Xuống" disabled={i === secs.length - 1} onClick={() => move(i, 1)}><i className="ri-arrow-down-line" /></button>
             <button className="hd-btn hd-btn-sm hd-btn-danger" title="Xoá mục" onClick={() => { if (!s.md.trim() || window.confirm(`Xoá mục "${s.title}"?`)) { setSecs((S) => S.filter((x) => x.id !== s.id)); setDirty(true); } }}><i className="ri-delete-bin-line" /></button>

@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { writeAudit } from '@/lib/audit';
 import { guideUser, missingTable, MIGRATE_MSG } from '@/lib/guide/server';
-import { isAudience, isService, slugify, type GuideSection } from '@/lib/guide/meta';
+import { isAudience, isService, slugify, type GuideExtras, type GuideSection } from '@/lib/guide/meta';
 
 async function editor() {
   const g = await guideUser();
@@ -17,8 +17,17 @@ const dbErr = (m: string) => new Error(missingTable(m) ? MIGRATE_MSG : m);
 
 export type GuideInput = {
   id?: string | null; slug?: string; title: string; service: string; audience: string; summary?: string;
-  version?: string; owner?: string; status: string; sort?: number; sections: GuideSection[]; note?: string;
+  version?: string; owner?: string; status: string; sort?: number; sections: GuideSection[]; note?: string; extras?: GuideExtras;
 };
+
+function cleanExtras(e?: GuideExtras): GuideExtras {
+  if (!e || typeof e !== 'object') return {};
+  return {
+    who: t(e.who, 200) || undefined, portal: t(e.portal, 300) || undefined, internal: !!e.internal,
+    tasks: (Array.isArray(e.tasks) ? e.tasks : []).slice(0, 24).map((x) => ({ t: t(x.t, 120), d: t(x.d, 200) || undefined, sec: t(x.sec, 60) })).filter((x) => x.t && x.sec),
+    stats: (Array.isArray(e.stats) ? e.stats : []).slice(0, 6).map((x) => ({ k: t(x.k, 60), v: t(x.v, 30), d: t(x.d, 160) || undefined })).filter((x) => x.k),
+  };
+}
 
 /** Tạo mới hoặc lưu hướng dẫn. Mỗi lần lưu giữ lại 1 phiên bản. Trả về slug. */
 export async function luuHuongDan(inp: GuideInput): Promise<{ slug: string; id: string }> {
@@ -31,17 +40,21 @@ export async function luuHuongDan(inp: GuideInput): Promise<{ slug: string; id: 
   const status = inp.status === 'phat-hanh' ? 'phat-hanh' : 'nhap';
   const sections = (Array.isArray(inp.sections) ? inp.sections : []).slice(0, 200).map((s, i) => ({
     id: t(s.id, 40) || `m${i + 1}`, title: t(s.title, 200) || `Mục ${i + 1}`, md: String(s.md ?? '').slice(0, 200000),
+    ...(t(s.group, 100) ? { group: t(s.group, 100) } : {}),
   }));
+  const extras = cleanExtras(inp.extras);
   if (JSON.stringify(sections).length > 2_000_000) throw new Error('Nội dung quá dài (tối đa khoảng 2 MB chữ).');
   const row = {
     title, service: inp.service, audience: inp.audience, summary: t(inp.summary, 500) || null,
     version: t(inp.version, 20) || '1.0', owner: t(inp.owner, 100) || null, status,
     sort: Number.isFinite(Number(inp.sort)) ? Math.round(Number(inp.sort)) : 100, sections,
     updated_at: new Date().toISOString(), updated_by: user.email,
+    ...(inp.extras !== undefined ? { extras } : {}),
   };
   let id = inp.id || null, slug = '';
   if (id) {
-    const { data, error } = await sb.from('guides').update(row).eq('id', id).select('id,slug').maybeSingle();
+    let { data, error } = await sb.from('guides').update(row).eq('id', id).select('id,slug').maybeSingle();
+    if (error && /extras/.test(error.message)) { const { extras: _x, ...r2 } = row as typeof row & { extras?: unknown }; void _x; ({ data, error } = await sb.from('guides').update(r2).eq('id', id).select('id,slug').maybeSingle()); }
     if (error) throw dbErr(error.message);
     if (!data) throw new Error('Không tìm thấy hướng dẫn (có thể đã bị xoá).');
     slug = data.slug;
@@ -54,8 +67,9 @@ export async function luuHuongDan(inp: GuideInput): Promise<{ slug: string; id: 
       if (!data) break;
       slug = `${base}-${k}`;
     }
-    const { data, error } = await sb.from('guides').insert({ ...row, slug }).select('id').single();
-    if (error) throw dbErr(error.message);
+    let { data, error } = await sb.from('guides').insert({ ...row, slug }).select('id').single();
+    if (error && /extras/.test(error.message)) { const { extras: _x, ...r2 } = row as typeof row & { extras?: unknown }; void _x; ({ data, error } = await sb.from('guides').insert({ ...r2, slug }).select('id').single()); }
+    if (error || !data) throw dbErr(error?.message || 'Không lưu được');
     id = data.id as string;
   }
   await sb.from('guide_versions').insert({
@@ -66,6 +80,78 @@ export async function luuHuongDan(inp: GuideInput): Promise<{ slug: string; id: 
   revalidatePath('/huong-dan');
   revalidatePath(`/huong-dan/${slug}`);
   return { slug, id: id! };
+}
+
+/** Nhập gói hướng dẫn (từ file .json do Claude chuyển đổi). Ảnh đã tải lên trước, md đã thay link ảnh.
+ *  Trùng slug: ghi đè nội dung (bản cũ vẫn còn trong Phiên bản). replaces: chuyển các bài cũ về Nháp. */
+export async function nhapGoiHuongDan(guides: GuideInput[], replaces: string[] = []): Promise<{ created: number; updated: number; hidden: number }> {
+  const user = await editor();
+  const sb = supabaseAdmin();
+  let created = 0, updated = 0;
+  for (const g of guides.slice(0, 50)) {
+    const slug = slugify(g.slug || g.title);
+    const { data: cur, error } = await sb.from('guides').select('id').eq('slug', slug).maybeSingle();
+    if (error) throw dbErr(error.message);
+    await luuHuongDan({ ...g, id: cur?.id || null, slug, note: `Nhập gói${g.note ? ' · ' + g.note : ''}` });
+    if (cur) updated++; else created++;
+  }
+  let hidden = 0;
+  const rep = replaces.map((x) => slugify(x)).filter(Boolean).slice(0, 50);
+  if (rep.length) {
+    const { data, error } = await sb.from('guides').update({ status: 'nhap', updated_by: user.email, updated_at: new Date().toISOString() })
+      .in('slug', rep).eq('status', 'phat-hanh').select('id');
+    if (error) throw dbErr(error.message);
+    hidden = (data || []).length;
+  }
+  await writeAudit({ actorId: user.id, actorEmail: user.email, action: 'guide.import', entity: 'guides', note: `Nhập gói: ${created} bài mới, ${updated} bài cập nhật, ${hidden} bài cũ chuyển về Nháp` });
+  revalidatePath('/huong-dan');
+  return { created, updated, hidden };
+}
+
+/* ---------------- Tệp đính kèm ---------------- */
+const BUCKET = 'guide-files';
+const safeName = (n: string) => n.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').replace(/[^A-Za-z0-9._-]+/g, '_').slice(-120) || 'tep';
+
+/** Xin chỗ lưu tệp: trả về đường dẫn + token để trình duyệt tải thẳng lên kho (không đi qua máy chủ web) */
+export async function xinChoTepHuongDan(guideId: string, fileName: string): Promise<{ path: string; token: string }> {
+  await editor();
+  const path = `${guideId}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}-${safeName(fileName)}`;
+  const { data, error } = await supabaseAdmin().storage.from(BUCKET).createSignedUploadUrl(path);
+  if (error) throw new Error(/not found|bucket/i.test(error.message) ? 'Chưa tạo kho tệp guide-files — chạy supabase/migrations/25_huong_dan_tep_dinh_kem.sql. ' + error.message : error.message);
+  return { path: data.path, token: data.token };
+}
+export async function ghiNhanTepHuongDan(inp: { guideId: string; path: string; label: string; note?: string; fileName: string; mime?: string; size?: number }) {
+  const user = await editor();
+  if (!inp.path.startsWith(inp.guideId + '/')) throw new Error('Đường dẫn tệp không hợp lệ.');
+  const sb = supabaseAdmin();
+  const { data: mx } = await sb.from('guide_files').select('sort').eq('guide_id', inp.guideId).order('sort', { ascending: false }).limit(1);
+  const { error } = await sb.from('guide_files').insert({
+    guide_id: inp.guideId, label: t(inp.label, 200) || inp.fileName, note: t(inp.note, 300) || null, file_name: t(inp.fileName, 200),
+    storage_path: inp.path, mime_type: t(inp.mime, 100) || null, size_bytes: Number(inp.size) || null, sort: ((mx?.[0]?.sort as number) ?? 0) + 10, uploaded_by: user.email,
+  });
+  if (error) { await sb.storage.from(BUCKET).remove([inp.path]); throw dbErr(error.message); }
+  await writeAudit({ actorId: user.id, actorEmail: user.email, action: 'guide.file_add', entity: 'guide_files', entityId: inp.guideId, note: `${inp.label || inp.fileName} (${inp.fileName})` });
+  revalidatePath('/huong-dan', 'layout');
+}
+export async function suaTepHuongDan(id: string, p: { label?: string; note?: string; sort?: number }) {
+  const user = await editor();
+  const row: Record<string, unknown> = {};
+  if (p.label !== undefined) row.label = t(p.label, 200);
+  if (p.note !== undefined) row.note = t(p.note, 300) || null;
+  if (p.sort !== undefined && Number.isFinite(p.sort)) row.sort = Math.round(p.sort);
+  const { error } = await supabaseAdmin().from('guide_files').update(row).eq('id', id);
+  if (error) throw dbErr(error.message);
+  await writeAudit({ actorId: user.id, actorEmail: user.email, action: 'guide.file_edit', entity: 'guide_files', entityId: id, note: JSON.stringify(row).slice(0, 300) });
+  revalidatePath('/huong-dan', 'layout');
+}
+export async function xoaTepHuongDan(id: string) {
+  const user = await editor();
+  const sb = supabaseAdmin();
+  const { data, error } = await sb.from('guide_files').delete().eq('id', id).select('storage_path,label,file_name').maybeSingle();
+  if (error) throw dbErr(error.message);
+  if (data?.storage_path) await sb.storage.from(BUCKET).remove([data.storage_path]);
+  await writeAudit({ actorId: user.id, actorEmail: user.email, action: 'guide.file_delete', entity: 'guide_files', entityId: id, note: data ? `${data.label} (${data.file_name})` : '' });
+  revalidatePath('/huong-dan', 'layout');
 }
 
 export async function xoaHuongDan(id: string) {
