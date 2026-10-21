@@ -29,7 +29,7 @@ export default function JourneyEditor({ guide, lib, onCancel }: { guide: Guide; 
       try {
         await luuHuongDan({ id: guide.id, title, summary, service: guide.service, audience: guide.audience, version: guide.version, owner: guide.owner || '', status, sort: guide.sort, sections: [], note: 'Sắp xếp hành trình',
           extras: { ...guide.extras, kind: 'journey', journey: { ...J0, roles, stages: st } } });
-        router.refresh(); onCancel();
+        onCancel();
       } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
     });
   }

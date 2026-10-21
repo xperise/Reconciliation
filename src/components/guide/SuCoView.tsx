@@ -1,51 +1,66 @@
 'use client';
-// Sự cố thường gặp: bảng tra theo triệu chứng, lọc theo vai trò; "Mở mục" nhảy thẳng vào đúng bước của hành trình
+// Sự cố thường gặp: bảng tra theo triệu chứng, lọc theo người gặp + tìm thông minh; mở đúng mục hướng dẫn
 import './guide.css';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { renderMd } from '@/lib/guide/md';
-import type { Journey } from '@/lib/guide/journey';
+import Link from 'next/link';
+import { useMemo, useState } from 'react';
+import { buildIndex, fold, search } from '@/lib/guide/search';
+import { chunkURL } from './GuideSearch';
 import GuideNav from './GuideNav';
 
-export default function SuCoView({ md, journeySlug, journey }: { md: string; journeySlug: string; journey: Journey }) {
-  const box = useRef<HTMLDivElement>(null);
-  const html = useMemo(() => renderMd(md, 'suco').html, [md]);
-  const [who, setWho] = useState(''), [q, setQ] = useState(''), [opts, setOpts] = useState<string[]>([]), [n, setN] = useState([0, 0]);
-  const fold = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
+type Row = { who: string; symptom: string; cause: string; fix: string; g?: string; s?: string };
+const strip = (x: string) => x.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/[*`]/g, '').trim();
 
-  useEffect(() => {
-    const el = box.current; if (!el) return;
-    const rows = Array.from(el.querySelectorAll<HTMLTableRowElement>('tbody tr'));
-    setOpts([...new Set(rows.map((r) => r.cells[0]?.textContent?.trim() || '').filter(Boolean))]);
-    // link "Mở mục" → bước tương ứng trong hành trình
-    el.querySelectorAll<HTMLAnchorElement>('a[href*="#s-"]').forEach((a) => {
-      const m = (a.getAttribute('href') || '').match(/\/huong-dan\/([^#?]+)#s-(.+)$/); if (!m) return;
-      for (let k = 0; k < journey.stages.length; k++) { const p = journey.stages[k].steps.findIndex((x) => x.g === m[1] && x.s === m[2]); if (p >= 0) { a.href = `/huong-dan/${journeySlug}#${journey.stages[k].id}/${p + 1}`; a.textContent = `Chặng ${k + 1} · bước ${p + 1} →`; return; } }
-    });
-  }, [html, journey, journeySlug]);
-  useEffect(() => {
-    const el = box.current; if (!el) return;
-    const rows = Array.from(el.querySelectorAll<HTMLTableRowElement>('tbody tr')); const fq = fold(q.trim()); let k = 0;
-    rows.forEach((r) => { const ok = (!who || r.cells[0]?.textContent?.trim() === who) && (!fq || fold(r.textContent || '').includes(fq)); r.style.display = ok ? '' : 'none'; if (ok) k++; });
-    setN([k, rows.length]);
-  }, [who, q, html]);
+export default function SuCoView({ md, journeySlug }: { md: string; journeySlug: string }) {
+  const rows: Row[] = useMemo(() => {
+    const L = md.split('\n').filter((l) => /^\|.*\|$/.test(l.trim())); if (L.length < 3) return [];
+    const H = L[0].split('|').map((x) => fold(x).trim()), ix = (k: string) => H.findIndex((h) => h.includes(k));
+    return L.slice(2).map((l) => { const c = l.split('|').map((x) => x.trim()), m = l.match(/\]\(\/huong-dan\/([^#?)]+)#s-([^)]+)\)/);
+      return { who: strip(c[ix('ai gap')] || ''), symptom: strip(c[ix('trieu chung')] || ''), cause: strip(c[ix('nguyen nhan')] || ''), fix: strip(c[ix('cach xu ly')] || ''), g: m?.[1], s: m?.[2] }; });
+  }, [md]);
+  const idx = useMemo(() => buildIndex({ x: { slug: 'x', title: 'Sự cố', sections: [{ id: 'm', title: 'Sự cố', md }] } }), [md]);
+  const [who, setWho] = useState(''), [q, setQ] = useState('');
+  const opts = useMemo(() => [...new Set(rows.map((r) => r.who).filter(Boolean))], [rows]);
+  const qq = q.trim();
+  // có từ khoá: xếp theo độ khớp (hiểu đồng nghĩa, không dấu, sai chính tả); không có: giữ thứ tự gốc
+  const shown = useMemo(() => {
+    const base = rows.filter((r) => !who || r.who === who);
+    if (qq.length < 2) return base.map((r) => ({ r, terms: [] as string[] }));
+    const hits = search(idx, qq, 50);
+    return hits.map((h) => ({ r: base.find((r) => r.symptom === h.c.sym?.symptom), terms: h.terms })).filter((x): x is { r: Row; terms: string[] } => !!x.r);
+  }, [rows, who, qq, idx]);
+  const mark = (t: string, terms: string[]) => {
+    if (!terms.length) return t;
+    const f = fold(t); const R: [number, number][] = [];
+    terms.filter((w) => w.length > 1 && !['khong', 'duoc', 'bi', 'co'].includes(w)).forEach((w) => { let i = -1; while ((i = f.indexOf(w, i + 1)) >= 0) R.push([i, i + w.length]); });
+    if (!R.length) return t; R.sort((a, b) => a[0] - b[0]); const out: (string | JSX.Element)[] = []; let at = 0;
+    R.forEach(([a, b], k) => { if (a < at) return; out.push(t.slice(at, a), <mark key={k}>{t.slice(a, b)}</mark>); at = b; }); out.push(t.slice(at)); return out;
+  };
 
   return (
     <div className="hd"><div className="hd-wrap">
-      <div style={{ marginBottom: 14 }}><GuideNav on="suco" journeySlug={journeySlug} /></div>
+      <div style={{ marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}><GuideNav on="suco" journeySlug={journeySlug} /><Link href="/huong-dan" className="hd-muted" style={{ textDecoration: 'none' }}>← về Tổng quan</Link></div>
       <section className="hh-hero" style={{ background: 'radial-gradient(800px 260px at 100% -30%, #ff8a5b 0%, transparent 60%), linear-gradient(115deg, #e83c3f 0%, #c2185b 55%, #8a2fd0 100%)' }}>
         <div className="hd-eyebrow" style={{ color: '#ffffffcc', position: 'relative' }}>Tra cứu</div>
         <h1>Sự cố thường gặp</h1>
-        <p>Tìm theo triệu chứng khách, tài xế hoặc tổng đài báo. Đọc nguyên nhân, cách xử lý, rồi bấm để mở đúng bước hướng dẫn.</p>
-        <div className="hh-search"><i className="ri-search-line" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ví dụ: không gán được thẻ, PIN, hết hạn mức, không có xe…" /></div>
+        <p>Gõ triệu chứng khách, tài xế hoặc tổng đài báo — bảng lọc ngay. Đọc nguyên nhân, cách xử lý, rồi bấm để mở đúng mục hướng dẫn.</p>
+        <div className="hs" style={{ marginTop: 16, maxWidth: 720 }}><div className="hs-in"><i className="ri-search-line" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ví dụ: không gán được thẻ · PIN sai · hết hạn mức · không có xe" aria-label="Tìm sự cố" />
+          {q && <button className="hs-x" onClick={() => setQ('')} aria-label="Xoá"><i className="ri-close-line" /></button>}</div></div>
       </section>
       <div className="hd-card" style={{ padding: 14 }}>
         <div className="hd-chips" style={{ marginBottom: 10, alignItems: 'center' }}>
           <span className="hd-muted" style={{ marginRight: 4 }}>Ai gặp</span>
           <button className="hd-chip" data-on={!who} onClick={() => setWho('')}>Tất cả</button>
           {opts.map((o) => <button key={o} className="hd-chip" data-on={who === o} onClick={() => setWho(o)}>{o}</button>)}
-          <span className="hd-muted" style={{ marginLeft: 'auto' }}>{n[0]}/{n[1]} tình huống</span>
+          <span className="hd-muted" style={{ marginLeft: 'auto' }}>{shown.length}/{rows.length} tình huống</span>
         </div>
-        <div ref={box} className="hd-md" dangerouslySetInnerHTML={{ __html: html }} />
+        <div className="hd-md"><div className="g-tw"><table><thead><tr><th>Ai gặp</th><th>Triệu chứng</th><th>Nguyên nhân</th><th>Cách xử lý</th><th /></tr></thead><tbody>
+          {shown.map(({ r, terms }, i) => <tr key={i}>
+            <td><span className="hd-pill">{r.who}</span></td><td><b>{mark(r.symptom, terms)}</b></td><td>{mark(r.cause, terms)}</td><td>{mark(r.fix, terms)}</td>
+            <td style={{ whiteSpace: 'nowrap' }}>{r.g && r.s && <a href={chunkURL({ g: r.g, s: r.s }, terms)}>Xem hướng dẫn →</a>}</td>
+          </tr>)}
+          {!shown.length && <tr><td colSpan={5} className="hd-muted">Không có tình huống khớp. Thử từ khác hoặc dùng ô tìm kiếm ở trang Tổng quan để tìm trong toàn bộ hướng dẫn.</td></tr>}
+        </tbody></table></div></div>
       </div>
     </div></div>
   );

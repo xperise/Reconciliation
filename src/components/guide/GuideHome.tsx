@@ -17,7 +17,7 @@ export default function GuideHome({ guides, canEdit, error, journeySlug, journey
   const libMap = useMemo(() => Object.fromEntries(guides.map((g) => [g.slug, g])), [guides]);
   const [svc, setSvc] = useState('');
   const [aud, setAud] = useState('');
-  const [q, setQ] = useState('');
+  const q = ''; // tìm kiếm dùng ô thông minh phía trên
   const [pick, setPick] = useState<string[]>([]);
 
   const idx = useMemo(() => guides.map((g) => ({ g, text: plain(g.sections.map((s) => s.title + ' ' + s.md).join(' ')), ft: fold(g.title + ' ' + (g.summary || '') + ' ' + g.sections.map((s) => s.title + ' ' + s.md).join(' ')) })), [guides]);
@@ -37,7 +37,7 @@ export default function GuideHome({ guides, canEdit, error, journeySlug, journey
   return (
     <div className="hd"><div className="hd-wrap">
       <div style={{ marginBottom: 14 }}><GuideNav on="library" journeySlug={journeySlug} /></div>
-      {guides.length > 0 && <div style={{ marginBottom: 16, maxWidth: 860 }}><GuideSearch lib={libMap} journey={journey} journeySlug={journeySlug} variant="bar" /></div>}
+      {guides.length > 0 && <div style={{ marginBottom: 16, maxWidth: 860 }}><GuideSearch lib={libMap} journey={journey} compact /></div>}
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 16, justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
           <div className="hd-eyebrow">Theo vai trò</div>
@@ -51,7 +51,6 @@ export default function GuideHome({ guides, canEdit, error, journeySlug, journey
       </div>
       {error && <div className="hd-err" style={{ marginBottom: 12 }}>{error}</div>}
       <div className="hd-card" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <input className="hd-input" placeholder="Tìm trong toàn bộ hướng dẫn: tên bước, menu, lỗi… (ví dụ: gán thẻ, cost center, verify)" value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="hd-chips"><span className="hd-muted" style={{ alignSelf: 'center', minWidth: 70 }}>Mảng</span>
           <button className="hd-chip" data-on={!svc} onClick={() => setSvc('')}>Tất cả</button>
           {SERVICES.map(([k, l]) => <button key={k} className="hd-chip" data-on={svc === k} onClick={() => setSvc(svc === k ? '' : k)}>{l} · {count('s', k)}</button>)}
