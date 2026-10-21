@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { PageHeader } from '@/components/PageHeader';
-import { AccessToggle, CreateUser, DoiMatKhau, ToggleUser, XoaUser } from './user-form';
+import { AccessToggle, CreateUser, DoiMatKhau, MobAccessToggle, ToggleUser, XoaUser } from './user-form';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,7 +33,7 @@ export default async function UsersPage() {
 
       <div className="card overflow-hidden">
         <table className="tbl">
-          <thead><tr><th>Họ tên</th><th>Email</th><th>Vai trò</th><th>Được xem tab</th><th>Trạng thái</th><th></th></tr></thead>
+          <thead><tr><th>Họ tên</th><th>Email</th><th>Vai trò</th><th>Được xem tab</th><th>Hồ sơ doanh nghiệp (Mobility)</th><th>Trạng thái</th><th></th></tr></thead>
           <tbody>
             {(data ?? []).map((u) => (
               <tr key={u.id}>
@@ -47,6 +47,17 @@ export default async function UsersPage() {
                     mlx={u.xem_mlx ?? true}
                     dashboard={u.xem_dashboard ?? false}
                     isAdmin={u.role === 'admin'}
+                  />
+                </td>
+                <td>
+                  <MobAccessToggle
+                    id={u.id}
+                    dn={u.xem_mob_dn ?? false}
+                    pl={u.xem_mob_pl ?? true}
+                    the={u.xem_mob_the ?? false}
+                    isAdmin={u.role === 'admin'}
+                    isEditRole={u.role === 'ke_toan'}
+                    hasDashboard={u.role === 'admin' || (u.xem_dashboard ?? false)}
                   />
                 </td>
                 <td>

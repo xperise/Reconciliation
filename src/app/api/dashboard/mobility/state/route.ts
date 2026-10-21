@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminClient, guard } from "@/lib/dashboard/server";
 import { canEditRole, errMsg, fail } from "@/lib/dashboard/mobility";
+import { mobAccess } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -14,7 +15,7 @@ export async function GET() {
     if (error) throw new Error(error.message);
     return NextResponse.json({
       data: data?.data ?? null, version: data?.version ?? 0, updated_at: data?.updated_at ?? null, updated_by: data?.updated_by ?? null,
-      me: { email: g.user.email, canEdit: canEditRole(g.user.role), canWrite: true },
+      me: { email: g.user.email, canEdit: canEditRole(g.user.role), canWrite: true, mob: mobAccess(g.user) },
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) { return fail(errMsg(e), 500); }
 }

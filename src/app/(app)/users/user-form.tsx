@@ -1,7 +1,7 @@
 'use client';
 import { useState, useTransition } from 'react';
 import {
-  taoNguoiDung, doiTrangThaiNguoiDung, doiQuyenXemTab,
+  taoNguoiDung, doiTrangThaiNguoiDung, doiQuyenXemTab, doiQuyenHoSoMobility,
   doiMatKhauNguoiDung, xoaNguoiDung,
 } from '@/app/actions';
 
@@ -130,6 +130,42 @@ export function AccessToggle({ id, xperise, mlx, dashboard, isAdmin }: {
   return (
     <div>
       <TabCheckboxes xperise={x} mlx={m} dashboard={d} onChange={doi} disabled={dangChay} />
+      {loi && <div className="text-xs text-[var(--critical)] mt-1">{loi}</div>}
+    </div>
+  );
+}
+
+/** Quyền xem 3 mục trong Hồ sơ doanh nghiệp (Dashboard → Mobility) — lưu ngay khi đổi */
+export function MobAccessToggle({ id, dn, pl, the, isAdmin, isEditRole, hasDashboard }: {
+  id: string; dn: boolean; pl: boolean; the: boolean; isAdmin: boolean; isEditRole: boolean; hasDashboard: boolean;
+}) {
+  const [v, setV] = useState({ dn, pl, the });
+  const [loi, setLoi] = useState('');
+  const [dangChay, start] = useTransition();
+  if (isAdmin) return <span className="text-xs text-[var(--ink-3)]">Cả 3 (Quản trị)</span>;
+  function doi(k: 'dn' | 'pl' | 'the') {
+    const cu = v, moi = { ...v, [k]: !v[k] };
+    setV(moi); setLoi('');
+    start(async () => {
+      try { await doiQuyenHoSoMobility(id, moi.dn, moi.pl, moi.the); }
+      catch (e) { setV(cu); setLoi(e instanceof Error ? e.message : 'Không lưu được'); }
+    });
+  }
+  const box = (k: 'dn' | 'pl' | 'the', label: string) => (
+    <label className="inline-flex items-center gap-2 text-sm cursor-pointer select-none">
+      <input type="checkbox" checked={v[k]} disabled={dangChay} onChange={() => doi(k)} />{label}
+    </label>
+  );
+  return (
+    <div className={hasDashboard ? '' : 'opacity-60'}>
+      <div className="flex flex-col gap-1">
+        {box('dn', 'Thông tin DN')}
+        {box('pl', 'Phân loại & phụ trách')}
+        {box('the', 'Thẻ XPAY')}
+      </div>
+      <div className="text-[11px] text-[var(--ink-3)] mt-1 max-w-[220px]">
+        {!hasDashboard ? 'Chưa có quyền tab Dashboard nên chưa dùng được.' : v.the ? (isEditRole ? 'Được hiện đầy đủ, xuất, import thẻ.' : 'Chỉ xem thẻ dạng che (4 số cuối).') : ''}
+      </div>
       {loi && <div className="text-xs text-[var(--critical)] mt-1">{loi}</div>}
     </div>
   );

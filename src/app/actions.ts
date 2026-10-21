@@ -617,6 +617,21 @@ export async function doiQuyenXemTab(userId: string, xemXperise: boolean, xemMlx
   revalidatePath('/users');
 }
 
+/** Quyền xem 3 mục trong Hồ sơ doanh nghiệp (Dashboard Mobility). Chỉ admin. */
+export async function doiQuyenHoSoMobility(userId: string, dn: boolean, pl: boolean, the: boolean) {
+  const user = await requireRole('admin');
+  const { error } = await supabaseAdmin().from('profiles')
+    .update({ xem_mob_dn: !!dn, xem_mob_pl: !!pl, xem_mob_the: !!the })
+    .eq('id', userId);
+  if (error) throw new Error(/xem_mob_/.test(error.message) ? 'Cần chạy supabase/migrations/22_quyen_ho_so_mobility.sql trước. ' + error.message : error.message);
+  await writeAudit({
+    actorId: user.id, actorEmail: user.email,
+    action: 'user.access_mobility', entity: 'profiles', entityId: userId,
+    note: `Hồ sơ doanh nghiệp Mobility: ${[dn && 'Thông tin DN', pl && 'Phân loại & phụ trách', the && 'Thẻ XPAY'].filter(Boolean).join(', ') || 'không xem mục nào'}`,
+  });
+  revalidatePath('/users');
+}
+
 /** Đặt lại mật khẩu cho một tài khoản đã có. Chỉ admin. */
 export async function doiMatKhauNguoiDung(userId: string, matKhauMoi: string) {
   const user = await requireRole('admin');
