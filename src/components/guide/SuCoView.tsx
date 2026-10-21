@@ -1,7 +1,6 @@
 'use client';
 // Sự cố thường gặp: bảng tra theo triệu chứng, lọc theo người gặp + tìm thông minh; mở đúng mục hướng dẫn
 import './guide.css';
-import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { buildIndex, fold, search } from '@/lib/guide/search';
 import { chunkURL } from './GuideSearch';
@@ -38,7 +37,7 @@ export default function SuCoView({ md, journeySlug }: { md: string; journeySlug:
 
   return (
     <div className="hd"><div className="hd-wrap">
-      <div style={{ marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}><GuideNav on="suco" journeySlug={journeySlug} /><Link href="/huong-dan" className="hd-muted" style={{ textDecoration: 'none' }}>← về Tổng quan</Link></div>
+      <div style={{ marginBottom: 14 }}><GuideNav on="suco" journeySlug={journeySlug} /></div>
       <section className="hh-hero" style={{ background: 'radial-gradient(800px 260px at 100% -30%, #ff8a5b 0%, transparent 60%), linear-gradient(115deg, #e83c3f 0%, #c2185b 55%, #8a2fd0 100%)' }}>
         <div className="hd-eyebrow" style={{ color: '#ffffffcc', position: 'relative' }}>Tra cứu</div>
         <h1>Sự cố thường gặp</h1>
