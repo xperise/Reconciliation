@@ -329,7 +329,11 @@ function renderOverview(d, C, A, p) {
   const cmp = (t, a, F) => { if (t == null || a == null) return '<span class="lbl">chưa đủ dữ liệu 7 ngày</span>'; const dl = t - a;
     return `${dl > 0 ? `<span class="up"><b>▲ ${F(dl)}</b>` : dl < 0 ? `<span class="dn"><b>▼ ${F(-dl)}</b>` : '<span><b>= 0</b>'}${a ? ' (' + pctCh(t, a) + ')' : ''}</span> so với TB 7 ngày (${F(a)})`; };
   const bar = (r, col) => `<div class="meter"><i style="width:${Math.min(100, Math.max(0, (r || 0) * 100))}%;background:${col || `var(--${status(r) === 'mute' ? 'ink-3' : status(r)})`}"></i></div>`;
-  const tile = (k, v, s1, s2, mt) => `<div class="kpi"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s1 || ''}</div>${s2 ? `<div class="s">${s2}</div>` : ''}${mt || ''}</div>`;
+  const tile = (k, v, s1, s2, mt) => `<div class="kpi"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s1 || ''}</div>${[].concat(s2 || []).map(x => `<div class="s">${x}</div>`).join('')}${mt || ''}</div>`;
+  // Lũy kế tháng so với lũy kế hôm qua (ngày 1 của tháng thì hôm qua thuộc tháng trước → không so)
+  const cmpY = (t, y, F) => { if (d.slice(8) === '01') return '<span class="lbl">Ngày đầu tháng · chưa có lũy kế hôm qua để so</span>';
+    if (t == null || y == null) return '<span class="lbl">chưa có số hôm qua</span>'; const dl = t - y;
+    return `${dl > 0 ? `<span class="up"><b>▲ ${F(dl)}</b>` : dl < 0 ? `<span class="dn"><b>▼ ${F(-dl)}</b>` : '<span><b>= 0</b>'}${y ? ' (' + pctCh(t, y) + ')' : ''}</span> so với hôm qua (${F(y)})`; };
   const of = v => `<span style="font-size:14px;font-weight:600;color:var(--ink-2)"> / ${v}</span>`;
   const plC = countSrc(d, 'appendix'), obC = countSrc(d, 'onboard');
   const srcTxt = c => c.src === 'manual' ? `Số nhập tay ngày ${dmy(c.d)}` : c.src === 'crm' ? 'Lấy từ tab Tiến độ khách hàng' : 'Chưa có số';
@@ -340,7 +344,7 @@ function renderOverview(d, C, A, p) {
   const fr = (a, t) => t ? `${n0(a)}/${n0(Math.round(t))}` : n0(a);
   const tiles = [
     tile('GMV hôm nay', mu(g.t), cmp(g.t, g.a7, mu), `Kế hoạch ${mu(g.pl)} · đạt <b>${pct(g.ratio)}</b>`, bar(g.ratio)),
-    tile('GMV lũy kế tháng', mu(m.t), `Kế hoạch ${mu(m.pl)} · đạt <b>${pct(m.ratio)}</b>`, `Đích tháng 12: ${mu(P.dec)}`, bar(m.ratio)),
+    tile('GMV lũy kế tháng', mu(m.t), cmpY(m.t, m.y, mu), [`Kế hoạch ${mu(m.pl)} · đạt <b>${pct(m.ratio)}</b>`, `Đích tháng 12: ${mu(P.dec)}`], bar(m.ratio)),
     tile('DN đã ký phụ lục', plC.v == null ? '—' : n0(plC.v), srcTxt(plC), 'Lũy kế · không tính khách thanh lý chưa có giao dịch'),
     tile('DN đã khởi tạo XPAY', obC.v == null ? '—' : n0(obC.v) + (plC.v ? of(n0(plC.v)) : ''), plC.v && obC.v != null ? `<b>${pct(obC.v / plC.v)}</b> số DN đã ký phụ lục` : '', srcTxt(obC), bar(plC.v ? obC.v / plC.v : 0, 'var(--accent)')),
     tile('DN active hôm nay', n0(A0.cos || 0) + of(n0(A0.cos30 || 0)), cmp(A0.cos, av(x => x.cos), n0), `Trên ${n0(A0.cos30 || 0)} DN active 30 ngày`, bar(A0.cos30 ? A0.cos / A0.cos30 : 0, 'var(--accent)')),
