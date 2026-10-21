@@ -29,6 +29,9 @@ export type GuideSection = { id: string; title: string; md: string; group?: stri
 /** Thông tin phụ của bộ hướng dẫn */
 export type GuideExtras = {
   who?: string; portal?: string; internal?: boolean;
+  kind?: 'journey';                                  // bài dạng Hành trình (chặng → bước)
+  journey?: import('./journey').Journey;
+  short?: string;                                    // tên ngắn hiện trên nhãn nguồn của bước
   tasks?: { t: string; d?: string; sec: string }[];     // "Việc hay làm" → link tới mục
   stats?: { k: string; v: string; d?: string }[];
 };

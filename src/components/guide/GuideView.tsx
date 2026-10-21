@@ -61,7 +61,7 @@ export default function GuideView({ guide, canEdit, userId, startEdit }: { guide
 
   return (
     <div className="hd"><div className="hd-wrap">
-      <div style={{ marginBottom: 14 }}><Link href="/huong-dan" className="hd-muted" style={{ textDecoration: 'none' }}>← Tất cả hướng dẫn</Link></div>
+      <div style={{ marginBottom: 14 }}><Link href="/huong-dan/thu-vien" className="hd-muted" style={{ textDecoration: 'none' }}>← Thư viện</Link> <span className="hd-muted">·</span> <Link href="/huong-dan" className="hd-muted" style={{ textDecoration: 'none' }}>Hành trình</Link></div>
       <div className="hd-card" style={{ padding: '18px 22px', marginBottom: 16, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         <div style={{ flex: '1 1 420px' }}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>

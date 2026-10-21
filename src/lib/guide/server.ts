@@ -61,3 +61,20 @@ export async function getGuides(slugs: string[], withDrafts: boolean): Promise<G
   const by = new Map(((data || []) as unknown as Guide[]).map((g) => [g.slug, g]));
   return slugs.map((s) => by.get(s)).filter(Boolean) as Guide[];
 }
+
+/** Toàn bộ thư viện (kèm nội dung, extras, tệp) — dùng cho trang Thư viện và Hành trình */
+export async function loadLibrary(withDrafts: boolean): Promise<{ guides: Guide[]; error?: string }> {
+  const { rows, error } = await listGuides(withDrafts);
+  if (error || !rows.length) return { guides: [], error };
+  const ids = rows.map((r) => r.id);
+  type Row = { id: string; sections: Guide['sections']; extras?: Guide['extras'] };
+  let data: Row[] | null = null;
+  let { data: d1, error: e2 } = await supabaseAdmin().from('guides').select('id,sections,extras').in('id', ids);
+  data = d1 as Row[] | null;
+  if (e2 && /extras/.test(e2.message)) { const r = await supabaseAdmin().from('guides').select('id,sections').in('id', ids); data = r.data as Row[] | null; e2 = r.error; }
+  if (e2) return { guides: [], error: e2.message };
+  const by = new Map((data || []).map((d) => [d.id, d]));
+  const files = await listFiles(ids);
+  return { guides: rows.map((r) => ({ ...r, sections: by.get(r.id)?.sections || [], extras: by.get(r.id)?.extras || {}, files: files[r.id] || [] })) };
+}
+export const isJourney = (g: Pick<Guide, 'extras'>) => g.extras?.kind === 'journey' && !!g.extras.journey;

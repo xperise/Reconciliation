@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import GuideView from '@/components/guide/GuideView';
-import { getGuide, guideUser } from '@/lib/guide/server';
+import { getGuide, guideUser, isJourney } from '@/lib/guide/server';
+import { renderGuides } from '../view';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,5 +11,6 @@ export default async function HuongDanChiTiet({ params, searchParams }: { params
   const { guide, error } = await getGuide(decodeURIComponent(params.slug), g.edit);
   if (error) return <div className="hd-wrap" style={{ padding: 24 }}><div className="card notice">{error}</div></div>;
   if (!guide) notFound();
+  if (isJourney(guide)) return renderGuides(g, { slug: guide.slug });
   return <GuideView guide={guide} canEdit={g.edit} userId={g.user.id} startEdit={searchParams.sua === '1'} />;
 }

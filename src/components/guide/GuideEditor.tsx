@@ -87,7 +87,7 @@ export default function GuideEditor({ guide, onCancel }: { guide?: Guide; onCanc
   }
   function del() {
     if (!guide || !window.confirm(`Xoá hẳn hướng dẫn "${guide.title}"? Không khôi phục được.`)) return;
-    start(async () => { try { await xoaHuongDan(guide.id); setDirty(false); router.replace('/huong-dan'); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } });
+    start(async () => { try { await xoaHuongDan(guide.id); setDirty(false); router.replace('/huong-dan/thu-vien'); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } });
   }
   async function openVers() { if (!guide) return; try { setVers(await dsPhienBan(guide.id)); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } }
   async function loadVer(v: VersionRow) {
@@ -106,7 +106,7 @@ export default function GuideEditor({ guide, onCancel }: { guide?: Guide; onCanc
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <label className="hd-muted" style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={prev} onChange={(e) => setPrev(e.target.checked)} /> Xem trước</label>
           {guide && <button className="hd-btn" onClick={openVers}><i className="ri-history-line" /> Phiên bản</button>}
-          <button className="hd-btn" onClick={() => { if (!dirty || window.confirm('Bỏ các thay đổi chưa lưu?')) { setDirty(false); if (onCancel) onCancel(); else router.push('/huong-dan'); } }}>Huỷ</button>
+          <button className="hd-btn" onClick={() => { if (!dirty || window.confirm('Bỏ các thay đổi chưa lưu?')) { setDirty(false); if (onCancel) onCancel(); else router.push('/huong-dan/thu-vien'); } }}>Huỷ</button>
           <input className="hd-input" style={{ width: 230 }} placeholder="Ghi chú lần lưu (không bắt buộc)" value={note} onChange={(e) => setNote(e.target.value)} />
           <button className="hd-btn hd-btn-pri" onClick={save} disabled={busy}>{busy ? 'Đang lưu…' : m.status === 'phat-hanh' ? 'Lưu & phát hành' : 'Lưu nháp'}</button>
         </span>

@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { writeAudit } from '@/lib/audit';
 import { guideUser, missingTable, MIGRATE_MSG } from '@/lib/guide/server';
 import { isAudience, isService, slugify, type GuideExtras, type GuideSection } from '@/lib/guide/meta';
+import { cleanJourney } from '@/lib/guide/journey';
 
 async function editor() {
   const g = await guideUser();
@@ -26,6 +27,8 @@ function cleanExtras(e?: GuideExtras): GuideExtras {
     who: t(e.who, 200) || undefined, portal: t(e.portal, 300) || undefined, internal: !!e.internal,
     tasks: (Array.isArray(e.tasks) ? e.tasks : []).slice(0, 24).map((x) => ({ t: t(x.t, 120), d: t(x.d, 200) || undefined, sec: t(x.sec, 60) })).filter((x) => x.t && x.sec),
     stats: (Array.isArray(e.stats) ? e.stats : []).slice(0, 6).map((x) => ({ k: t(x.k, 60), v: t(x.v, 30), d: t(x.d, 160) || undefined })).filter((x) => x.k),
+    short: t(e.short, 40) || undefined,
+    ...(e.kind === 'journey' ? { kind: 'journey' as const, journey: cleanJourney(e.journey) } : {}),
   };
 }
 
@@ -131,17 +134,35 @@ export async function xinChoTepHuongDan(guideId: string, fileName: string): Prom
   if (error) throw new Error(/not found|bucket/i.test(error.message) ? 'Chưa tạo kho tệp guide-files — chạy supabase/migrations/25_huong_dan_tep_dinh_kem.sql. ' + error.message : error.message);
   return { path: data.path, token: data.token };
 }
-export async function ghiNhanTepHuongDan(inp: { guideId: string; path: string; label: string; note?: string; fileName: string; mime?: string; size?: number }) {
+export async function ghiNhanTepHuongDan(inp: { guideId: string; path: string; label: string; note?: string; fileName: string; mime?: string; size?: number }): Promise<{ id: string }> {
   const user = await editor();
   if (!inp.path.startsWith(inp.guideId + '/')) throw new Error('Đường dẫn tệp không hợp lệ.');
   const sb = supabaseAdmin();
   const { data: mx } = await sb.from('guide_files').select('sort').eq('guide_id', inp.guideId).order('sort', { ascending: false }).limit(1);
-  const { error } = await sb.from('guide_files').insert({
+  const { data: ins, error } = await sb.from('guide_files').insert({
     guide_id: inp.guideId, label: t(inp.label, 200) || inp.fileName, note: t(inp.note, 300) || null, file_name: t(inp.fileName, 200),
     storage_path: inp.path, mime_type: t(inp.mime, 100) || null, size_bytes: Number(inp.size) || null, sort: ((mx?.[0]?.sort as number) ?? 0) + 10, uploaded_by: user.email,
-  });
+  }).select('id').single();
   if (error) { await sb.storage.from(BUCKET).remove([inp.path]); throw dbErr(error.message); }
   await writeAudit({ actorId: user.id, actorEmail: user.email, action: 'guide.file_add', entity: 'guide_files', entityId: inp.guideId, note: `${inp.label || inp.fileName} (${inp.fileName})` });
+  revalidatePath('/huong-dan', 'layout');
+  return { id: ins!.id as string };
+}
+
+/** Gắn / gỡ 1 tệp (của bài hành trình) vào 1 chặng */
+export async function ganTepVaoChang(journeyId: string, stageId: string, fileId: string, gan: boolean) {
+  const user = await editor();
+  const sb = supabaseAdmin();
+  const { data, error } = await sb.from('guides').select('extras').eq('id', journeyId).maybeSingle();
+  if (error) throw dbErr(error.message);
+  const ex = (data?.extras || {}) as GuideExtras;
+  const st = ex.journey?.stages.find((s) => s.id === stageId);
+  if (!ex.journey || !st) throw new Error('Không tìm thấy chặng.');
+  const cur = new Set(st.files || []);
+  if (gan) cur.add(fileId); else cur.delete(fileId);
+  st.files = [...cur];
+  const { error: e2 } = await sb.from('guides').update({ extras: ex, updated_at: new Date().toISOString(), updated_by: user.email }).eq('id', journeyId);
+  if (e2) throw dbErr(e2.message);
   revalidatePath('/huong-dan', 'layout');
 }
 export async function suaTepHuongDan(id: string, p: { label?: string; note?: string; sort?: number }) {

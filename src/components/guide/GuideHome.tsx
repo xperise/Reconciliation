@@ -5,12 +5,13 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { AUDIENCES, SERVICES, audienceLabel, type Guide } from '@/lib/guide/meta';
 import ImportBundle from './ImportBundle';
+import GuideNav from './GuideNav';
 
 const fold = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
 export const audPill = (a: string) => (a === 'internal' ? 'hd-pill-int' : a === 'khach-hang' ? 'hd-pill-kh' : a === 'tai-xe' ? 'hd-pill-tx' : 'hd-pill-dv');
 const plain = (md: string) => md.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/[#>*_`|[\]-]+/g, ' ').replace(/\s+/g, ' ');
 
-export default function GuideHome({ guides, canEdit, error }: { guides: Guide[]; canEdit: boolean; error?: string }) {
+export default function GuideHome({ guides, canEdit, error, journeySlug }: { guides: Guide[]; canEdit: boolean; error?: string; journeySlug?: string | null }) {
   const [svc, setSvc] = useState('');
   const [aud, setAud] = useState('');
   const [q, setQ] = useState('');
@@ -32,10 +33,11 @@ export default function GuideHome({ guides, canEdit, error }: { guides: Guide[];
 
   return (
     <div className="hd"><div className="hd-wrap">
+      <div style={{ marginBottom: 14 }}><GuideNav on="library" journeySlug={journeySlug} /></div>
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 16, justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
-          <div className="hd-eyebrow">Tài liệu</div>
-          <h1 style={{ margin: '4px 0 2px', fontSize: 22 }}>Hướng dẫn sử dụng</h1>
+          <div className="hd-eyebrow">Thư viện tài liệu</div>
+          <h1 style={{ margin: '4px 0 2px', fontSize: 22 }}>Tất cả hướng dẫn</h1>
           <div className="hd-muted">Theo từng mảng dịch vụ, cho Internal, Khách hàng, Đơn vị và Tài xế. Xem và làm theo trên web; tải tài liệu đính kèm để gửi cho khách khi cần.</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
