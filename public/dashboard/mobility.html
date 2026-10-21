@@ -1317,34 +1317,50 @@ function xlKit() {
 const xlStamp = () => new Date().toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'});
 const scopeTxt = () => CR.who ? (CR.who === '_none' ? 'khách chưa phân công' : 'khách của ' + CR.who) : 'tất cả khách';
 const msDate = v => isoOk(v) ? new Date(v + 'T00:00:00Z') : v === 'Y' ? 'Có (không rõ ngày)' : '';
+/* Nhóm khách giống hệt màn hình Nhập liệu: thứ tự nhóm 1→5→Đã thanh lý, cùng cách sắp xếp, nhóm 5 chia theo phân loại Mai Linh */
+function crmGroups(R) {
+  const out = [];
+  for (const g of [1, 2, 3, 4, 5, 9]) { const A = R.filter(r => r.grp === g); if (!A.length) continue;
+    const sorter = g === 2 ? (a, b) => (a.grank || 999) - (b.grank || 999) || b.pot - a.pot : g === 3 ? (a, b) => b.pot - a.pot || (b.b.peak || 0) - (a.b.peak || 0) : (a, b) => b.gmv - a.gmv || b.ml69 - a.ml69 || (b.b.peak || 0) - (a.b.peak || 0);
+    const subs = g === 5 ? [...new Set(A.map(r => r.sub))].sort((a, b) => G2().indexOf(a) - G2().indexOf(b)).map(sb => ({sb, rows: A.filter(r => r.sub === sb).sort(sorter)})) : [{sb: null, rows: A.slice().sort(sorter)}];
+    out.push({g, label: (g === 9 ? '' : g + '. ') + GRP[g], n: A.length, nocall: A.filter(r => r.todo.nocall).length, rev: A.filter(r => r.first).length, subs}); }
+  return out;
+}
+const grpHead = G => `${G.label} · ${n0(G.n)} khách · ${n0(G.nocall)} chưa gọi · ${n0(G.rev)} có doanh thu`;
+/* dòng tiêu đề nhóm / nhóm con trong file Excel */
+function xlSec(K, ws, row, ncol, text, sub) {
+  ws.getCell(row, 1).value = sub ? '      ' + text : text;
+  for (let c = 1; c <= ncol; c++) { const x = ws.getCell(row, c); x.fill = K.fill(sub ? 'FFF3F4F6' : 'FFE6F2F0'); x.font = {name: 'Arial', size: 10, bold: true, color: {argb: sub ? 'FF374151' : 'FF0D6E63'}}; x.border = K.bd; }
+}
 function crmExport() {
   (async () => {
     const btn = $('crxls'); if (btn) { btn.disabled = true; btn.textContent = 'Đang tạo file…'; }
     try {
       await loadScript(EXCELJS_URL);
-      const d = CR.day, R = crmScope(crmRows(d)).slice().sort((a, b) => a.grp - b.grp || G2().indexOf(a.sub) - G2().indexOf(b.sub) || b.gmv - a.gmv || b.pot - a.pot), PS = patSummary(d);
+      const d = CR.day, GS = crmGroups(crmScope(crmRows(d))), R = GS.flatMap(G => G.subs.flatMap(x => x.rows)), PS = patSummary(d);
       const K = xlKit(), wbk = new ExcelJS.Workbook(), VN = '#,##0;(#,##0);-', DT = 'dd/mm/yyyy', N1 = '#,##0.0;(#,##0.0);-';
-      const ws = wbk.addWorksheet('Khach_hang', {views: [{state: 'frozen', ySplit: 4, xSplit: 2, showGridLines: false}]});
+      const ws = wbk.addWorksheet('Khach_hang', {views: [{state: 'frozen', ySplit: 4, xSplit: 3, showGridLines: false}]});
       K.title(ws, 'XPAY — TIẾN ĐỘ KHÁCH HÀNG (mỗi pháp nhân 1 dòng)', `${scopeTxt()} · số liệu đến ${dmy(d)} · xuất lúc ${xlStamp()}`);
-      const cols = [['Số hợp đồng', 13], ['Tên pháp nhân', 46], ['PIC', 11], ['PIC cũ (sổ khách)', 13], ['Nhóm', 34], ['Cách xếp nhóm', 11], ['Phân loại Mai Linh', 26], ['Nhóm client', 24], ['Hạng nhóm client', 9], ['Hạng Top 200', 13], ['Tình trạng đặc biệt', 12], ['Tiến độ', 16],
+      const cols = [['Nhóm', 34], ['Số hợp đồng', 13], ['Tên pháp nhân', 46], ['PIC', 11], ['PIC cũ (sổ khách)', 13], ['Cách xếp nhóm', 11], ['Phân loại Mai Linh', 26], ['Nhóm client', 24], ['Hạng nhóm client', 9], ['Hạng Top 200', 13], ['Tình trạng đặc biệt', 12], ['Tiến độ', 16],
         ['Ký phụ lục (vào tủ)', 13], ['Khởi tạo XPAY', 13], ['Gọi khách gần nhất', 13], ['Số lần gọi', 8], ['Meeting gần nhất', 13], ['Số meeting', 8], ['Hẹn gọi lại', 12], ['Liên hệ gần nhất', 12], ['Kết quả gần nhất', 22],
         ['Ngày doanh thu đầu tiên', 13], ['Giao dịch đầu tiên (VND)', 14], ['GMV lũy kế (VND)', 15], ['GMV 30 ngày (VND)', 15], ['Số chuyến', 9], ['Giao dịch gần nhất', 13], ['Tiềm năng (triệu/tháng)', 11], ['Giao dịch Mai Linh T6–T9 (VND)', 15],
         ['Tuyến chính 30 ngày', 34], ['Mục đích chính 30 ngày', 18], ['Khung giờ 30 ngày', 16], ['Chuyến thiếu xe 30 ngày', 10], ['Gợi ý xử lý', 70], ['Ghi chú', 40]];
       K.head(ws, 4, cols);
       const fm = [null, null, null, null, null, null, null, null, null, null, null, null, DT, DT, DT, null, DT, null, DT, DT, null, DT, VN, VN, VN, '#,##0', DT, N1, VN, null, null, null, '#,##0', null, null];
-      R.forEach((r, i) => { const ps = PS[r.key];
-        K.put(ws, 5 + i, [r.key, r.name, r.pic || 'Chưa phân công', r.picOld, (r.grp === 9 ? '' : r.grp + '. ') + GRP[r.grp], r.liq ? 'Tự động' : r.grpM ? 'Chọn tay' : 'Tự động', r.sub, r.gname, r.grank || '', r.rank, r.st, stageTxt[r.stage],
+      let row = 5;
+      for (const G of GS) { xlSec(K, ws, row++, cols.length, grpHead(G)); for (const X of G.subs) { if (X.sb) xlSec(K, ws, row++, cols.length, `${X.sb} · ${n0(X.rows.length)} khách`, 1); X.rows.forEach(r => { const ps = PS[r.key], i = row++ - 5;
+        K.put(ws, 5 + i, [G.label, r.key, r.name, r.pic || 'Chưa phân công', r.picOld, r.liq ? 'Tự động' : r.grpM ? 'Chọn tay' : 'Tự động', r.sub, r.gname, r.grank || '', r.rank, r.st, stageTxt[r.stage],
           msDate(r.pl), msDate(r.xp), msDate(r.call), r.calls.length, msDate(r.meet), r.meets.length, msDate(r.nx), r.acts[0] && isoOk(r.acts[0].d) ? new Date(r.acts[0].d + 'T00:00:00Z') : '', r.lastRes,
           msDate(r.first), r.firstAmt, r.gmv, r.gmv30, r.trips, r.lastTx ? new Date(r.lastTx + 'T00:00:00Z') : '', r.pot || '', r.ml69 || '',
           ps ? `${ps.route} (${ps.rn}/${ps.n} chuyến)` : '', ps ? ps.p : '', ps ? ps.band : '', ps ? ps.short : '', r.sug.join(' · '), r.note], fm);
-        ws.getCell(5 + i, 1).numFmt = '@'; });
-      ws.autoFilter = {from: {row: 4, column: 1}, to: {row: 4 + R.length, column: cols.length}};
+        ws.getCell(5 + i, 2).numFmt = '@'; }); } }
+      ws.autoFilter = {from: {row: 4, column: 1}, to: {row: row - 1, column: cols.length}};
       // lịch sử liên hệ
       const wa = wbk.addWorksheet('Lich_su_lien_he', {views: [{state: 'frozen', ySplit: 4, showGridLines: false}]});
       K.title(wa, 'LỊCH SỬ GỌI KHÁCH / MEETING', `${scopeTxt()} · đến ${dmy(d)}`);
-      K.head(wa, 4, [['Số hợp đồng', 13], ['Tên pháp nhân', 46], ['PIC', 11], ['Ngày', 12], ['Loại', 10], ['Người thực hiện', 14], ['Kết quả', 22], ['Chi tiết', 70], ['Nguồn', 14]]);
-      let n = 5; R.forEach(r => r.acts.forEach(a => { K.put(wa, n, [r.key, r.name, r.pic, isoOk(a.d) ? new Date(a.d + 'T00:00:00Z') : a.d, a.t === 'meet' ? 'Meeting' : 'Gọi khách', a.who, a.res, a.det, a.seed ? 'File giao thẻ' : 'Nhập liệu'], [null, null, null, DT]); wa.getCell(n, 1).numFmt = '@'; n++; }));
-      wa.autoFilter = {from: {row: 4, column: 1}, to: {row: Math.max(4, n - 1), column: 9}};
+      K.head(wa, 4, [['Nhóm', 30], ['Số hợp đồng', 13], ['Tên pháp nhân', 46], ['PIC', 11], ['Ngày', 12], ['Loại', 10], ['Người thực hiện', 14], ['Kết quả', 22], ['Chi tiết', 70], ['Nguồn', 14]]);
+      let n = 5; R.forEach(r => r.acts.forEach(a => { K.put(wa, n, [(r.grp === 9 ? '' : r.grp + '. ') + GRP[r.grp], r.key, r.name, r.pic, isoOk(a.d) ? new Date(a.d + 'T00:00:00Z') : a.d, a.t === 'meet' ? 'Meeting' : 'Gọi khách', a.who, a.res, a.det, a.seed ? 'File giao thẻ' : 'Nhập liệu'], [null, null, null, null, DT]); wa.getCell(n, 2).numFmt = '@'; n++; }));
+      wa.autoFilter = {from: {row: 4, column: 1}, to: {row: Math.max(4, n - 1), column: 10}};
       await xlSave(wbk, `XPAY_Khach_hang_${d.replace(/-/g, '')}.xlsx`);
     } catch (e) { alert('Không tạo được file Excel: ' + (e.message || e)); }
     if (btn) { btn.disabled = false; btn.textContent = 'Xuất Excel khách hàng'; }
@@ -1367,17 +1383,13 @@ function picTemplate() {
       [...PICS, PIC_CLEAR].forEach((p, i) => { lists.getCell(2 + i, 1).value = p; lists.getCell(2 + i, 2).value = ROLE[p] || ''; });
       const vf = `DS_PIC!$A$2:$A$${PICS.length + 2}`;
       let row = 6;
-      for (const g of [1, 2, 3, 4, 5, 9]) { const A = R.filter(r => r.grp === g); if (!A.length) continue;
-        const gl = (g === 9 ? '' : g + '. ') + GRP[g];
-        ws.getCell(row, 1).value = `${gl} · ${n0(A.length)} khách`; for (let c = 1; c <= cols.length; c++) { const x = ws.getCell(row, c); x.fill = K.fill('FFE6F2F0'); x.font = {name: 'Arial', size: 10, bold: true, color: {argb: 'FF0D6E63'}}; x.border = K.bd; } row++;
-        const subs = [...new Set(A.map(r => r.sub))].sort((a, b) => G2().indexOf(a) - G2().indexOf(b));
-        for (const sb of subs) {
-          A.filter(r => r.sub === sb).sort((a, b) => b.gmv30 - a.gmv30 || b.gmv - a.gmv || b.pot - a.pot).forEach(r => {
-            K.put(ws, row, [gl, sb, r.key, r.name, r.gname, r.rank, stageTxt[r.stage], r.gmv30, r.gmv, r.pot || '', r.pic || 'Chưa phân công', ''], [null, null, '@', null, null, null, null, VN, VN, '#,##0.0']);
+      for (const G of crmGroups(R)) { xlSec(K, ws, row++, cols.length, grpHead(G));
+        for (const X of G.subs) { if (X.sb) xlSec(K, ws, row++, cols.length, `${X.sb} · ${n0(X.rows.length)} khách`, 1);
+          X.rows.forEach(r => {
+            K.put(ws, row, [G.label, r.sub, r.key, r.name, r.gname, r.rank, stageTxt[r.stage], r.gmv30, r.gmv, r.pot || '', r.pic || 'Chưa phân công', ''], [null, null, '@', null, null, null, null, VN, VN, '#,##0.0']);
             ws.getCell(row, 3).value = String(r.key); ws.getCell(row, 12).fill = K.fill('FFFFF7D6');
             ws.getCell(row, 12).dataValidation = {type: 'list', allowBlank: true, showErrorMessage: true, errorTitle: 'PIC không hợp lệ', error: 'Chọn người phụ trách trong danh sách (sheet DS_PIC).', formulae: [vf]};
-            row++; });
-        } }
+            row++; }); } }
       await xlSave(wbk, `XPAY_Template_PIC_${d.replace(/-/g, '')}.xlsx`);
     } catch (e) { alert('Không tạo được template: ' + (e.message || e)); }
     if (btn) { btn.disabled = false; btn.textContent = 'Tải template PIC'; }
@@ -1406,6 +1418,7 @@ async function picParse(file) {
     if ((r.pic || '') === np) { same++; continue; }
     changes.push({key: k, name: r.name, grp: r.grp, from: r.pic || '', to: np});
   }
+  const go = [1, 2, 3, 4, 5, 9]; changes.sort((a, b) => go.indexOf(a.grp) - go.indexOf(b.grp) || a.name.localeCompare(b.name, 'vi'));
   return {file: file.name, changes, errors, same, filled};
 }
 /* Ghi PIC: gom theo nhóm tài liệu crm/bXX, mỗi nhóm 1 lần ghi */
