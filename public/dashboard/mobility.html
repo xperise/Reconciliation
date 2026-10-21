@@ -1238,7 +1238,7 @@ function crmInput(ALL, d) {
     <span class="lbl" style="margin-left:8px">Nhóm</span><select id="crgrp"><option value="">Tất cả nhóm</option>${[1, 2, 3, 4, 5, 9].map(g => `<option value="${g}" ${CR.grp === String(g) ? 'selected' : ''}>${g === 9 ? '' : g + '. '}${GRP[g]}</option>`).join('')}${CR.grp.includes('|') ? `<option value="${CR.grp}" selected>${GRP[CR.grp.split('|')[0]]} · ${stageTxt[CR.grp.split('|')[1]]}</option>` : ''}</select>
     ${CR.res ? `<span class="pill p-mute">Kết quả: ${esc(CR.res)} <a id="crresx" style="cursor:pointer;font-weight:700">×</a></span>` : ''}${CR.todo && !(CR.todo in TD) ? `<span class="pill p-mute">Việc: ${esc(ACTL[CR.todo] || CR.todo)} <a data-crtodo="" style="cursor:pointer;font-weight:700">×</a></span>` : ''}
     <input id="crq" placeholder="Tìm tên, số hợp đồng, nhóm client…" value="${esc(CR.q)}" style="font:13px var(--font-family-sans-serif);padding:6px 10px;border:1px solid var(--color-border-default);border-radius:10px;width:250px"><span class="lbl">${n0(R.length)} khách</span>
-    <span style="margin-left:auto;display:flex;gap:8px"><button class="btn" id="crxls">Tải Excel</button></span></div></div>`;
+    <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="crxls" title="Mỗi pháp nhân 1 dòng: PIC, nhóm, mốc tiến độ, doanh thu, pattern, gợi ý + sheet lịch sử liên hệ">Xuất Excel khách hàng</button><button class="btn" id="crpict" title="Danh sách công ty theo nhóm, phân loại và PIC hiện tại để điền PIC mới">Tải template PIC</button>${ed && CANWRITE ? `<label class="btn pri" style="cursor:pointer" title="Upload template PIC đã điền để đổi PIC hàng loạt">Upload PIC<input type="file" id="crpicf" accept=".xlsx,.xls" hidden></label>` : ''}</span></div></div>` + picPanel();
   const row = r => `<tr class="hit" data-cropen="${esc(r.key)}" style="cursor:pointer"><td class="l name" style="min-width:240px;padding-left:34px;color:var(--accent)">${esc(r.name)}<span class="def">HĐ ${esc(r.key)}${r.gname ? ' · ' + esc(r.gname) + (r.grank ? ' #' + r.grank : '') : ''}</span></td><td class="l">${r.pic ? esc(r.pic) : '<b style="color:var(--critical)">Chưa phân công</b>'}</td>
     ${['pl', 'xp', 'call', 'meet'].map(f => `<td class="l">${done(r[f]) ? `<span class="c-stable">✓</span> ${isoOk(r[f]) ? dm(r[f]) : ''}${f === 'call' && r.calls.length > 1 ? `<span class="def">${r.calls.length} lần</span>` : ''}` : '<span class="lbl">—</span>'}</td>`).join('')}
     <td class="l">${r.first ? dmy(r.first) : '<span class="lbl">chưa</span>'}</td><td>${r.gmv ? money(r.gmv) : '—'}<span class="def">${r.gmv30 ? '30N ' + nf(r.gmv30 / UNIT.div, UNIT.dec) : r.gmv ? 'ngừng 30N' : ''}</span></td><td class="l" style="white-space:normal;min-width:170px;font-size:12px">${PS[r.key] ? `${esc(PS[r.key].route)} <span class="lbl">(${PS[r.key].rn}/${PS[r.key].n} chuyến)</span><span class="def">${esc(PS[r.key].p)} · ${PS[r.key].band}${PS[r.key].short ? ' · <b style="color:var(--critical)">thiếu xe</b>' : ''}</span>` : (((S.cs || {})[r.key] || {}).custom || []).length ? '<span class="pill p-mute">CS đã khai báo</span>' : '<span class="lbl">—</span>'}</td>
@@ -1297,20 +1297,138 @@ function crmDrawer(r, d) {
   </div></div>`;
   return h;
 }
+/* ---- Excel: xuất toàn bộ thông tin khách · template PIC · nhập PIC hàng loạt ---- */
+const XL_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+async function xlSave(wbk, name) {
+  const buf = await wbk.xlsx.writeBuffer();
+  const dl = window.claude ? await claude.use('downloads') : null;
+  if (dl) { try { await dl.save({filename: name, data: new Uint8Array(buf), mimeType: XL_MIME}); } catch (e) { if (e && e.code !== 'declined') alert('Không tải được file: ' + (e.message || e.code)); } }
+  else { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], {type: XL_MIME})); a.download = name; a.click(); }
+}
+function xlKit() {
+  const F = {name: 'Arial', size: 10}, HF = {name: 'Arial', size: 10, bold: true, color: {argb: 'FFFFFFFF'}};
+  const fill = c => ({type: 'pattern', pattern: 'solid', fgColor: {argb: c}});
+  const bd = {top: {style: 'thin', color: {argb: 'FFD7DEE3'}}, left: {style: 'thin', color: {argb: 'FFD7DEE3'}}, bottom: {style: 'thin', color: {argb: 'FFD7DEE3'}}, right: {style: 'thin', color: {argb: 'FFD7DEE3'}}};
+  const head = (ws, row, cols) => { cols.forEach(([l, w], i) => { const c = ws.getCell(row, i + 1); c.value = l; c.font = HF; c.fill = fill('FF0D6E63'); c.border = bd; c.alignment = {wrapText: true, vertical: 'middle', horizontal: 'center'}; ws.getColumn(i + 1).width = w; }); ws.getRow(row).height = 34; };
+  const put = (ws, row, vals, fmts) => vals.forEach((v, i) => { const c = ws.getCell(row, i + 1); c.value = (v == null || v === '' || (typeof v === 'number' && !isFinite(v))) ? null : v; c.font = F; c.border = bd; if (fmts && fmts[i]) c.numFmt = fmts[i]; });
+  const title = (ws, t, sub) => { ws.getCell('A1').value = t; ws.getCell('A1').font = {name: 'Arial', size: 13, bold: true}; ws.getCell('A2').value = sub; ws.getCell('A2').font = {name: 'Arial', size: 9, italic: true, color: {argb: 'FF6B7280'}}; };
+  return {F, fill, bd, head, put, title};
+}
+const xlStamp = () => new Date().toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'});
+const scopeTxt = () => CR.who ? (CR.who === '_none' ? 'khách chưa phân công' : 'khách của ' + CR.who) : 'tất cả khách';
+const msDate = v => isoOk(v) ? new Date(v + 'T00:00:00Z') : v === 'Y' ? 'Có (không rõ ngày)' : '';
 function crmExport() {
   (async () => {
-    try { await loadScript(XLSX_URL); } catch (e) { alert(e.message); return; }
-    const R = crmScope(crmRows(CR.day)).sort((a, b) => a.grp - b.grp || b.gmv - a.gmv);
-    const dv = v => isoOk(v) ? new Date(v + 'T00:00:00Z') : v === 'Y' ? 'Y' : '';
-    const aoa = [['Số hợp đồng', 'Tên pháp nhân', 'Người phụ trách', 'Nhóm', 'Phân loại Mai Linh', 'Nhóm client', 'Hạng nhóm', 'Ký phụ lục (vào tủ)', 'Khởi tạo XPAY', 'Gọi khách gần nhất', 'Số lần gọi', 'Meeting gần nhất', 'Số meeting', 'Doanh thu đầu tiên', 'GMV lũy kế (VND)', 'GMV 30 ngày (VND)', 'Kết quả gần nhất', 'Tình trạng', 'Gợi ý', 'Ghi chú'],
-      ...R.map(r => [r.key, r.name, r.pic, (r.grp === 9 ? '' : r.grp + '. ') + GRP[r.grp], r.sub, r.gname, r.grank || '', dv(r.pl), dv(r.xp), dv(r.call), r.calls.length, dv(r.meet), r.meets.length, dv(r.first), r.gmv, r.gmv30, r.lastRes, r.st, r.sug[0], r.note])];
-    const ws = XLSX.utils.aoa_to_sheet(aoa, {cellDates: true, dateNF: 'dd/mm/yyyy'}); ws['!cols'] = [12, 50, 12, 34, 28, 26, 9, 13, 13, 13, 8, 13, 8, 13, 14, 14, 22, 12, 60, 40].map(w => ({wch: w}));
-    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Tien_do_khach_hang');
-    const buf = XLSX.write(wb, {type: 'array', bookType: 'xlsx'}), name = `XPAY_Tien_do_khach_hang_${CR.day.replace(/-/g, '')}.xlsx`;
-    const dl = window.claude ? await claude.use('downloads') : null;
-    if (dl) { try { await dl.save({filename: name, data: new Uint8Array(buf)}); } catch (e) {} }
-    else { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf])); a.download = name; a.click(); }
+    const btn = $('crxls'); if (btn) { btn.disabled = true; btn.textContent = 'Đang tạo file…'; }
+    try {
+      await loadScript(EXCELJS_URL);
+      const d = CR.day, R = crmScope(crmRows(d)).slice().sort((a, b) => a.grp - b.grp || G2().indexOf(a.sub) - G2().indexOf(b.sub) || b.gmv - a.gmv || b.pot - a.pot), PS = patSummary(d);
+      const K = xlKit(), wbk = new ExcelJS.Workbook(), VN = '#,##0;(#,##0);-', DT = 'dd/mm/yyyy', N1 = '#,##0.0;(#,##0.0);-';
+      const ws = wbk.addWorksheet('Khach_hang', {views: [{state: 'frozen', ySplit: 4, xSplit: 2, showGridLines: false}]});
+      K.title(ws, 'XPAY — TIẾN ĐỘ KHÁCH HÀNG (mỗi pháp nhân 1 dòng)', `${scopeTxt()} · số liệu đến ${dmy(d)} · xuất lúc ${xlStamp()}`);
+      const cols = [['Số hợp đồng', 13], ['Tên pháp nhân', 46], ['PIC', 11], ['PIC cũ (sổ khách)', 13], ['Nhóm', 34], ['Cách xếp nhóm', 11], ['Phân loại Mai Linh', 26], ['Nhóm client', 24], ['Hạng nhóm client', 9], ['Hạng Top 200', 13], ['Tình trạng đặc biệt', 12], ['Tiến độ', 16],
+        ['Ký phụ lục (vào tủ)', 13], ['Khởi tạo XPAY', 13], ['Gọi khách gần nhất', 13], ['Số lần gọi', 8], ['Meeting gần nhất', 13], ['Số meeting', 8], ['Hẹn gọi lại', 12], ['Liên hệ gần nhất', 12], ['Kết quả gần nhất', 22],
+        ['Ngày doanh thu đầu tiên', 13], ['Giao dịch đầu tiên (VND)', 14], ['GMV lũy kế (VND)', 15], ['GMV 30 ngày (VND)', 15], ['Số chuyến', 9], ['Giao dịch gần nhất', 13], ['Tiềm năng (triệu/tháng)', 11], ['Giao dịch Mai Linh T6–T9 (VND)', 15],
+        ['Tuyến chính 30 ngày', 34], ['Mục đích chính 30 ngày', 18], ['Khung giờ 30 ngày', 16], ['Chuyến thiếu xe 30 ngày', 10], ['Gợi ý xử lý', 70], ['Ghi chú', 40]];
+      K.head(ws, 4, cols);
+      const fm = [null, null, null, null, null, null, null, null, null, null, null, null, DT, DT, DT, null, DT, null, DT, DT, null, DT, VN, VN, VN, '#,##0', DT, N1, VN, null, null, null, '#,##0', null, null];
+      R.forEach((r, i) => { const ps = PS[r.key];
+        K.put(ws, 5 + i, [r.key, r.name, r.pic || 'Chưa phân công', r.picOld, (r.grp === 9 ? '' : r.grp + '. ') + GRP[r.grp], r.liq ? 'Tự động' : r.grpM ? 'Chọn tay' : 'Tự động', r.sub, r.gname, r.grank || '', r.rank, r.st, stageTxt[r.stage],
+          msDate(r.pl), msDate(r.xp), msDate(r.call), r.calls.length, msDate(r.meet), r.meets.length, msDate(r.nx), r.acts[0] && isoOk(r.acts[0].d) ? new Date(r.acts[0].d + 'T00:00:00Z') : '', r.lastRes,
+          msDate(r.first), r.firstAmt, r.gmv, r.gmv30, r.trips, r.lastTx ? new Date(r.lastTx + 'T00:00:00Z') : '', r.pot || '', r.ml69 || '',
+          ps ? `${ps.route} (${ps.rn}/${ps.n} chuyến)` : '', ps ? ps.p : '', ps ? ps.band : '', ps ? ps.short : '', r.sug.join(' · '), r.note], fm);
+        ws.getCell(5 + i, 1).numFmt = '@'; });
+      ws.autoFilter = {from: {row: 4, column: 1}, to: {row: 4 + R.length, column: cols.length}};
+      // lịch sử liên hệ
+      const wa = wbk.addWorksheet('Lich_su_lien_he', {views: [{state: 'frozen', ySplit: 4, showGridLines: false}]});
+      K.title(wa, 'LỊCH SỬ GỌI KHÁCH / MEETING', `${scopeTxt()} · đến ${dmy(d)}`);
+      K.head(wa, 4, [['Số hợp đồng', 13], ['Tên pháp nhân', 46], ['PIC', 11], ['Ngày', 12], ['Loại', 10], ['Người thực hiện', 14], ['Kết quả', 22], ['Chi tiết', 70], ['Nguồn', 14]]);
+      let n = 5; R.forEach(r => r.acts.forEach(a => { K.put(wa, n, [r.key, r.name, r.pic, isoOk(a.d) ? new Date(a.d + 'T00:00:00Z') : a.d, a.t === 'meet' ? 'Meeting' : 'Gọi khách', a.who, a.res, a.det, a.seed ? 'File giao thẻ' : 'Nhập liệu'], [null, null, null, DT]); wa.getCell(n, 1).numFmt = '@'; n++; }));
+      wa.autoFilter = {from: {row: 4, column: 1}, to: {row: Math.max(4, n - 1), column: 9}};
+      await xlSave(wbk, `XPAY_Khach_hang_${d.replace(/-/g, '')}.xlsx`);
+    } catch (e) { alert('Không tạo được file Excel: ' + (e.message || e)); }
+    if (btn) { btn.disabled = false; btn.textContent = 'Xuất Excel khách hàng'; }
   })();
+}
+const PIC_CLEAR = '(Bỏ phân công)';
+function picTemplate() {
+  (async () => {
+    const btn = $('crpict'); if (btn) { btn.disabled = true; btn.textContent = 'Đang tạo file…'; }
+    try {
+      await loadScript(EXCELJS_URL);
+      const d = CR.day, R = crmScope(crmRows(d)), K = xlKit(), wbk = new ExcelJS.Workbook(), VN = '#,##0;(#,##0);-';
+      const ws = wbk.addWorksheet('Phan_cong_PIC', {views: [{state: 'frozen', ySplit: 5, xSplit: 4, showGridLines: false}]});
+      K.title(ws, 'XPAY — PHÂN CÔNG PIC HÀNG LOẠT', `${scopeTxt()} · ${dmy(d)} · tạo lúc ${xlStamp()}`);
+      ws.getCell('A3').value = `Chỉ điền cột "PIC mới" (chọn trong danh sách). Để trống = giữ nguyên. Chọn "${PIC_CLEAR}" để bỏ người phụ trách. Không sửa cột "Số hợp đồng". Lưu file rồi upload lại ở tab Tiến độ khách hàng → Nhập liệu → "Upload PIC".`;
+      ws.getCell('A3').font = {name: 'Arial', size: 10, bold: true, color: {argb: 'FFB45309'}};
+      const cols = [['Nhóm', 34], ['Phân loại Mai Linh', 26], ['Số hợp đồng', 13], ['Tên pháp nhân', 46], ['Nhóm client', 24], ['Hạng Top 200', 13], ['Tiến độ', 16], ['GMV 30 ngày (VND)', 15], ['GMV lũy kế (VND)', 15], ['Tiềm năng (triệu/tháng)', 11], ['PIC hiện tại', 14], ['PIC mới', 16]];
+      K.head(ws, 5, cols); ws.getCell(5, 12).fill = K.fill('FFB45309');
+      const lists = wbk.addWorksheet('DS_PIC'); lists.getCell('A1').value = 'Người phụ trách'; lists.getCell('B1').value = 'Vai trò'; lists.getColumn(1).width = 18; lists.getColumn(2).width = 24;
+      [...PICS, PIC_CLEAR].forEach((p, i) => { lists.getCell(2 + i, 1).value = p; lists.getCell(2 + i, 2).value = ROLE[p] || ''; });
+      const vf = `DS_PIC!$A$2:$A$${PICS.length + 2}`;
+      let row = 6;
+      for (const g of [1, 2, 3, 4, 5, 9]) { const A = R.filter(r => r.grp === g); if (!A.length) continue;
+        const gl = (g === 9 ? '' : g + '. ') + GRP[g];
+        ws.getCell(row, 1).value = `${gl} · ${n0(A.length)} khách`; for (let c = 1; c <= cols.length; c++) { const x = ws.getCell(row, c); x.fill = K.fill('FFE6F2F0'); x.font = {name: 'Arial', size: 10, bold: true, color: {argb: 'FF0D6E63'}}; x.border = K.bd; } row++;
+        const subs = [...new Set(A.map(r => r.sub))].sort((a, b) => G2().indexOf(a) - G2().indexOf(b));
+        for (const sb of subs) {
+          A.filter(r => r.sub === sb).sort((a, b) => b.gmv30 - a.gmv30 || b.gmv - a.gmv || b.pot - a.pot).forEach(r => {
+            K.put(ws, row, [gl, sb, r.key, r.name, r.gname, r.rank, stageTxt[r.stage], r.gmv30, r.gmv, r.pot || '', r.pic || 'Chưa phân công', ''], [null, null, '@', null, null, null, null, VN, VN, '#,##0.0']);
+            ws.getCell(row, 3).value = String(r.key); ws.getCell(row, 12).fill = K.fill('FFFFF7D6');
+            ws.getCell(row, 12).dataValidation = {type: 'list', allowBlank: true, showErrorMessage: true, errorTitle: 'PIC không hợp lệ', error: 'Chọn người phụ trách trong danh sách (sheet DS_PIC).', formulae: [vf]};
+            row++; });
+        } }
+      await xlSave(wbk, `XPAY_Template_PIC_${d.replace(/-/g, '')}.xlsx`);
+    } catch (e) { alert('Không tạo được template: ' + (e.message || e)); }
+    if (btn) { btn.disabled = false; btn.textContent = 'Tải template PIC'; }
+  })();
+}
+/* Đọc file template đã điền → danh sách thay đổi, chưa ghi gì */
+async function picParse(file) {
+  await loadScript(XLSX_URL);
+  const wb = XLSX.read(await file.arrayBuffer(), {type: 'array'});
+  const sh = wb.Sheets['Phan_cong_PIC'] || wb.Sheets[wb.SheetNames[0]];
+  const A = XLSX.utils.sheet_to_json(sh, {header: 1, raw: true, defval: ''});
+  const hi = A.findIndex(r => r.some(c => fold(c) === fold('Số hợp đồng')) && r.some(c => fold(c) === fold('PIC mới')));
+  if (hi < 0) throw new Error('Không thấy cột "Số hợp đồng" và "PIC mới". Hãy dùng file tải từ nút "Tải template PIC".');
+  const H = A[hi].map(c => fold(c)), ck = H.indexOf(fold('Số hợp đồng')), cp = H.indexOf(fold('PIC mới')), cn = H.indexOf(fold('Tên pháp nhân'));
+  const byKey = {}; crmRows(CR.day).forEach(r => byKey[r.key] = r);
+  const pick = v => { const x = fold(v); if (!x) return undefined; if (x === fold(PIC_CLEAR) || x === fold('Chưa phân công')) return ''; return PICS.find(p => fold(p) === x) ?? null; };
+  const seen = {}, changes = [], errors = []; let same = 0, filled = 0;
+  for (let i = hi + 1; i < A.length; i++) {
+    const raw = A[i], k0 = String(raw[ck] == null ? '' : raw[ck]).trim(), pv = String(raw[cp] == null ? '' : raw[cp]).trim();
+    if (!k0 || !pv) continue; filled++;
+    const k = MERGE[k0] || k0, r = byKey[k], np = pick(pv), line = i + 1, nm = cn >= 0 ? String(raw[cn] || '') : '';
+    if (!r) { errors.push(`Dòng ${line}: không có số hợp đồng "${k0}"${nm ? ' (' + nm + ')' : ''} trong hệ thống`); continue; }
+    if (np === null) { errors.push(`Dòng ${line}: "${pv}" không có trong danh sách PIC (${r.name})`); continue; }
+    if (k in seen && seen[k] !== np) { errors.push(`Dòng ${line}: ${r.name} bị điền 2 PIC khác nhau (${seen[k] || PIC_CLEAR} / ${np || PIC_CLEAR}), bỏ qua dòng này`); continue; }
+    if (k in seen) continue; seen[k] = np;
+    if ((r.pic || '') === np) { same++; continue; }
+    changes.push({key: k, name: r.name, grp: r.grp, from: r.pic || '', to: np});
+  }
+  return {file: file.name, changes, errors, same, filled};
+}
+/* Ghi PIC: gom theo nhóm tài liệu crm/bXX, mỗi nhóm 1 lần ghi */
+async function picApply(changes, prog) {
+  const db = await claude.use('db'); if (!db) throw {code: 'not_granted'};
+  const by = {}; changes.forEach(c => { const base = (C0.rows[c.key] || [])[2] || ''; (by[bucketOf(c.key)] = by[bucketOf(c.key)] || {})[c.key] = {pic: c.to === base ? null : c.to}; });
+  const B = Object.entries(by); let i = 0;
+  const run = async () => { for (const [b, patch] of B) { const ref = db.doc('crm/' + b), s = await ref.get();
+      if (!s.exists) await ref.set(patch); else await ref.update(patch);
+      for (const [k, v] of Object.entries(patch)) { const e = DBX[k] = Object.assign({}, DBX[k] || {}); if (v.pic == null) delete e.pic; else e.pic = v.pic; }
+      prog(++i, B.length); } };
+  DBQ = DBQ.then(run, run); await DBQ;
+}
+function picPanel() {
+  const I = CR.picImp; if (!I) return '';
+  const lab = p => p ? esc(p) : '<span class="lbl">Chưa phân công</span>', cnt = {};
+  I.changes.forEach(c => { const t = c.to || PIC_CLEAR; cnt[t] = (cnt[t] || 0) + 1; });
+  return `<div class="card" id="crpicp" style="border:1px solid var(--accent)"><div class="hd"><div><div class="eyebrow">Upload PIC · ${esc(I.file)}</div><h2 class="card-title">${n0(I.changes.length)} khách đổi PIC · ${n0(I.same)} giữ nguyên · ${n0(I.errors.length)} lỗi</h2></div>
+    <div style="display:flex;gap:8px"><button class="btn" id="crpicx">Huỷ</button><button class="btn pri" id="crpicok" ${I.changes.length && !I.busy ? '' : 'disabled'}>${I.busy ? 'Đang lưu…' : 'Áp dụng ' + n0(I.changes.length) + ' thay đổi'}</button></div></div>
+    ${I.changes.length ? `<div class="lbl" style="margin-bottom:8px">Sau khi áp dụng: ${Object.entries(cnt).map(([p, n]) => `<b>${esc(p)}</b> nhận ${n0(n)}`).join(' · ')}</div>` : ''}
+    ${I.msg ? `<div class="hint" style="margin-bottom:8px"><b>${esc(I.msg)}</b></div>` : ''}
+    ${I.errors.length ? `<div class="hint" style="color:var(--critical);margin-bottom:8px">${I.errors.slice(0, 30).map(esc).join('<br>')}${I.errors.length > 30 ? `<br>… còn ${n0(I.errors.length - 30)} lỗi` : ''}</div>` : ''}
+    ${I.changes.length ? `<div class="tw" style="max-height:340px;overflow:auto"><table><thead><tr><th class="l">Doanh nghiệp</th><th class="l">Nhóm</th><th class="l">PIC hiện tại</th><th class="l">PIC mới</th></tr></thead><tbody>${I.changes.map(c => `<tr><td class="l name">${esc(c.name)}<span class="def">HĐ ${esc(c.key)}</span></td><td class="l">${c.grp === 9 ? '' : c.grp + '. '}${esc(GRP[c.grp])}</td><td class="l">${lab(c.from)}</td><td class="l"><b>${lab(c.to)}</b></td></tr>`).join('')}</tbody></table></div>` : `<div class="hint">${I.filled ? 'Không có khách nào đổi PIC so với hiện tại.' : 'Chưa điền cột "PIC mới" ở dòng nào.'}</div>`}</div>`;
 }
 function bindJourney() {
   if (TAB !== 'jr') return;
@@ -1337,6 +1455,17 @@ function bindJourney() {
   if ($('crresx')) $('crresx').onclick = () => keep(() => { CR.res = ''; });
   if ($('crq')) $('crq').onchange = e => keep(() => { CR.q = e.target.value; });
   if ($('crxls')) $('crxls').onclick = crmExport;
+  if ($('crpict')) $('crpict').onclick = picTemplate;
+  if ($('crpicf')) $('crpicf').onchange = async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    try { CR.picImp = await picParse(f); } catch (er) { CR.picImp = {file: f.name, changes: [], errors: [er.message || String(er)], same: 0, filled: 0}; }
+    keep(() => {}); if ($('crpicp')) $('crpicp').scrollIntoView({behavior: 'smooth', block: 'start'}); };
+  if ($('crpicx')) $('crpicx').onclick = () => keep(() => { CR.picImp = null; });
+  if ($('crpicok')) $('crpicok').onclick = async () => { const I = CR.picImp; if (!I || I.busy || !I.changes.length) return;
+    if (!window.confirm(`Đổi PIC cho ${I.changes.length} khách theo file "${I.file}"?`)) return;
+    I.busy = true; I.msg = ''; keep(() => {});
+    try { await picApply(I.changes, (i, n) => { const b = $('crpicok'); if (b) b.textContent = `Đang lưu ${i}/${n}…`; });
+      CRM_ = null; AUTOC_ = null; CR.picImp = null; keep(() => {}); alert(`Đã đổi PIC cho ${I.changes.length} khách.`);
+    } catch (er) { I.busy = false; I.msg = (er && er.code === 'not_granted') ? 'Chưa kết nối được dữ liệu nhập, chưa lưu.' : 'Chưa lưu được: ' + ((er && (er.message || er.code)) || er) + '. Có thể đã lưu một phần, tải lại trang để kiểm tra.'; keep(() => {}); } };
   document.querySelectorAll('tr.crg').forEach(el => el.onclick = () => keep(() => { const id = el.dataset.crg; const cur = id in COPEN ? COPEN[id] : el.textContent.trim().startsWith('▾'); COPEN[id] = !cur; }));
   document.querySelectorAll('.crmore').forEach(el => el.onclick = e => { e.stopPropagation(); keep(() => { const id = el.dataset.crg; CMORE[id] = (CMORE[id] || 30) + 50; }); });
   document.querySelectorAll('[data-cropen]').forEach(el => el.onclick = () => keep(() => { CR.open = el.dataset.cropen; }));
