@@ -884,7 +884,7 @@ function collectCS(key) {
 function bindPattern() {
   const keep = fn => { const y = window.scrollY, py = $('dpanel') ? $('dpanel').scrollTop : 0; fn(); render(); window.scrollTo(0, y); if ($('dpanel') && fn.keepPanel) $('dpanel').scrollTop = py; };
   document.querySelectorAll('[data-drill]').forEach(el => el.onclick = ev => { ev.stopPropagation(); const v = el.dataset.drill;
-    if (v.startsWith('cust:')) { const k = profKey(v.slice(5)); if (!k) return; const y = window.scrollY; CR.open = k; CR.sec.pat = true; render(); window.scrollTo(0, y); return; }
+    if (v.startsWith('cust:')) { const k = profKey(v.slice(5)); if (!k) return; const y = window.scrollY; if (CR.open !== k) CR.cq = ''; CR.open = k; CR.ptab = 'input'; CR.sec.pat = true; render(); window.scrollTo(0, y); return; }
     keep(() => { PAT.drill = v; }); });
   const msp = $('pmsp');
   if (msp) {
@@ -1276,24 +1276,36 @@ function crmInput(ALL, d) {
     <div class="hint">Nhóm tự xếp theo thứ tự: 1) đã ký phụ lục (ngày vào tủ) chưa khởi tạo XPAY; 2) Top 200 (mọi pháp nhân của nhóm client); 3) đã khởi tạo XPAY, 30 ngày chưa có giao dịch, xếp theo tiềm năng; 4) chưa ký phụ lục nhưng có giao dịch Mai Linh T6–T9; 5) còn lại, chia theo phân loại Mai Linh. Đổi nhóm, người phụ trách trong cửa sổ cập nhật. Doanh thu đầu và GMV lấy tự động từ bảng kê.</div></div>`;
   return h;
 }
-function cardSec(r, sec) {
-  if (CARDST === 'off') return '';
-  const D = CARDD[r.key], sm = CARDS[r.key] || {}, ed = CANWRITE, na = '<span class="lbl">chưa có</span>';
-  const sum = CARDST === 'err' ? 'chưa tải được' : CARDST !== 'ok' ? 'đang tải…' : [sm.n ? `<b>${n0(sm.n)} thẻ</b> · hạn mức ${short(sm.limit)} · còn ${short(sm.bal)}` : 'chưa có thẻ', sm.mst ? 'MST ' + esc(sm.mst) : 'chưa có MST', sm.exp && sm.exp <= addD(TODAY, 60).slice(0, 7).replace('-', '').slice(2) ? '<b style="color:var(--critical)">có thẻ sắp hết hạn</b>' : ''].filter(Boolean).join(' · ');
-  let h = '';
-  if (CARDST === 'err') h = `<div class="hint">Chưa tải được dữ liệu thẻ: ${esc(CARDMSG)}</div>`;
-  else if (!D || D.loading) h = '<div class="hint">Đang tải…</div>';
-  else if (D.err) h = `<div class="hint" style="color:var(--critical)">${esc(D.err)}</div>`;
-  else {
-    const co = D.company || {}, C = D.cards, lim = C.reduce((a, x) => a + (x.monthly_limit || 0), 0), bal = C.reduce((a, x) => a + (x.balance || 0), 0);
-    const bd = C.map(x => x.balance_date).filter(Boolean).sort().pop(), soon = C.filter(x => expSoon(x.expiry)).length;
-    h = (ed && C.length ? `<div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:6px"><button class="btn" id="cdfull">${D.full ? 'Che lại' : 'Hiện đầy đủ'}</button><button class="btn" id="cdxls">Xuất thẻ của khách này</button></div>` : '')
-      + `<div style="display:grid;grid-template-columns:140px 1fr;gap:4px 10px;font-size:13px;margin-bottom:8px"><span class="lbl">MST</span><span>${co.mst ? esc(co.mst) : na}</span><span class="lbl">Địa chỉ</span><span>${co.address ? esc(co.address) : na}</span><span class="lbl">Email doanh nghiệp</span><span>${co.email ? esc(co.email) : na}</span></div>`;
-    if (!C.length) h += `<div class="hint">Chưa có thẻ nào trong hệ thống. ${ed ? 'Thêm thẻ bằng sheet The_XPAY trong "Tải template cập nhật".' : ''}</div>`;
-    else h += `<div class="lbl" style="margin-bottom:6px"><b>${n0(C.length)} thẻ</b> · tổng hạn mức tháng <b>${money(lim)}</b> · số dư còn <b>${money(bal)}</b> ${unitLabel()}${bd ? ` (cập nhật ${dmy(bd)})` : ''}${soon ? ` · <b style="color:var(--critical)">${soon} thẻ hết hạn trong 60 ngày</b>` : ''}${D.full ? ' · <b>đang hiện đầy đủ</b>' : ''}</div>
-      <div class="tw" style="max-height:320px;overflow:auto"><table><thead><tr><th class="l">Tên chủ thẻ</th><th class="l">Tên công ty trên thẻ</th><th class="l">Số thẻ</th><th class="l">UID</th><th class="l">Pantoken (mã QR)</th><th class="l">Hạn</th><th>Hạn mức tháng (${unitLabel()})</th><th>Số dư (${unitLabel()})</th></tr></thead><tbody>${C.map(x => `<tr><td class="l">${esc(x.holder || '')}</td><td class="l">${esc(x.company_on_card || '')}</td><td class="l" style="font-family:monospace">${esc(x.pan || '—')}</td><td class="l" style="font-family:monospace">${esc(x.uid)}</td><td class="l" style="font-family:monospace;max-width:180px;overflow:hidden;text-overflow:ellipsis">${esc(x.pantoken || '—')}</td><td class="l">${expSoon(x.expiry) ? `<b style="color:var(--critical)">${esc(x.expiry)}</b>` : esc(x.expiry || '—')}</td><td>${money(x.monthly_limit)}</td><td>${money(x.balance)}${x.balance_date ? `<span class="def">${dmy(x.balance_date)}</span>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
-  }
-  return sec('cards', 'Thẻ XPAY & thông tin doanh nghiệp', sum, CR.sec.cards ? h : '');
+/* Mục trong Nhập liệu mặc định mở; người dùng đóng mục nào thì nhớ mục đó */
+const secOn = k => CR.sec[k] !== false;
+/* Hồ sơ doanh nghiệp: thông tin có sẵn để theo dõi + danh sách thẻ (tìm kiếm được) */
+function cardRowsHtml(C, q) {
+  const f = fold(q || ''), L = f ? C.filter(x => fold([x.holder, x.company_on_card, x.uid, x.pan, x.expiry].join(' ')).includes(f)) : C;
+  return {n: L.length, html: L.map((x, i) => `<tr><td>${i + 1}</td><td class="l">${esc(x.holder || '')}</td><td class="l">${esc(x.company_on_card || '')}</td><td class="l" style="font-family:monospace">${esc(x.pan || '—')}</td><td class="l" style="font-family:monospace">${esc(x.uid)}</td><td class="l" style="font-family:monospace;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.pantoken || '')}">${esc(x.pantoken || '—')}</td><td class="l">${expSoon(x.expiry) ? `<b style="color:var(--critical)">${esc(x.expiry)}</b>` : esc(x.expiry || '—')}</td><td>${money(x.monthly_limit)}</td><td>${money(x.balance)}${x.balance_date ? `<span class="def">${dmy(x.balance_date)}</span>` : ''}</td></tr>`).join('') || `<tr><td colspan="9" class="l lbl">${f ? 'Không có thẻ khớp.' : 'Chưa có thẻ.'}</td></tr>`};
+}
+function profView(r) {
+  const na = '<span class="lbl">chưa có</span>', D = CARDD[r.key], ed = CANWRITE;
+  const grid = rows => `<div style="display:grid;grid-template-columns:170px 1fr;gap:6px 12px;font-size:13px">${rows.map(([k, v]) => `<span class="lbl">${k}</span><span>${v == null || v === '' ? na : v}</span>`).join('')}</div>`;
+  const co = (D && D.company) || {}, cs = CARDS[r.key] || {};
+  let h = `<div class="g2" style="margin-top:12px"><div class="card"><h3 style="margin:0 0 10px;font-size:14px">Thông tin doanh nghiệp</h3>${grid([
+      ['Tên pháp nhân', esc(r.name)], ['Số hợp đồng', esc(r.key)], ['MST', esc(co.mst || cs.mst || '')], ['Địa chỉ', esc(co.address || cs.address || '')], ['Email doanh nghiệp', esc(co.email || cs.email || '')]])}</div>
+    <div class="card"><h3 style="margin:0 0 10px;font-size:14px">Phân loại & phụ trách</h3>${grid([
+      ['Nhóm', `${r.grp === 9 ? '' : r.grp + '. '}${esc(GRP[r.grp])}${r.grpM ? ' (chọn tay)' : ''}`], ['Phân loại Mai Linh', esc(r.sub)], ['Nhóm client', r.gname ? esc(r.gname) + (r.grank ? ` (hạng ${r.grank})` : '') : ''], ['Hạng Top 200', esc(r.rank)],
+      ['PIC', r.pic ? esc(r.pic) : '<b style="color:var(--critical)">Chưa phân công</b>'], ['PIC cũ (sổ khách)', esc(r.picOld)], ['Tình trạng', esc(r.st)], ['Tiến độ', stageTxt[r.stage]]])}</div></div>`;
+  h += `<div class="card" style="margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px"><h3 style="margin:0;font-size:14px">Thẻ XPAY</h3>
+    ${D && !D.loading && !D.err && D.cards.length ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="cdq" placeholder="Tìm chủ thẻ, UID, 4 số cuối…" value="${esc(CR.cq || '')}" style="font:13px var(--font-family-sans-serif);padding:6px 10px;border:1px solid var(--color-border-default);border-radius:10px;width:230px">${ed ? `<button class="btn" id="cdfull">${D.full ? 'Che lại' : 'Hiện đầy đủ'}</button><button class="btn" id="cdxls">Xuất thẻ của khách này</button>` : ''}</div>` : ''}</div>`;
+  if (CARDST === 'off') return h + '<div class="hint">Dữ liệu thẻ chỉ có trong web Reconciliation.</div></div>';
+  if (CARDST === 'err') return h + `<div class="hint">Chưa tải được dữ liệu thẻ: ${esc(CARDMSG)}</div></div>`;
+  if (!D || D.loading) return h + '<div class="hint">Đang tải…</div></div>';
+  if (D.err) return h + `<div class="hint" style="color:var(--critical)">${esc(D.err)}</div></div>`;
+  const C = D.cards;
+  if (!C.length) return h + `<div class="hint">Chưa có thẻ nào trong hệ thống. ${ed ? 'Thêm thẻ bằng sheet The_XPAY trong "Tải template cập nhật" ở tab Nhập liệu.' : ''}</div></div>`;
+  const lim = C.reduce((a, x) => a + (x.monthly_limit || 0), 0), bal = C.reduce((a, x) => a + (x.balance || 0), 0), bd = C.map(x => x.balance_date).filter(Boolean).sort().pop(), soon = C.filter(x => expSoon(x.expiry)).length;
+  h += `<div class="kpis" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:10px">${[['Số thẻ', n0(C.length)], ['Tổng hạn mức tháng', money(lim) + ' <span style="font-size:12px">' + unitLabel() + '</span>'], ['Tổng số dư', money(bal) + ' <span style="font-size:12px">' + unitLabel() + '</span>' + (bd ? `<div class="lbl" style="font-size:11px">cập nhật ${dmy(bd)}</div>` : '')], ['Sắp hết hạn (60 ngày)', soon ? `<span style="color:var(--critical)">${n0(soon)}</span>` : '0']].map(([k, v]) => `<div class="kpi"><div class="k">${k}</div><div class="v" style="font-size:18px">${v}</div></div>`).join('')}</div>`;
+  const R = cardRowsHtml(C, CR.cq);
+  h += `<div class="lbl" style="margin-bottom:6px" id="cdn">${R.n === C.length ? `${n0(C.length)} thẻ` : `${n0(R.n)} / ${n0(C.length)} thẻ khớp`}${D.full ? ' · <b>đang hiện đầy đủ</b>' : ''}</div>
+    <div class="tw" style="max-height:calc(100vh - 360px);min-height:240px;overflow:auto"><table><thead><tr><th>#</th><th class="l">Tên chủ thẻ</th><th class="l">Tên công ty trên thẻ</th><th class="l">Số thẻ</th><th class="l">UID</th><th class="l">Pantoken (mã QR)</th><th class="l">Hạn</th><th>Hạn mức tháng (${unitLabel()})</th><th>Số dư (${unitLabel()})</th></tr></thead><tbody id="cdbody">${R.html}</tbody></table></div></div>`;
+  return h;
 }
 function crmDrawer(r, d) {
   if (!r) return '';
@@ -1304,13 +1316,14 @@ function crmDrawer(r, d) {
   const people = [...new Set([...PICS, ...r.acts.map(a => a.who).filter(Boolean)])];
   let h = `<div id="crmask" style="position:fixed;inset:0;background:#0006;z-index:30;display:flex;justify-content:flex-end"><div id="crpane" style="background:var(--surface-2);width:min(920px,100%);height:100%;overflow:auto;padding:20px 24px;border-radius:20px 0 0 20px">
     <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start"><div><div class="eyebrow">${r.grp === 9 ? '' : r.grp + '. '}${esc(GRP[r.grp])}${r.grpM ? ' (chọn tay)' : ''}</div><h2 class="card-title" style="font-size:19px">${esc(r.name)}</h2>
-      <div class="lbl" style="margin-top:4px">HĐ ${esc(r.key)}${r.gname ? ' · nhóm client ' + esc(r.gname) + (r.grank ? ' (hạng ' + r.grank + ')' : '') : ''}${r.rank ? ' · ' + esc(r.rank) : ''} · ${esc(r.sub)}${r.pot ? ' · tiềm năng ' + nf(r.pot, 1) + ' triệu/tháng' : ''}${r.picOld ? ' · PIC cũ ' + esc(r.picOld) : ''}</div></div><button class="btn" id="crclose">✕</button></div>
+      <div class="lbl" style="margin-top:4px">HĐ ${esc(r.key)}${r.gname ? ' · nhóm client ' + esc(r.gname) + (r.grank ? ' (hạng ' + r.grank + ')' : '') : ''}${r.rank ? ' · ' + esc(r.rank) : ''} · ${esc(r.sub)}${r.pot ? ' · tiềm năng ' + nf(r.pot, 1) + ' triệu/tháng' : ''}${r.picOld ? ' · PIC cũ ' + esc(r.picOld) : ''}</div></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-shrink:0"><div class="tabs" style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:3px">${[['input', 'Nhập liệu'], ['profile', 'Hồ sơ doanh nghiệp']].map(([k, l]) => `<button class="tab ${(CR.ptab || 'input') === k ? 'on' : ''}" data-ptab="${k}">${l}</button>`).join('')}</div><button class="btn" id="crclose">✕</button></div></div>
     <div class="kpis" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-top:12px">${[['GMV lũy kế', r.gmv ? money(r.gmv) : '—'], ['GMV 30 ngày', r.gmv30 ? money(r.gmv30) : '—'], ['Chuyến', n0(r.trips)], ['Giao dịch Mai Linh T6–T9', r.ml69 ? money(r.ml69) : '—']].map(([k, v]) => `<div class="kpi"><div class="k">${k}</div><div class="v" style="font-size:19px">${v}</div></div>`).join('')}</div>
-    <div class="banner" style="margin-top:12px"><b>Gợi ý xử lý</b><ul>${r.sug.map(s => `<li class="watch">${esc(s)}</li>`).join('')}</ul></div>
+    ${CR.ptab === 'profile' ? profView(r) : `<div class="banner" style="margin-top:12px"><b>Gợi ý xử lý</b><ul>${r.sug.map(s => `<li class="watch">${esc(s)}</li>`).join('')}</ul></div>
     <div class="lbl" id="crmmsg" style="margin:8px 2px;min-height:16px">${ed ? '' : DBST === 'ok' ? 'Bạn chỉ có quyền xem.' : 'Chưa kết nối được dữ liệu nhập, chưa lưu được.'}</div>
     ${(() => {
       const mk = f => done(r[f]) ? (isoOk(r[f]) ? dm(r[f]) : '✓') : '—', tr = S.tx.filter(t => t[2] === r.key && t.length > 9).map(mkTrip), ps = patSummary(d)[r.key], cs = CARDS[r.key] || {};
-      const A = r.acts[0], sec = (k, title, sum, body) => `<details class="card crsec" data-sec="${k}" style="margin-top:10px;padding:14px 20px" ${CR.sec[k] ? 'open' : ''}><summary style="cursor:pointer;list-style:none;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap"><b style="font-size:14px">${CR.sec[k] ? '▾' : '▸'} ${title}</b><span class="lbl" style="font-size:12.5px">${sum}</span></summary><div style="margin-top:10px">${body}</div></details>`;
+      const A = r.acts[0], sec = (k, title, sum, body) => `<details class="card crsec" data-sec="${k}" style="margin-top:10px;padding:14px 20px" ${secOn(k) ? 'open' : ''}><summary style="cursor:pointer;list-style:none;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap"><b style="font-size:14px">${secOn(k) ? '▾' : '▸'} ${title}</b><span class="lbl" style="font-size:12.5px">${sum}</span></summary><div style="margin-top:10px">${body}</div></details>`;
       return sec('ms', 'Tiến độ & các mốc', `${stageTxt[r.stage]} · ký PL ${mk('pl')} · XPAY ${mk('xp')} · gọi ${mk('call')} · meeting ${mk('meet')} · doanh thu đầu ${r.first ? dm(r.first) : '—'}`, `
       ${ms('pl', 'Ký phụ lục (vào tủ)')}${ms('xp', 'Khởi tạo XPAY')}${ms('call', 'Gọi khách', r.calls.length ? `${r.calls.length} lần · tự lấy ngày gọi gần nhất` : '')}${ms('meet', 'Meeting', r.meets.length ? `${r.meets.length} lần · tự lấy ngày gần nhất` : '')}
       <div style="display:flex;gap:8px;align-items:center;padding:6px 0"><span style="width:150px;font-weight:600">Doanh thu đầu tiên</span>${r.firstAmt != null ? `<span>${dmy(r.first)} · ${n0(r.firstAmt)} đồng <span class="lbl">(tự động từ bảng kê)</span></span>` : `<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-ms="first" ${done(r.first) ? 'checked' : ''} ${dis}> đã có</label><input type="date" data-msd="first" value="${isoOk(r.first) ? r.first : ''}" ${dis} style="${inp}"><span class="lbl">chưa thấy trong bảng kê</span>`}</div>
@@ -1326,8 +1339,7 @@ function crmDrawer(r, d) {
       <textarea id="cat_x" placeholder="Feedback chi tiết" ${dis} style="${inp};width:100%;margin-top:8px;min-height:60px"></textarea>
       <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><span class="lbl">Hẹn lại ngày</span><input type="date" id="cat_nx" value="${isoOk(r.nx) ? r.nx : ''}" ${dis} style="${inp}"><button class="btn pri" id="cat_add" ${dis}>Lưu lần ${'liên hệ'}</button></div>
       ${r.acts.length ? `<div class="tw" style="margin-top:10px"><table><thead><tr><th class="l">Ngày</th><th class="l">Loại</th><th class="l">Người</th><th class="l">Kết quả</th><th class="l">Chi tiết</th><th></th></tr></thead><tbody>${r.acts.map(a => `<tr><td class="l">${isoOk(a.d) ? dmy(a.d) : esc(a.d)}</td><td class="l">${a.t === 'meet' ? 'Meeting' : 'Gọi'}</td><td class="l">${esc(a.who || '')}</td><td class="l">${esc(a.res || '')}</td><td class="l" style="white-space:normal;min-width:220px">${esc(a.det || '')}</td><td>${a.seed ? '<span class="lbl">file giao thẻ</span>' : ed ? `<a data-cadel="${esc(a.id)}" style="cursor:pointer;color:var(--critical)">xóa</a>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="hint">Chưa có lần liên hệ nào.</div>'}`)
-      + cardSec(r, sec)
-      + sec('pat', 'Pattern di chuyển', tr.length ? `${n0(tr.length)} chuyến toàn bộ${ps ? ` · 30 ngày: ${esc(ps.route)} (${ps.rn} chuyến), ${esc(ps.p)}, ${ps.band}` : ''}` : 'chưa có chuyến XPAY', CR.sec.pat ? (tr.length ? kpiRow(tr) : '') + custPatterns(r.key, tr) : '')
+      + sec('pat', 'Pattern di chuyển', tr.length ? `${n0(tr.length)} chuyến toàn bộ${ps ? ` · 30 ngày: ${esc(ps.route)} (${ps.rn} chuyến), ${esc(ps.p)}, ${ps.band}` : ''}` : 'chưa có chuyến XPAY', secOn('pat') ? (tr.length ? kpiRow(tr) : '') + custPatterns(r.key, tr) : '')
       + sec('asg', 'Phân công, phân loại', `PIC ${r.pic ? esc(r.pic) : '<b style="color:var(--critical)">chưa phân công</b>'} · nhóm ${r.grp === 9 ? 'Đã thanh lý' : r.grp}${r.grpM ? ' (chọn tay)' : ' (tự động)'}${r.st ? ' · ' + esc(r.st) : ''}${r.note ? ' · có ghi chú' : ''}`, `
 
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
@@ -1336,7 +1348,7 @@ function crmDrawer(r, d) {
         <label class="lbl">Tình trạng đặc biệt<select id="crf_st" ${dis} style="width:100%">${SPECIAL.map(s => `<option value="${s}" ${r.st === s ? 'selected' : ''}>${s || '—'}</option>`).join('')}</select></label></div>
       <textarea id="crf_note" placeholder="Ghi chú chung" ${dis} style="${inp};width:100%;margin-top:8px;min-height:50px">${esc(r.note)}</textarea>
       <div style="margin-top:10px"><button class="btn pri crf-save" ${dis}>Lưu mốc và phân công</button></div>`);
-    })()}
+    })()}`}
   </div></div>`;
   return h;
 }
@@ -1650,14 +1662,16 @@ function bindJourney() {
 const profKey = k => { k = MERGE[k] || k; return crmRows(CR.day).some(r => r.key === k) ? k : null; };
 function bindDrawer() {
   const keep = fn => { const y = window.scrollY, pn = $('crpane'), py = pn ? pn.scrollTop : 0; fn(); render(); window.scrollTo(0, y); if ($('crpane')) $('crpane').scrollTop = py; };
-  document.querySelectorAll('[data-cropen]').forEach(el => el.onclick = ev => { ev.stopPropagation(); const k = profKey(el.dataset.cropen); if (!k) return; const y = window.scrollY; CR.open = k; render(); window.scrollTo(0, y); });
+  document.querySelectorAll('[data-cropen]').forEach(el => el.onclick = ev => { ev.stopPropagation(); const k = profKey(el.dataset.cropen); if (!k) return; const y = window.scrollY; if (CR.open !== k) { CR.cq = ''; CR.ptab = 'input'; } CR.open = k; render(); window.scrollTo(0, y); });
   if (!CR.open) return;
   document.querySelectorAll('details.crsec').forEach(el => el.ontoggle = () => { const k = el.dataset.sec; if (!!CR.sec[k] === el.open) return; keep(() => { CR.sec[k] = el.open; }); });
   const close = () => keep(() => { CR.open = null; });
   $('crclose').onclick = close; $('crmask').onclick = e => { if (e.target.id === 'crmask') close(); };
   document.onkeydown = e => { if (e.key === 'Escape' && CR.open) close(); };
   const k = CR.open, msg = t => { if ($('crmmsg')) $('crmmsg').textContent = t; };
-  if (CARDST === 'ok' && CR.sec.cards && !CARDD[k]) { CARDD[k] = {loading: true}; cardDetail(k, false).catch(e => { CARDD[k] = {err: 'Chưa tải được: ' + (e.message || e)}; }).then(() => { if (CR.open === k) keep(() => {}); }); }
+  document.querySelectorAll('[data-ptab]').forEach(b => b.onclick = () => keep(() => { CR.ptab = b.dataset.ptab; }));
+  if ($('cdq')) $('cdq').oninput = e => { CR.cq = e.target.value; const D = CARDD[k]; if (!D || !D.cards) return; const R = cardRowsHtml(D.cards, CR.cq); $('cdbody').innerHTML = R.html; $('cdn').innerHTML = (R.n === D.cards.length ? `${n0(R.n)} thẻ` : `${n0(R.n)} / ${n0(D.cards.length)} thẻ khớp`) + (D.full ? ' · <b>đang hiện đầy đủ</b>' : ''); };
+  if (CARDST === 'ok' && CR.ptab === 'profile' && !CARDD[k]) { CARDD[k] = {loading: true}; cardDetail(k, false).catch(e => { CARDD[k] = {err: 'Chưa tải được: ' + (e.message || e)}; }).then(() => { if (CR.open === k) keep(() => {}); }); }
   if ($('cdfull')) $('cdfull').onclick = () => { const D = CARDD[k]; if (D.full) { CARDD[k] = Object.assign({}, D, {loading: true}); keep(() => {}); cardDetail(k, false).then(() => keep(() => {})); return; }
     CARDD[k] = Object.assign({}, D, {loading: true}); keep(() => {}); cardDetail(k, true).catch(e => { CARDD[k] = {err: e.message || String(e)}; }).then(() => keep(() => {})); };
   if ($('cdxls')) $('cdxls').onclick = async () => { try { const D = CARDD[k].full ? CARDD[k] : await cardDetail(k, true); await cardsXlsx([{key: k, name: cname(k), label: '', company: D.company, cards: D.cards}], `XPAY_The_${k}_${TODAY.replace(/-/g, '')}.xlsx`, cname(k)); keep(() => {}); } catch (e) { alert('Không xuất được: ' + (e.message || e)); } };
