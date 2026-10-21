@@ -16,13 +16,13 @@ type Lib = Record<string, Pick<Guide, 'slug' | 'title' | 'audience' | 'sections'
 const kb = (n: number | null) => (n == null ? '' : n > 1048576 ? `${(n / 1048576).toFixed(1).replace('.', ',')} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 const noExt = (n: string) => n.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
 
-export default function JourneyView({ guide, lib, canEdit, userId }: { guide: Guide; lib: Lib; canEdit: boolean; userId: string }) {
+export default function JourneyView({ guide, lib, canEdit, userId, startEdit }: { guide: Guide; lib: Lib; canEdit: boolean; userId: string; startEdit?: boolean }) {
   const router = useRouter();
   const J = guide.extras!.journey!;
   const roles = J.roles?.length ? J.roles : DEFAULT_ROLES;
   const R = useMemo(() => Object.fromEntries(roles.map((r) => [r.id, r])), [roles]);
   const src = (g: string) => J.sources?.[g] || (lib[g] ? audienceLabel(lib[g].audience) : g);
-  const [edit, setEdit] = useState(false);
+  const [edit, setEdit] = useState(!!startEdit && canEdit);
   const [si, setSi] = useState(0), [pi, setPi] = useState(0);
   const [me, setMe] = useState(''), [only, setOnly] = useState(false);
   const [done, setDone] = useState<Record<string, boolean>>({});
@@ -36,7 +36,12 @@ export default function JourneyView({ guide, lib, canEdit, userId }: { guide: Gu
 
   // khôi phục: vai trò, đã làm, vị trí (từ #chang/buoc trên đường dẫn)
   useEffect(() => {
-    try { const v = JSON.parse(localStorage.getItem(KEY) || '{}'); setDone(v.done || {}); setMe(v.me || ''); setOnly(!!v.only); } catch { /* */ }
+    let v: { done?: Record<string, boolean>; me?: string; only?: boolean } = {};
+    try { v = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { /* */ }
+    // ?vai=… (từ trang Tổng quan) chọn sẵn vai trò
+    const vai = new URLSearchParams(location.search).get('vai');
+    setDone(v.done || {}); setMe(vai || v.me || ''); setOnly(vai ? true : !!v.only);
+    if (vai) { try { localStorage.setItem(KEY, JSON.stringify({ ...v, me: vai, only: true })); } catch { /* */ } }
     const m = decodeURIComponent(location.hash.slice(1)).match(/^([^/]+)(?:\/(\d+))?$/);
     if (m) { const k = J.stages.findIndex((s) => s.id === m[1]); if (k >= 0) { setSi(k); setPi(m[2] ? Math.max(0, +m[2] - 1) : 0); } }
   }, [KEY, J.stages]);
@@ -54,7 +59,7 @@ export default function JourneyView({ guide, lib, canEdit, userId }: { guide: Gu
   const all = J.stages.reduce((a, _, k) => { const s = stat(k); return { n: a.n + s.n, t: a.t + s.t }; }, { n: 0, t: 0 });
 
   const goto = (k: number, p = 0) => {
-    setSi(k); setPi(p); history.replaceState(null, '', `#${J.stages[k].id}/${p + 1}`);
+    setSi(k); setPi(p); history.replaceState(null, '', `${location.pathname}#${J.stages[k].id}/${p + 1}`);
     body.current?.scrollTo({ top: 0 });
     if (window.innerWidth < 1050) setTimeout(() => document.getElementById('hj-reader')?.scrollIntoView({ behavior: 'smooth' }), 30);
   };

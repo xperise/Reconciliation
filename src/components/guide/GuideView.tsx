@@ -6,10 +6,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { renderMd } from '@/lib/guide/md';
 import { audienceLabel, hasOwnNumber, serviceLabel, statusLabel, type Guide } from '@/lib/guide/meta';
 import FilesBox from './FilesBox';
+import GuideNav from './GuideNav';
 import { audPill } from './GuideHome';
 import GuideEditor from './GuideEditor';
 
-export default function GuideView({ guide, canEdit, userId, startEdit }: { guide: Guide; canEdit: boolean; userId: string; startEdit?: boolean }) {
+export default function GuideView({ guide, canEdit, userId, startEdit, journeySlug }: { guide: Guide; canEdit: boolean; userId: string; startEdit?: boolean; journeySlug?: string | null }) {
   const [edit, setEdit] = useState(!!startEdit && canEdit);
   const [on, setOn] = useState(guide.sections[0]?.id || '');
   const box = useRef<HTMLDivElement>(null);
@@ -61,7 +62,7 @@ export default function GuideView({ guide, canEdit, userId, startEdit }: { guide
 
   return (
     <div className="hd"><div className="hd-wrap">
-      <div style={{ marginBottom: 14 }}><Link href="/huong-dan/thu-vien" className="hd-muted" style={{ textDecoration: 'none' }}>← Thư viện</Link> <span className="hd-muted">·</span> <Link href="/huong-dan" className="hd-muted" style={{ textDecoration: 'none' }}>Hành trình</Link></div>
+      <div style={{ marginBottom: 14 }}><GuideNav on="library" journeySlug={journeySlug} /></div>
       <div className="hd-card" style={{ padding: '18px 22px', marginBottom: 16, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         <div style={{ flex: '1 1 420px' }}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>

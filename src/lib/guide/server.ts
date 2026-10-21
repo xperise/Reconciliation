@@ -78,3 +78,10 @@ export async function loadLibrary(withDrafts: boolean): Promise<{ guides: Guide[
   return { guides: rows.map((r) => ({ ...r, sections: by.get(r.id)?.sections || [], extras: by.get(r.id)?.extras || {}, files: files[r.id] || [] })) };
 }
 export const isJourney = (g: Pick<Guide, 'extras'>) => g.extras?.kind === 'journey' && !!g.extras.journey;
+/** Slug của hành trình đầu tiên (nhẹ, không tải nội dung) */
+export async function findJourneySlug(withDrafts: boolean): Promise<string | null> {
+  let q = supabaseAdmin().from('guides').select('slug').eq('extras->>kind', 'journey').order('sort').limit(1);
+  if (!withDrafts) q = q.eq('status', 'phat-hanh');
+  const { data } = await q;
+  return (data?.[0]?.slug as string) || null;
+}

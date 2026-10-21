@@ -92,10 +92,16 @@ export async function nhapGoiHuongDan(guides: GuideInput[], replaces: string[] =
   const user = await editor();
   const sb = supabaseAdmin();
   let created = 0, updated = 0;
-  for (const g of guides.slice(0, 50)) {
+  for (let g of guides.slice(0, 50)) {
     const slug = slugify(g.slug || g.title);
-    const { data: cur, error } = await sb.from('guides').select('id').eq('slug', slug).maybeSingle();
+    const { data: cur, error } = await sb.from('guides').select('id,extras').eq('slug', slug).maybeSingle();
     if (error) throw dbErr(error.message);
+    // nhập lại hành trình: giữ các tệp đã gắn vào chặng (theo mã chặng)
+    const oldJ = (cur?.extras as GuideExtras | undefined)?.journey;
+    if (oldJ && g.extras?.kind === 'journey' && g.extras.journey) {
+      const keep = Object.fromEntries(oldJ.stages.map((x) => [x.id, x.files || []]));
+      g = { ...g, extras: { ...g.extras, journey: { ...g.extras.journey, stages: g.extras.journey.stages.map((x) => ({ ...x, files: [...new Set([...(x.files || []), ...(keep[x.id] || [])])] })) } } };
+    }
     await luuHuongDan({ ...g, id: cur?.id || null, slug, note: `Nhập gói${g.note ? ' · ' + g.note : ''}` });
     if (cur) updated++; else created++;
   }

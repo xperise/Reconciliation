@@ -1,10 +1,16 @@
-// Chuyển giữa Hành trình và Thư viện trong tab Hướng dẫn
+// Thanh chuyển trong tab Hướng dẫn: Tổng quan · Làm theo hành trình · Theo vai trò · Sự cố
 import Link from 'next/link';
-export default function GuideNav({ on, journeySlug }: { on: 'journey' | 'library'; journeySlug?: string | null }) {
+export type NavOn = 'hub' | 'journey' | 'library' | 'suco';
+export default function GuideNav({ on, journeySlug, hasSuco = true }: { on: NavOn; journeySlug?: string | null; hasSuco?: boolean }) {
+  const T: [NavOn, string, string, string][] = [
+    ...(journeySlug ? [['hub', '/huong-dan', 'ri-compass-3-line', 'Tổng quan'] as [NavOn, string, string, string]] : []),
+    ...(journeySlug ? [['journey', `/huong-dan/${journeySlug}`, 'ri-route-line', 'Làm theo hành trình'] as [NavOn, string, string, string]] : []),
+    ['library', '/huong-dan/thu-vien', 'ri-book-2-line', 'Theo vai trò'],
+    ...(journeySlug && hasSuco ? [['suco', '/huong-dan/su-co', 'ri-alarm-warning-line', 'Sự cố thường gặp'] as [NavOn, string, string, string]] : []),
+  ];
   return (
     <nav className="hj-nav" aria-label="Chế độ xem hướng dẫn">
-      {journeySlug && <Link href="/huong-dan" data-on={on === 'journey'}><i className="ri-route-line" /> Hành trình</Link>}
-      <Link href="/huong-dan/thu-vien" data-on={on === 'library'}><i className="ri-book-2-line" /> Thư viện</Link>
+      {T.map(([k, h, ic, l]) => <Link key={k} href={h} data-on={on === k}><i className={ic} /> {l}</Link>)}
     </nav>
   );
 }

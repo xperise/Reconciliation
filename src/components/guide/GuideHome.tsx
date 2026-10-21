@@ -36,8 +36,8 @@ export default function GuideHome({ guides, canEdit, error, journeySlug }: { gui
       <div style={{ marginBottom: 14 }}><GuideNav on="library" journeySlug={journeySlug} /></div>
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 16, justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
-          <div className="hd-eyebrow">Thư viện tài liệu</div>
-          <h1 style={{ margin: '4px 0 2px', fontSize: 22 }}>Tất cả hướng dẫn</h1>
+          <div className="hd-eyebrow">Theo vai trò</div>
+          <h1 style={{ margin: '4px 0 2px', fontSize: 22 }}>Hướng dẫn đầy đủ cho từng vai trò</h1>
           <div className="hd-muted">Theo từng mảng dịch vụ, cho Internal, Khách hàng, Đơn vị và Tài xế. Xem và làm theo trên web; tải tài liệu đính kèm để gửi cho khách khi cần.</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
