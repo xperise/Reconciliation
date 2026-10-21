@@ -8,11 +8,17 @@ export const adminClient = supabaseAdmin;
 /** Vai trò được upload dữ liệu và chốt hoa hồng */
 export const EDIT_ROLES = ["admin", "ke_toan"];
 
-/** Kiểm tra đăng nhập + quyền xem tab Dashboard. Trả về người dùng hoặc thông báo lỗi. */
-export async function guard(needEdit = false): Promise<{ user: { id: string; email: string; role: string } } | { error: string; status: number }> {
+/** Phần của Dashboard mà API phục vụ: "fin" = Tổng quan + Travel & SaaS (chung dữ liệu tài chính), "m" = Mobility */
+export type DashPart = "fin" | "m";
+
+/** Kiểm tra đăng nhập + quyền xem tab Dashboard (và phần cụ thể). Trả về người dùng hoặc thông báo lỗi. */
+export async function guard(needEdit = false, part?: DashPart): Promise<{ user: { id: string; email: string; role: string } } | { error: string; status: number }> {
   const user = await currentUser();
   if (!user) return { error: "Chưa đăng nhập", status: 401 };
-  if (!tabAccess(user).dashboard) return { error: "Tài khoản không có quyền xem Dashboard", status: 403 };
+  const a = tabAccess(user);
+  if (!a.dashboard) return { error: "Tài khoản không có quyền xem Dashboard", status: 403 };
+  if (part === "m" && !a.dbM) return { error: "Tài khoản không có quyền xem Dashboard Mobility", status: 403 };
+  if (part === "fin" && !a.dbAll && !a.dbTs) return { error: "Tài khoản không có quyền xem Dashboard Tổng quan / Travel & SaaS", status: 403 };
   if (needEdit && !EDIT_ROLES.includes(user.role)) return { error: "Chỉ Quản trị và Kế toán được cập nhật dữ liệu dashboard", status: 403 };
   return { user };
 }

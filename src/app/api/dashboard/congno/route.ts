@@ -48,7 +48,7 @@ function clean(fields: Record<string, string | number | null>, allowed: string[]
 
 export async function POST(req: Request) {
   try {
-    const g = await guard(true);
+    const g = await guard(true, "fin");
     if ("error" in g) return NextResponse.json({ error: g.error }, { status: g.status });
     const b = (await req.json()) as Body;
     if (b.loai !== "ar" && b.loai !== "ap") return NextResponse.json({ error: "Loại không hợp lệ" }, { status: 400 });

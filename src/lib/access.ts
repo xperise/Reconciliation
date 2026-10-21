@@ -4,16 +4,25 @@
  * - Cột xem_xperise / xem_mlx chưa có (chưa chạy SQL 13) → coi như được xem, để không ai bị khoá nhầm.
  * - Cột xem_dashboard chưa có (chưa chạy SQL 14) → chỉ admin xem được.
  */
-export type TabAccess = { xperise: boolean; mlx: boolean; dashboard: boolean };
+/** dbAll / dbTs / dbM: 3 phần trong tab Dashboard (Tổng quan · Travel & SaaS · Mobility). dashboard = có ít nhất 1 phần. */
+export type TabAccess = { xperise: boolean; mlx: boolean; dashboard: boolean; dbAll: boolean; dbTs: boolean; dbM: boolean };
 
-export function tabAccess(p: { role?: string | null; xem_xperise?: boolean | null; xem_mlx?: boolean | null; xem_dashboard?: boolean | null } | null | undefined): TabAccess {
-  if (!p) return { xperise: false, mlx: false, dashboard: false };
-  if (p.role === 'admin') return { xperise: true, mlx: true, dashboard: true };
-  // Ba quyền độc lập nhau: cấp mỗi Dashboard cũng hợp lệ.
+type ProfileAccess = {
+  role?: string | null; xem_xperise?: boolean | null; xem_mlx?: boolean | null; xem_dashboard?: boolean | null;
+  xem_db_all?: boolean | null; xem_db_ts?: boolean | null; xem_db_m?: boolean | null;
+};
+export function tabAccess(p: ProfileAccess | null | undefined): TabAccess {
+  if (!p) return { xperise: false, mlx: false, dashboard: false, dbAll: false, dbTs: false, dbM: false };
+  if (p.role === 'admin') return { xperise: true, mlx: true, dashboard: true, dbAll: true, dbTs: true, dbM: true };
+  // Chưa chạy SQL 22 (cột chưa có): quyền Dashboard cũ áp cho cả 3 phần
+  const d = p.xem_dashboard ?? false;
+  const dbAll = p.xem_db_all ?? d, dbTs = p.xem_db_ts ?? d, dbM = p.xem_db_m ?? d;
+  // Các quyền độc lập nhau: cấp mỗi Dashboard (hay mỗi 1 phần của Dashboard) cũng hợp lệ.
   return {
     xperise: p.xem_xperise ?? true,
     mlx: p.xem_mlx ?? true,
-    dashboard: p.xem_dashboard ?? false,
+    dashboard: d && (dbAll || dbTs || dbM),
+    dbAll: d && dbAll, dbTs: d && dbTs, dbM: d && dbM,
   };
 }
 
@@ -30,15 +39,3 @@ export function trangChu(a: TabAccess): string | null {
 
 export const isMlxPath = (path: string) => path === '/mlx' || path.startsWith('/mlx/');
 export const isDashboardPath = (path: string) => path === '/dashboard' || path.startsWith('/dashboard/');
-
-/**
- * Quyền xem 3 mục trong "Hồ sơ doanh nghiệp" của Dashboard Mobility (SQL 22).
- * - Admin luôn xem được cả 3.
- * - Chưa chạy SQL 22 (cột chưa có): chỉ admin xem thông tin DN và thẻ; Phân loại & phụ trách vẫn xem được.
- */
-export type MobAccess = { dn: boolean; pl: boolean; the: boolean };
-export function mobAccess(p: { role?: string | null; xem_mob_dn?: boolean | null; xem_mob_pl?: boolean | null; xem_mob_the?: boolean | null } | null | undefined): MobAccess {
-  if (!p) return { dn: false, pl: false, the: false };
-  if (p.role === 'admin') return { dn: true, pl: true, the: true };
-  return { dn: p.xem_mob_dn ?? false, pl: p.xem_mob_pl ?? true, the: p.xem_mob_the ?? false };
-}

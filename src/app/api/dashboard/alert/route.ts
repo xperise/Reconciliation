@@ -8,7 +8,7 @@ const TRANG_THAI = ["moi", "dang_xu_ly", "da_xong", "bo_qua"];
 // Ghi nhận xử lý một cảnh báo: ai nhận việc, hạn xử lý, hành động, trạng thái.
 export async function POST(req: Request) {
   try {
-    const g = await guard();
+    const g = await guard(false, "fin");
     if ("error" in g) return NextResponse.json({ error: g.error }, { status: g.status });
     const b = (await req.json()) as { id: string; ky: string; pic?: string; han_xu_ly?: string; hanh_dong?: string; trang_thai?: string };
     if (!b.id || !/^T\d{2}\.\d{4}$/.test(b.ky || "")) return NextResponse.json({ error: "Thiếu mã cảnh báo hoặc kỳ" }, { status: 400 });
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    const g = await guard();
+    const g = await guard(false, "fin");
     if ("error" in g) return NextResponse.json({ error: g.error }, { status: g.status });
     const id = new URL(req.url).searchParams.get("id") || "";
     const { error } = await adminClient().from("fin_alert_actions").delete().eq("id", id);

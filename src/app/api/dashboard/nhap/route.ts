@@ -20,7 +20,7 @@ function money(raw: unknown): number | null {
 
 export async function POST(req: Request) {
   try {
-    const g = await guard(true);
+    const g = await guard(true, "fin");
     if ("error" in g) return NextResponse.json({ error: g.error }, { status: g.status });
     const b = (await req.json()) as Body;
     const list = "rows" in b ? b.rows : [b];

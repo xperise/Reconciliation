@@ -38,6 +38,7 @@ const TABS: Record<Sec, [string, string, string][]> = {
   // Pattern di chuyển, Cập nhật số liệu) — xem components/dashboard/MobilityFrame.tsx
   m: [],
 };
+type Acc = { all: boolean; ts: boolean; m: boolean; canEdit?: boolean };
 const hasTab = (sec: Sec, t: string) => TABS[sec].some(([k]) => k === t);
 const firstTab = (sec: Sec) => TABS[sec][0]?.[0] ?? "";
 
@@ -57,6 +58,9 @@ export default function DashboardPage() {
   const [st, setSt] = useState<ViewState>({ gran: "m", cpG: "all", rate: null });
   // Mobility: tăng số này để tải lại khung dashboard sau khi nhập dữ liệu
   const [mobKey, setMobKey] = useState(0);
+  // Phần Dashboard được xem (Tổng quan / Travel & SaaS / Mobility), admin cấp ở trang Người dùng
+  const [acc, setAcc] = useState<Acc | null>(null);
+  const [accErr, setAccErr] = useState("");
   setUnit(donVi, soLe);
 
   const toast = useCallback((m: string, e = false) => { setToastMsg({ m, err: e }); setTimeout(() => setToastMsg(null), e ? 7000 : 3600); }, []);
@@ -68,7 +72,23 @@ export default function DashboardPage() {
       setData(j as DataSet); setErr("");
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    fetch("/api/dashboard/me", { cache: "no-store" }).then(async (r) => {
+      const j = await r.json();
+      if (!r.ok || j.error) throw new Error(j.error || "Không đọc được quyền xem");
+      setAcc(j as Acc);
+    }).catch((e) => setAccErr(e instanceof Error ? e.message : String(e)));
+  }, []);
+  const allowed = useCallback((s: Sec) => !!acc && acc[s], [acc]);
+  const secs = SECTIONS.filter(([k]) => allowed(k));
+  // Tổng quan và Travel & SaaS dùng chung dữ liệu tài chính: chỉ tải khi được xem 1 trong 2 phần
+  useEffect(() => { if (acc && (acc.all || acc.ts)) load(); }, [load, acc]);
+  // Phần đang chọn không được xem → chuyển sang phần đầu tiên được xem
+  useEffect(() => {
+    if (!acc || acc[sec]) return;
+    const f = SECTIONS.find(([k]) => acc[k]);
+    if (f) { setSec(f[0]); setTab(firstTab(f[0])); }
+  }, [acc, sec]);
 
   const ctx = useMemo(() => (data ? makeCtx(mergeEdits(data)) : null), [data]);
   useEffect(() => {
@@ -90,11 +110,13 @@ export default function DashboardPage() {
     const [a, b] = target.includes(":") ? target.split(":") : ["", target];
     let s2: Sec = (a as Sec) || sec, t2 = b;
     if (!a && !hasTab(s2, t2)) s2 = hasTab("all", t2) ? "all" : sec;
+    if (!allowed(s2)) return;
     if (!hasTab(s2, t2)) t2 = firstTab(s2);
     setSec(s2); setTab(t2); setDrillKey(null);
     window.scrollTo({ top: 0 });
   }
   function pickSec(s2: Sec) {
+    if (!allowed(s2)) return;
     setSec(s2); setDrillKey(null);
     if (!hasTab(s2, tab)) setTab(firstTab(s2));
   }
@@ -300,7 +322,7 @@ export default function DashboardPage() {
     toast(`Đã mở khóa kỳ ${ky}`); await load();
   }
 
-  const canEdit = !!data?.me?.canEdit;
+  const canEdit = !!(data?.me?.canEdit || acc?.canEdit);
 
   /** Nạp file dữ liệu dashboard Mobility (JSON xuất từ bản claude.ai hoặc file Sao lưu) */
   async function importMobility(f: File) {
@@ -318,11 +340,15 @@ export default function DashboardPage() {
   const nCrit = vm ? vm.AL.filter((a) => a.sev === "critical").length : 0;
   const snapComm = snap ? Number((snap.data as { comm?: number }).comm || 0) : 0;
 
+  if (accErr) return <div className="xd"><div className="xd-page"><div className="card notice">{accErr}</div></div></div>;
+  if (!acc) return <div className="xd"><div className="xd-page"><div className="empty">Đang tải…</div></div></div>;
+  if (!secs.length) return <div className="xd"><div className="xd-page"><div className="card notice">Tài khoản chưa được cấp phần nào của Dashboard. Liên hệ Quản trị.</div></div></div>;
+
   return (
     <div className="xd" onClick={onClick} onKeyDown={onKey} onChange={onChange}>
       <nav className="xd-tabs no-print" aria-label="Dashboard quản trị"><div className="xd-tabs-in xd-top">
         <div className="xd-secs" role="tablist" aria-label="Phần">
-          {SECTIONS.map(([k, l, ic]) => (<button key={k} role="tab" aria-selected={sec === k} className={"xd-sec" + (sec === k ? " on" : "")} onClick={() => pickSec(k)}><i className={ic} aria-hidden="true" />{l}</button>))}
+          {secs.map(([k, l, ic]) => (<button key={k} role="tab" aria-selected={sec === k} className={"xd-sec" + (sec === k ? " on" : "")} onClick={() => pickSec(k)}><i className={ic} aria-hidden="true" />{l}</button>))}
         </div>
         {sec === "m" ? (canEdit && <div className="ctl">
           <label className="btn" title="Nạp file dữ liệu chép từ bản dashboard trên claude.ai (ghi đè số liệu hiện tại)">Nhập dữ liệu

@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 /** Đọc dữ liệu tiến độ khách hàng: ?doc=crm/b07 (một tài liệu) hoặc ?col=crm (cả nhóm) */
 export async function GET(req: Request) {
   try {
-    const g = await guard();
+    const g = await guard(false, "m");
     if ("error" in g) return fail(g.error, g.status);
     const q = new URL(req.url).searchParams;
     const sb = adminClient();
@@ -36,7 +36,7 @@ export async function GET(req: Request) {
 /** Ghi: { op: "set" | "update" | "delete", path, data } — mọi người xem được Dashboard đều ghi được */
 export async function POST(req: Request) {
   try {
-    const g = await guard();
+    const g = await guard(false, "m");
     if ("error" in g) return fail(g.error, g.status, "not_granted");
     const b = (await req.json()) as { op?: string; path?: string; data?: unknown };
     const p = docPath(b.path);

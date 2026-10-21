@@ -3,7 +3,6 @@ import { adminClient, guard } from "@/lib/dashboard/server";
 import { canEditRole, errMsg, fail } from "@/lib/dashboard/mobility";
 import { CardRow, dec, digits, enc, full, hasKey, intOrNull, masked, txt } from "@/lib/dashboard/cards";
 import { writeAudit } from "@/lib/audit";
-import { mobAccess } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -29,33 +28,33 @@ type Company = { key: string; mst: string | null; address: string | null; email:
  *  ?export=1         → toàn bộ thẻ đầy đủ (Quản trị/Kế toán), có ghi nhật ký */
 export async function GET(req: Request) {
   try {
-    const g = await guard();
+    const g = await guard(false, "m");
     if ("error" in g) return fail(g.error, g.status);
-    const q = new URL(req.url).searchParams, P = mobAccess(g.user), edit = canEditRole(g.user.role);
+    const q = new URL(req.url).searchParams, edit = canEditRole(g.user.role);
     const CC = "uid,key,company_on_card,holder,pan_enc,pan_last4,pantoken_enc,expiry,monthly_limit,balance,balance_date,updated_at";
     if (q.has("summary")) {
-      const [co, cards] = await Promise.all([P.dn ? all<Company>("mob_company", "key,mst,address,email") : Promise.resolve([] as Company[]), P.the ? all<CardRow>("mob_card", "key,monthly_limit,balance,balance_date,expiry") : Promise.resolve([] as CardRow[])]);
+      const [co, cards] = await Promise.all([all<Company>("mob_company", "key,mst,address,email"), all<CardRow>("mob_card", "key,monthly_limit,balance,balance_date,expiry")]);
       const S: Record<string, { mst?: string | null; address?: string | null; email?: string | null; n: number; limit: number; bal: number; balDate: string | null; exp: string | null }> = {};
       const get = (k: string) => (S[k] = S[k] || { n: 0, limit: 0, bal: 0, balDate: null, exp: null });
       co.forEach((c) => Object.assign(get(c.key), { mst: c.mst, address: c.address, email: c.email }));
       cards.forEach((c) => { const s = get(c.key); s.n++; s.limit += c.monthly_limit || 0; s.bal += c.balance || 0;
         if (c.balance_date && (!s.balDate || c.balance_date > s.balDate)) s.balDate = c.balance_date;
         const e = c.expiry && /^\d{2}\/\d{2}$/.test(c.expiry) ? c.expiry.slice(3) + c.expiry.slice(0, 2) : null; if (e && (!s.exp || e < s.exp)) s.exp = e; });
-      return NextResponse.json({ ok: true, canEdit: edit && P.the, keyOk: hasKey(), perm: P, sum: S }, H);
+      return NextResponse.json({ ok: true, canEdit: edit, keyOk: hasKey(), sum: S }, H);
     }
     if (q.has("export")) {
-      if (!edit || !P.the) return fail("Bạn không có quyền xuất dữ liệu thẻ (cần vai trò Quản trị/Kế toán và quyền xem Thẻ XPAY)", 403);
-      const [co, cards] = await Promise.all([P.dn ? all<Company>("mob_company", "key,mst,address,email") : Promise.resolve([] as Company[]), all<CardRow>("mob_card", CC)]);
+      if (!edit) return fail("Chỉ Quản trị và Kế toán được xuất dữ liệu thẻ", 403);
+      const [co, cards] = await Promise.all([all<Company>("mob_company", "key,mst,address,email"), all<CardRow>("mob_card", CC)]);
       await writeAudit({ actorId: g.user.id, actorEmail: g.user.email, action: "mobility.cards.export", entity: "mob_card", note: `Xuất ${cards.length} thẻ đầy đủ` });
       return NextResponse.json({ companies: co, cards: cards.map(full) }, H);
     }
     const k = txt(q.get("key"), 100);
     if (!k) return fail("Thiếu số hợp đồng", 400);
     const wantFull = q.get("full") === "1";
-    if (wantFull && (!edit || !P.the)) return fail("Bạn không có quyền xem đầy đủ số thẻ", 403);
-    const [co, cards] = await Promise.all([P.dn ? all<Company>("mob_company", "key,mst,address,email,updated_at", k) : Promise.resolve([] as Company[]), P.the ? all<CardRow>("mob_card", CC, k) : Promise.resolve([] as CardRow[])]);
+    if (wantFull && !edit) return fail("Chỉ Quản trị và Kế toán được xem đầy đủ số thẻ", 403);
+    const [co, cards] = await Promise.all([all<Company>("mob_company", "key,mst,address,email,updated_at", k), all<CardRow>("mob_card", CC, k)]);
     if (wantFull) await writeAudit({ actorId: g.user.id, actorEmail: g.user.email, action: "mobility.cards.view_full", entity: "mob_card", entityId: k, note: `Xem đầy đủ ${cards.length} thẻ` });
-    return NextResponse.json({ company: co[0] || null, cards: cards.map(wantFull ? full : masked), canEdit: edit && P.the, full: wantFull, perm: P }, H);
+    return NextResponse.json({ company: co[0] || null, cards: cards.map(wantFull ? full : masked), canEdit: edit, full: wantFull }, H);
   } catch (e) { return fail(errMsg(e), 500); }
 }
 
@@ -70,13 +69,10 @@ const CF: [keyof CardIn & keyof CardRow, string][] = [["key", "Số hợp đồn
  *  Dòng lỗi bị bỏ qua (trả về trong errors), các dòng hợp lệ vẫn được ghi. */
 export async function POST(req: Request) {
   try {
-    const g = await guard(true);
+    const g = await guard(true, "m");
     if ("error" in g) return fail(g.error, g.status);
     const b = (await req.json()) as { companies?: CompanyIn[]; cards?: CardIn[]; deletes?: { uid: string; line?: number }[]; dry?: boolean };
     const companies = Array.isArray(b.companies) ? b.companies : [], cards = Array.isArray(b.cards) ? b.cards : [], deletes = Array.isArray(b.deletes) ? b.deletes : [];
-    const P = mobAccess(g.user);
-    if (companies.length && !P.dn) return fail("Bạn không có quyền cập nhật thông tin doanh nghiệp", 403);
-    if ((cards.length || deletes.length) && !P.the) return fail("Bạn không có quyền cập nhật thẻ XPAY", 403);
     if (companies.length + cards.length + deletes.length > 20000) return fail("File quá lớn (tối đa 20.000 dòng mỗi lần)", 413);
     const sb = adminClient(), now = new Date().toISOString(), by = g.user.email, errors: string[] = [];
     const at = (x: { line?: number }, sh = "The_XPAY") => (x.line ? `${sh} dòng ${x.line}: ` : "");

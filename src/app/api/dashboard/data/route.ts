@@ -59,7 +59,7 @@ async function bangKeMap(customers: Customer[]): Promise<Record<string, BangKe>>
 
 export async function GET() {
   try {
-    const g = await guard();
+    const g = await guard(false, "fin");
     if ("error" in g) return NextResponse.json({ error: g.error }, { status: g.status });
     const [params, customers, suppliers, staff, alloc, targets, gmv, ar, ap, cash, opex, contracts, uploads, snapshots, alertActions, arEdits, apEdits, manual] = await Promise.all([
       fetchAll<{ key: string; value: string | null }>("fin_params"),

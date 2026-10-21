@@ -10,7 +10,7 @@ export const maxDuration = 60;
  *  Ghi đè số liệu hiện tại; tài liệu tiến độ khách hàng chỉ ghi đè đúng các tài liệu có trong file. */
 export async function POST(req: Request) {
   try {
-    const g = await guard(true);
+    const g = await guard(true, "m");
     if ("error" in g) return fail(g.error, g.status);
     const body = (await req.json()) as Record<string, unknown>;
     const state = (body.state ?? (body.params && body.plan ? body : null)) as Record<string, unknown> | null;
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
 /** Tải toàn bộ dữ liệu ra file (sao lưu) */
 export async function GET() {
   try {
-    const g = await guard(true);
+    const g = await guard(true, "m");
     if ("error" in g) return fail(g.error, g.status);
     const sb = adminClient();
     const st = await sb.from("mob_state").select("data").eq("id", "main").maybeSingle();

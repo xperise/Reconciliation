@@ -1,27 +1,32 @@
 'use client';
 import { useState, useTransition } from 'react';
 import {
-  taoNguoiDung, doiTrangThaiNguoiDung, doiQuyenXemTab, doiQuyenHoSoMobility,
+  taoNguoiDung, doiTrangThaiNguoiDung, doiQuyenXemTab,
   doiMatKhauNguoiDung, xoaNguoiDung,
 } from '@/app/actions';
 
-/** Ô tick chọn tab được xem */
-function TabCheckboxes({ xperise, mlx, dashboard, onChange, disabled, locked }: {
-  xperise: boolean; mlx: boolean; dashboard: boolean;
-  onChange: (x: boolean, m: boolean, d: boolean) => void;
-  disabled?: boolean; locked?: boolean;
+/** Quyền xem: tab Xperise, MLX và 3 phần của tab Dashboard */
+export type Quyen = { xperise: boolean; mlx: boolean; all: boolean; ts: boolean; m: boolean };
+const KHONG: Quyen = { xperise: false, mlx: false, all: false, ts: false, m: false };
+const coPhan = (q: Quyen) => q.xperise || q.mlx || q.all || q.ts || q.m;
+
+/** Ô tick chọn phần được xem */
+function TabCheckboxes({ q, onChange, disabled, locked }: {
+  q: Quyen; onChange: (q: Quyen) => void; disabled?: boolean; locked?: boolean;
 }) {
-  const box = (label: string, checked: boolean, next: () => void) => (
+  const box = (label: string, k: keyof Quyen) => (
     <label className="inline-flex items-center gap-2 text-sm cursor-pointer select-none">
-      <input type="checkbox" checked={checked} disabled={disabled || locked} onChange={next} />
+      <input type="checkbox" checked={q[k]} disabled={disabled || locked} onChange={() => onChange({ ...q, [k]: !q[k] })} />
       {label}
     </label>
   );
   return (
-    <div className="flex items-center gap-5">
-      {box('Xperise', xperise, () => onChange(!xperise, mlx, dashboard))}
-      {box('MLX', mlx, () => onChange(xperise, !mlx, dashboard))}
-      {box('Dashboard', dashboard, () => onChange(xperise, mlx, !dashboard))}
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-5">{box('Xperise', 'xperise')}{box('MLX', 'mlx')}</div>
+      <div className="flex items-center gap-4 flex-wrap">
+        <span className="text-xs font-semibold text-[var(--ink-3)]">Dashboard:</span>
+        {box('Tổng quan', 'all')}{box('Travel & SaaS', 'ts')}{box('Mobility', 'm')}
+      </div>
     </div>
   );
 }
@@ -31,23 +36,21 @@ export function CreateUser() {
   const [mk, setMk] = useState('');
   const [ten, setTen] = useState('');
   const [vaiTro, setVaiTro] = useState('ke_toan');
-  const [xemXperise, setXemXperise] = useState(false);
-  const [xemMlx, setXemMlx] = useState(false);
-  const [xemDash, setXemDash] = useState(false);
+  const [q, setQ] = useState<Quyen>(KHONG);
   const [tb, setTb] = useState('');
   const [dangChay, start] = useTransition();
 
   const laAdmin = vaiTro === 'admin';
-  const coTab = laAdmin || xemXperise || xemMlx || xemDash;
+  const coTab = laAdmin || coPhan(q);
 
   function tao() {
     setTb('');
     start(async () => {
       try {
-        await taoNguoiDung(email, mk, ten, vaiTro, laAdmin || xemXperise, laAdmin || xemMlx, laAdmin || xemDash);
+        await taoNguoiDung(email, mk, ten, vaiTro, laAdmin || q.xperise, laAdmin || q.mlx, { all: laAdmin || q.all, ts: laAdmin || q.ts, m: laAdmin || q.m });
         setTb(`Đã cấp tài khoản cho ${email}.`);
         setEmail(''); setMk(''); setTen('');
-        setXemXperise(false); setXemMlx(false); setXemDash(false);
+        setQ(KHONG);
       } catch (e) { setTb(e instanceof Error ? e.message : 'Không tạo được tài khoản.'); }
     });
   }
@@ -78,19 +81,17 @@ export function CreateUser() {
           </select>
         </div>
         <div className="sm:col-span-2">
-          <span className="label">Được xem tab</span>
+          <span className="label">Được xem</span>
           <TabCheckboxes
-            xperise={laAdmin || xemXperise}
-            mlx={laAdmin || xemMlx}
-            dashboard={laAdmin || xemDash}
+            q={laAdmin ? { xperise: true, mlx: true, all: true, ts: true, m: true } : q}
             locked={laAdmin}
-            onChange={(x, m, d) => { setXemXperise(x); setXemMlx(m); setXemDash(d); }}
+            onChange={setQ}
           />
           <div className="text-xs text-[var(--ink-3)] mt-1">
             {laAdmin
-              ? 'Quản trị luôn xem được cả 3 tab.'
+              ? 'Quản trị luôn xem được tất cả.'
               : coTab
-                ? 'Ba quyền độc lập — cấp mỗi Dashboard cũng được.'
+                ? 'Các quyền độc lập — cấp riêng 1 phần của Dashboard cũng được.'
                 : 'Chọn ít nhất 1 phần.'}
           </div>
         </div>
@@ -105,68 +106,28 @@ export function CreateUser() {
   );
 }
 
-/** Ô tick quyền xem tab trong bảng người dùng — lưu ngay khi đổi */
-export function AccessToggle({ id, xperise, mlx, dashboard, isAdmin }: {
-  id: string; xperise: boolean; mlx: boolean; dashboard: boolean; isAdmin: boolean;
-}) {
-  const [x, setX] = useState(xperise);
-  const [m, setM] = useState(mlx);
-  const [d, setD] = useState(dashboard);
+/** Ô tick quyền xem trong bảng người dùng — lưu ngay khi đổi */
+export function AccessToggle({ id, q: q0, isAdmin }: { id: string; q: Quyen; isAdmin: boolean }) {
+  const [q, setQ] = useState<Quyen>(q0);
   const [loi, setLoi] = useState('');
   const [dangChay, start] = useTransition();
 
-  if (isAdmin) return <span className="text-xs text-[var(--ink-3)]">Cả 3 (Quản trị)</span>;
+  if (isAdmin) return <span className="text-xs text-[var(--ink-3)]">Tất cả (Quản trị)</span>;
 
-  function doi(nx: boolean, nm: boolean, nd: boolean) {
-    if (!nx && !nm && !nd) { setLoi('Giữ ít nhất 1 phần'); return; }
-    const [cx, cm, cd] = [x, m, d];
-    setX(nx); setM(nm); setD(nd); setLoi('');
+  function doi(n: Quyen) {
+    if (!coPhan(n)) { setLoi('Giữ ít nhất 1 phần'); return; }
+    const cu = q;
+    setQ(n); setLoi('');
     start(async () => {
-      try { await doiQuyenXemTab(id, nx, nm, nd); }
-      catch (e) { setX(cx); setM(cm); setD(cd); setLoi(e instanceof Error ? e.message : 'Không lưu được'); }
+      try { await doiQuyenXemTab(id, n.xperise, n.mlx, { all: n.all, ts: n.ts, m: n.m }); }
+      catch (e) { setQ(cu); setLoi(e instanceof Error ? e.message : 'Không lưu được'); }
     });
   }
 
   return (
     <div>
-      <TabCheckboxes xperise={x} mlx={m} dashboard={d} onChange={doi} disabled={dangChay} />
-      {loi && <div className="text-xs text-[var(--critical)] mt-1">{loi}</div>}
-    </div>
-  );
-}
-
-/** Quyền xem 3 mục trong Hồ sơ doanh nghiệp (Dashboard → Mobility) — lưu ngay khi đổi */
-export function MobAccessToggle({ id, dn, pl, the, isAdmin, isEditRole, hasDashboard }: {
-  id: string; dn: boolean; pl: boolean; the: boolean; isAdmin: boolean; isEditRole: boolean; hasDashboard: boolean;
-}) {
-  const [v, setV] = useState({ dn, pl, the });
-  const [loi, setLoi] = useState('');
-  const [dangChay, start] = useTransition();
-  if (isAdmin) return <span className="text-xs text-[var(--ink-3)]">Cả 3 (Quản trị)</span>;
-  function doi(k: 'dn' | 'pl' | 'the') {
-    const cu = v, moi = { ...v, [k]: !v[k] };
-    setV(moi); setLoi('');
-    start(async () => {
-      try { await doiQuyenHoSoMobility(id, moi.dn, moi.pl, moi.the); }
-      catch (e) { setV(cu); setLoi(e instanceof Error ? e.message : 'Không lưu được'); }
-    });
-  }
-  const box = (k: 'dn' | 'pl' | 'the', label: string) => (
-    <label className="inline-flex items-center gap-2 text-sm cursor-pointer select-none">
-      <input type="checkbox" checked={v[k]} disabled={dangChay} onChange={() => doi(k)} />{label}
-    </label>
-  );
-  return (
-    <div className={hasDashboard ? '' : 'opacity-60'}>
-      <div className="flex flex-col gap-1">
-        {box('dn', 'Thông tin DN')}
-        {box('pl', 'Phân loại & phụ trách')}
-        {box('the', 'Thẻ XPAY')}
-      </div>
-      <div className="text-[11px] text-[var(--ink-3)] mt-1 max-w-[220px]">
-        {!hasDashboard ? 'Chưa có quyền tab Dashboard nên chưa dùng được.' : v.the ? (isEditRole ? 'Được hiện đầy đủ, xuất, import thẻ.' : 'Chỉ xem thẻ dạng che (4 số cuối).') : ''}
-      </div>
-      {loi && <div className="text-xs text-[var(--critical)] mt-1">{loi}</div>}
+      <TabCheckboxes q={q} onChange={doi} disabled={dangChay} />
+      {loi && <div className="text-xs text-[var(--critical)] mt-1 max-w-[340px]">{loi}</div>}
     </div>
   );
 }

@@ -54,7 +54,7 @@ async function overwriteManual(sb: ReturnType<typeof adminClient>, sheet: string
 
 export async function POST(req: Request) {
   try {
-    const g = await guard(true);
+    const g = await guard(true, "fin");
     if ("error" in g) return NextResponse.json({ error: g.error }, { status: g.status });
     const body = (await req.json()) as ChunkBody | LogBody;
     const sb = adminClient();

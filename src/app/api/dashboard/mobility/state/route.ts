@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminClient, guard } from "@/lib/dashboard/server";
 import { canEditRole, errMsg, fail } from "@/lib/dashboard/mobility";
-import { mobAccess } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -9,13 +8,13 @@ export const maxDuration = 30;
 /** Số liệu dashboard Mobility + quyền của người đang xem */
 export async function GET() {
   try {
-    const g = await guard();
+    const g = await guard(false, "m");
     if ("error" in g) return fail(g.error, g.status);
     const { data, error } = await adminClient().from("mob_state").select("data,version,updated_at,updated_by").eq("id", "main").maybeSingle();
     if (error) throw new Error(error.message);
     return NextResponse.json({
       data: data?.data ?? null, version: data?.version ?? 0, updated_at: data?.updated_at ?? null, updated_by: data?.updated_by ?? null,
-      me: { email: g.user.email, canEdit: canEditRole(g.user.role), canWrite: true, mob: mobAccess(g.user) },
+      me: { email: g.user.email, canEdit: canEditRole(g.user.role), canWrite: true },
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) { return fail(errMsg(e), 500); }
 }
@@ -24,7 +23,7 @@ export async function GET() {
  *  Gửi kèm version đang xem; ai đó đã lưu trước thì trả 409 để trang tải lại bản mới. */
 export async function PUT(req: Request) {
   try {
-    const g = await guard(true);
+    const g = await guard(true, "m");
     if ("error" in g) return fail(g.error, g.status, "not_writer");
     const body = (await req.json()) as { version?: number; data?: unknown };
     if (!body.data || typeof body.data !== "object" || Array.isArray(body.data)) return fail("Thiếu số liệu", 400);
