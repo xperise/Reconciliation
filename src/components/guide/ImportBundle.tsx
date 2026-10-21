@@ -10,7 +10,7 @@ type Bundle = { format: string; version: number; source?: string; guides: GuideI
 export default function ImportBundle() {
   const router = useRouter();
   const [b, setB] = useState<Bundle | null>(null), [name, setName] = useState('');
-  const [msg, setMsg] = useState(''), [err, setErr] = useState(''), [busy, setBusy] = useState(false), [hide, setHide] = useState(true);
+  const [msg, setMsg] = useState(''), [err, setErr] = useState(''), [busy, setBusy] = useState(false), [del, setDel] = useState(true);
 
   async function pick(f: File) {
     setErr(''); setMsg('');
@@ -22,6 +22,7 @@ export default function ImportBundle() {
   }
   async function run() {
     if (!b) return;
+    if (del && b.replaces?.length && !window.confirm(`Xoá hẳn ${b.replaces.length} bài cũ có nội dung trùng (kèm phiên bản và tệp đính kèm của chúng)? Không khôi phục được.`)) return;
     setBusy(true); setErr('');
     try {
       const keys = Object.keys(b.images || {}), map: Record<string, string> = {};
@@ -35,8 +36,8 @@ export default function ImportBundle() {
       }
       setMsg('Đang lưu các bài hướng dẫn…');
       const guides = b.guides.map((g) => ({ ...g, sections: g.sections.map((s) => ({ ...s, md: s.md.replace(/\(img:([^)\s]+)\)/g, (_, k) => `(${map[k] || '#'})`) })) }));
-      const r = await nhapGoiHuongDan(guides, hide ? b.replaces || [] : []);
-      setMsg(`Xong: ${r.created} bài mới, ${r.updated} bài cập nhật${r.hidden ? `, ${r.hidden} bài cũ chuyển về Nháp` : ''}.`);
+      const r = await nhapGoiHuongDan(guides, del ? b.replaces || [] : []);
+      setMsg(`Xong: ${r.created} bài mới, ${r.updated} bài cập nhật${r.deleted ? `, đã xoá ${r.deleted} bài cũ` : ''}.`);
       setB(null); router.refresh();
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
     setBusy(false);
@@ -53,7 +54,7 @@ export default function ImportBundle() {
               <div className="hd-muted" style={{ marginBottom: 8 }}>{b.source ? `Nguồn: ${b.source} · ` : ''}{b.guides.length} bài · {Object.keys(b.images || {}).length} ảnh</div>
               <ul style={{ margin: '0 0 10px', paddingLeft: 18, fontSize: 13, lineHeight: 1.7 }}>{b.guides.map((g) => <li key={g.slug}><b>{g.title}</b> <span className="hd-muted">· {g.sections.length} mục</span></li>)}</ul>
               <div className="hd-muted" style={{ marginBottom: 8 }}>Bài trùng đường dẫn sẽ được ghi đè nội dung; bản cũ vẫn xem lại được trong Phiên bản. Tệp đính kèm đã gắn không bị ảnh hưởng.</div>
-              {!!b.replaces?.length && <label style={{ display: 'flex', gap: 8, fontSize: 13, marginBottom: 12 }}><input type="checkbox" checked={hide} onChange={(e) => setHide(e.target.checked)} /> Chuyển {b.replaces.length} bài cũ có nội dung trùng về Nháp (không xoá)</label>}
+              {!!b.replaces?.length && <label style={{ display: 'flex', gap: 8, fontSize: 13, marginBottom: 12, alignItems: 'flex-start' }}><input type="checkbox" checked={del} onChange={(e) => setDel(e.target.checked)} style={{ marginTop: 3 }} /> <span>Xoá hẳn {b.replaces.length} bài cũ có nội dung trùng, chỉ giữ nội dung và cấu trúc mới<br /><span className="hd-muted">Kèm phiên bản và tệp đính kèm của các bài đó · không khôi phục được</span></span></label>}
             </>}
             {msg && <div className="hd-ok" style={{ marginBottom: 8 }}>{msg}</div>}
             {err && <div className="hd-err" style={{ marginBottom: 8 }}>{err}</div>}

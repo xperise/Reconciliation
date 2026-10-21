@@ -83,8 +83,9 @@ export async function luuHuongDan(inp: GuideInput): Promise<{ slug: string; id: 
 }
 
 /** Nhập gói hướng dẫn (từ file .json do Claude chuyển đổi). Ảnh đã tải lên trước, md đã thay link ảnh.
- *  Trùng slug: ghi đè nội dung (bản cũ vẫn còn trong Phiên bản). replaces: chuyển các bài cũ về Nháp. */
-export async function nhapGoiHuongDan(guides: GuideInput[], replaces: string[] = []): Promise<{ created: number; updated: number; hidden: number }> {
+ *  Trùng slug: ghi đè nội dung (bản cũ vẫn còn trong Phiên bản). replaces: XOÁ HẲN các bài cũ có nội dung trùng
+ *  (kèm phiên bản và tệp đính kèm của chúng). Không bao giờ xoá bài vừa nhập trong cùng gói. */
+export async function nhapGoiHuongDan(guides: GuideInput[], replaces: string[] = []): Promise<{ created: number; updated: number; deleted: number }> {
   const user = await editor();
   const sb = supabaseAdmin();
   let created = 0, updated = 0;
@@ -95,17 +96,27 @@ export async function nhapGoiHuongDan(guides: GuideInput[], replaces: string[] =
     await luuHuongDan({ ...g, id: cur?.id || null, slug, note: `Nhập gói${g.note ? ' · ' + g.note : ''}` });
     if (cur) updated++; else created++;
   }
-  let hidden = 0;
-  const rep = replaces.map((x) => slugify(x)).filter(Boolean).slice(0, 50);
+  let deleted = 0;
+  const giu = new Set(guides.map((g) => slugify(g.slug || g.title)));
+  const rep = replaces.map((x) => slugify(x)).filter((x) => x && !giu.has(x)).slice(0, 50);
   if (rep.length) {
-    const { data, error } = await sb.from('guides').update({ status: 'nhap', updated_by: user.email, updated_at: new Date().toISOString() })
-      .in('slug', rep).eq('status', 'phat-hanh').select('id');
+    const { data: old, error } = await sb.from('guides').select('id,title').in('slug', rep);
     if (error) throw dbErr(error.message);
-    hidden = (data || []).length;
+    const ids = (old || []).map((x) => x.id as string);
+    if (ids.length) {
+      // tệp đính kèm của bài cũ: xoá khỏi kho trước, dòng dữ liệu tự xoá theo bài
+      const { data: fs } = await sb.from('guide_files').select('storage_path').in('guide_id', ids);
+      const paths = (fs || []).map((f) => f.storage_path as string);
+      if (paths.length) await sb.storage.from('guide-files').remove(paths);
+      const { error: e2 } = await sb.from('guides').delete().in('id', ids);
+      if (e2) throw dbErr(e2.message);
+      deleted = ids.length;
+      await writeAudit({ actorId: user.id, actorEmail: user.email, action: 'guide.delete', entity: 'guides', note: `Xoá khi nhập gói: ${(old || []).map((x) => x.title).join('; ')}` });
+    }
   }
-  await writeAudit({ actorId: user.id, actorEmail: user.email, action: 'guide.import', entity: 'guides', note: `Nhập gói: ${created} bài mới, ${updated} bài cập nhật, ${hidden} bài cũ chuyển về Nháp` });
+  await writeAudit({ actorId: user.id, actorEmail: user.email, action: 'guide.import', entity: 'guides', note: `Nhập gói: ${created} bài mới, ${updated} bài cập nhật, ${deleted} bài cũ đã xoá` });
   revalidatePath('/huong-dan');
-  return { created, updated, hidden };
+  return { created, updated, deleted };
 }
 
 /* ---------------- Tệp đính kèm ---------------- */
