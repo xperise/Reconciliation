@@ -1,6 +1,6 @@
 import { createServerClient, type SetAllCookies } from '@supabase/ssr';
 import { NextRequest, NextResponse } from 'next/server';
-import { coQuyen, isDashboardPath, isMlxPath, tabAccess, trangChu } from '@/lib/access';
+import { coQuyen, isDashboardPath, isGuidePath, isMlxPath, tabAccess, trangChu } from '@/lib/access';
 
 /** Làm mới phiên đăng nhập và chặn truy cập khi chưa đăng nhập. */
 export async function middleware(req: NextRequest) {
@@ -82,6 +82,13 @@ export async function middleware(req: NextRequest) {
   }
   if (path.startsWith('/api/dashboard') && !access.dashboard) {
     return NextResponse.json({ error: 'Tài khoản không có quyền xem Dashboard' }, { status: 403 });
+  }
+  if (path.startsWith('/api/guides') && !access.guide) {
+    return NextResponse.json({ error: 'Tài khoản không có quyền xem Hướng dẫn' }, { status: 403 });
+  }
+  if (isGuidePath(path)) {
+    if (!access.guide) return chuyenHuong(home);
+    return res;
   }
   if (isDashboardPath(path)) {
     if (!access.dashboard) return chuyenHuong(home);

@@ -12,7 +12,7 @@ const LOGO = 'https://files.uts.network/email_assets/xperise_alt_fulllogo%402x.p
 type Muc = { href: string; label: string; badge?: boolean; adminOnly?: boolean };
 type Nhom = { ten: string; muc: Muc[] };
 
-/** Bốn nhóm tab. Mục nào của nhóm cũng dẫn thẳng, không có menu thả xuống. */
+/** Ba nhóm tab (Hướng dẫn đã thành tab riêng /huong-dan). Mục nào của nhóm cũng dẫn thẳng, không có menu thả xuống. */
 const NHOM: Nhom[] = [
   { ten: 'Tổng quan', muc: [{ href: '/', label: 'Dashboard' }] },
   {
@@ -34,7 +34,6 @@ const NHOM: Nhom[] = [
       { href: '/settings', label: 'Cài đặt', adminOnly: true },
     ],
   },
-  { ten: 'Hỗ trợ', muc: [{ href: '/guide', label: 'Hướng dẫn' }] },
 ];
 
 const VAI_TRO: Record<string, string> = {
@@ -61,6 +60,8 @@ export function Shell({ role, email, userId, soChoDuyet, thongBao, access, child
   const laMlx = path === '/mlx' || path.startsWith('/mlx/');
   // Tab Dashboard cũng có thanh tab riêng
   const laDash = path === '/dashboard' || path.startsWith('/dashboard/');
+  // Tab Hướng dẫn: không dùng các nhóm tab của Xperise
+  const laHd = path === '/huong-dan' || path.startsWith('/huong-dan/');
 
   const isOn = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));
 
@@ -79,10 +80,10 @@ export function Shell({ role, email, userId, soChoDuyet, thongBao, access, child
       <header className="topbar">
         <img src={LOGO} alt="xperise" className="topbar-logo" />
         <span className="topbar-div" />
-        <span className="topbar-name">{laMlx ? 'Bảng kê MLX' : laDash ? 'Dashboard quản trị' : 'Đối soát bảng kê'}</span>
+        <span className="topbar-name">{laMlx ? 'Bảng kê MLX' : laDash ? 'Dashboard quản trị' : laHd ? 'Hướng dẫn sử dụng' : 'Đối soát bảng kê'}</span>
 
         <div className="ml-auto flex items-center gap-3 no-print">
-          <AppTabs xperise={access?.xperise ?? true} mlx={access?.mlx ?? true} dashboard={access?.dashboard ?? false} />
+          <AppTabs xperise={access?.xperise ?? true} mlx={access?.mlx ?? true} dashboard={access?.dashboard ?? false} guide={access?.guide ?? true} />
           <Bell items={thongBao} userId={userId} />
           <div className="text-right leading-tight hidden sm:block">
             <div className="text-[11.5px] text-[var(--ink-2)] font-semibold">{email}</div>
@@ -92,7 +93,7 @@ export function Shell({ role, email, userId, soChoDuyet, thongBao, access, child
         </div>
       </header>
 
-      {!laMlx && !laDash && (
+      {!laMlx && !laDash && !laHd && (
         <>
           {/* Hàng 1: nhóm tab */}
           <nav className="tabs no-print" aria-label="Nhóm chức năng">
@@ -132,7 +133,7 @@ export function Shell({ role, email, userId, soChoDuyet, thongBao, access, child
       )}
 
       {/* Trang MLX tự có khung & lề riêng, không bọc thêm .page để tránh lề đôi */}
-      {laMlx || laDash ? <main>{children}</main> : <main className="page">{children}</main>}
+      {laMlx || laDash || laHd ? <main>{children}</main> : <main className="page">{children}</main>}
     </>
   );
 }

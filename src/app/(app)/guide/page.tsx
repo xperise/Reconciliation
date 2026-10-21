@@ -1,17 +1,6 @@
-import { PageHeader } from '@/components/PageHeader';
-import { GuideContent } from './guide-content';
+import { redirect } from 'next/navigation';
 
-export const dynamic = 'force-dynamic';
-
+// Trang SOP cũ đã chuyển vào tab Hướng dẫn (Hệ thống nội bộ › Hệ thống đối soát bảng kê)
 export default function GuidePage() {
-  return (
-    <>
-      <PageHeader
-        eyebrow="Tài liệu vận hành"
-        title="Hướng dẫn sử dụng"
-        description="SOP dạng tương tác — chọn vai trò để xem đúng phần cần làm."
-      />
-      <GuideContent />
-    </>
-  );
+  redirect('/huong-dan/doi-soat-bang-ke');
 }

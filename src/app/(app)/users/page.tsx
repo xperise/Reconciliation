@@ -50,6 +50,9 @@ export default async function UsersPage() {
                       all: !!(u.xem_dashboard && (u.xem_db_all ?? true)),
                       ts: !!(u.xem_dashboard && (u.xem_db_ts ?? true)),
                       m: !!(u.xem_dashboard && (u.xem_db_m ?? true)),
+                      // Chưa chạy SQL 23: ai cũng xem được Hướng dẫn, chưa ai được sửa
+                      hd: u.xem_huongdan ?? true,
+                      hdSua: u.sua_huongdan ?? false,
                     }}
                     isAdmin={u.role === 'admin'}
                   />

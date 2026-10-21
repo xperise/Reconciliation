@@ -6,9 +6,10 @@ import {
 } from '@/app/actions';
 
 /** Quyền xem: tab Xperise, MLX và 3 phần của tab Dashboard */
-export type Quyen = { xperise: boolean; mlx: boolean; all: boolean; ts: boolean; m: boolean };
-const KHONG: Quyen = { xperise: false, mlx: false, all: false, ts: false, m: false };
-const coPhan = (q: Quyen) => q.xperise || q.mlx || q.all || q.ts || q.m;
+export type Quyen = { xperise: boolean; mlx: boolean; all: boolean; ts: boolean; m: boolean; hd: boolean; hdSua: boolean };
+const KHONG: Quyen = { xperise: false, mlx: false, all: false, ts: false, m: false, hd: true, hdSua: false };
+const TAT_CA: Quyen = { xperise: true, mlx: true, all: true, ts: true, m: true, hd: true, hdSua: true };
+const coPhan = (q: Quyen) => q.xperise || q.mlx || q.all || q.ts || q.m || q.hd;
 
 /** Ô tick chọn phần được xem */
 function TabCheckboxes({ q, onChange, disabled, locked }: {
@@ -26,6 +27,14 @@ function TabCheckboxes({ q, onChange, disabled, locked }: {
       <div className="flex items-center gap-4 flex-wrap">
         <span className="text-xs font-semibold text-[var(--ink-3)]">Dashboard:</span>
         {box('Tổng quan', 'all')}{box('Travel & SaaS', 'ts')}{box('Mobility', 'm')}
+      </div>
+      <div className="flex items-center gap-4 flex-wrap">
+        <span className="text-xs font-semibold text-[var(--ink-3)]">Hướng dẫn:</span>
+        {box('Xem', 'hd')}
+        <label className="inline-flex items-center gap-2 text-sm cursor-pointer select-none">
+          <input type="checkbox" checked={q.hd && q.hdSua} disabled={disabled || locked || !q.hd} onChange={() => onChange({ ...q, hdSua: !q.hdSua })} />
+          Được sửa
+        </label>
       </div>
     </div>
   );
@@ -47,7 +56,7 @@ export function CreateUser() {
     setTb('');
     start(async () => {
       try {
-        await taoNguoiDung(email, mk, ten, vaiTro, laAdmin || q.xperise, laAdmin || q.mlx, { all: laAdmin || q.all, ts: laAdmin || q.ts, m: laAdmin || q.m });
+        await taoNguoiDung(email, mk, ten, vaiTro, laAdmin || q.xperise, laAdmin || q.mlx, { all: laAdmin || q.all, ts: laAdmin || q.ts, m: laAdmin || q.m }, { xem: laAdmin || q.hd, sua: laAdmin || (q.hd && q.hdSua) });
         setTb(`Đã cấp tài khoản cho ${email}.`);
         setEmail(''); setMk(''); setTen('');
         setQ(KHONG);
@@ -83,7 +92,7 @@ export function CreateUser() {
         <div className="sm:col-span-2">
           <span className="label">Được xem</span>
           <TabCheckboxes
-            q={laAdmin ? { xperise: true, mlx: true, all: true, ts: true, m: true } : q}
+            q={laAdmin ? TAT_CA : q}
             locked={laAdmin}
             onChange={setQ}
           />
@@ -119,7 +128,7 @@ export function AccessToggle({ id, q: q0, isAdmin }: { id: string; q: Quyen; isA
     const cu = q;
     setQ(n); setLoi('');
     start(async () => {
-      try { await doiQuyenXemTab(id, n.xperise, n.mlx, { all: n.all, ts: n.ts, m: n.m }); }
+      try { await doiQuyenXemTab(id, n.xperise, n.mlx, { all: n.all, ts: n.ts, m: n.m }, { xem: n.hd, sua: n.hd && n.hdSua }); }
       catch (e) { setQ(cu); setLoi(e instanceof Error ? e.message : 'Không lưu được'); }
     });
   }

@@ -555,16 +555,24 @@ export async function luuLichWorkflow(key: string, form: {
 
 /** 3 phần của tab Dashboard */
 export type DbParts = { all: boolean; ts: boolean; m: boolean };
+/** Quyền tab Hướng dẫn */
+export type HdParts = { xem: boolean; sua: boolean };
 const tenPhanDb = (d: DbParts) => [d.all && 'Tổng quan', d.ts && 'Travel & SaaS', d.m && 'Mobility'].filter(Boolean).join(' + ');
-const tenQuyen = (x: boolean, m: boolean, d: DbParts) =>
-  [x && 'Xperise', m && 'MLX', (d.all || d.ts || d.m) && `Dashboard (${tenPhanDb(d)})`].filter(Boolean).join(', ');
+const tenQuyen = (x: boolean, m: boolean, d: DbParts, h?: HdParts) =>
+  [x && 'Xperise', m && 'MLX', (d.all || d.ts || d.m) && `Dashboard (${tenPhanDb(d)})`, h?.xem && `Hướng dẫn${h.sua ? ' (được sửa)' : ''}`].filter(Boolean).join(', ');
 
 /** Ghi quyền xem tab + 3 phần Dashboard. Chưa chạy SQL 22 thì chỉ ghi được khi 3 phần giống nhau. */
-async function ghiQuyen(userId: string, x: boolean, m: boolean, d: DbParts) {
+async function ghiQuyen(userId: string, x: boolean, m: boolean, d: DbParts, h?: HdParts) {
   const sb = supabaseAdmin(), dash = d.all || d.ts || d.m;
-  const { error } = await sb.from('profiles')
-    .update({ xem_xperise: x, xem_mlx: m, xem_dashboard: dash, xem_db_all: d.all, xem_db_ts: d.ts, xem_db_m: d.m })
+  const hd = h ? { xem_huongdan: h.xem, sua_huongdan: h.xem && h.sua } : {};
+  let { error } = await sb.from('profiles')
+    .update({ xem_xperise: x, xem_mlx: m, xem_dashboard: dash, xem_db_all: d.all, xem_db_ts: d.ts, xem_db_m: d.m, ...hd })
     .eq('id', userId);
+  // Chưa chạy SQL 23 (cột Hướng dẫn chưa có): lưu phần còn lại, báo cần chạy SQL nếu đang đổi quyền Hướng dẫn
+  if (error && h && /huongdan/.test(error.message)) {
+    if (!(h.xem && !h.sua)) throw new Error('Cần chạy supabase/migrations/23_huong_dan.sql để phân quyền tab Hướng dẫn.');
+    ({ error } = await sb.from('profiles').update({ xem_xperise: x, xem_mlx: m, xem_dashboard: dash, xem_db_all: d.all, xem_db_ts: d.ts, xem_db_m: d.m }).eq('id', userId));
+  }
   if (!error) return;
   if (/xem_db_/.test(error.message)) {
     if (!(d.all === d.ts && d.ts === d.m)) throw new Error('Cần chạy supabase/migrations/22_quyen_dashboard_tung_phan.sql để cấp riêng từng phần Dashboard.');
@@ -577,14 +585,14 @@ async function ghiQuyen(userId: string, x: boolean, m: boolean, d: DbParts) {
 
 export async function taoNguoiDung(
   email: string, matKhau: string, hoTen: string, vaiTro: string,
-  xemXperise: boolean, xemMlx: boolean, db: DbParts = { all: false, ts: false, m: false },
+  xemXperise: boolean, xemMlx: boolean, db: DbParts = { all: false, ts: false, m: false }, hd: HdParts = { xem: true, sua: false },
 ) {
   const user = await requireRole('admin');
   const sb = supabaseAdmin();
 
   // Admin luôn xem được tất cả; vai trò khác phải chọn ít nhất 1 phần
-  if (vaiTro === 'admin') { xemXperise = true; xemMlx = true; db = { all: true, ts: true, m: true }; }
-  if (!xemXperise && !xemMlx && !db.all && !db.ts && !db.m) throw new Error('Chọn ít nhất 1 phần được xem (Xperise, MLX hoặc một phần của Dashboard).');
+  if (vaiTro === 'admin') { xemXperise = true; xemMlx = true; db = { all: true, ts: true, m: true }; hd = { xem: true, sua: true }; }
+  if (!xemXperise && !xemMlx && !db.all && !db.ts && !db.m && !hd.xem) throw new Error('Chọn ít nhất 1 phần được xem (Xperise, MLX, một phần của Dashboard hoặc Hướng dẫn).');
 
   const { data, error } = await sb.auth.admin.createUser({
     email: email.trim(),
@@ -595,7 +603,7 @@ export async function taoNguoiDung(
   if (error) throw new Error(error.message);
 
   // Hồ sơ được trigger handle_new_user tạo sẵn → cập nhật quyền xem tab
-  try { await ghiQuyen(data.user!.id, xemXperise, xemMlx, db); }
+  try { await ghiQuyen(data.user!.id, xemXperise, xemMlx, db, hd); }
   catch (qErr) {
     throw new Error(
       `Đã tạo tài khoản nhưng chưa lưu được quyền xem (${qErr instanceof Error ? qErr.message : String(qErr)}). ` +
@@ -606,7 +614,7 @@ export async function taoNguoiDung(
   await writeAudit({
     actorId: user.id, actorEmail: user.email,
     action: 'user.create', entity: 'profiles', entityId: data.user!.id,
-    note: `${email} — vai trò ${vaiTro} — được xem: ${tenQuyen(xemXperise, xemMlx, db)}`,
+    note: `${email} — vai trò ${vaiTro} — được xem: ${tenQuyen(xemXperise, xemMlx, db, hd)}`,
   });
 
   revalidatePath('/users');
@@ -622,14 +630,14 @@ function loiRangBuocTab(msg: string): string {
     : '';
 }
 
-export async function doiQuyenXemTab(userId: string, xemXperise: boolean, xemMlx: boolean, db: DbParts) {
+export async function doiQuyenXemTab(userId: string, xemXperise: boolean, xemMlx: boolean, db: DbParts, hd?: HdParts) {
   const user = await requireRole('admin');
-  if (!xemXperise && !xemMlx && !db.all && !db.ts && !db.m) throw new Error('Phải giữ ít nhất 1 phần: Xperise, MLX hoặc một phần của Dashboard.');
-  await ghiQuyen(userId, xemXperise, xemMlx, db);
+  if (!xemXperise && !xemMlx && !db.all && !db.ts && !db.m && !hd?.xem) throw new Error('Phải giữ ít nhất 1 phần: Xperise, MLX, một phần của Dashboard hoặc Hướng dẫn.');
+  await ghiQuyen(userId, xemXperise, xemMlx, db, hd);
   await writeAudit({
     actorId: user.id, actorEmail: user.email,
     action: 'user.access', entity: 'profiles', entityId: userId,
-    note: `Được xem: ${tenQuyen(xemXperise, xemMlx, db)}`,
+    note: `Được xem: ${tenQuyen(xemXperise, xemMlx, db, hd)}`,
   });
   revalidatePath('/users');
 }
