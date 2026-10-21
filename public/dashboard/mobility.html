@@ -309,7 +309,8 @@ function render() {
   else if (TAB === 'pat') body = renderPattern(d);
   else if (TAB === 'jr') body = renderJourney();
   else body = renderUpload();
-  $('app').innerHTML = top + `<div class="page">${body}</div><div class="tt" id="tt"></div>`;
+  const prof = CR.open ? crmDrawer(crmRows(CR.day).find(r => r.key === CR.open), CR.day) : '';
+  $('app').innerHTML = top + `<div class="page">${body}</div><div class="tt" id="tt"></div>` + prof;
   bind();
 }
 function renderOverview(d, C, A, p) {
@@ -413,7 +414,7 @@ function renderZoom(d, C, A) {
    </tbody></table></div><div class="hint">Phân khúc: GMV XPAY 30N của khách so với KH hôm nay của khách = mục tiêu T12 × (KH GMV 30N hôm nay ÷ 60 tỷ).</div></div>`;
   const rows = CC.list.filter(c => c.grp === 'Top 200' || c.g > 0);
   h += `<details><summary>Danh sách Top 200 và khách có giao dịch XPAY (${n0(rows.length)} khách)</summary><div class="tw" style="margin-top:10px"><table><thead><tr><th>Hạng</th><th class="l">Khách hàng</th><th class="l">PIC</th><th class="l">Thẻ XPAY</th><th>Đỉnh ML</th><th class="l">Tháng</th><th>Mục tiêu T12</th><th>GMV XPAY 30N</th><th>Chuyến</th><th>GD gần nhất</th><th>% KH hôm nay</th><th class="l">Phân khúc</th></tr></thead><tbody>
-   ${rows.map(c => `<tr><td>${c.rank}</td><td class="l name">${esc(c.name)}</td><td class="l">${esc(c.ae) || '—'}</td><td class="l">${esc(c.card)}</td><td>${money(c.peak)}</td><td class="l">${c.peak_m || ''}</td><td>${money(c.tgt)}</td><td>${c.g ? money(c.g) : '—'}</td><td>${c.n || '—'}</td><td>${c.last ? dm(c.last) : '—'}</td><td class="c-${status(c.pc)}">${c.pc == null ? '—' : pct(c.pc)}</td><td class="l"><span class="pill p-${SEG[c.seg].cls}">${SEG[c.seg].k}</span></td></tr>`).join('')}
+   ${rows.map(c => `<tr class="hit" data-cropen="${esc(c.key)}" style="cursor:pointer"><td>${c.rank}</td><td class="l name" style="color:var(--accent)">${esc(c.name)}</td><td class="l">${esc(c.ae) || '—'}</td><td class="l">${esc(c.card)}</td><td>${money(c.peak)}</td><td class="l">${c.peak_m || ''}</td><td>${money(c.tgt)}</td><td>${c.g ? money(c.g) : '—'}</td><td>${c.n || '—'}</td><td>${c.last ? dm(c.last) : '—'}</td><td class="c-${status(c.pc)}">${c.pc == null ? '—' : pct(c.pc)}</td><td class="l"><span class="pill p-${SEG[c.seg].cls}">${SEG[c.seg].k}</span></td></tr>`).join('')}
    </tbody></table></div></details>`;
   return h;
 }
@@ -883,7 +884,7 @@ function collectCS(key) {
 function bindPattern() {
   const keep = fn => { const y = window.scrollY, py = $('dpanel') ? $('dpanel').scrollTop : 0; fn(); render(); window.scrollTo(0, y); if ($('dpanel') && fn.keepPanel) $('dpanel').scrollTop = py; };
   document.querySelectorAll('[data-drill]').forEach(el => el.onclick = ev => { ev.stopPropagation(); const v = el.dataset.drill;
-    if (v.startsWith('cust:')) { PAT.drill = null; TAB = 'jr'; CR.view = 'input'; CR.open = v.slice(5); CR.patOpen = true; try { localStorage.setItem('xpay_tab', TAB); } catch (e) {} render(); return; }
+    if (v.startsWith('cust:')) { const k = profKey(v.slice(5)); if (!k) return; const y = window.scrollY; CR.open = k; CR.sec.pat = true; render(); window.scrollTo(0, y); return; }
     keep(() => { PAT.drill = v; }); });
   const msp = $('pmsp');
   if (msp) {
@@ -994,7 +995,7 @@ const isWd = d => { const w = new Date(d + 'T00:00:00Z').getUTCDay(); return w >
 const tgtW = (p, kind, d) => { const a = (KPI_W[p] || {})[kind]; const i = weekIdx(d); return a && i >= 0 && i < a.length ? a[i] : 0; };
 const tgtD = (p, kind, d) => isWd(d) ? tgtW(p, kind, d) / 5 : 0;
 const bucketOf = k => { let h = 0; for (const c of String(k)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return 'b' + String(h % 32).padStart(2, '0'); };
-let DBX = {}, CFG = {cats: []}, DBST = 'loading', DBW = null, CR = {view: 'dash', who: '', grp: '', todo: '', res: '', q: '', open: null, day: TODAY};
+let DBX = {}, CFG = {cats: []}, DBST = 'loading', DBW = null, CR = {view: 'dash', who: '', grp: '', todo: '', res: '', q: '', open: null, day: TODAY, sec: {}};
 try { const w = localStorage.getItem('xpay_who'); if (w != null) CR.who = w; } catch (e) {}
 const cats = () => [...new Set([...CAT0, ...(CFG.cats || [])])];
 const SEEDACT = {}; C0.acts.forEach((a, i) => (SEEDACT[a[0]] = SEEDACT[a[0]] || []).push({id: 's' + i, t: a[1], d: a[2], res: CATMAP[a[3]] || a[3], det: a[4], who: a[5], seed: 1}));
@@ -1063,8 +1064,23 @@ function crmInit() {
     db.doc('cfg/main').onSnapshot(s => { CFG = s.exists ? (s.data() || {cats: []}) : {cats: []}; }, () => {});
   })();
 }
+/* ---- Thẻ XPAY & thông tin doanh nghiệp (API riêng; chỉ có khi chạy trong web Reconciliation) ---- */
+let CARDS = {}, CARDST = 'off', CARDMSG = '', CARDD = {};
+async function cardsLoad() {
+  const c = window.claude ? await claude.use('cards') : null; if (!c) { CARDST = 'off'; return; }
+  CARDST = 'loading';
+  try { const r = await c.summary(); CARDS = r.sum || {}; CARDST = 'ok'; CARDMSG = r.keyOk ? '' : 'Chưa cấu hình khoá mã hoá MOB_CARD_KEY nên chưa lưu được số thẻ.'; }
+  catch (e) { CARDST = 'err'; CARDMSG = e.message || String(e); }
+  if (TAB === 'jr') crmRerender();
+}
+async function cardDetail(k, full) {
+  const c = await claude.use('cards'); const r = await c.get(k, full);
+  CARDD[k] = {company: r.company, cards: r.cards || [], full: !!r.full}; return CARDD[k];
+}
+const expIso = e => /^\d{2}\/\d{2}$/.test(e || '') ? '20' + e.slice(3) + '-' + e.slice(0, 2) : null;
+const expSoon = e => { const x = expIso(e); return x ? x <= addD(TODAY, 60).slice(0, 7) : false; };
 function crmRerender(data) {
-  if (CR.open && TAB === 'jr') { const m = $('crmmsg'); if (m && data) m.textContent = 'Dữ liệu vừa được cập nhật bởi người khác; đóng cửa sổ để xem bản mới.'; return; }
+  if (CR.open) { const m = $('crmmsg'); if (m && data) m.textContent = 'Dữ liệu vừa được cập nhật bởi người khác; đóng cửa sổ để xem bản mới.'; return; }
   if (TAB === 'jr' || (data && TAB === 'ov')) { if (TAB === 'ov') computeActuals(); const y = window.scrollY; render(); window.scrollTo(0, y); }
 }
 /* ---- khoảng thời gian (bộ chọn giống mẫu: lựa chọn nhanh + lịch 2 tháng + Áp dụng) ---- */
@@ -1124,7 +1140,7 @@ function renderJourney() {
     <span class="lbl" style="margin-left:auto">${DBST === 'ok' ? `Dữ liệu nhập: đồng bộ trực tiếp${DBW === false ? ' · bạn chỉ có quyền xem' : ''}` : DBST === 'loading' ? 'Đang kết nối dữ liệu nhập…' : 'Chưa kết nối được dữ liệu nhập (chỉ xem số có sẵn)'}</span></div>`;
   PAT.rng = [f, t]; PAT.keys = CR.who ? new Set(crmScope(ALL).map(r => r.key)) : null;
   const body = CR.view === 'dash' ? crmDash(ALL, f, t) : CR.view === 'pat' ? renderPattern(t) : crmInput(ALL, d);
-  return tabs + body + (CR.open ? crmDrawer(ALL.find(r => r.key === CR.open), d) : '');
+  return tabs + body;
 }
 function crmDash(ALL, f, t) {
   const d = t, R = crmScope(ALL).filter(r => !r.liq), who = PICS.includes(CR.who) ? CR.who : '', ppl = who ? [who] : PICS;
@@ -1238,7 +1254,7 @@ function crmInput(ALL, d) {
     <span class="lbl" style="margin-left:8px">Nhóm</span><select id="crgrp"><option value="">Tất cả nhóm</option>${[1, 2, 3, 4, 5, 9].map(g => `<option value="${g}" ${CR.grp === String(g) ? 'selected' : ''}>${g === 9 ? '' : g + '. '}${GRP[g]}</option>`).join('')}${CR.grp.includes('|') ? `<option value="${CR.grp}" selected>${GRP[CR.grp.split('|')[0]]} · ${stageTxt[CR.grp.split('|')[1]]}</option>` : ''}</select>
     ${CR.res ? `<span class="pill p-mute">Kết quả: ${esc(CR.res)} <a id="crresx" style="cursor:pointer;font-weight:700">×</a></span>` : ''}${CR.todo && !(CR.todo in TD) ? `<span class="pill p-mute">Việc: ${esc(ACTL[CR.todo] || CR.todo)} <a data-crtodo="" style="cursor:pointer;font-weight:700">×</a></span>` : ''}
     <input id="crq" placeholder="Tìm tên, số hợp đồng, nhóm client…" value="${esc(CR.q)}" style="font:13px var(--font-family-sans-serif);padding:6px 10px;border:1px solid var(--color-border-default);border-radius:10px;width:250px"><span class="lbl">${n0(R.length)} khách</span>
-    <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="crxls" title="Mỗi pháp nhân 1 dòng: PIC, nhóm, mốc tiến độ, doanh thu, pattern, gợi ý + sheet lịch sử liên hệ">Xuất Excel khách hàng</button><button class="btn" id="crpict" title="Danh sách công ty theo nhóm, phân loại và PIC hiện tại để điền PIC mới">Tải template PIC</button>${ed && CANWRITE ? `<label class="btn pri" style="cursor:pointer" title="Upload template PIC đã điền để đổi PIC hàng loạt">Upload PIC<input type="file" id="crpicf" accept=".xlsx,.xls" hidden></label>` : ''}</span></div></div>` + picPanel();
+    <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="crxls" title="Mỗi pháp nhân 1 dòng: PIC, nhóm, mốc tiến độ, doanh thu, pattern, gợi ý + sheet lịch sử liên hệ">Xuất Excel khách hàng</button><button class="btn" id="crpict" title="Sheet PIC; Quản trị / Kế toán có thêm sheet thông tin doanh nghiệp và thẻ XPAY">Tải template cập nhật</button>${ed && CANWRITE ? `<label class="btn pri" style="cursor:pointer" title="Upload template đã điền: PIC, thông tin doanh nghiệp, thẻ XPAY">Upload file cập nhật<input type="file" id="crpicf" accept=".xlsx,.xls" hidden></label>` : ''}</span></div></div>` + picPanel();
   const row = r => `<tr class="hit" data-cropen="${esc(r.key)}" style="cursor:pointer"><td class="l name" style="min-width:240px;padding-left:34px;color:var(--accent)">${esc(r.name)}<span class="def">HĐ ${esc(r.key)}${r.gname ? ' · ' + esc(r.gname) + (r.grank ? ' #' + r.grank : '') : ''}</span></td><td class="l">${r.pic ? esc(r.pic) : '<b style="color:var(--critical)">Chưa phân công</b>'}</td>
     ${['pl', 'xp', 'call', 'meet'].map(f => `<td class="l">${done(r[f]) ? `<span class="c-stable">✓</span> ${isoOk(r[f]) ? dm(r[f]) : ''}${f === 'call' && r.calls.length > 1 ? `<span class="def">${r.calls.length} lần</span>` : ''}` : '<span class="lbl">—</span>'}</td>`).join('')}
     <td class="l">${r.first ? dmy(r.first) : '<span class="lbl">chưa</span>'}</td><td>${r.gmv ? money(r.gmv) : '—'}<span class="def">${r.gmv30 ? '30N ' + nf(r.gmv30 / UNIT.div, UNIT.dec) : r.gmv ? 'ngừng 30N' : ''}</span></td><td class="l" style="white-space:normal;min-width:170px;font-size:12px">${PS[r.key] ? `${esc(PS[r.key].route)} <span class="lbl">(${PS[r.key].rn}/${PS[r.key].n} chuyến)</span><span class="def">${esc(PS[r.key].p)} · ${PS[r.key].band}${PS[r.key].short ? ' · <b style="color:var(--critical)">thiếu xe</b>' : ''}</span>` : (((S.cs || {})[r.key] || {}).custom || []).length ? '<span class="pill p-mute">CS đã khai báo</span>' : '<span class="lbl">—</span>'}</td>
@@ -1260,6 +1276,25 @@ function crmInput(ALL, d) {
     <div class="hint">Nhóm tự xếp theo thứ tự: 1) đã ký phụ lục (ngày vào tủ) chưa khởi tạo XPAY; 2) Top 200 (mọi pháp nhân của nhóm client); 3) đã khởi tạo XPAY, 30 ngày chưa có giao dịch, xếp theo tiềm năng; 4) chưa ký phụ lục nhưng có giao dịch Mai Linh T6–T9; 5) còn lại, chia theo phân loại Mai Linh. Đổi nhóm, người phụ trách trong cửa sổ cập nhật. Doanh thu đầu và GMV lấy tự động từ bảng kê.</div></div>`;
   return h;
 }
+function cardSec(r, sec) {
+  if (CARDST === 'off') return '';
+  const D = CARDD[r.key], sm = CARDS[r.key] || {}, ed = CANWRITE, na = '<span class="lbl">chưa có</span>';
+  const sum = CARDST === 'err' ? 'chưa tải được' : CARDST !== 'ok' ? 'đang tải…' : [sm.n ? `<b>${n0(sm.n)} thẻ</b> · hạn mức ${short(sm.limit)} · còn ${short(sm.bal)}` : 'chưa có thẻ', sm.mst ? 'MST ' + esc(sm.mst) : 'chưa có MST', sm.exp && sm.exp <= addD(TODAY, 60).slice(0, 7).replace('-', '').slice(2) ? '<b style="color:var(--critical)">có thẻ sắp hết hạn</b>' : ''].filter(Boolean).join(' · ');
+  let h = '';
+  if (CARDST === 'err') h = `<div class="hint">Chưa tải được dữ liệu thẻ: ${esc(CARDMSG)}</div>`;
+  else if (!D || D.loading) h = '<div class="hint">Đang tải…</div>';
+  else if (D.err) h = `<div class="hint" style="color:var(--critical)">${esc(D.err)}</div>`;
+  else {
+    const co = D.company || {}, C = D.cards, lim = C.reduce((a, x) => a + (x.monthly_limit || 0), 0), bal = C.reduce((a, x) => a + (x.balance || 0), 0);
+    const bd = C.map(x => x.balance_date).filter(Boolean).sort().pop(), soon = C.filter(x => expSoon(x.expiry)).length;
+    h = (ed && C.length ? `<div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:6px"><button class="btn" id="cdfull">${D.full ? 'Che lại' : 'Hiện đầy đủ'}</button><button class="btn" id="cdxls">Xuất thẻ của khách này</button></div>` : '')
+      + `<div style="display:grid;grid-template-columns:140px 1fr;gap:4px 10px;font-size:13px;margin-bottom:8px"><span class="lbl">MST</span><span>${co.mst ? esc(co.mst) : na}</span><span class="lbl">Địa chỉ</span><span>${co.address ? esc(co.address) : na}</span><span class="lbl">Email doanh nghiệp</span><span>${co.email ? esc(co.email) : na}</span></div>`;
+    if (!C.length) h += `<div class="hint">Chưa có thẻ nào trong hệ thống. ${ed ? 'Thêm thẻ bằng sheet The_XPAY trong "Tải template cập nhật".' : ''}</div>`;
+    else h += `<div class="lbl" style="margin-bottom:6px"><b>${n0(C.length)} thẻ</b> · tổng hạn mức tháng <b>${money(lim)}</b> · số dư còn <b>${money(bal)}</b> ${unitLabel()}${bd ? ` (cập nhật ${dmy(bd)})` : ''}${soon ? ` · <b style="color:var(--critical)">${soon} thẻ hết hạn trong 60 ngày</b>` : ''}${D.full ? ' · <b>đang hiện đầy đủ</b>' : ''}</div>
+      <div class="tw" style="max-height:320px;overflow:auto"><table><thead><tr><th class="l">Tên chủ thẻ</th><th class="l">Tên công ty trên thẻ</th><th class="l">Số thẻ</th><th class="l">UID</th><th class="l">Pantoken (mã QR)</th><th class="l">Hạn</th><th>Hạn mức tháng (${unitLabel()})</th><th>Số dư (${unitLabel()})</th></tr></thead><tbody>${C.map(x => `<tr><td class="l">${esc(x.holder || '')}</td><td class="l">${esc(x.company_on_card || '')}</td><td class="l" style="font-family:monospace">${esc(x.pan || '—')}</td><td class="l" style="font-family:monospace">${esc(x.uid)}</td><td class="l" style="font-family:monospace;max-width:180px;overflow:hidden;text-overflow:ellipsis">${esc(x.pantoken || '—')}</td><td class="l">${expSoon(x.expiry) ? `<b style="color:var(--critical)">${esc(x.expiry)}</b>` : esc(x.expiry || '—')}</td><td>${money(x.monthly_limit)}</td><td>${money(x.balance)}${x.balance_date ? `<span class="def">${dmy(x.balance_date)}</span>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
+  }
+  return sec('cards', 'Thẻ XPAY & thông tin doanh nghiệp', sum, CR.sec.cards ? h : '');
+}
 function crmDrawer(r, d) {
   if (!r) return '';
   const ed = DBST === 'ok' && DBW !== false, dis = ed ? '' : 'disabled';
@@ -1267,17 +1302,21 @@ function crmDrawer(r, d) {
   const ms = (f, l, auto) => `<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line-soft)"><span style="width:150px;font-weight:600">${l}</span>
     <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-ms="${f}" ${done(r[f]) ? 'checked' : ''} ${dis}> đã xong</label><input type="date" data-msd="${f}" value="${isoOk(r[f]) ? r[f] : ''}" ${dis} style="${inp}"><span class="lbl">${auto || ''}</span></div>`;
   const people = [...new Set([...PICS, ...r.acts.map(a => a.who).filter(Boolean)])];
-  let h = `<div id="crmask" style="position:fixed;inset:0;background:#0006;z-index:30;display:flex;justify-content:flex-end"><div style="background:var(--surface-2);width:min(920px,100%);height:100%;overflow:auto;padding:20px 24px;border-radius:20px 0 0 20px">
+  let h = `<div id="crmask" style="position:fixed;inset:0;background:#0006;z-index:30;display:flex;justify-content:flex-end"><div id="crpane" style="background:var(--surface-2);width:min(920px,100%);height:100%;overflow:auto;padding:20px 24px;border-radius:20px 0 0 20px">
     <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start"><div><div class="eyebrow">${r.grp === 9 ? '' : r.grp + '. '}${esc(GRP[r.grp])}${r.grpM ? ' (chọn tay)' : ''}</div><h2 class="card-title" style="font-size:19px">${esc(r.name)}</h2>
       <div class="lbl" style="margin-top:4px">HĐ ${esc(r.key)}${r.gname ? ' · nhóm client ' + esc(r.gname) + (r.grank ? ' (hạng ' + r.grank + ')' : '') : ''}${r.rank ? ' · ' + esc(r.rank) : ''} · ${esc(r.sub)}${r.pot ? ' · tiềm năng ' + nf(r.pot, 1) + ' triệu/tháng' : ''}${r.picOld ? ' · PIC cũ ' + esc(r.picOld) : ''}</div></div><button class="btn" id="crclose">✕</button></div>
     <div class="kpis" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-top:12px">${[['GMV lũy kế', r.gmv ? money(r.gmv) : '—'], ['GMV 30 ngày', r.gmv30 ? money(r.gmv30) : '—'], ['Chuyến', n0(r.trips)], ['Giao dịch Mai Linh T6–T9', r.ml69 ? money(r.ml69) : '—']].map(([k, v]) => `<div class="kpi"><div class="k">${k}</div><div class="v" style="font-size:19px">${v}</div></div>`).join('')}</div>
     <div class="banner" style="margin-top:12px"><b>Gợi ý xử lý</b><ul>${r.sug.map(s => `<li class="watch">${esc(s)}</li>`).join('')}</ul></div>
-    ${(() => { const tr = S.tx.filter(t => t[2] === r.key && t.length > 9).map(mkTrip), ps = patSummary(d)[r.key];
-      return `<details class="card" style="margin-top:12px;padding:14px 20px" ${CR.patOpen ? 'open' : ''} id="crpat"><summary style="font-size:14px">Pattern di chuyển · ${tr.length ? `${n0(tr.length)} chuyến toàn bộ${ps ? ` · 30 ngày: ${esc(ps.route)} (${ps.rn} chuyến), ${esc(ps.p)}, ${ps.band}` : ''}` : 'chưa có chuyến XPAY'}</summary>${tr.length ? kpiRow(tr) : ''}${custPatterns(r.key, tr)}</details>`; })()}
-    <div class="card" style="margin-top:12px"><h3 style="margin:0 0 6px;font-size:14px">Các mốc</h3>
+    <div class="lbl" id="crmmsg" style="margin:8px 2px;min-height:16px">${ed ? '' : DBST === 'ok' ? 'Bạn chỉ có quyền xem.' : 'Chưa kết nối được dữ liệu nhập, chưa lưu được.'}</div>
+    ${(() => {
+      const mk = f => done(r[f]) ? (isoOk(r[f]) ? dm(r[f]) : '✓') : '—', tr = S.tx.filter(t => t[2] === r.key && t.length > 9).map(mkTrip), ps = patSummary(d)[r.key], cs = CARDS[r.key] || {};
+      const A = r.acts[0], sec = (k, title, sum, body) => `<details class="card crsec" data-sec="${k}" style="margin-top:10px;padding:14px 20px" ${CR.sec[k] ? 'open' : ''}><summary style="cursor:pointer;list-style:none;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap"><b style="font-size:14px">${CR.sec[k] ? '▾' : '▸'} ${title}</b><span class="lbl" style="font-size:12.5px">${sum}</span></summary><div style="margin-top:10px">${body}</div></details>`;
+      return sec('ms', 'Tiến độ & các mốc', `${stageTxt[r.stage]} · ký PL ${mk('pl')} · XPAY ${mk('xp')} · gọi ${mk('call')} · meeting ${mk('meet')} · doanh thu đầu ${r.first ? dm(r.first) : '—'}`, `
       ${ms('pl', 'Ký phụ lục (vào tủ)')}${ms('xp', 'Khởi tạo XPAY')}${ms('call', 'Gọi khách', r.calls.length ? `${r.calls.length} lần · tự lấy ngày gọi gần nhất` : '')}${ms('meet', 'Meeting', r.meets.length ? `${r.meets.length} lần · tự lấy ngày gần nhất` : '')}
-      <div style="display:flex;gap:8px;align-items:center;padding:6px 0"><span style="width:150px;font-weight:600">Doanh thu đầu tiên</span>${r.firstAmt != null ? `<span>${dmy(r.first)} · ${n0(r.firstAmt)} đồng <span class="lbl">(tự động từ bảng kê)</span></span>` : `<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-ms="first" ${done(r.first) ? 'checked' : ''} ${dis}> đã có</label><input type="date" data-msd="first" value="${isoOk(r.first) ? r.first : ''}" ${dis} style="${inp}"><span class="lbl">chưa thấy trong bảng kê</span>`}</div></div>
-    <div class="card" style="margin-top:12px"><h3 style="margin:0 0 8px;font-size:14px">Ghi cuộc gọi / meeting</h3>
+      <div style="display:flex;gap:8px;align-items:center;padding:6px 0"><span style="width:150px;font-weight:600">Doanh thu đầu tiên</span>${r.firstAmt != null ? `<span>${dmy(r.first)} · ${n0(r.firstAmt)} đồng <span class="lbl">(tự động từ bảng kê)</span></span>` : `<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-ms="first" ${done(r.first) ? 'checked' : ''} ${dis}> đã có</label><input type="date" data-msd="first" value="${isoOk(r.first) ? r.first : ''}" ${dis} style="${inp}"><span class="lbl">chưa thấy trong bảng kê</span>`}</div>
+      <div style="margin-top:10px"><button class="btn pri crf-save" ${dis}>Lưu mốc và phân công</button></div>`)
+      + sec('act', 'Cuộc gọi / meeting', r.acts.length ? `${n0(r.calls.length)} lần gọi · ${n0(r.meets.length)} meeting · gần nhất ${isoOk(A.d) ? dmy(A.d) : esc(A.d)}${A.res ? ' · ' + esc(A.res) : ''}${isoOk(r.nx) ? ` · hẹn lại ${dmy(r.nx)}` : ''}` : 'chưa liên hệ · bấm để ghi lần liên hệ đầu tiên', `
+
       <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">
         <label class="lbl">Loại<select id="cat_t" ${dis} style="width:100%"><option value="call">Gọi khách</option><option value="meet">Meeting</option></select></label>
         <label class="lbl">Ngày<input type="date" id="cat_d" value="${TODAY}" ${dis} style="${inp};width:100%"></label>
@@ -1286,14 +1325,18 @@ function crmDrawer(r, d) {
       <input id="cat_new" placeholder="Tên loại kết quả mới" style="${inp};width:100%;margin-top:8px;display:none">
       <textarea id="cat_x" placeholder="Feedback chi tiết" ${dis} style="${inp};width:100%;margin-top:8px;min-height:60px"></textarea>
       <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><span class="lbl">Hẹn lại ngày</span><input type="date" id="cat_nx" value="${isoOk(r.nx) ? r.nx : ''}" ${dis} style="${inp}"><button class="btn pri" id="cat_add" ${dis}>Lưu lần ${'liên hệ'}</button></div>
-      ${r.acts.length ? `<div class="tw" style="margin-top:10px"><table><thead><tr><th class="l">Ngày</th><th class="l">Loại</th><th class="l">Người</th><th class="l">Kết quả</th><th class="l">Chi tiết</th><th></th></tr></thead><tbody>${r.acts.map(a => `<tr><td class="l">${isoOk(a.d) ? dmy(a.d) : esc(a.d)}</td><td class="l">${a.t === 'meet' ? 'Meeting' : 'Gọi'}</td><td class="l">${esc(a.who || '')}</td><td class="l">${esc(a.res || '')}</td><td class="l" style="white-space:normal;min-width:220px">${esc(a.det || '')}</td><td>${a.seed ? '<span class="lbl">file giao thẻ</span>' : ed ? `<a data-cadel="${esc(a.id)}" style="cursor:pointer;color:var(--critical)">xóa</a>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="hint">Chưa có lần liên hệ nào.</div>'}</div>
-    <div class="card" style="margin-top:12px"><h3 style="margin:0 0 8px;font-size:14px">Phân công, phân loại</h3>
+      ${r.acts.length ? `<div class="tw" style="margin-top:10px"><table><thead><tr><th class="l">Ngày</th><th class="l">Loại</th><th class="l">Người</th><th class="l">Kết quả</th><th class="l">Chi tiết</th><th></th></tr></thead><tbody>${r.acts.map(a => `<tr><td class="l">${isoOk(a.d) ? dmy(a.d) : esc(a.d)}</td><td class="l">${a.t === 'meet' ? 'Meeting' : 'Gọi'}</td><td class="l">${esc(a.who || '')}</td><td class="l">${esc(a.res || '')}</td><td class="l" style="white-space:normal;min-width:220px">${esc(a.det || '')}</td><td>${a.seed ? '<span class="lbl">file giao thẻ</span>' : ed ? `<a data-cadel="${esc(a.id)}" style="cursor:pointer;color:var(--critical)">xóa</a>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="hint">Chưa có lần liên hệ nào.</div>'}`)
+      + cardSec(r, sec)
+      + sec('pat', 'Pattern di chuyển', tr.length ? `${n0(tr.length)} chuyến toàn bộ${ps ? ` · 30 ngày: ${esc(ps.route)} (${ps.rn} chuyến), ${esc(ps.p)}, ${ps.band}` : ''}` : 'chưa có chuyến XPAY', CR.sec.pat ? (tr.length ? kpiRow(tr) : '') + custPatterns(r.key, tr) : '')
+      + sec('asg', 'Phân công, phân loại', `PIC ${r.pic ? esc(r.pic) : '<b style="color:var(--critical)">chưa phân công</b>'} · nhóm ${r.grp === 9 ? 'Đã thanh lý' : r.grp}${r.grpM ? ' (chọn tay)' : ' (tự động)'}${r.st ? ' · ' + esc(r.st) : ''}${r.note ? ' · có ghi chú' : ''}`, `
+
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
         <label class="lbl">Người phụ trách<select id="crf_pic" ${dis} style="width:100%"><option value="">Chưa phân công</option>${PICS.map(p => `<option ${r.pic === p ? 'selected' : ''}>${p}</option>`).join('')}</select></label>
         <label class="lbl">Nhóm khách<select id="crf_grp" ${dis} style="width:100%"><option value="">Tự động: ${r.grpA === 9 ? '' : r.grpA + '. '}${esc(GRP[r.grpA])}</option>${[1, 2, 3, 4, 5].map(g => `<option value="${g}" ${r.grpM === String(g) ? 'selected' : ''}>${g}. ${GRP[g]}</option>`).join('')}</select></label>
         <label class="lbl">Tình trạng đặc biệt<select id="crf_st" ${dis} style="width:100%">${SPECIAL.map(s => `<option value="${s}" ${r.st === s ? 'selected' : ''}>${s || '—'}</option>`).join('')}</select></label></div>
       <textarea id="crf_note" placeholder="Ghi chú chung" ${dis} style="${inp};width:100%;margin-top:8px;min-height:50px">${esc(r.note)}</textarea>
-      <div style="display:flex;gap:8px;align-items:center;margin-top:10px"><button class="btn pri" id="crf_save" ${dis}>Lưu mốc và phân công</button><span class="lbl" id="crmmsg">${ed ? '' : DBST === 'ok' ? 'Bạn chỉ có quyền xem.' : 'Chưa kết nối được dữ liệu nhập, chưa lưu được.'}</span></div></div>
+      <div style="margin-top:10px"><button class="btn pri crf-save" ${dis}>Lưu mốc và phân công</button></div>`);
+    })()}
   </div></div>`;
   return h;
 }
@@ -1344,15 +1387,16 @@ function crmExport() {
       const cols = [['Nhóm', 34], ['Số hợp đồng', 13], ['Tên pháp nhân', 46], ['PIC', 11], ['PIC cũ (sổ khách)', 13], ['Cách xếp nhóm', 11], ['Phân loại Mai Linh', 26], ['Nhóm client', 24], ['Hạng nhóm client', 9], ['Hạng Top 200', 13], ['Tình trạng đặc biệt', 12], ['Tiến độ', 16],
         ['Ký phụ lục (vào tủ)', 13], ['Khởi tạo XPAY', 13], ['Gọi khách gần nhất', 13], ['Số lần gọi', 8], ['Meeting gần nhất', 13], ['Số meeting', 8], ['Hẹn gọi lại', 12], ['Liên hệ gần nhất', 12], ['Kết quả gần nhất', 22],
         ['Ngày doanh thu đầu tiên', 13], ['Giao dịch đầu tiên (VND)', 14], ['GMV lũy kế (VND)', 15], ['GMV 30 ngày (VND)', 15], ['Số chuyến', 9], ['Giao dịch gần nhất', 13], ['Tiềm năng (triệu/tháng)', 11], ['Giao dịch Mai Linh T6–T9 (VND)', 15],
-        ['Tuyến chính 30 ngày', 34], ['Mục đích chính 30 ngày', 18], ['Khung giờ 30 ngày', 16], ['Chuyến thiếu xe 30 ngày', 10], ['Gợi ý xử lý', 70], ['Ghi chú', 40]];
+        ['Tuyến chính 30 ngày', 34], ['Mục đích chính 30 ngày', 18], ['Khung giờ 30 ngày', 16], ['Chuyến thiếu xe 30 ngày', 10], ['Gợi ý xử lý', 70], ['Ghi chú', 40], ['MST', 14], ['Địa chỉ', 50], ['Email doanh nghiệp', 28], ['Số thẻ XPAY', 9], ['Tổng hạn mức tháng (VND)', 15], ['Tổng số dư thẻ (VND)', 15], ['Ngày số dư', 12]];
+      if (CARDST === 'loading' || CARDST === 'off') await cardsLoad();
       K.head(ws, 4, cols);
-      const fm = [null, null, null, null, null, null, null, null, null, null, null, null, DT, DT, DT, null, DT, null, DT, DT, null, DT, VN, VN, VN, '#,##0', DT, N1, VN, null, null, null, '#,##0', null, null];
+      const fm = [null, null, null, null, null, null, null, null, null, null, null, null, DT, DT, DT, null, DT, null, DT, DT, null, DT, VN, VN, VN, '#,##0', DT, N1, VN, null, null, null, '#,##0', null, null, '@', null, null, '#,##0', VN, VN, DT];
       let row = 5;
       for (const G of GS) { xlSec(K, ws, row++, cols.length, grpHead(G)); for (const X of G.subs) { if (X.sb) xlSec(K, ws, row++, cols.length, `${X.sb} · ${n0(X.rows.length)} khách`, 1); X.rows.forEach(r => { const ps = PS[r.key], i = row++ - 5;
         K.put(ws, 5 + i, [G.label, r.key, r.name, r.pic || 'Chưa phân công', r.picOld, r.liq ? 'Tự động' : r.grpM ? 'Chọn tay' : 'Tự động', r.sub, r.gname, r.grank || '', r.rank, r.st, stageTxt[r.stage],
           msDate(r.pl), msDate(r.xp), msDate(r.call), r.calls.length, msDate(r.meet), r.meets.length, msDate(r.nx), r.acts[0] && isoOk(r.acts[0].d) ? new Date(r.acts[0].d + 'T00:00:00Z') : '', r.lastRes,
           msDate(r.first), r.firstAmt, r.gmv, r.gmv30, r.trips, r.lastTx ? new Date(r.lastTx + 'T00:00:00Z') : '', r.pot || '', r.ml69 || '',
-          ps ? `${ps.route} (${ps.rn}/${ps.n} chuyến)` : '', ps ? ps.p : '', ps ? ps.band : '', ps ? ps.short : '', r.sug.join(' · '), r.note], fm);
+          ps ? `${ps.route} (${ps.rn}/${ps.n} chuyến)` : '', ps ? ps.p : '', ps ? ps.band : '', ps ? ps.short : '', r.sug.join(' · '), r.note, ...(cs => [cs.mst, cs.address, cs.email, cs.n || '', cs.n ? cs.limit : '', cs.n ? cs.bal : '', cs.balDate ? new Date(cs.balDate + 'T00:00:00Z') : ''])(CARDS[r.key] || {})], fm);
         ws.getCell(5 + i, 2).numFmt = '@'; }); } }
       ws.autoFilter = {from: {row: 4, column: 1}, to: {row: row - 1, column: cols.length}};
       // lịch sử liên hệ
@@ -1361,12 +1405,46 @@ function crmExport() {
       K.head(wa, 4, [['Nhóm', 30], ['Số hợp đồng', 13], ['Tên pháp nhân', 46], ['PIC', 11], ['Ngày', 12], ['Loại', 10], ['Người thực hiện', 14], ['Kết quả', 22], ['Chi tiết', 70], ['Nguồn', 14]]);
       let n = 5; R.forEach(r => r.acts.forEach(a => { K.put(wa, n, [(r.grp === 9 ? '' : r.grp + '. ') + GRP[r.grp], r.key, r.name, r.pic, isoOk(a.d) ? new Date(a.d + 'T00:00:00Z') : a.d, a.t === 'meet' ? 'Meeting' : 'Gọi khách', a.who, a.res, a.det, a.seed ? 'File giao thẻ' : 'Nhập liệu'], [null, null, null, null, DT]); wa.getCell(n, 2).numFmt = '@'; n++; }));
       wa.autoFilter = {from: {row: 4, column: 1}, to: {row: Math.max(4, n - 1), column: 10}};
+      if (CANWRITE && CARDST === 'ok') { const {items} = await cardsGrouped(GS); if (items.length) cardsSheet(K, wbk, items, false); }
       await xlSave(wbk, `XPAY_Khach_hang_${d.replace(/-/g, '')}.xlsx`);
     } catch (e) { alert('Không tạo được file Excel: ' + (e.message || e)); }
     if (btn) { btn.disabled = false; btn.textContent = 'Xuất Excel khách hàng'; }
   })();
 }
 const PIC_CLEAR = '(Bỏ phân công)';
+const CLR = '(Xoá)';
+const CARD_COLS = [['Nhóm', 30], ['Số hợp đồng', 13], ['Tên pháp nhân', 40], ['Tên công ty trên thẻ', 30], ['Tên chủ thẻ', 24], ['Số thẻ', 22], ['UID', 18], ['Pantoken (mã QR)', 40], ['Hạn sử dụng (MM/YY)', 11], ['Hạn mức tháng (VND)', 15], ['Số dư (VND)', 15], ['Ngày cập nhật số dư', 13]];
+const TEXT_COLS = [2, 6, 7, 8, 9];   // cột phải giữ dạng Text để Excel không làm mất chữ số
+/* items: [{key, name, label, cards}] — ghi sheet thẻ, có dòng tiêu đề nhóm nếu label đổi */
+function cardsSheet(K, wbk, items, withDel) {
+  const cols = withDel ? [...CARD_COLS, ['Xoá thẻ (X)', 9]] : CARD_COLS;
+  const ws = wbk.addWorksheet('The_XPAY', {views: [{state: 'frozen', ySplit: 5, xSplit: 3, showGridLines: false}]});
+  K.title(ws, 'THẺ XPAY — mỗi thẻ 1 dòng', `Dữ liệu nhạy cảm · chỉ Quản trị / Kế toán · tạo lúc ${xlStamp()} · không gửi file này ra ngoài`);
+  ws.getCell('A3').value = withDel ? `Sửa trực tiếp trên dòng thẻ; ô để trống = giữ nguyên, gõ "${CLR}" để xoá giá trị. Thẻ mới: thêm dòng mới, bắt buộc có Số hợp đồng + UID. Gỡ thẻ: đánh X ở cột cuối. Số thẻ / UID / pantoken phải ở dạng Text (đã định dạng sẵn).` : 'Số thẻ và pantoken hiển thị đầy đủ — bảo quản file cẩn thận.';
+  ws.getCell('A3').font = {name: 'Arial', size: 10, bold: true, color: {argb: 'FFB45309'}};
+  K.head(ws, 5, cols); TEXT_COLS.forEach(c => ws.getColumn(c).numFmt = '@');
+  let row = 6, last = null;
+  for (const it of items) {
+    if (it.label && it.label !== last) { xlSec(K, ws, row++, cols.length, it.label); last = it.label; }
+    for (const x of it.cards) { K.put(ws, row, [it.label || '', it.key, it.name, x.company_on_card, x.holder, x.pan, x.uid, x.pantoken, x.expiry, x.monthly_limit, x.balance, x.balance_date ? new Date(x.balance_date + 'T00:00:00Z') : '', ...(withDel ? [''] : [])], [null, '@', null, null, null, '@', '@', '@', '@', '#,##0', '#,##0', 'dd/mm/yyyy']); row++; }
+  }
+  for (let i = 0; i < (withDel ? 300 : 0); i++) TEXT_COLS.forEach(c => ws.getCell(row + i, c).numFmt = '@');   // dòng trống để thêm thẻ mới
+  return ws;
+}
+async function cardsXlsx(items, name, who) {
+  await loadScript(EXCELJS_URL);
+  const K = xlKit(), wbk = new ExcelJS.Workbook(); cardsSheet(K, wbk, items, false);
+  const ws = wbk.addWorksheet('Thong_tin_DN'); K.head(ws, 1, [['Số hợp đồng', 13], ['Tên pháp nhân', 40], ['MST', 16], ['Địa chỉ', 60], ['Email doanh nghiệp', 30]]);
+  items.forEach((it, i) => { const c = it.company || {}; K.put(ws, 2 + i, [it.key, it.name, c.mst, c.address, c.email], ['@', null, '@']); });
+  await xlSave(wbk, name);
+}
+/* thẻ đầy đủ của mọi khách trong phạm vi, sắp theo nhóm như màn hình */
+async function cardsGrouped(GS) {
+  const c = await claude.use('cards'), r = await c.exportAll(), by = {}, co = {};
+  (r.cards || []).forEach(x => (by[MERGE[x.key] || x.key] = by[MERGE[x.key] || x.key] || []).push(x)); (r.companies || []).forEach(x => co[MERGE[x.key] || x.key] = x);
+  const items = []; GS.forEach(G => G.subs.forEach(X => X.rows.forEach(rw => { if (by[rw.key]) items.push({key: rw.key, name: rw.name, label: G.label, cards: by[rw.key].sort((a, b) => String(a.holder || '').localeCompare(String(b.holder || ''), 'vi'))}); })));
+  return {items, co};
+}
 function picTemplate() {
   (async () => {
     const btn = $('crpict'); if (btn) { btn.disabled = true; btn.textContent = 'Đang tạo file…'; }
@@ -1390,19 +1468,31 @@ function picTemplate() {
             ws.getCell(row, 3).value = String(r.key); ws.getCell(row, 12).fill = K.fill('FFFFF7D6');
             ws.getCell(row, 12).dataValidation = {type: 'list', allowBlank: true, showErrorMessage: true, errorTitle: 'PIC không hợp lệ', error: 'Chọn người phụ trách trong danh sách (sheet DS_PIC).', formulae: [vf]};
             row++; }); } }
-      await xlSave(wbk, `XPAY_Template_PIC_${d.replace(/-/g, '')}.xlsx`);
+      if (CANWRITE && CARDST === 'ok') {
+        const GS = crmGroups(R), {items, co} = await cardsGrouped(GS);
+        const wd = wbk.addWorksheet('Thong_tin_DN', {views: [{state: 'frozen', ySplit: 5, xSplit: 4, showGridLines: false}]});
+        K.title(wd, 'THÔNG TIN DOANH NGHIỆP — mỗi pháp nhân 1 dòng', `${scopeTxt()} · tạo lúc ${xlStamp()}`);
+        wd.getCell('A3').value = `Sửa cột MST / Địa chỉ / Email (mỗi doanh nghiệp 1 email). Ô để trống = giữ nguyên, gõ "${CLR}" để xoá giá trị. Không sửa cột "Số hợp đồng".`;
+        wd.getCell('A3').font = {name: 'Arial', size: 10, bold: true, color: {argb: 'FFB45309'}};
+        const dc = [['Nhóm', 34], ['Phân loại Mai Linh', 26], ['Số hợp đồng', 13], ['Tên pháp nhân', 46], ['Số thẻ XPAY', 9], ['MST', 16], ['Địa chỉ', 60], ['Email doanh nghiệp', 30]];
+        K.head(wd, 5, dc); [3, 6].forEach(c => wd.getColumn(c).numFmt = '@'); [6, 7, 8].forEach(c => wd.getCell(5, c).fill = K.fill('FFB45309'));
+        let rd = 6;
+        for (const G of GS) { xlSec(K, wd, rd++, dc.length, grpHead(G));
+          for (const X of G.subs) { if (X.sb) xlSec(K, wd, rd++, dc.length, `${X.sb} · ${n0(X.rows.length)} khách`, 1);
+            X.rows.forEach(r => { const c = co[r.key] || {}; K.put(wd, rd, [G.label, r.sub, r.key, r.name, (CARDS[r.key] || {}).n || '', c.mst, c.address, c.email], [null, null, '@', null, '#,##0', '@']); [6, 7, 8].forEach(x => wd.getCell(rd, x).fill = K.fill('FFFFF7D6')); rd++; }); } }
+        cardsSheet(K, wbk, items, true);
+      }
+      await xlSave(wbk, `XPAY_Template_cap_nhat_${d.replace(/-/g, '')}.xlsx`);
     } catch (e) { alert('Không tạo được template: ' + (e.message || e)); }
-    if (btn) { btn.disabled = false; btn.textContent = 'Tải template PIC'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Tải template cập nhật'; }
   })();
 }
 /* Đọc file template đã điền → danh sách thay đổi, chưa ghi gì */
-async function picParse(file) {
-  await loadScript(XLSX_URL);
-  const wb = XLSX.read(await file.arrayBuffer(), {type: 'array'});
-  const sh = wb.Sheets['Phan_cong_PIC'] || wb.Sheets[wb.SheetNames[0]];
-  const A = XLSX.utils.sheet_to_json(sh, {header: 1, raw: true, defval: ''});
-  const hi = A.findIndex(r => r.some(c => fold(c) === fold('Số hợp đồng')) && r.some(c => fold(c) === fold('PIC mới')));
-  if (hi < 0) throw new Error('Không thấy cột "Số hợp đồng" và "PIC mới". Hãy dùng file tải từ nút "Tải template PIC".');
+const sheetRows = sh => { const R = XLSX.utils.decode_range(sh['!ref'] || 'A1'); R.s.r = 0; R.s.c = 0; return XLSX.utils.sheet_to_json(sh, {header: 1, raw: true, defval: '', blankrows: true, range: R}); };
+const headAt = (A, must) => A.findIndex(r => must.every(m => r.some(c => fold(c) === fold(m))));
+function picRows(A) {
+  const hi = headAt(A, ['Số hợp đồng', 'PIC mới']);
+  if (hi < 0) throw new Error('Không thấy cột "Số hợp đồng" và "PIC mới". Hãy dùng file tải từ nút "Tải template cập nhật".');
   const H = A[hi].map(c => fold(c)), ck = H.indexOf(fold('Số hợp đồng')), cp = H.indexOf(fold('PIC mới')), cn = H.indexOf(fold('Tên pháp nhân'));
   const byKey = {}; crmRows(CR.day).forEach(r => byKey[r.key] = r);
   const pick = v => { const x = fold(v); if (!x) return undefined; if (x === fold(PIC_CLEAR) || x === fold('Chưa phân công')) return ''; return PICS.find(p => fold(p) === x) ?? null; };
@@ -1419,8 +1509,70 @@ async function picParse(file) {
     changes.push({key: k, name: r.name, grp: r.grp, from: r.pic || '', to: np});
   }
   const go = [1, 2, 3, 4, 5, 9]; changes.sort((a, b) => go.indexOf(a.grp) - go.indexOf(b.grp) || a.name.localeCompare(b.name, 'vi'));
-  return {file: file.name, changes, errors, same, filled};
+  return {changes, errors, same, filled};
 }
+const isClr = v => fold(v) === fold(CLR);
+const cellTxt = v => v instanceof Date ? isoOf(v) : String(v == null ? '' : v).trim();
+const moneyOf = v => { if (typeof v === 'number') return isFinite(v) ? Math.round(v) : NaN; const t = String(v).replace(/[\s.,đ]/g, '').replace(/vnd$/i, ''); return /^\d+$/.test(t) ? +t : NaN; };
+const expOf = v => { if (v instanceof Date) { const x = new Date(v.getTime() + 12 * 3600e3); return String(x.getMonth() + 1).padStart(2, '0') + '/' + String(x.getFullYear()).slice(2); }
+  const m = String(v).trim().match(/^(\d{1,2})\s*\/\s*(\d{2}|\d{4})$/); return m && +m[1] >= 1 && +m[1] <= 12 ? m[1].padStart(2, '0') + '/' + m[2].slice(-2) : null; };
+const keyOf = v => { const k = cellTxt(v); return MERGE[k] || k; };
+function dnRows(A, byKey) {
+  const hi = headAt(A, ['Số hợp đồng', 'MST']); if (hi < 0) return {companies: [], errors: ['Sheet Thong_tin_DN: không thấy cột "Số hợp đồng" và "MST"']};
+  const H = A[hi].map(c => fold(c)), ix = l => H.indexOf(fold(l)), ck = ix('Số hợp đồng'), F = [['mst', ix('MST')], ['address', ix('Địa chỉ')], ['email', ix('Email doanh nghiệp')]].filter(([, i]) => i >= 0);
+  const companies = [], errors = [], seen = {};
+  for (let i = hi + 1; i < A.length; i++) { const R = A[i], k = keyOf(R[ck]); if (!k) continue;
+    const o = {key: k, line: i + 1}; let any = false;
+    for (const [f, c] of F) { const v = R[c]; if (v === '' || v == null) continue; any = true;
+      o[f] = isClr(v) ? null : f === 'mst' ? (typeof v === 'number' ? String(v).padStart(10, '0') : String(v).replace(/\s/g, '')) : cellTxt(v); }
+    if (!any) continue;
+    if (!byKey[k]) { errors.push(`Thong_tin_DN dòng ${i + 1}: không có số hợp đồng "${k}"`); continue; }
+    if (seen[k]) { errors.push(`Thong_tin_DN dòng ${i + 1}: ${byKey[k].name} lặp lại (đã có ở dòng ${seen[k]}), bỏ qua`); continue; }
+    seen[k] = i + 1; companies.push(o); }
+  return {companies, errors};
+}
+function cardRows(A, byKey) {
+  const hi = headAt(A, ['UID', 'Số thẻ']); if (hi < 0) return {cards: [], deletes: [], errors: ['Sheet The_XPAY: không thấy cột "UID" và "Số thẻ"']};
+  const H = A[hi].map(c => fold(c)), ix = l => H.indexOf(fold(l)), cu = ix('UID'), ck = ix('Số hợp đồng'), cx = ix('Xoá thẻ (X)');
+  const F = [['company_on_card', ix('Tên công ty trên thẻ')], ['holder', ix('Tên chủ thẻ')], ['pan', ix('Số thẻ')], ['pantoken', ix('Pantoken (mã QR)')], ['expiry', ix('Hạn sử dụng (MM/YY)')], ['monthly_limit', ix('Hạn mức tháng (VND)')], ['balance', ix('Số dư (VND)')], ['balance_date', ix('Ngày cập nhật số dư')]].filter(([, i]) => i >= 0);
+  const cards = [], deletes = [], errors = [], seen = {};
+  for (let i = hi + 1; i < A.length; i++) { const R = A[i], L = `The_XPAY dòng ${i + 1}: `, uidV = R[cu];
+    const any = F.some(([, c]) => R[c] !== '' && R[c] != null) || (ck >= 0 && R[ck] !== '' && !/·/.test(String(R[ck])));
+    if (uidV === '' || uidV == null) { if (any && ck >= 0 && byKey[keyOf(R[ck])]) errors.push(L + 'thiếu UID'); continue; }
+    if (typeof uidV === 'number' && uidV >= 1e15) { errors.push(L + 'UID bị Excel đổi sang dạng số và mất chữ số. Định dạng cột UID là Text rồi nhập lại'); continue; }
+    const uid = cellTxt(uidV);
+    if (seen[uid]) { errors.push(L + `UID ${uid} lặp lại (đã có ở dòng ${seen[uid]}), bỏ qua`); continue; } seen[uid] = i + 1;
+    if (cx >= 0 && fold(R[cx]) === 'x') { deletes.push({uid, line: i + 1}); continue; }
+    const o = {uid, line: i + 1}; let bad = '';
+    if (ck >= 0 && R[ck] !== '') { const k = keyOf(R[ck]); if (!byKey[k]) bad = `không có số hợp đồng "${k}"`; else o.key = k; }
+    for (const [f, c] of F) { const v = R[c]; if (v === '' || v == null || bad) continue;
+      if (isClr(v)) { o[f] = null; continue; }
+      if (f === 'pan') { if (typeof v === 'number' && v >= 1e15) { bad = 'số thẻ bị Excel đổi sang dạng số và mất chữ số cuối. Định dạng cột Số thẻ là Text rồi nhập lại'; continue; } o.pan = String(v).replace(/[\s-]/g, ''); }
+      else if (f === 'expiry') { const e = expOf(v); if (!e) bad = `hạn sử dụng "${cellTxt(v)}" phải dạng MM/YY (ví dụ 12/46)`; else o.expiry = e; }
+      else if (f === 'monthly_limit' || f === 'balance') { const m = moneyOf(v); if (!isFinite(m)) bad = `${f === 'balance' ? 'số dư' : 'hạn mức'} "${cellTxt(v)}" không phải số tiền`; else o[f] = m; }
+      else if (f === 'balance_date') { const d = isoOf(v); if (!d) bad = `ngày số dư "${cellTxt(v)}" không hợp lệ (dd/mm/yyyy)`; else o.balance_date = d; }
+      else o[f] = cellTxt(v); }
+    if (bad) { errors.push(L + bad); continue; }
+    if ('balance' in o && o.balance != null && !('balance_date' in o)) o.balance_date = TODAY;
+    cards.push(o); }
+  return {cards, deletes, errors};
+}
+async function updParse(file) {
+  await loadScript(XLSX_URL);
+  const wb = XLSX.read(await file.arrayBuffer(), {type: 'array', cellDates: true}), SH = wb.Sheets;
+  const byKey = {}; crmRows(CR.day).forEach(r => byKey[r.key] = r);
+  const I = {file: file.name, pic: null, errors: [], payload: null, srv: null};
+  if (SH.Phan_cong_PIC || (!SH.Thong_tin_DN && !SH.The_XPAY)) { try { I.pic = picRows(sheetRows(SH.Phan_cong_PIC || SH[wb.SheetNames[0]])); } catch (e) { if (SH.Phan_cong_PIC || !(SH.Thong_tin_DN || SH.The_XPAY)) I.errors.push(e.message); } }
+  if ((SH.Thong_tin_DN || SH.The_XPAY) && !CANWRITE) I.errors.push('Bạn không có quyền cập nhật thông tin doanh nghiệp / thẻ, bỏ qua 2 sheet này.');
+  else if (SH.Thong_tin_DN || SH.The_XPAY) {
+    const dn = SH.Thong_tin_DN ? dnRows(sheetRows(SH.Thong_tin_DN), byKey) : {companies: [], errors: []}, cd = SH.The_XPAY ? cardRows(sheetRows(SH.The_XPAY), byKey) : {cards: [], deletes: [], errors: []};
+    I.errors.push(...dn.errors, ...cd.errors);
+    I.payload = {companies: dn.companies, cards: cd.cards, deletes: cd.deletes};
+    if (dn.companies.length + cd.cards.length + cd.deletes.length) { const c = await claude.use('cards'); if (!c) I.errors.push('Dữ liệu thẻ chỉ cập nhật được trong web Reconciliation.'); else I.srv = await c.save(Object.assign({dry: true}, I.payload)); }
+  }
+  return I;
+}
+const updCount = I => (I.pic ? I.pic.changes.length : 0) + (I.srv ? I.srv.companies.length + I.srv.added.length + I.srv.changed.length + I.srv.deleted.length : 0);
 /* Ghi PIC: gom theo nhóm tài liệu crm/bXX, mỗi nhóm 1 lần ghi */
 async function picApply(changes, prog) {
   const db = await claude.use('db'); if (!db) throw {code: 'not_granted'};
@@ -1434,14 +1586,24 @@ async function picApply(changes, prog) {
 }
 function picPanel() {
   const I = CR.picImp; if (!I) return '';
-  const lab = p => p ? esc(p) : '<span class="lbl">Chưa phân công</span>', cnt = {};
-  I.changes.forEach(c => { const t = c.to || PIC_CLEAR; cnt[t] = (cnt[t] || 0) + 1; });
-  return `<div class="card" id="crpicp" style="border:1px solid var(--accent)"><div class="hd"><div><div class="eyebrow">Upload PIC · ${esc(I.file)}</div><h2 class="card-title">${n0(I.changes.length)} khách đổi PIC · ${n0(I.same)} giữ nguyên · ${n0(I.errors.length)} lỗi</h2></div>
-    <div style="display:flex;gap:8px"><button class="btn" id="crpicx">Huỷ</button><button class="btn pri" id="crpicok" ${I.changes.length && !I.busy ? '' : 'disabled'}>${I.busy ? 'Đang lưu…' : 'Áp dụng ' + n0(I.changes.length) + ' thay đổi'}</button></div></div>
-    ${I.changes.length ? `<div class="lbl" style="margin-bottom:8px">Sau khi áp dụng: ${Object.entries(cnt).map(([p, n]) => `<b>${esc(p)}</b> nhận ${n0(n)}`).join(' · ')}</div>` : ''}
+  const lab = p => p ? esc(p) : '<span class="lbl">Chưa phân công</span>', P = I.pic, V = I.srv, total = updCount(I), errs = [...I.errors, ...(P ? P.errors : []), ...(V ? V.errors : [])];
+  const fv = v => v == null || v === '' ? '<span class="lbl">trống</span>' : typeof v === 'number' ? n0(v) + ' đ' : esc(v);
+  const sec = (t, body) => `<h3 style="margin:14px 0 6px;font-size:14px">${t}</h3>${body}`, tbl = (head, rows) => `<div class="tw" style="max-height:300px;overflow:auto"><table><thead><tr>${head.map(x => `<th class="l">${x}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
+  const parts = [];
+  if (P) { const cnt = {}; P.changes.forEach(c => { const t = c.to || PIC_CLEAR; cnt[t] = (cnt[t] || 0) + 1; });
+    parts.push(sec(`Phân công PIC · ${n0(P.changes.length)} khách đổi · ${n0(P.same)} giữ nguyên`, P.changes.length ? `<div class="lbl" style="margin-bottom:6px">Sau khi áp dụng: ${Object.entries(cnt).map(([p, n]) => `<b>${esc(p)}</b> nhận ${n0(n)}`).join(' · ')}</div>` + tbl(['Doanh nghiệp', 'Nhóm', 'PIC hiện tại', 'PIC mới'], P.changes.map(c => `<tr><td class="l name">${esc(c.name)}<span class="def">HĐ ${esc(c.key)}</span></td><td class="l">${c.grp === 9 ? '' : c.grp + '. '}${esc(GRP[c.grp])}</td><td class="l">${lab(c.from)}</td><td class="l"><b>${lab(c.to)}</b></td></tr>`).join('')) : `<div class="hint">${P.filled ? 'Không có khách nào đổi PIC.' : 'Chưa điền cột "PIC mới" ở dòng nào.'}</div>`)); }
+  if (V) {
+    parts.push(sec(`Thông tin doanh nghiệp · ${n0(V.companies.length)} khách thay đổi`, V.companies.length ? tbl(['Doanh nghiệp', 'Thông tin', 'Hiện tại', 'Mới'], V.companies.map(c => c.diffs.map((d, j) => `<tr><td class="l name">${j ? '' : esc(cname(c.key)) + `<span class="def">HĐ ${esc(c.key)}</span>`}</td><td class="l">${esc(d.f)}</td><td class="l">${fv(d.from)}</td><td class="l"><b>${fv(d.to)}</b></td></tr>`).join('')).join('')) : '<div class="hint">Không có thay đổi.</div>'));
+    const cr = [...V.added.map(c => `<tr><td class="l name">${esc(cname(c.key))}<span class="def">HĐ ${esc(c.key)}</span></td><td class="l">${esc(c.holder || '')}<span class="def">UID ${esc(c.uid)}</span></td><td class="l"><span class="pill p-stable">Thẻ mới</span></td><td class="l" colspan="2">${esc(c.pan || '')}</td></tr>`),
+      ...V.changed.map(c => c.diffs.map((d, j) => `<tr><td class="l name">${j ? '' : esc(cname(c.key)) + `<span class="def">HĐ ${esc(c.key)}</span>`}</td><td class="l">${j ? '' : esc(c.holder || '') + `<span class="def">UID ${esc(c.uid)}</span>`}</td><td class="l">${esc(d.f)}</td><td class="l">${fv(d.from)}</td><td class="l"><b>${fv(d.to)}</b></td></tr>`).join('')),
+      ...V.deleted.map(c => `<tr><td class="l name">${esc(cname(c.key))}<span class="def">HĐ ${esc(c.key)}</span></td><td class="l">${esc(c.holder || '')}<span class="def">UID ${esc(c.uid)}</span></td><td class="l"><span class="pill p-critical">Gỡ thẻ</span></td><td colspan="2"></td></tr>`)];
+    parts.push(sec(`Thẻ XPAY · ${n0(V.added.length)} thẻ mới · ${n0(V.changed.length)} thẻ sửa · ${n0(V.deleted.length)} thẻ gỡ · ${n0(V.same)} giữ nguyên`, cr.length ? tbl(['Doanh nghiệp', 'Chủ thẻ', 'Thông tin', 'Hiện tại', 'Mới'], cr.join('')) : '<div class="hint">Không có thay đổi.</div>'));
+  }
+  return `<div class="card" id="crpicp" style="border:1px solid var(--accent)"><div class="hd"><div><div class="eyebrow">Upload file cập nhật · ${esc(I.file)}</div><h2 class="card-title">${n0(total)} thay đổi · ${n0(errs.length)} lỗi</h2></div>
+    <div style="display:flex;gap:8px"><button class="btn" id="crpicx">Huỷ</button><button class="btn pri" id="crpicok" ${total && !I.busy ? '' : 'disabled'}>${I.busy ? 'Đang lưu…' : 'Áp dụng ' + n0(total) + ' thay đổi'}</button></div></div>
     ${I.msg ? `<div class="hint" style="margin-bottom:8px"><b>${esc(I.msg)}</b></div>` : ''}
-    ${I.errors.length ? `<div class="hint" style="color:var(--critical);margin-bottom:8px">${I.errors.slice(0, 30).map(esc).join('<br>')}${I.errors.length > 30 ? `<br>… còn ${n0(I.errors.length - 30)} lỗi` : ''}</div>` : ''}
-    ${I.changes.length ? `<div class="tw" style="max-height:340px;overflow:auto"><table><thead><tr><th class="l">Doanh nghiệp</th><th class="l">Nhóm</th><th class="l">PIC hiện tại</th><th class="l">PIC mới</th></tr></thead><tbody>${I.changes.map(c => `<tr><td class="l name">${esc(c.name)}<span class="def">HĐ ${esc(c.key)}</span></td><td class="l">${c.grp === 9 ? '' : c.grp + '. '}${esc(GRP[c.grp])}</td><td class="l">${lab(c.from)}</td><td class="l"><b>${lab(c.to)}</b></td></tr>`).join('')}</tbody></table></div>` : `<div class="hint">${I.filled ? 'Không có khách nào đổi PIC so với hiện tại.' : 'Chưa điền cột "PIC mới" ở dòng nào.'}</div>`}</div>`;
+    ${errs.length ? `<div class="hint" style="color:var(--critical);margin-bottom:8px">${errs.slice(0, 40).map(esc).join('<br>')}${errs.length > 40 ? `<br>… còn ${n0(errs.length - 40)} lỗi` : ''}<br><span class="lbl">Dòng lỗi được bỏ qua, các dòng khác vẫn áp dụng.</span></div>` : ''}
+    ${parts.join('') || '<div class="hint">File không có sheet nào để cập nhật.</div>'}</div>`;
 }
 function bindJourney() {
   if (TAB !== 'jr') return;
@@ -1459,7 +1621,6 @@ function bindJourney() {
     if (over > 0) p.style.left = Math.max(-over, 16 - p.parentElement.getBoundingClientRect().left) + 'px'; }
   document.onmousedown = e => { if (RP.open && $('rpp') && !$('rpp').contains(e.target) && e.target.id !== 'rpb') keep(() => { RP.open = false; });
     if (PAT.msOpen && $('pmsp') && !$('pmsp').contains(e.target) && e.target.id !== 'pmsb') { PAT.msOpen = false; $('pmsp').style.display = 'none'; } };
-  if ($('crpat')) $('crpat').ontoggle = e => { CR.patOpen = e.target.open; };
   document.querySelectorAll('[data-crwho]').forEach(el => el.onclick = () => keep(() => { CR.who = el.dataset.crwho; }));
   document.querySelectorAll('[data-crgo]').forEach(el => el.onclick = () => { CR.view = 'input'; CR.grp = el.dataset.crgo; CR.todo = ''; CR.res = ''; render(); window.scrollTo(0, 0); });
   document.querySelectorAll('[data-crres]').forEach(el => el.onclick = () => { CR.view = 'input'; CR.res = el.dataset.crres; CR.grp = ''; CR.todo = ''; render(); window.scrollTo(0, 0); });
@@ -1470,23 +1631,36 @@ function bindJourney() {
   if ($('crxls')) $('crxls').onclick = crmExport;
   if ($('crpict')) $('crpict').onclick = picTemplate;
   if ($('crpicf')) $('crpicf').onchange = async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return;
-    try { CR.picImp = await picParse(f); } catch (er) { CR.picImp = {file: f.name, changes: [], errors: [er.message || String(er)], same: 0, filled: 0}; }
+    try { CR.picImp = await updParse(f); } catch (er) { CR.picImp = {file: f.name, pic: null, srv: null, errors: [er.message || String(er)]}; }
     keep(() => {}); if ($('crpicp')) $('crpicp').scrollIntoView({behavior: 'smooth', block: 'start'}); };
   if ($('crpicx')) $('crpicx').onclick = () => keep(() => { CR.picImp = null; });
-  if ($('crpicok')) $('crpicok').onclick = async () => { const I = CR.picImp; if (!I || I.busy || !I.changes.length) return;
-    if (!window.confirm(`Đổi PIC cho ${I.changes.length} khách theo file "${I.file}"?`)) return;
-    I.busy = true; I.msg = ''; keep(() => {});
-    try { await picApply(I.changes, (i, n) => { const b = $('crpicok'); if (b) b.textContent = `Đang lưu ${i}/${n}…`; });
-      CRM_ = null; AUTOC_ = null; CR.picImp = null; keep(() => {}); alert(`Đã đổi PIC cho ${I.changes.length} khách.`);
-    } catch (er) { I.busy = false; I.msg = (er && er.code === 'not_granted') ? 'Chưa kết nối được dữ liệu nhập, chưa lưu.' : 'Chưa lưu được: ' + ((er && (er.message || er.code)) || er) + '. Có thể đã lưu một phần, tải lại trang để kiểm tra.'; keep(() => {}); } };
+  if ($('crpicok')) $('crpicok').onclick = async () => { const I = CR.picImp, n = I ? updCount(I) : 0; if (!I || I.busy || !n) return;
+    if (!window.confirm(`Áp dụng ${n} thay đổi theo file "${I.file}"?`)) return;
+    I.busy = true; I.msg = ''; keep(() => {}); const done_ = [];
+    try {
+      if (I.pic && I.pic.changes.length) { await picApply(I.pic.changes, (i, m) => { const b = $('crpicok'); if (b) b.textContent = `Đang lưu PIC ${i}/${m}…`; }); done_.push(`${I.pic.changes.length} khách đổi PIC`); I.pic.changes = []; }
+      if (I.srv && (I.srv.companies.length + I.srv.added.length + I.srv.changed.length + I.srv.deleted.length)) { const b = $('crpicok'); if (b) b.textContent = 'Đang lưu thẻ…';
+        const r = await (await claude.use('cards')).save(Object.assign({dry: false}, I.payload)); done_.push(`${r.companies.length} doanh nghiệp, ${r.added.length} thẻ mới, ${r.changed.length} thẻ sửa, ${r.deleted.length} thẻ gỡ`); CARDD = {}; await cardsLoad(); }
+      CRM_ = null; AUTOC_ = null; CR.picImp = null; keep(() => {}); alert('Đã cập nhật: ' + done_.join(' · ') + '.');
+    } catch (er) { I.busy = false; I.srv = null; I.msg = (done_.length ? 'Đã lưu: ' + done_.join(' · ') + '. ' : '') + 'Chưa lưu được phần còn lại: ' + ((er && (er.message || er.code)) || er) + '. Tải lại trang rồi upload lại file để kiểm tra.'; keep(() => {}); } };
   document.querySelectorAll('tr.crg').forEach(el => el.onclick = () => keep(() => { const id = el.dataset.crg; const cur = id in COPEN ? COPEN[id] : el.textContent.trim().startsWith('▾'); COPEN[id] = !cur; }));
   document.querySelectorAll('.crmore').forEach(el => el.onclick = e => { e.stopPropagation(); keep(() => { const id = el.dataset.crg; CMORE[id] = (CMORE[id] || 30) + 50; }); });
-  document.querySelectorAll('[data-cropen]').forEach(el => el.onclick = () => keep(() => { CR.open = el.dataset.cropen; }));
+}
+/* Hồ sơ khách: mở được từ mọi tab (mọi phần tử có data-cropen) */
+const profKey = k => { k = MERGE[k] || k; return crmRows(CR.day).some(r => r.key === k) ? k : null; };
+function bindDrawer() {
+  const keep = fn => { const y = window.scrollY, pn = $('crpane'), py = pn ? pn.scrollTop : 0; fn(); render(); window.scrollTo(0, y); if ($('crpane')) $('crpane').scrollTop = py; };
+  document.querySelectorAll('[data-cropen]').forEach(el => el.onclick = ev => { ev.stopPropagation(); const k = profKey(el.dataset.cropen); if (!k) return; const y = window.scrollY; CR.open = k; render(); window.scrollTo(0, y); });
   if (!CR.open) return;
+  document.querySelectorAll('details.crsec').forEach(el => el.ontoggle = () => { const k = el.dataset.sec; if (!!CR.sec[k] === el.open) return; keep(() => { CR.sec[k] = el.open; }); });
   const close = () => keep(() => { CR.open = null; });
   $('crclose').onclick = close; $('crmask').onclick = e => { if (e.target.id === 'crmask') close(); };
   document.onkeydown = e => { if (e.key === 'Escape' && CR.open) close(); };
-  const k = CR.open, msg = t => { if ($('crmsg')) $('crmsg').textContent = t; };
+  const k = CR.open, msg = t => { if ($('crmmsg')) $('crmmsg').textContent = t; };
+  if (CARDST === 'ok' && CR.sec.cards && !CARDD[k]) { CARDD[k] = {loading: true}; cardDetail(k, false).catch(e => { CARDD[k] = {err: 'Chưa tải được: ' + (e.message || e)}; }).then(() => { if (CR.open === k) keep(() => {}); }); }
+  if ($('cdfull')) $('cdfull').onclick = () => { const D = CARDD[k]; if (D.full) { CARDD[k] = Object.assign({}, D, {loading: true}); keep(() => {}); cardDetail(k, false).then(() => keep(() => {})); return; }
+    CARDD[k] = Object.assign({}, D, {loading: true}); keep(() => {}); cardDetail(k, true).catch(e => { CARDD[k] = {err: e.message || String(e)}; }).then(() => keep(() => {})); };
+  if ($('cdxls')) $('cdxls').onclick = async () => { try { const D = CARDD[k].full ? CARDD[k] : await cardDetail(k, true); await cardsXlsx([{key: k, name: cname(k), label: '', company: D.company, cards: D.cards}], `XPAY_The_${k}_${TODAY.replace(/-/g, '')}.xlsx`, cname(k)); keep(() => {}); } catch (e) { alert('Không xuất được: ' + (e.message || e)); } };
   const fail = e => msg(e && e.code === 'invalid_argument' ? 'Bạn không có quyền lưu dữ liệu.' : 'Chưa lưu được: ' + ((e && (e.message || e.code)) || e));
   if ($('cat_r')) $('cat_r').onchange = e => { $('cat_new').style.display = e.target.value === '__new' ? '' : 'none'; };
   if ($('cat_add')) $('cat_add').onclick = async () => {
@@ -1501,7 +1675,7 @@ function bindJourney() {
     try { await crmWrite(k, patch); msg('Đã lưu.'); CR.open = null; CRM_ = null; const y = window.scrollY; render(); window.scrollTo(0, y); } catch (e) { fail(e); $('cat_add').disabled = false; }
   };
   document.querySelectorAll('[data-cadel]').forEach(el => el.onclick = async () => { msg('Đang xóa…'); try { await crmWrite(k, {acts: {[el.dataset.cadel]: null}}); CRM_ = null; const y = window.scrollY; render(); window.scrollTo(0, y); } catch (e) { fail(e); } });
-  if ($('crf_save')) $('crf_save').onclick = async () => {
+  const saveMs = async btn => {
     const r = crmRows(CR.day).find(x => x.key === k), b = BOOK[k] || {}, c = C0.rows[k] || [];
     const auto = {pl: c[0] || (b.fpl === 'Y' ? 'Y' : ''), xp: c[1] || (b.xp ? 'Y' : ''), call: r.calls[0] ? r.calls[0].d : '', meet: r.meets[0] ? r.meets[0].d : '', first: ''};
     const ms = {};
@@ -1511,9 +1685,10 @@ function bindJourney() {
     const st = $('crf_st').value, stAuto = b.tl ? 'Thanh lý' : '';
     const patch = {ms, pic: $('crf_pic').value === (c[2] || '') ? null : $('crf_pic').value, grp: $('crf_grp').value || null, st: st === stAuto ? null : st, note: $('crf_note').value.trim()};
     if (['pl', 'xp'].some(f => (ms[f] == null ? null : ms[f]) !== (((DBX[k] || {}).ms || {})[f] == null ? null : DBX[k].ms[f]))) patch.mts = Date.now();
-    $('crf_save').disabled = true; msg('Đang lưu…');
-    try { await crmWrite(k, patch); msg('Đã lưu.'); CR.open = null; CRM_ = null; AUTOC_ = null; const y = window.scrollY; render(); window.scrollTo(0, y); } catch (e) { fail(e); $('crf_save').disabled = false; }
+    document.querySelectorAll('.crf-save').forEach(b => b.disabled = true); msg('Đang lưu…');
+    try { await crmWrite(k, patch); msg('Đã lưu.'); CR.open = null; CRM_ = null; AUTOC_ = null; const y = window.scrollY; render(); window.scrollTo(0, y); } catch (e) { fail(e); document.querySelectorAll('.crf-save').forEach(b => b.disabled = false); }
   };
+  document.querySelectorAll('.crf-save').forEach(b => b.onclick = () => saveMs(b));
 }
 function bind() {
   document.querySelectorAll('[data-tab]').forEach(el => el.onclick = ev => { ev.preventDefault(); TAB = el.dataset.tab; try { localStorage.setItem('xpay_tab', TAB); } catch (e) {} render(); window.scrollTo(0, 0); });
@@ -1528,6 +1703,7 @@ function bind() {
     if (s.value === 'auto') i.value = s.dataset.auto; else if (s.value === 'manual' && s.dataset.man) i.value = s.dataset.man; }; });
   bindPattern();
   bindJourney();
+  bindDrawer();
 }
 computeActuals();
 SEL = LASTDAY;
@@ -1535,6 +1711,7 @@ try { const t = localStorage.getItem('xpay_tab'); if (t) TAB = t; } catch (e) {}
 if (TAB === 'pat') { TAB = 'jr'; CR.view = 'pat'; }
 render();
 crmInit();
+cardsLoad();
 (async () => {
   try { const u = window.claude ? await claude.use('user') : null; CANWRITE = u ? await u.canEdit() : false; } catch (e) { CANWRITE = false; }
   if (TAB === 'up' || TAB === 'jr' || TAB === 'pat') render();
@@ -1630,7 +1807,14 @@ crmInit();
       document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
     },
   };
-  var CAPS = { db: db, artifact: artifact, user: user, downloads: downloads };
+  /* ---- thẻ XPAY & thông tin doanh nghiệp: API riêng, kiểm tra quyền ở máy chủ ---- */
+  var cards = {
+    summary: function () { return J(API + "/cards?summary=1"); },
+    get: function (key, full) { return J(API + "/cards?key=" + encodeURIComponent(key) + (full ? "&full=1" : "")); },
+    exportAll: function () { return J(API + "/cards?export=1"); },
+    save: function (payload) { return J(API + "/cards", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }); },
+  };
+  var CAPS = { db: db, artifact: artifact, user: user, downloads: downloads, cards: cards };
   window.claude = { use: async function (n) { return CAPS[n] || null; } };
 
   /* ---- khởi động ---- */
