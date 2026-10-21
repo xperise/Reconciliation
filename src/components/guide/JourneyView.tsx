@@ -11,6 +11,8 @@ import { supabaseBrowser } from '@/lib/supabase/client';
 import { ganTepVaoChang, ghiNhanTepHuongDan, xinChoTepHuongDan } from '@/app/(app)/huong-dan/actions';
 import GuideNav from './GuideNav';
 import JourneyEditor from './JourneyEditor';
+import GuideSearch from './GuideSearch';
+import { fold, highlightDom } from '@/lib/guide/search';
 
 type Lib = Record<string, Pick<Guide, 'slug' | 'title' | 'audience' | 'sections' | 'status'>>;
 const kb = (n: number | null) => (n == null ? '' : n > 1048576 ? `${(n / 1048576).toFixed(1).replace('.', ',')} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
@@ -28,6 +30,7 @@ export default function JourneyView({ guide, lib, canEdit, userId, startEdit }: 
   const [done, setDone] = useState<Record<string, boolean>>({});
   const [lb, setLb] = useState<{ src: string; alt: string } | null>(null);
   const [err, setErr] = useState(''), [busy, setBusy] = useState('');
+  const [hl, setHl] = useState<{ t: string[]; h: string; at: string } | null>(null);
   const body = useRef<HTMLDivElement>(null);
   const KEY = `hdj:${userId}:${guide.slug}`;
   const S = J.stages[si];
@@ -42,6 +45,8 @@ export default function JourneyView({ guide, lib, canEdit, userId, startEdit }: 
     const vai = new URLSearchParams(location.search).get('vai');
     setDone(v.done || {}); setMe(vai || v.me || ''); setOnly(vai ? true : !!v.only);
     if (vai) { try { localStorage.setItem(KEY, JSON.stringify({ ...v, me: vai, only: true })); } catch { /* */ } }
+    const sp = new URLSearchParams(location.search), tt = (sp.get('t') || '').split(',').filter(Boolean);
+    if (tt.length) setHl({ t: tt, h: sp.get('h') || '', at: decodeURIComponent(location.hash.slice(1)) });
     const m = decodeURIComponent(location.hash.slice(1)).match(/^([^/]+)(?:\/(\d+))?$/);
     if (m) { const k = J.stages.findIndex((s) => s.id === m[1]); if (k >= 0) { setSi(k); setPi(m[2] ? Math.max(0, +m[2] - 1) : 0); } }
   }, [KEY, J.stages]);
@@ -78,6 +83,16 @@ export default function JourneyView({ guide, lib, canEdit, userId, startEdit }: 
   const toggleDone = () => { if (!cur) return; const n = { ...done, [stepKey(cur)]: !done[stepKey(cur)] }; setDone(n); save({ done: n }); };
   const isLast = si === J.stages.length - 1 && pi === steps.length - 1;
   const lastOfStage = pi === steps.length - 1;
+
+  // đến từ ô tìm kiếm: tô từ khoá và cuộn tới đúng đoạn
+  useEffect(() => {
+    if (!hl || !body.current || `${S?.id}/${pi + 1}` !== hl.at) return;
+    const el = body.current;
+    highlightDom(el, hl.t);
+    const fh = fold(hl.h).trim();
+    const tgt = fh ? Array.from(el.querySelectorAll<HTMLElement>('h3,h4,strong,p,li,td')).find((x) => fold(x.textContent || '').includes(fh)) : el.querySelector<HTMLElement>('mark.hd-hl');
+    (tgt || el.querySelector<HTMLElement>('mark.hd-hl'))?.scrollIntoView({ block: 'center' });
+  }, [hl, html, si, pi, S]);
 
   // trong nội dung: link tới mục khác → nhảy tới bước tương ứng của hành trình (nếu có); bấm ảnh → phóng to
   useEffect(() => {
@@ -149,6 +164,8 @@ export default function JourneyView({ guide, lib, canEdit, userId, startEdit }: 
           {me && <label className="hj-role" style={{ cursor: 'pointer' }}><input type="checkbox" checked={only} onChange={(e) => { setOnly(e.target.checked); save({ only: e.target.checked }); }} style={{ accentColor: '#fff' }} /> Chỉ hiện bước của tôi</label>}
         </div>
       </section>
+
+      <div style={{ marginBottom: 14, maxWidth: 860 }}><GuideSearch lib={lib} journey={J} journeySlug={guide.slug} variant="bar" placeholder="Tìm trong hành trình: mô tả vấn đề hoặc thao tác cần làm…" /></div>
 
       <div className="hj-rail" role="tablist" aria-label="Các chặng">
         {J.stages.map((s, k) => { const st = stat(k); return (

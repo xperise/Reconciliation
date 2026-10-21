@@ -2,16 +2,14 @@
 // Trung tâm hướng dẫn: bức tranh tổng thể trước (ai làm gì ở chặng nào) → chọn vai trò / làm theo hành trình / tải tài liệu / tra sự cố
 import './guide.css';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import type { Guide, GuideFile } from '@/lib/guide/meta';
 import { DEFAULT_ROLES, type JStep } from '@/lib/guide/journey';
 import GuideNav from './GuideNav';
+import GuideSearch from './GuideSearch';
 
 type LibG = Pick<Guide, 'slug' | 'title' | 'audience' | 'sections' | 'status' | 'summary' | 'extras' | 'files'>;
-const fold = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
-const plain = (md: string) => md.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/[#>*_`|[\]]+/g, ' ').replace(/\s+/g, ' ');
 const kb = (n: number | null) => (n == null ? '' : n > 1048576 ? `${(n / 1048576).toFixed(1).replace('.', ',')} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
-const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
 export default function HubView({ journey, lib, canEdit }: { journey: Guide; lib: Record<string, LibG>; canEdit: boolean }) {
   const J = journey.extras!.journey!;
@@ -19,7 +17,6 @@ export default function HubView({ journey, lib, canEdit }: { journey: Guide; lib
   const RC = Object.fromEntries((J.roles?.length ? J.roles : DEFAULT_ROLES).map((r) => [r.id, r]));
   const jURL = (k: number, p: number, role?: string) => `/huong-dan/${journey.slug}${role ? `?vai=${role}` : ''}#${J.stages[k].id}/${p + 1}`;
   const secOf = (x: JStep) => lib[x.g]?.sections.find((s) => s.id === x.s);
-  const [q, setQ] = useState('');
 
   // ô sơ đồ: theo vai trò × chặng → các nhóm bước (phase) kèm bước đầu tiên của nhóm
   const cell = (role: string, k: number) => {
@@ -52,13 +49,6 @@ export default function HubView({ journey, lib, canEdit }: { journey: Guide; lib
     return rows;
   }, [J, journey.files, lib]);
 
-  // tìm kiếm toàn bộ mục
-  const idx = useMemo(() => Object.values(lib).flatMap((g) => g.sections.map((s) => ({ g, s, text: plain(s.md), ft: fold(s.title + ' ' + plain(s.md)) }))), [lib]);
-  const fq = fold(q.trim());
-  const hits = fq.length < 2 ? [] : idx.filter((x) => fq.split(/\s+/).every((w) => x.ft.includes(w))).slice(0, 12);
-  const snip = (text: string) => { const w = fq.split(/\s+/)[0], at = fold(text).indexOf(w); if (at < 0) return esc(text.slice(0, 120)); const a = Math.max(0, at - 50); return (a ? '…' : '') + esc(text.slice(a, at)) + '<mark>' + esc(text.slice(at, at + w.length)) + '</mark>' + esc(text.slice(at + w.length, at + 110)) + '…'; };
-  const hitURL = (g: string, s: string) => { for (let k = 0; k < J.stages.length; k++) { const p = J.stages[k].steps.findIndex((x) => x.g === g && x.s === s); if (p >= 0) return jURL(k, p); } return `/huong-dan/${g}#s-${s}`; };
-
   return (
     <div className="hd"><div className="hd-wrap">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 10, flexWrap: 'wrap' }}>
@@ -69,14 +59,9 @@ export default function HubView({ journey, lib, canEdit }: { journey: Guide; lib
       <section className="hh-hero">
         <div className="hd-eyebrow" style={{ color: '#ffffffcc', position: 'relative' }}>Trung tâm hướng dẫn XPAY · Xperise</div>
         <h1>Từ nhận khách mới đến chuyến xe đầu tiên</h1>
-        <p>Xem bức tranh tổng thể ở dưới trước: mỗi cột là một chặng, mỗi hàng là một vai trò. Bấm vào ô để mở đúng bước cần làm; hoặc chọn vai trò của bạn để đọc hướng dẫn đầy đủ và tải tài liệu gửi khách, đơn vị, tài xế.</p>
+        <p>Gặp vấn đề cụ thể? Gõ mô tả vào ô dưới — hệ thống tìm tới đúng bước, câu hỏi hay dòng tra lỗi, hoặc bấm <b>Hỏi trợ lý</b> để nhận câu trả lời tóm tắt có dẫn nguồn. Muốn nắm cả quy trình: xem bức tranh tổng thể bên dưới.</p>
         <div className="hh-stats"><span>{J.stages.length} chặng</span><span>{totalSteps} bước</span><span>{roles.length} vai trò</span><span>{files.length} tài liệu tải về</span></div>
-        <div className="hh-search">
-          <i className="ri-search-line" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm nhanh: gán thẻ, quên PIN, biển số, nạp ví, cost center…" />
-          {fq.length >= 2 && <div className="hh-results">{hits.length ? hits.map(({ g, s, text }) => (
-            <a key={g.slug + s.id} href={hitURL(g.slug, s.id)}><b>{s.title}</b><span>{J.sources?.[g.slug] || g.title}{s.group ? ` · ${s.group}` : ''}</span><div style={{ fontSize: 12, color: 'var(--hd-ink-2)', marginTop: 2 }} dangerouslySetInnerHTML={{ __html: snip(text) }} /></a>)) : <div className="hd-muted" style={{ padding: 12 }}>Không thấy mục nào khớp.</div>}</div>}
-        </div>
+        <div style={{ marginTop: 18, maxWidth: 760, position: 'relative' }}><GuideSearch lib={lib} journey={J} journeySlug={journey.slug} /></div>
       </section>
 
       <div className="hh-sec"><span className="hh-n">1</span><h2>Bức tranh tổng thể</h2><p>Đọc từ trái sang phải. Ô nào có việc nghĩa là vai trò đó phải làm ở chặng đó — bấm để mở bước đầu tiên của nhóm việc.</p></div>

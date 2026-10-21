@@ -242,9 +242,9 @@
 .hj-empty { padding: 40px 24px; text-align: center; color: var(--hd-ink-3); }
 
 /* ======================= Trung tâm (tổng quan) ======================= */
-.hh-hero { position: relative; overflow: hidden; border-radius: 24px; padding: 30px 32px 26px; color: #fff; margin-bottom: 22px;
+.hh-hero { position: relative; z-index: 5; overflow: visible; border-radius: 24px; padding: 30px 32px 26px; color: #fff; margin-bottom: 22px;
   background: radial-gradient(900px 320px at 100% -30%, #b041ff 0%, transparent 60%), radial-gradient(700px 260px at -10% 130%, #3b85ff 0%, transparent 60%), linear-gradient(115deg, #00a693 0%, #079a9c 40%, #5b5bd6 100%); box-shadow: 0 22px 46px -26px #0a6f8a; }
-.hh-hero::before { content: ""; position: absolute; right: 40px; top: -90px; width: 300px; height: 300px; border-radius: 50%; border: 44px solid #ffffff12; }
+.hh-hero::before { content: ""; position: absolute; right: 40px; top: 0; width: 300px; height: 200px; border-radius: 0 0 150px 150px; border: 44px solid #ffffff12; border-top: 0; pointer-events: none; }
 .hh-hero h1 { margin: 6px 0 6px; font-size: 30px; letter-spacing: -.015em; position: relative; }
 .hh-hero p { margin: 0; max-width: 760px; color: #ffffffdb; font-size: 14.5px; line-height: 1.6; position: relative; }
 .hh-stats { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; position: relative; }
@@ -309,3 +309,39 @@
 .hh-files td { padding: 10px 12px; border-bottom: 1px solid var(--hd-line-2); vertical-align: middle; }
 .hh-alert { padding: 16px 18px; display: flex; gap: 14px; align-items: center; background: linear-gradient(90deg, #e83c3f12, #fff 70%); border-color: #e83c3f40; }
 .hh-alert i.big { font-size: 28px; color: var(--hd-neg); }
+
+/* ======================= Tìm kiếm thông minh ======================= */
+.hs { position: relative; z-index: 6; }
+.hs-in { display: flex; align-items: center; gap: 8px; background: #fff; border-radius: 14px; padding: 6px 6px 6px 14px; box-shadow: 0 10px 30px -14px #00000060; border: 1px solid #ffffff; }
+.hs-bar .hs-in { border-color: var(--hd-line); box-shadow: 0 1px 3px #00000014; }
+.hs-in > i { font-size: 19px; color: var(--hd-ink-3); }
+.hs-in input { flex: 1; border: 0; outline: 0; font: 15px var(--font-ui); color: var(--hd-ink); padding: 8px 0; background: transparent; min-width: 0; }
+.hs-x { border: 0; background: none; color: var(--hd-ink-3); cursor: pointer; font-size: 18px; }
+.hs-ai { display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 10px; padding: 9px 14px; font: 700 13px var(--font-ui); color: #fff; cursor: pointer; background: linear-gradient(120deg, #00a693, #6c5ce7 60%, #b041ff); white-space: nowrap; }
+.hs-ai:disabled { opacity: .5; cursor: default; }
+.hs-pop { position: absolute; left: 0; right: 0; top: calc(100% + 8px); background: #fff; color: var(--hd-ink); border-radius: 16px; box-shadow: 0 28px 60px -22px #00000066; max-height: min(70vh, 620px); overflow: auto; padding: 8px; border: 1px solid var(--hd-line-2); }
+.hs-sug { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px; }
+.hs-hit { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border-radius: 12px; text-decoration: none; color: inherit; }
+.hs-hit[data-on="true"] { background: var(--hd-surface-2); }
+.hs-hit b { display: block; font-size: 13.5px; line-height: 1.35; margin: 1px 0 2px; }
+.hs-sub { font-weight: 600; color: var(--hd-ink-2); }
+.hs-bc { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; color: var(--hd-ink-3); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+.hs-bc .hj-badge { text-transform: none; letter-spacing: 0; font-size: 10.5px; padding: 1px 7px; }
+.hs-sn { display: block; font-size: 12.5px; color: var(--hd-ink-2); line-height: 1.5; }
+.hs-sn mark, .hd-hl { background: #ffe58a; color: inherit; border-radius: 3px; padding: 0 1px; }
+.hd-hl { box-shadow: 0 0 0 2px #ffe58a; animation: hdhl 1.6s ease-out 1; }
+@keyframes hdhl { 0% { background: #ffc531; box-shadow: 0 0 0 5px #ffc53180; } 100% { background: #ffe58a; box-shadow: 0 0 0 2px #ffe58a; } }
+.hs-k { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; flex-shrink: 0; font-size: 15px; background: var(--hd-surface-2); color: var(--hd-ink-2); }
+.hs-k-symptom { background: var(--hd-neg-soft); color: var(--hd-neg); } .hs-k-faq { background: var(--hd-info-soft); color: var(--hd-info); } .hs-k-step { background: var(--hd-primary-soft); color: #007a6c; }
+.hs-enter { font-size: 11px; color: var(--hd-ink-3); align-self: center; }
+.hs-foot { display: flex; justify-content: space-between; padding: 8px 10px 4px; font-size: 11.5px; color: var(--hd-ink-3); border-top: 1px solid var(--hd-line-2); margin-top: 4px; }
+.hs-quick { display: block; margin: 4px 2px 8px; padding: 12px 14px; border-radius: 14px; text-decoration: none; color: inherit; background: linear-gradient(135deg, #e83c3f10, #fff 70%); border: 1px solid #e83c3f40; }
+.hs-qh { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13.5px; color: var(--hd-ink); }
+.hs-qh i { color: var(--hd-neg); font-size: 17px; }
+.hs-qg { display: grid; grid-template-columns: 96px 1fr; gap: 4px 10px; margin-top: 8px; font-size: 13px; color: var(--hd-ink-2); }
+.hs-qg span { font-size: 11px; font-weight: 700; color: var(--hd-ink-3); text-transform: uppercase; letter-spacing: .04em; padding-top: 2px; }
+.hs-qgo { margin-top: 8px; font-size: 12.5px; font-weight: 700; color: var(--hd-neg); }
+.hs-aibox { margin: 4px 2px 10px; padding: 12px 14px; border-radius: 14px; background: linear-gradient(135deg, #00a69312, #b041ff10); border: 1px solid #6c5ce733; }
+.hs-aih { font-size: 13px; font-weight: 700; color: #5b4bd6; margin-bottom: 4px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.hs-aimd { font-size: 13.5px; color: var(--hd-ink); }
+.hs-cite { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 6px; background: #6c5ce7; color: #fff !important; font-size: 10.5px; font-weight: 700; text-decoration: none; vertical-align: 1px; margin: 0 1px; }

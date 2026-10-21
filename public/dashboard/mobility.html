@@ -292,15 +292,133 @@ function waterfall(steps) {
   return s + '</svg>';
 }
 
+/* ---------- Tổng quan: khoảng thời gian + lọc đơn vị (cột "Đơn vị phát sinh" của bảng kê taxi) ---------- */
+let OV = {from: '', to: '', preset: 'today', units: [], uOpen: false, uq: ''};
+/* gọi lúc khởi động (sau khi đã có TODAY): mặc định Hôm nay, nhớ lựa chọn lần trước; preset luôn tính lại theo ngày hiện tại */
+function ovInit() {
+  OV.from = OV.to = TODAY; OV.preset = 'today';
+  try { const o = JSON.parse(localStorage.getItem('xpay_ov') || 'null'); if (o) { OV.units = Array.isArray(o.units) ? o.units : []; if (o.preset) { const [a, z] = presetRangeOv(o.preset); OV.from = a; OV.to = z; OV.preset = o.preset; } else if (o.from && o.to) { OV.from = o.from; OV.to = o.to; OV.preset = ''; } } } catch (e) {}
+}
+function presetRangeOv(k) { const t = TODAY; switch (k) { case 'yday': return [addD(t, -1), addD(t, -1)]; case 'wtd': return [wkStart(t), t]; case 'mtd': return [t.slice(0, 8) + '01', t]; case 'ytd': return [t.slice(0, 5) + '01-01', t]; case 'l7': return [addD(t, -6), t]; case 'l30': return [addD(t, -29), t]; case 'l90': return [addD(t, -89), t]; case 'all': return ['2025-01-01', t]; default: return [t, t]; } }
+const ovSave = () => { try { localStorage.setItem('xpay_ov', JSON.stringify({from: OV.from, to: OV.to, preset: OV.preset, units: OV.units})); } catch (e) {} };
+const UNK = '(Chưa rõ đơn vị)';
+const unitOf = t => String(t[6] || '').trim() || UNK;
+/* thống kê trong khoảng [from, to], chỉ tính các đơn vị trong U (null = tất cả) */
+function rangeStats(from, to, U) {
+  const R = {gmv: 0, trips: 0, cos: new Set(), cards: new Set(), drv: new Set(), units: {}, days: {}};
+  for (let d = from; d <= to; d = addD(d, 1)) {
+    const td = BYDAY[d]; if (!td) continue;
+    for (const t of td) { const u = unitOf(t); if (U && !U.has(u)) continue;
+      R.gmv += t[4]; R.trips++; R.cos.add(t[2]); R.cards.add(t[3]); R.drv.add(t[5]);
+      const x = R.units[u] = R.units[u] || {u, gmv: 0, trips: 0, drv: new Set(), cos: new Set(), days: new Set(), last: ''};
+      x.gmv += t[4]; x.trips++; x.drv.add(t[5]); x.cos.add(t[2]); x.days.add(d); if (d > x.last) x.last = d;
+      const y = R.days[d] = R.days[d] || {gmv: 0, trips: 0, units: new Set(), drv: new Set()}; y.gmv += t[4]; y.trips++; y.units.add(u); y.drv.add(t[5]); }
+  }
+  R.ndays = diffD(to, from) + 1; return R;
+}
+const ovRange = () => { const n = diffD(OV.to, OV.from) + 1; return {n, pf: addD(OV.from, -n), pt: addD(OV.from, -1)}; };
+function unitFilter() {
+  const all = {}; for (const t of S.tx) if (!LIQ.has(t[2])) { const u = unitOf(t); all[u] = (all[u] || 0) + (t[0] >= OV.from && t[0] <= OV.to ? t[4] : 0); }
+  const L = Object.entries(all).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'vi')), sel = new Set(OV.units), q = fold(OV.uq || '');
+  const lab = !OV.units.length ? 'Tất cả đơn vị' : OV.units.length === 1 ? OV.units[0] : `${OV.units.length} đơn vị`;
+  let h = `<div style="position:relative"><button class="btn" id="oub" style="min-width:190px;max-width:280px;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Đơn vị: <b>${esc(lab)}</b> ▾</button>`;
+  if (OV.uOpen) h += `<div id="oup" style="position:absolute;top:calc(100% + 6px);right:0;width:340px;max-width:calc(100vw - 32px);z-index:40;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px #00000026;padding:12px">
+      <input id="ouq" placeholder="Tìm đơn vị…" value="${esc(OV.uq || '')}" style="width:100%;box-sizing:border-box;font:13px var(--font-family-sans-serif);padding:7px 10px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+      <div style="display:flex;gap:6px;margin-bottom:6px"><button class="btn" data-ouall="1" style="padding:3px 10px">Xem tất cả đơn vị</button><span class="lbl" style="margin-left:auto;align-self:center">${n0(L.length)} đơn vị · GMV trong khoảng đang xem</span></div>
+      <div style="max-height:300px;overflow:auto">${L.filter(([u]) => !q || fold(u).includes(q)).map(([u, g]) => `<label style="display:flex;gap:8px;align-items:center;padding:5px 4px;border-radius:8px;cursor:pointer;font-size:13px"><input type="checkbox" data-ou="${esc(u)}" ${sel.has(u) ? 'checked' : ''}><span style="flex:1">${esc(u)}</span><span class="lbl">${g ? short(g) : '—'}</span></label>`).join('') || '<div class="hint">Không có đơn vị khớp.</div>'}</div>
+      <div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="btn pri" id="oudone">Xong</button></div></div>`;
+  return h + '</div>';
+}
+/* biểu đồ thanh ngang: GMV theo đơn vị (top N) + vạch kỳ trước */
+function unitBars(rows, prev, tot) {
+  const N = rows.length; if (!N) return '<div class="hint">Không có giao dịch trong khoảng này.</div>';
+  const W = 760, rh = 30, T = 8, L = 190, R = 150, H = T + N * rh + 6, mx = Math.max(...rows.map(r => Math.max(r.gmv, prev[r.u] || 0))) || 1, x = v => L + (W - L - R) * v / mx;
+  let h = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">`;
+  rows.forEach((r, i) => { const y = T + i * rh, pv = prev[r.u] || 0, dl = pv ? (r.gmv - pv) / pv : null;
+    h += `<g class="hit" data-ounit="${esc(r.u)}" style="cursor:pointer"><title>${esc(r.u)} · GMV ${nf(r.gmv, 0)} VND · ${n0(r.trips)} chuyến · ${n0(r.drv.size)} tài xế · kỳ trước ${nf(pv, 0)} VND</title>
+      <rect x="0" y="${y}" width="${W}" height="${rh}" fill="transparent"/>
+      <text x="${L - 8}" y="${y + rh / 2 + 4}" text-anchor="end" font-size="12" fill="var(--ink)">${esc(r.u.length > 26 ? r.u.slice(0, 25) + '…' : r.u)}</text>
+      <rect x="${L}" y="${y + 6}" width="${Math.max(2, x(r.gmv) - L)}" height="${rh - 12}" rx="4" fill="var(--color-display-cyan-default)" opacity="${.55 + .45 * (1 - i / N)}"/>
+      ${pv ? `<line x1="${x(pv)}" x2="${x(pv)}" y1="${y + 3}" y2="${y + rh - 3}" stroke="var(--color-display-purple-default)" stroke-width="2.5"/>` : ''}
+      <text x="${Math.max(x(r.gmv), x(pv)) + 6}" y="${y + rh / 2 + 4}" font-size="11.5" fill="var(--ink-2)"><tspan font-weight="700" fill="var(--ink)">${short(r.gmv)}</tspan> · ${pct(r.gmv / tot)}${dl == null ? '' : ` · <tspan fill="${dl >= 0 ? 'var(--stable)' : 'var(--critical)'}">${dl >= 0 ? '▲' : '▼'}${nf(Math.abs(dl) * 100, 0)}%</tspan>`}</text></g>`; });
+  return h + '</svg>';
+}
+/* biểu đồ theo ngày: cột = tài xế active, đường = đơn vị active (trục phải) */
+function unitDaily(days, D) {
+  if (!days.length) return '<div class="hint">Không có dữ liệu.</div>';
+  const W = Math.max(560, Math.min(1180, 70 + days.length * 16)), H = 250, L = 46, R = 44, T = 14, B = 30;
+  const dv = days.map(d => D[d] ? D[d].drv.size : 0), uv = days.map(d => D[d] ? D[d].units.size : 0);
+  const st = m => Math.max(1, Math.ceil(m / 4)), s1 = st(Math.max(1, ...dv)), s2 = st(Math.max(1, ...uv)), m1 = s1 * 4 * 1.08, m2 = s2 * 4 * 1.08;
+  const bw = (W - L - R) / days.length, x = i => L + i * bw + bw / 2, y1 = v => T + (H - T - B) * (1 - v / m1), y2 = v => T + (H - T - B) * (1 - v / m2);
+  let h = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px;display:block;margin:0 auto">`;
+  for (let i = 0; i <= 4; i++) { const v = s1 * i, w = s2 * i; h += `<line x1="${L}" x2="${W - R}" y1="${y1(v)}" y2="${y1(v)}" stroke="var(--line-soft)"/><text x="${L - 6}" y="${y1(v) + 4}" text-anchor="end" font-size="10.5" fill="var(--ink-3)">${nf(v, 0)}</text><text x="${W - R + 6}" y="${y2(w) + 4}" font-size="10.5" fill="var(--color-display-orange-default)">${nf(w, 0)}</text>`; }
+  days.forEach((d, i) => { if (i % Math.ceil(days.length / 12) === 0) h += `<text x="${x(i)}" y="${H - 10}" text-anchor="middle" font-size="10.5" fill="var(--ink-3)">${dm(d)}</text>`;
+    const top = y1(dv[i]); h += `<rect x="${x(i) - bw * .34}" y="${top}" width="${bw * .68}" height="${Math.max(1, H - B - top)}" rx="2" fill="#3B85FF" opacity=".8"><title>${dmy(d)} · ${n0(dv[i])} tài xế active · ${n0(uv[i])} đơn vị · GMV ${nf(D[d] ? D[d].gmv : 0, 0)} VND</title></rect>`; });
+  h += `<polyline fill="none" stroke="var(--color-display-orange-default)" stroke-width="2.5" points="${uv.map((v, i) => x(i) + ',' + y2(v)).join(' ')}"/>` + uv.map((v, i) => `<circle cx="${x(i)}" cy="${y2(v)}" r="2.6" fill="var(--color-display-orange-default)"/>`).join('');
+  return h + '</svg>';
+}
+/* khối thống kê đơn vị trên tab Tổng quan */
+function unitSection() {
+  const U = OV.units.length ? new Set(OV.units) : null, cur = rangeStats(OV.from, OV.to, U), {pf, pt} = ovRange(), prv = rangeStats(pf, pt, U);
+  const rows = Object.values(cur.units).sort((a, b) => b.gmv - a.gmv), prev = Object.fromEntries(Object.values(prv.units).map(x => [x.u, x.gmv]));
+  const top = rows.slice(0, 12), tot = cur.gmv || 1;
+  const dEnd = OV.to > LASTDAY ? LASTDAY : OV.to, dStart = diffD(OV.to, OV.from) >= 6 ? OV.from : addD(dEnd, -29), days = []; for (let d = dStart; d <= dEnd; d = addD(d, 1)) days.push(d);
+  const top3 = rows.slice(0, 3).reduce((a, r) => a + r.gmv, 0), newU = rows.filter(r => !prev[r.u]).length, lost = Object.keys(prev).filter(u => !cur.units[u]).length;
+  const avgDrv = cur.drv.size ? cur.gmv / cur.drv.size : null;
+  let h = `<div class="card"><div class="hd"><div><div class="eyebrow">Đơn vị phát sinh giao dịch · ${esc(rngLabel(OV.from, OV.to))}${U ? ` · ${n0(OV.units.length)} đơn vị đang lọc` : ''}</div><h2 class="card-title">${n0(rows.length)} đơn vị có giao dịch · ${n0(cur.drv.size)} tài xế active · GMV ${money(cur.gmv)} ${unitLabel()}</h2></div><div class="card-note">So với kỳ trước ${esc(rngLabel(pf, pt))} · tiền: ${unitLabel()}</div></div>
+    <div class="kpis" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:12px">
+      <div class="kpi"><div class="k">Top 3 đơn vị chiếm</div><div class="v">${pct(top3 / tot)}</div><div class="s">${rows.slice(0, 3).map(r => esc(r.u)).join(' · ') || '—'}</div></div>
+      <div class="kpi"><div class="k">GMV / tài xế active</div><div class="v">${avgDrv == null ? '—' : money(avgDrv)}</div><div class="s">${n0(cur.trips)} chuyến · ${cur.drv.size ? nf(cur.trips / cur.drv.size, 1) : '—'} chuyến / tài xế</div></div>
+      <div class="kpi"><div class="k">Đơn vị mới so với kỳ trước</div><div class="v">${n0(newU)}</div><div class="s">${n0(lost)} đơn vị kỳ trước có giao dịch, kỳ này chưa có</div></div>
+      <div class="kpi"><div class="k">GMV / chuyến</div><div class="v">${cur.trips ? money(cur.gmv / cur.trips) : '—'}</div><div class="s">${n0(cur.cos.size)} doanh nghiệp · ${n0(cur.cards.size)} thẻ có giao dịch</div></div>
+    </div>
+    <div class="g2">
+      <div><div class="eyebrow" style="margin-bottom:6px">GMV theo đơn vị · top ${top.length}${rows.length > top.length ? ' / ' + n0(rows.length) : ''}</div>${unitBars(top, prev, tot)}<div class="legend" style="margin-top:4px"><span><i style="background:var(--color-display-cyan-default)"></i>GMV kỳ này</span><span><i style="background:var(--color-display-purple-default);width:3px"></i>GMV kỳ trước</span><span class="lbl">Bấm vào đơn vị để lọc</span></div></div>
+      <div><div class="eyebrow" style="margin-bottom:6px">Tài xế & đơn vị active theo ngày${diffD(OV.to, OV.from) >= 6 ? '' : ' · 30 ngày đến ' + dmy(dEnd)}</div>${unitDaily(days, rangeStats(days[0] || dEnd, dEnd, U).days)}<div class="legend" style="margin-top:4px"><span><i style="background:#3B85FF"></i>Tài xế active (trục trái)</span><span><i style="background:var(--color-display-orange-default);height:3px"></i>Đơn vị active (trục phải)</span></div></div>
+    </div>
+    <div class="tw" style="margin-top:14px;max-height:420px;overflow:auto"><table><thead><tr><th>#</th><th class="l">Đơn vị phát sinh</th><th>GMV</th><th>% tổng</th><th>Kỳ trước</th><th>+/−</th><th>Chuyến</th><th>Tài xế active</th><th>GMV / tài xế</th><th>Chuyến / tài xế</th><th>DN phục vụ</th><th>Ngày có GD</th><th>GD gần nhất</th></tr></thead><tbody>
+    ${rows.map((r, i) => { const pv = prev[r.u] || 0, dl = pv ? r.gmv / pv - 1 : null; return `<tr class="hit" data-ounit="${esc(r.u)}" style="cursor:pointer"><td>${i + 1}</td><td class="l name">${esc(r.u)}${!pv ? ' <span class="pill p-stable">mới</span>' : ''}</td><td><b>${money(r.gmv)}</b></td><td>${pct(r.gmv / tot)}</td><td>${pv ? money(pv) : '—'}</td><td class="${dl == null ? '' : dl >= 0 ? 'up' : 'dn'}">${dl == null ? '—' : (dl >= 0 ? '▲ ' : '▼ ') + nf(Math.abs(dl) * 100, 0) + '%'}</td><td>${n0(r.trips)}</td><td>${n0(r.drv.size)}</td><td>${money(r.gmv / r.drv.size)}</td><td>${nf(r.trips / r.drv.size, 1)}</td><td>${n0(r.cos.size)}</td><td>${n0(r.days.size)}/${n0(cur.ndays)}</td><td>${dmy(r.last)}</td></tr>`; }).join('') || `<tr><td colspan="13" class="l lbl">Không có giao dịch trong khoảng này.</td></tr>`}
+    </tbody></table></div>
+    <div class="hint">Đơn vị lấy từ cột <b>Đơn vị phát sinh</b> của bảng kê taxi — cập nhật bảng kê ở tab Cập nhật số liệu là số đơn vị tự đồng bộ. Tài xế active = Mã NV (thiếu thì biển số) có ≥ 1 giao dịch. ${rows.some(r => r.u === UNK) ? `<b>${UNK}</b>: giao dịch từ bảng kê cũ chưa có cột đơn vị — nạp lại file bảng kê để bổ sung.` : ''}</div></div>`;
+  return h;
+}
+/* KPI theo khoảng thời gian (khi xem nhiều ngày, xem ngày chưa có bảng kê, hoặc đang lọc đơn vị) */
+function renderRange() {
+  const U = OV.units.length ? new Set(OV.units) : null, cur = rangeStats(OV.from, OV.to, U), {pf, pt} = ovRange(), prv = rangeStats(pf, pt, U);
+  let pl = 0, hasPl = !U; for (let d = OV.from; d <= OV.to; d = addD(d, 1)) { if (PLAN[d]) pl += PLAN[d].gmv; else if (d >= P.start && d <= P.end) hasPl = false; }
+  if (OV.to < P.start || OV.from > P.end) hasPl = false;
+  const mu = v => money(v) + ' ' + (UNIT.div === 1 ? 'đồng' : unitLabel());
+  const cmp = (a, b, F) => b == null ? '' : !b ? '<span class="lbl">kỳ trước chưa có giao dịch</span>' : `${a >= b ? `<span class="up"><b>▲ ${F(a - b)}</b>` : `<span class="dn"><b>▼ ${F(b - a)}</b>`} (${pctCh(a, b)})</span> so với kỳ trước (${F(b)})`;
+  const tile = (k, v, s1, s2) => `<div class="kpi"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s1 || ''}</div>${s2 ? `<div class="s">${s2}</div>` : ''}</div>`;
+  const nd = cur.ndays, noData = OV.to > LASTDAY;
+  const tiles = [
+    tile(nd === 1 ? 'GMV' : `GMV ${nd} ngày`, mu(cur.gmv), cmp(cur.gmv, prv.gmv, mu), hasPl && pl ? `Kế hoạch ${mu(pl)} · đạt <b>${pct(cur.gmv / pl)}</b>` : U ? 'Đang lọc đơn vị — không so kế hoạch tổng' : ''),
+    tile('GMV trung bình / ngày', mu(cur.gmv / nd), `${n0(Object.keys(cur.days).length)}/${n0(nd)} ngày có giao dịch`, ''),
+    tile('Chuyến', n0(cur.trips), cmp(cur.trips, prv.trips, n0), cur.trips ? `GMV / chuyến ${mu(cur.gmv / cur.trips)}` : ''),
+    tile('DN có giao dịch', n0(cur.cos.size), cmp(cur.cos.size, prv.cos.size, n0), ''),
+    tile('Thẻ có giao dịch', n0(cur.cards.size), cmp(cur.cards.size, prv.cards.size, n0), cur.cards.size ? `${nf(cur.trips / cur.cards.size, 1)} chuyến / thẻ` : ''),
+    tile('Tài xế active', n0(cur.drv.size), cmp(cur.drv.size, prv.drv.size, n0), cur.drv.size ? `GMV / tài xế ${mu(cur.gmv / cur.drv.size)}` : ''),
+    tile('Đơn vị có giao dịch', n0(Object.keys(cur.units).length), cmp(Object.keys(cur.units).length, Object.keys(prv.units).length, n0), ''),
+  ];
+  let h = `<div class="banner"><b>${esc(rngLabel(OV.from, OV.to))}${OV.preset ? ' · ' + (PRESETS.find(p => p[0] === OV.preset) || [0, ''])[1] : ''}${U ? ` · lọc ${n0(OV.units.length)} đơn vị` : ''}</b><ul>
+    ${noData ? `<li class="watch">Bảng kê taxi mới có giao dịch đến <b>${dmy(LASTDAY)}</b>; ${OV.from > LASTDAY ? 'khoảng đang xem chưa có giao dịch' : 'các ngày sau đó chưa có số'}. <a href="#" id="ovlast" style="color:var(--accent);font-weight:700">Xem ngày ${dmy(LASTDAY)} →</a></li>` : ''}
+    <li>GMV <b>${mu(cur.gmv)}</b> từ <b>${n0(cur.trips)}</b> chuyến, ${n0(cur.cos.size)} doanh nghiệp, ${n0(cur.drv.size)} tài xế thuộc ${n0(Object.keys(cur.units).length)} đơn vị. Kỳ trước (${esc(rngLabel(pf, pt))}): ${mu(prv.gmv)}.</li>
+    ${U ? '<li class="lbl">Đang lọc đơn vị: các số trên chỉ tính giao dịch của đơn vị đã chọn. Bảng CEO và lộ trình bên dưới vẫn tính trên toàn bộ.</li>' : ''}</ul></div>`;
+  return h + `<div class="kpis">${tiles.join('')}</div>`;
+}
+const ovSingle = () => OV.from === OV.to && !OV.units.length && OV.to <= LASTDAY && !!ACT[OV.to];
+const ovDay = () => { const ks = Object.keys(ACT).sort(), last = ks[ks.length - 1]; let d = OV.to > last ? last : OV.to; if (!ACT[d]) d = ks.filter(x => x <= OV.to).pop() || ks[0]; return d; };
+
 /* ---------- render ---------- */
 let SEL = null, TAB = 'ov', CH = {log: false, full: false}, CANWRITE = false, PENDING = null;
 function render() {
+  if (TAB === 'ov') SEL = ovDay();
   const d = SEL, dy = addD(d, -1), A = ACT[d], C = tableCalc(d), p = PLAN[d];
   const dates = Object.keys(ACT).filter(x => x >= P.start).sort().reverse();
   const top = `<div class="top">
     <div class="brand" style="display:flex;align-items:center;gap:10px"><img src="data:image/png;base64,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" alt="xpay" style="height:28px;width:auto;display:block"><span>CEO Dashboard</span></div>
     <div class="tabs">${[['ov','Tổng quan'],['zoom','Lộ trình 60 tỷ'],['jr','Tiến độ khách hàng'],['up','Cập nhật số liệu']].map(([k, l]) => `<button class="tab ${TAB === k ? 'on' : ''}" data-tab="${k}">${l}</button>`).join('')}</div>
-    <div class="ctl">${TAB === 'jr' ? '' : `<span class="lbl">Ngày xem</span><select id="dsel">${dates.map(x => `<option value="${x}" ${x === d ? 'selected' : ''}>${wd(x)} ${dmy(x)}</option>`).join('')}</select>`}
+    <div class="ctl">${TAB === 'ov' ? `<span class="lbl">Thời gian</span>${rangePicker(OV)}${unitFilter()}` : TAB === 'jr' ? '' : `<span class="lbl">Ngày xem</span><select id="dsel">${dates.map(x => `<option value="${x}" ${x === d ? 'selected' : ''}>${wd(x)} ${dmy(x)}</option>`).join('')}</select>`}
       <span class="lbl">Đơn vị tiền</span><select id="usel">${Object.entries(UNITS).map(([k, u]) => `<option value="${k}" ${u === UNIT ? 'selected' : ''}>${u.label}</option>`).join('')}</select>
       <button class="btn pri" id="bxls">Xuất Excel</button></div></div>`;
   let body = '';
@@ -325,7 +443,8 @@ function renderOverview(d, C, A, p) {
   bul.push(`<li class="${status(ca.ratio)}">Doanh nghiệp active 30 ngày: <b>${nf(ca.t, 0)}</b> trên kế hoạch ${nf(ca.pl, 0)}. Tài xế có giao dịch hôm nay: <b>${nf(dr.t, 0)}</b>. Tài xế đã active: ${nf(A.dact, 0)} trên ${nf(A.init, 0)} tài xế khởi tạo.</li>`);
   if (behind.length) bul.push(`<li class="critical">Xa kế hoạch nhất: <b>${behind.slice().sort((a, b) => C[a.k].ratio - C[b.k].ratio).slice(0, 3).map(r => full(r.k) + ' (' + pct(C[r.k].ratio) + ')').join(', ')}</b>.</li>`);
   const mu = v => money(v) + ' ' + (UNIT.div === 1 ? 'đồng' : unitLabel());
-  let h = `<div class="banner"><b>${['Chủ nhật','Thứ hai','Thứ ba','Thứ tư','Thứ năm','Thứ sáu','Thứ bảy'][new Date(d + 'T00:00:00Z').getUTCDay()]} ${dmy(d)}: ngày ${T} trên 92 ngày của lộ trình, còn ${diffD(P.end, d)} ngày đến 31/12</b><ul>${bul.join('')}</ul></div>`;
+  const single = ovSingle();
+  let h = single ? `<div class="banner"><b>${['Chủ nhật','Thứ hai','Thứ ba','Thứ tư','Thứ năm','Thứ sáu','Thứ bảy'][new Date(d + 'T00:00:00Z').getUTCDay()]} ${dmy(d)}: ngày ${T} trên 92 ngày của lộ trình, còn ${diffD(P.end, d)} ngày đến 31/12</b><ul>${bul.join('')}</ul></div>` : renderRange();
   const A0 = ACT[d] || {}, av = f => { let s = 0, n = 0; for (let i = 1; i <= 7; i++) { const x = ACT[addD(d, -i)]; if (!x || !x.trips) continue; s += f(x); n++; } return n ? s / n : null; };
   const cmp = (t, a, F) => { if (t == null || a == null) return '<span class="lbl">chưa đủ dữ liệu 7 ngày</span>'; const dl = t - a;
     return `${dl > 0 ? `<span class="up"><b>▲ ${F(dl)}</b>` : dl < 0 ? `<span class="dn"><b>▼ ${F(-dl)}</b>` : '<span><b>= 0</b>'}${a ? ' (' + pctCh(t, a) + ')' : ''}</span> so với TB 7 ngày (${F(a)})`; };
@@ -356,8 +475,9 @@ function renderOverview(d, C, A, p) {
       bar(cWt + mWt ? (cW + mW) / (cWt + mWt) : 0)),
     tile('Tài xế active hôm nay', n0(A0.drivers || 0) + of(n0(A0.drivers30 || 0)), cmp(A0.drivers, av(x => x.drivers), n0), `Trên ${n0(A0.drivers30 || 0)} tài xế active 30 ngày`, bar(A0.drivers30 ? A0.drivers / A0.drivers30 : 0, 'var(--accent)')),
   ];
-  h += `<div class="kpis">${tiles.join('')}</div>`;
-  h += `<div class="card"><div class="hd"><div><div class="eyebrow">Bảng CEO · Demand & Supply</div><h2 class="card-title">Hôm nay vs trung bình 7 ngày vs lộ trình · kế hoạch ngày mai đã bù thâm hụt</h2></div><div class="card-note">Tiền: ${unitLabel()} · tại ${dmy(d)} · số liệu giao dịch đến ${dmy(LASTDAY)}</div></div>
+  if (single) h += `<div class="kpis">${tiles.join('')}</div>`;
+  h += unitSection();
+  h += `<div class="card"><div class="hd"><div><div class="eyebrow">Bảng CEO · Demand & Supply${single ? '' : ` · tại ngày ${dmy(d)}${OV.units.length ? ' · toàn bộ đơn vị' : ''}`}</div><h2 class="card-title">Hôm nay vs trung bình 7 ngày vs lộ trình · kế hoạch ngày mai đã bù thâm hụt</h2></div><div class="card-note">Tiền: ${unitLabel()} · tại ${dmy(d)} · số liệu giao dịch đến ${dmy(LASTDAY)}</div></div>
     <div class="tw"><table><thead><tr><th class="l">Chỉ số</th><th>Hôm qua</th><th>TB 7 ngày gần nhất</th><th>Hôm nay</th><th>+/− TB 7 ngày</th><th>KH hôm nay</th><th>% đạt</th><th>Thâm hụt phải bù</th><th>KH ngày mai (gốc)</th><th>KH ngày mai (đã bù)</th><th>KH tuần</th><th>Đích T12 / 31/12</th><th>Còn thiếu</th><th class="l">Quyết định</th></tr></thead><tbody>`;
   for (const r of ROWS) {
     if (typeof r === 'string') { h += `<tr class="sec"><td colspan="14">${r}</td></tr>`; continue; }
@@ -1102,10 +1222,10 @@ function monthGrid(ym, a, b) {
     h += `<div data-rpd="${x}" style="padding:7px 0;border-radius:${edge ? '50%' : '6px'};cursor:${fut ? 'default' : 'pointer'};${edge ? 'background:var(--accent);color:#fff;font-weight:700;' : inr ? 'background:var(--color-surface-primary);' : ''}${fut ? 'color:var(--ink-3);' : ''}${x === TODAY && !edge ? 'box-shadow:inset 0 0 0 1px var(--accent);' : ''}">${dd}</div>`; }
   return h + '</div></div>';
 }
-function rangePicker() {
-  const lab = (PRESETS.find(p => p[0] === CR.preset) || [0, ''])[1];
-  let h = `<div style="position:relative"><button class="btn" id="rpb" style="min-width:250px;text-align:left">${lab ? '<b>' + lab + '</b> · ' : ''}${rngLabel(CR.from, CR.to)} ▾</button>`;
-  if (RP.open) { const m = RP.m || CR.to.slice(0, 7), m0 = ymAdd(m, -1), lo = RP.a && RP.b ? (RP.a < RP.b ? RP.a : RP.b) : RP.a, hi = RP.a && RP.b ? (RP.a < RP.b ? RP.b : RP.a) : null;
+function rangePicker(st = CR) {
+  const lab = (PRESETS.find(p => p[0] === st.preset) || [0, ''])[1];
+  let h = `<div style="position:relative"><button class="btn" id="rpb" style="min-width:250px;text-align:left">${lab ? '<b>' + lab + '</b> · ' : ''}${rngLabel(st.from, st.to)} ▾</button>`;
+  if (RP.open) { const m = RP.m || st.to.slice(0, 7), m0 = ymAdd(m, -1), lo = RP.a && RP.b ? (RP.a < RP.b ? RP.a : RP.b) : RP.a, hi = RP.a && RP.b ? (RP.a < RP.b ? RP.b : RP.a) : null;
     h += `<div id="rpp" style="position:absolute;top:calc(100% + 6px);left:0;width:max-content;max-width:calc(100vw - 32px);z-index:40;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px #00000026;padding:12px;display:flex;gap:14px;flex-wrap:wrap">
       <div style="display:flex;flex-direction:column;gap:2px;min-width:140px;border-right:1px solid var(--line-soft);padding-right:10px">${PRESETS.map(([k, l]) => `<button class="tab ${RP.pre === k ? 'on' : ''}" data-rpp="${k}" style="text-align:left">${l}</button>`).join('')}</div>
       <div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><button class="btn" data-rpm="-1" style="padding:3px 10px">‹</button><span class="lbl">${lo ? (hi ? rngLabel(lo, hi) : dmy(lo) + ' – chọn ngày kết thúc') : 'Chọn ngày bắt đầu'}</span><button class="btn" data-rpm="1" style="padding:3px 10px">›</button></div>
@@ -1617,20 +1737,24 @@ function picPanel() {
     ${errs.length ? `<div class="hint" style="color:var(--critical);margin-bottom:8px">${errs.slice(0, 40).map(esc).join('<br>')}${errs.length > 40 ? `<br>… còn ${n0(errs.length - 40)} lỗi` : ''}<br><span class="lbl">Dòng lỗi được bỏ qua, các dòng khác vẫn áp dụng.</span></div>` : ''}
     ${parts.join('') || '<div class="hint">File không có sheet nào để cập nhật.</div>'}</div>`;
 }
+/* gắn sự kiện cho bộ chọn khoảng thời gian (dùng chung: Tiến độ khách hàng = CR, Tổng quan = OV) */
+function bindRange(st, keep, onApply) {
+  if ($('rpb')) $('rpb').onclick = e => { e.stopPropagation(); keep(() => { RP = {open: !RP.open, a: st.from, b: st.to, m: st.to.slice(0, 7), pre: st.preset}; }); };
+  if ($('rpp')) { $('rpp').onclick = e => e.stopPropagation();
+    document.querySelectorAll('[data-rpp]').forEach(b => b.onclick = () => keep(() => { const [a, z] = presetRange(b.dataset.rpp); RP.a = a; RP.b = z; RP.pre = b.dataset.rpp; RP.m = z.slice(0, 7); }));
+    document.querySelectorAll('[data-rpm]').forEach(b => b.onclick = () => keep(() => { RP.m = ymAdd(RP.m || st.to.slice(0, 7), +b.dataset.rpm); }));
+    document.querySelectorAll('[data-rpd]').forEach(c => c.onclick = () => { const x = c.dataset.rpd; if (x > TODAY) return; keep(() => { RP.pre = ''; if (!RP.a || RP.b) { RP.a = x; RP.b = null; } else RP.b = x; }); });
+    $('rpx').onclick = () => keep(() => { RP.open = false; });
+    $('rpok').onclick = () => keep(() => { let a = RP.a || st.from, z = RP.b || a; if (a > z) [a, z] = [z, a]; st.from = a; st.to = z; st.preset = RP.pre || ''; RP.open = false; if (onApply) onApply(); }); }
+  if ($('rpp')) { const p = $('rpp'), r = p.getBoundingClientRect(), over = r.right - (document.documentElement.clientWidth - 16);
+    if (over > 0) p.style.left = Math.max(-over, 16 - p.parentElement.getBoundingClientRect().left) + 'px'; }
+}
 function bindJourney() {
   if (TAB !== 'jr') return;
   const keep = fn => { const y = window.scrollY; fn(); render(); window.scrollTo(0, y); };
   document.querySelectorAll('[data-crv]').forEach(b => b.onclick = () => keep(() => { CR.view = b.dataset.crv; }));
   if ($('crwho')) $('crwho').onchange = e => keep(() => { CR.who = e.target.value; try { localStorage.setItem('xpay_who', CR.who); } catch (er) {} });
-  if ($('rpb')) $('rpb').onclick = e => { e.stopPropagation(); keep(() => { RP = {open: !RP.open, a: CR.from, b: CR.to, m: CR.to.slice(0, 7), pre: CR.preset}; }); };
-  if ($('rpp')) { $('rpp').onclick = e => e.stopPropagation();
-    document.querySelectorAll('[data-rpp]').forEach(b => b.onclick = () => keep(() => { const [a, z] = presetRange(b.dataset.rpp); RP.a = a; RP.b = z; RP.pre = b.dataset.rpp; RP.m = z.slice(0, 7); }));
-    document.querySelectorAll('[data-rpm]').forEach(b => b.onclick = () => keep(() => { RP.m = ymAdd(RP.m || CR.to.slice(0, 7), +b.dataset.rpm); }));
-    document.querySelectorAll('[data-rpd]').forEach(c => c.onclick = () => { const x = c.dataset.rpd; if (x > TODAY) return; keep(() => { RP.pre = ''; if (!RP.a || RP.b) { RP.a = x; RP.b = null; } else RP.b = x; }); });
-    $('rpx').onclick = () => keep(() => { RP.open = false; });
-    $('rpok').onclick = () => keep(() => { let a = RP.a || CR.from, z = RP.b || a; if (a > z) [a, z] = [z, a]; CR.from = a; CR.to = z; CR.preset = RP.pre || ''; CR.day = z; CRM_ = null; RP.open = false; }); }
-  if ($('rpp')) { const p = $('rpp'), r = p.getBoundingClientRect(), over = r.right - (document.documentElement.clientWidth - 16);
-    if (over > 0) p.style.left = Math.max(-over, 16 - p.parentElement.getBoundingClientRect().left) + 'px'; }
+  bindRange(CR, keep, () => { CR.day = CR.to; CRM_ = null; });
   document.onmousedown = e => { if (RP.open && $('rpp') && !$('rpp').contains(e.target) && e.target.id !== 'rpb') keep(() => { RP.open = false; });
     if (PAT.msOpen && $('pmsp') && !$('pmsp').contains(e.target) && e.target.id !== 'pmsb') { PAT.msOpen = false; $('pmsp').style.display = 'none'; } };
   document.querySelectorAll('[data-crwho]').forEach(el => el.onclick = () => keep(() => { CR.who = el.dataset.crwho; }));
@@ -1716,10 +1840,27 @@ function bind() {
     if (s.value === 'auto') i.value = s.dataset.auto; else if (s.value === 'manual' && s.dataset.man) i.value = s.dataset.man; }; });
   bindPattern();
   bindJourney();
+  bindOverview();
   bindDrawer();
+}
+function bindOverview() {
+  if (TAB !== 'ov') return;
+  const keep = fn => { const y = window.scrollY; fn(); render(); window.scrollTo(0, y); };
+  bindRange(OV, keep, ovSave);
+  if ($('oub')) $('oub').onclick = e => { e.stopPropagation(); keep(() => { OV.uOpen = !OV.uOpen; RP.open = false; }); };
+  if ($('oup')) { $('oup').onclick = e => e.stopPropagation();
+    $('ouq').oninput = e => { OV.uq = e.target.value; const pos = e.target.selectionStart; keep(() => {}); const q = $('ouq'); if (q) { q.focus(); q.setSelectionRange(pos, pos); } };
+    document.querySelectorAll('[data-ou]').forEach(c => c.onchange = () => keep(() => { const u = c.dataset.ou, S2 = new Set(OV.units); if (c.checked) S2.add(u); else S2.delete(u); OV.units = [...S2]; ovSave(); }));
+    document.querySelectorAll('[data-ouall]').forEach(b => b.onclick = () => keep(() => { OV.units = []; ovSave(); }));
+    $('oudone').onclick = () => keep(() => { OV.uOpen = false; }); }
+  document.querySelectorAll('[data-ounit]').forEach(el => el.onclick = () => keep(() => { const u = el.dataset.ounit; OV.units = OV.units.length === 1 && OV.units[0] === u ? [] : [u]; ovSave(); }));
+  if ($('ovlast')) $('ovlast').onclick = e => { e.preventDefault(); keep(() => { OV.from = OV.to = LASTDAY; OV.preset = ''; ovSave(); }); };
+  document.onmousedown = e => { if (RP.open && $('rpp') && !$('rpp').contains(e.target) && e.target.id !== 'rpb') keep(() => { RP.open = false; });
+    if (OV.uOpen && $('oup') && !$('oup').contains(e.target) && e.target.id !== 'oub') keep(() => { OV.uOpen = false; }); };
 }
 computeActuals();
 SEL = LASTDAY;
+ovInit();
 try { const t = localStorage.getItem('xpay_tab'); if (t) TAB = t; } catch (e) {}
 if (TAB === 'pat') { TAB = 'jr'; CR.view = 'pat'; }
 render();

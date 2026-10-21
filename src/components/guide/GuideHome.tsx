@@ -6,12 +6,15 @@ import { useMemo, useState } from 'react';
 import { AUDIENCES, SERVICES, audienceLabel, type Guide } from '@/lib/guide/meta';
 import ImportBundle from './ImportBundle';
 import GuideNav from './GuideNav';
+import GuideSearch from './GuideSearch';
+import type { Journey } from '@/lib/guide/journey';
 
 const fold = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
 export const audPill = (a: string) => (a === 'internal' ? 'hd-pill-int' : a === 'khach-hang' ? 'hd-pill-kh' : a === 'tai-xe' ? 'hd-pill-tx' : 'hd-pill-dv');
 const plain = (md: string) => md.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/[#>*_`|[\]-]+/g, ' ').replace(/\s+/g, ' ');
 
-export default function GuideHome({ guides, canEdit, error, journeySlug }: { guides: Guide[]; canEdit: boolean; error?: string; journeySlug?: string | null }) {
+export default function GuideHome({ guides, canEdit, error, journeySlug, journey }: { guides: Guide[]; canEdit: boolean; error?: string; journeySlug?: string | null; journey?: Journey }) {
+  const libMap = useMemo(() => Object.fromEntries(guides.map((g) => [g.slug, g])), [guides]);
   const [svc, setSvc] = useState('');
   const [aud, setAud] = useState('');
   const [q, setQ] = useState('');
@@ -34,6 +37,7 @@ export default function GuideHome({ guides, canEdit, error, journeySlug }: { gui
   return (
     <div className="hd"><div className="hd-wrap">
       <div style={{ marginBottom: 14 }}><GuideNav on="library" journeySlug={journeySlug} /></div>
+      {guides.length > 0 && <div style={{ marginBottom: 16, maxWidth: 860 }}><GuideSearch lib={libMap} journey={journey} journeySlug={journeySlug} variant="bar" /></div>}
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 16, justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
           <div className="hd-eyebrow">Theo vai trò</div>

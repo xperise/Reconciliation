@@ -21,6 +21,6 @@ export async function renderGuides(u: U, mode: Mode) {
     const m = libG.flatMap((g) => g.sections).find((s) => s.id === 'ov-matrix') || libG.flatMap((g) => g.sections).find((s) => /tra cứu lỗi|sự cố/i.test(s.title));
     if (m) return <SuCoView md={m.md} journeySlug={j.slug} journey={j.extras!.journey!} />;
   }
-  return <GuideHome guides={libG as Guide[]} canEdit={u.edit} error={error} journeySlug={journeys[0]?.slug || null} />;
+  return <GuideHome guides={libG as Guide[]} canEdit={u.edit} error={error} journeySlug={journeys[0]?.slug || null} journey={journeys[0]?.extras?.journey} />;
 }
 export const journeySlugOf = (withDrafts: boolean) => findJourneySlug(withDrafts);

@@ -7,6 +7,7 @@ import { renderMd } from '@/lib/guide/md';
 import { audienceLabel, hasOwnNumber, serviceLabel, statusLabel, type Guide } from '@/lib/guide/meta';
 import FilesBox from './FilesBox';
 import GuideNav from './GuideNav';
+import { fold, highlightDom } from '@/lib/guide/search';
 import { audPill } from './GuideHome';
 import GuideEditor from './GuideEditor';
 
@@ -37,6 +38,17 @@ export default function GuideView({ guide, canEdit, userId, startEdit, journeySl
     return () => el.removeEventListener('change', on);
   }, [key, edit, R]);
   const reset = () => { try { localStorage.removeItem(key); } catch { /* */ } box.current?.querySelectorAll<HTMLInputElement>('input[data-task]').forEach((i) => { i.checked = i.defaultChecked; }); setDone(box.current?.querySelectorAll('input[data-task]:checked').length || 0); };
+
+  // đến từ ô tìm kiếm (?t=…&h=…): tô từ khoá trong mục đích và cuộn tới đoạn
+  useEffect(() => {
+    if (edit) return;
+    const sp = new URLSearchParams(location.search), tt = (sp.get('t') || '').split(',').filter(Boolean); if (!tt.length) return;
+    const sec = document.getElementById(decodeURIComponent(location.hash.slice(1))); if (!sec) return;
+    highlightDom(sec, tt);
+    const fh = fold(sp.get('h') || '').trim();
+    const tgt = fh ? Array.from(sec.querySelectorAll<HTMLElement>('h3,h4,strong,p,li,td')).find((x) => fold(x.textContent || '').includes(fh)) : null;
+    setTimeout(() => (tgt || sec.querySelector<HTMLElement>('mark.hd-hl') || sec).scrollIntoView({ block: 'center' }), 60);
+  }, [edit, R]);
 
   // bấm ảnh → xem phóng to
   useEffect(() => {
