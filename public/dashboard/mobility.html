@@ -1281,7 +1281,7 @@ const secOn = k => CR.sec[k] !== false;
 /* Hồ sơ doanh nghiệp: thông tin có sẵn để theo dõi + danh sách thẻ (tìm kiếm được) */
 function cardRowsHtml(C, q) {
   const f = fold(q || ''), L = f ? C.filter(x => fold([x.holder, x.company_on_card, x.uid, x.pan, x.expiry].join(' ')).includes(f)) : C;
-  return {n: L.length, html: L.map((x, i) => `<tr><td>${i + 1}</td><td class="l">${esc(x.holder || '')}</td><td class="l">${esc(x.company_on_card || '')}</td><td class="l" style="font-family:monospace">${esc(x.pan || '—')}</td><td class="l" style="font-family:monospace">${esc(x.uid)}</td><td class="l" style="font-family:monospace;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.pantoken || '')}">${esc(x.pantoken || '—')}</td><td class="l">${expSoon(x.expiry) ? `<b style="color:var(--critical)">${esc(x.expiry)}</b>` : esc(x.expiry || '—')}</td><td>${money(x.monthly_limit)}</td><td>${money(x.balance)}${x.balance_date ? `<span class="def">${dmy(x.balance_date)}</span>` : ''}</td></tr>`).join('') || `<tr><td colspan="9" class="l lbl">${f ? 'Không có thẻ khớp.' : 'Chưa có thẻ.'}</td></tr>`};
+  return {n: L.length, html: L.map((x, i) => `<tr><td>${i + 1}</td><td class="l">${esc(x.holder || '')}</td><td class="l">${esc(x.company_on_card || '')}</td><td class="l" style="font-family:monospace">${esc(x.pan || '—')}</td><td class="l" style="font-family:monospace">${esc(x.uid)}</td><td class="l" style="font-family:monospace;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${CR.tok ? esc(x.pantoken || '') : ''}">${x.pantoken ? (CR.tok ? esc(x.pantoken) : '••••••') : '—'}</td><td class="l">${expSoon(x.expiry) ? `<b style="color:var(--critical)">${esc(x.expiry)}</b>` : esc(x.expiry || '—')}</td><td>${money(x.monthly_limit)}</td><td>${money(x.balance)}${x.balance_date ? `<span class="def">${dmy(x.balance_date)}</span>` : ''}</td></tr>`).join('') || `<tr><td colspan="9" class="l lbl">${f ? 'Không có thẻ khớp.' : 'Chưa có thẻ.'}</td></tr>`};
 }
 function profView(r) {
   const na = '<span class="lbl">chưa có</span>', D = CARDD[r.key], ed = CANWRITE;
@@ -1293,7 +1293,7 @@ function profView(r) {
       ['Nhóm', `${r.grp === 9 ? '' : r.grp + '. '}${esc(GRP[r.grp])}${r.grpM ? ' (chọn tay)' : ''}`], ['Phân loại Mai Linh', esc(r.sub)], ['Nhóm client', r.gname ? esc(r.gname) + (r.grank ? ` (hạng ${r.grank})` : '') : ''], ['Hạng Top 200', esc(r.rank)],
       ['PIC', r.pic ? esc(r.pic) : '<b style="color:var(--critical)">Chưa phân công</b>'], ['PIC cũ (sổ khách)', esc(r.picOld)], ['Tình trạng', esc(r.st)], ['Tiến độ', stageTxt[r.stage]]])}</div></div>`;
   h += `<div class="card" style="margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px"><h3 style="margin:0;font-size:14px">Thẻ XPAY</h3>
-    ${D && !D.loading && !D.err && D.cards.length ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="cdq" placeholder="Tìm chủ thẻ, UID, 4 số cuối…" value="${esc(CR.cq || '')}" style="font:13px var(--font-family-sans-serif);padding:6px 10px;border:1px solid var(--color-border-default);border-radius:10px;width:230px">${ed ? `<button class="btn" id="cdfull">${D.full ? 'Che lại' : 'Hiện đầy đủ'}</button><button class="btn" id="cdxls">Xuất thẻ của khách này</button>` : ''}</div>` : ''}</div>`;
+    ${D && !D.loading && !D.err && D.cards.length ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="cdq" placeholder="Tìm chủ thẻ, UID, số thẻ…" value="${esc(CR.cq || '')}" style="font:13px var(--font-family-sans-serif);padding:6px 10px;border:1px solid var(--color-border-default);border-radius:10px;width:230px">${ed ? `<button class="btn" id="cdfull">${CR.tok ? 'Ẩn pantoken' : 'Hiện pantoken'}</button><button class="btn" id="cdxls">Xuất thẻ của khách này</button>` : ''}</div>` : ''}</div>`;
   if (CARDST === 'off') return h + '<div class="hint">Dữ liệu thẻ chỉ có trong web Reconciliation.</div></div>';
   if (CARDST === 'err') return h + `<div class="hint">Chưa tải được dữ liệu thẻ: ${esc(CARDMSG)}</div></div>`;
   if (!D || D.loading) return h + '<div class="hint">Đang tải…</div></div>';
@@ -1303,7 +1303,7 @@ function profView(r) {
   const lim = C.reduce((a, x) => a + (x.monthly_limit || 0), 0), bal = C.reduce((a, x) => a + (x.balance || 0), 0), bd = C.map(x => x.balance_date).filter(Boolean).sort().pop(), soon = C.filter(x => expSoon(x.expiry)).length;
   h += `<div class="kpis" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:10px">${[['Số thẻ', n0(C.length)], ['Tổng hạn mức tháng', money(lim) + ' <span style="font-size:12px">' + unitLabel() + '</span>'], ['Tổng số dư', money(bal) + ' <span style="font-size:12px">' + unitLabel() + '</span>' + (bd ? `<div class="lbl" style="font-size:11px">cập nhật ${dmy(bd)}</div>` : '')], ['Sắp hết hạn (60 ngày)', soon ? `<span style="color:var(--critical)">${n0(soon)}</span>` : '0']].map(([k, v]) => `<div class="kpi"><div class="k">${k}</div><div class="v" style="font-size:18px">${v}</div></div>`).join('')}</div>`;
   const R = cardRowsHtml(C, CR.cq);
-  h += `<div class="lbl" style="margin-bottom:6px" id="cdn">${R.n === C.length ? `${n0(C.length)} thẻ` : `${n0(R.n)} / ${n0(C.length)} thẻ khớp`}${D.full ? ' · <b>đang hiện đầy đủ</b>' : ''}</div>
+  h += `<div class="lbl" style="margin-bottom:6px" id="cdn">${R.n === C.length ? `${n0(C.length)} thẻ` : `${n0(R.n)} / ${n0(C.length)} thẻ khớp`}${D.full ? '' : ' · số thẻ hiện 4 số cuối (chỉ Quản trị / Kế toán xem đầy đủ)'}</div>
     <div class="tw" style="max-height:calc(100vh - 360px);min-height:240px;overflow:auto"><table><thead><tr><th>#</th><th class="l">Tên chủ thẻ</th><th class="l">Tên công ty trên thẻ</th><th class="l">Số thẻ</th><th class="l">UID</th><th class="l">Pantoken (mã QR)</th><th class="l">Hạn</th><th>Hạn mức tháng (${unitLabel()})</th><th>Số dư (${unitLabel()})</th></tr></thead><tbody id="cdbody">${R.html}</tbody></table></div></div>`;
   return h;
 }
@@ -1662,7 +1662,7 @@ function bindJourney() {
 const profKey = k => { k = MERGE[k] || k; return crmRows(CR.day).some(r => r.key === k) ? k : null; };
 function bindDrawer() {
   const keep = fn => { const y = window.scrollY, pn = $('crpane'), py = pn ? pn.scrollTop : 0; fn(); render(); window.scrollTo(0, y); if ($('crpane')) $('crpane').scrollTop = py; };
-  document.querySelectorAll('[data-cropen]').forEach(el => el.onclick = ev => { ev.stopPropagation(); const k = profKey(el.dataset.cropen); if (!k) return; const y = window.scrollY; if (CR.open !== k) { CR.cq = ''; CR.ptab = 'input'; } CR.open = k; render(); window.scrollTo(0, y); });
+  document.querySelectorAll('[data-cropen]').forEach(el => el.onclick = ev => { ev.stopPropagation(); const k = profKey(el.dataset.cropen); if (!k) return; const y = window.scrollY; if (CR.open !== k) { CR.cq = ''; CR.tok = false; CR.ptab = 'input'; } CR.open = k; render(); window.scrollTo(0, y); });
   if (!CR.open) return;
   document.querySelectorAll('details.crsec').forEach(el => el.ontoggle = () => { const k = el.dataset.sec; if (!!CR.sec[k] === el.open) return; keep(() => { CR.sec[k] = el.open; }); });
   const close = () => keep(() => { CR.open = null; });
@@ -1670,10 +1670,9 @@ function bindDrawer() {
   document.onkeydown = e => { if (e.key === 'Escape' && CR.open) close(); };
   const k = CR.open, msg = t => { if ($('crmmsg')) $('crmmsg').textContent = t; };
   document.querySelectorAll('[data-ptab]').forEach(b => b.onclick = () => keep(() => { CR.ptab = b.dataset.ptab; }));
-  if ($('cdq')) $('cdq').oninput = e => { CR.cq = e.target.value; const D = CARDD[k]; if (!D || !D.cards) return; const R = cardRowsHtml(D.cards, CR.cq); $('cdbody').innerHTML = R.html; $('cdn').innerHTML = (R.n === D.cards.length ? `${n0(R.n)} thẻ` : `${n0(R.n)} / ${n0(D.cards.length)} thẻ khớp`) + (D.full ? ' · <b>đang hiện đầy đủ</b>' : ''); };
-  if (CARDST === 'ok' && CR.ptab === 'profile' && !CARDD[k]) { CARDD[k] = {loading: true}; cardDetail(k, false).catch(e => { CARDD[k] = {err: 'Chưa tải được: ' + (e.message || e)}; }).then(() => { if (CR.open === k) keep(() => {}); }); }
-  if ($('cdfull')) $('cdfull').onclick = () => { const D = CARDD[k]; if (D.full) { CARDD[k] = Object.assign({}, D, {loading: true}); keep(() => {}); cardDetail(k, false).then(() => keep(() => {})); return; }
-    CARDD[k] = Object.assign({}, D, {loading: true}); keep(() => {}); cardDetail(k, true).catch(e => { CARDD[k] = {err: e.message || String(e)}; }).then(() => keep(() => {})); };
+  if ($('cdq')) $('cdq').oninput = e => { CR.cq = e.target.value; const D = CARDD[k]; if (!D || !D.cards) return; const R = cardRowsHtml(D.cards, CR.cq); $('cdbody').innerHTML = R.html; $('cdn').innerHTML = (R.n === D.cards.length ? `${n0(R.n)} thẻ` : `${n0(R.n)} / ${n0(D.cards.length)} thẻ khớp`) + (D.full ? '' : ' · số thẻ hiện 4 số cuối (chỉ Quản trị / Kế toán xem đầy đủ)'); };
+  if (CARDST === 'ok' && CR.ptab === 'profile' && !CARDD[k]) { CARDD[k] = {loading: true}; cardDetail(k, CANWRITE).catch(e => { CARDD[k] = {err: 'Chưa tải được: ' + (e.message || e)}; }).then(() => { if (CR.open === k) keep(() => {}); }); }
+  if ($('cdfull')) $('cdfull').onclick = () => keep(() => { CR.tok = !CR.tok; });
   if ($('cdxls')) $('cdxls').onclick = async () => { try { const D = CARDD[k].full ? CARDD[k] : await cardDetail(k, true); await cardsXlsx([{key: k, name: cname(k), label: '', company: D.company, cards: D.cards}], `XPAY_The_${k}_${TODAY.replace(/-/g, '')}.xlsx`, cname(k)); keep(() => {}); } catch (e) { alert('Không xuất được: ' + (e.message || e)); } };
   const fail = e => msg(e && e.code === 'invalid_argument' ? 'Bạn không có quyền lưu dữ liệu.' : 'Chưa lưu được: ' + ((e && (e.message || e.code)) || e));
   if ($('cat_r')) $('cat_r').onchange = e => { $('cat_new').style.display = e.target.value === '__new' ? '' : 'none'; };
