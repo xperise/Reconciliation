@@ -76,6 +76,31 @@ const P = S.params;
 /* Cùng một doanh nghiệp có 2 mã hợp đồng (ký phụ lục dưới mã mới): gộp về mã cũ — mã cũ giữ PIC, phân hạng,
    lịch sử giao dịch; nhận thêm ngày ký phụ lục / khởi tạo XPAY của mã mới. Mỗi doanh nghiệp chỉ đếm 1 lần. */
 const MERGE = {'26000055': '20000020', '26000034': '24000290', '26000041': '20006788', '26000029': '20006419', '000000000ML': '109839192'};
+/* Tên doanh nghiệp chuẩn hoá để so khớp: bỏ dấu, viết hoa, gom các cách viết tắt (TP. = thành phố, VPĐD, CN, Cty, TNHH, Co.,Ltd…) */
+const CANON_RULES = [
+  [/\b(THANH PHO HO CHI MINH|TP HO CHI MINH|TP HCM|TPHCM|HO CHI MINH CITY|HCMC|HO CHI MINH)\b/g, 'HCM'],
+  [/\bTHANH PHO\b/g, 'TP'], [/\bVAN PHONG DAI DIEN\b/g, 'VPDD'], [/\bCHI NHANH\b/g, 'CN'], [/\bCONG TY\b/g, 'CTY'],
+  [/\bTRACH NHIEM HUU HAN\b/g, 'TNHH'], [/\bCO PHAN\b/g, 'CP'], [/\bMOT THANH VIEN\b/g, 'MTV'], [/\bJOINT STOCK COMPANY\b/g, 'JSC'],
+  [/\b(COMPANY LIMITED|CO LTD|COMPANY LTD|CO LIMITED)\b/g, 'COLTD'], [/\bLIMITED\b/g, 'LTD'], [/\bVIET NAM\b/g, 'VN'],
+];
+const canonSp = s => { let x = String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'D').toUpperCase().replace(/^[A-Z0-9]{3,6}\s*-\s*/, '').replace(/[^A-Z0-9]+/g, ' ').trim();
+  for (const [re, to] of CANON_RULES) x = x.replace(re, to); return x.replace(/\s+/g, ' ').trim(); };
+const canon = s => canonSp(s).replace(/ /g, '');
+const xpayKeyOf = name => 'XPAY-' + String(name || '').toUpperCase().trim().replace(/^[A-Z0-9]{3,6}\s*-\s*/, '').replace(/[^\p{L}\p{N}]/gu, '').slice(0, 20);
+/* gộp mã trùng: (1) tách lại các tên Van đã chọn tách; (2) mã tạm XPAY-… có tên trùng (sau chuẩn hoá) với đúng 1 mã hợp đồng → gộp tự động; (3) các cặp Van đã chọn gộp tay */
+const AUTO_MERGED = [];
+(() => {
+  S.merge = S.merge || {}; S.nomerge = S.nomerge || {}; S.mergeLog = S.mergeLog || {};
+  for (const t of S.tx || []) if (S.nomerge[canon(t[7])]) t[2] = xpayKeyOf(t[7]);
+  const byCanon = {};
+  const addC = (k, n) => { const c = canon(n); if (!c || String(k).startsWith('XPAY-')) return; (byCanon[c] = byCanon[c] || new Set()).add(MERGE[k] || k); };
+  ((S.book && S.book.rows) || []).forEach(r => addC(r[0], r[1])); (S.customers || []).forEach(c => addC(c[0], c[1]));
+  const seen = {};
+  for (const t of S.tx || []) { if (!String(t[2]).startsWith('XPAY-') || seen[t[2]] !== undefined) continue;
+    const c = canon(t[7]); seen[t[2]] = null; if (S.nomerge[c]) continue;
+    const cand = byCanon[c]; if (cand && cand.size === 1) { const to = [...cand][0]; seen[t[2]] = to; MERGE[t[2]] = to; AUTO_MERGED.push({from: t[2], to, name: String(t[7] || '')}); if (!S.mergeLog[t[2]]) S.mergeLog[t[2]] = {to, name: String(t[7] || ''), auto: 1, at: new Date().toISOString().slice(0, 10)}; } }
+  for (const [from, to] of Object.entries(S.merge)) if (from !== to) MERGE[from] = to;
+})();
 (() => {
   const B = (S.book && S.book.rows) || [], C = (S.crm0 && S.crm0.rows) || {};
   for (const [nw, old] of Object.entries(MERGE)) {
@@ -119,11 +144,13 @@ const norm = s => String(s || '').toUpperCase().trim().replace(/^[A-Z0-9]{3,6}\s
 const CUST = S.customers.map(c => ({key: c[0], name: c[1], ae: c[2], card: c[3], tep: c[4], peak: c[5], peak_m: c[6]}));
 const BYKEY = {}; CUST.forEach(c => BYKEY[c.key] = c);
 function companyKey(company) {
-  if (S.alias[company]) return S.alias[company];
-  const k = norm(company);
+  if (S.nomerge[canon(company)]) return xpayKeyOf(company);
+  if (S.alias[company]) return MERGE[S.alias[company]] || S.alias[company];
+  const k = norm(company), kc = canon(company);
   let best = null;
-  for (const c of CUST) if (norm(c.name) === k && (!best || c.peak > best.peak)) best = c;
-  return best ? best.key : (typeof BOOKN !== 'undefined' && BOOKN[k]) || 'XPAY-' + k.slice(0, 20);
+  for (const c of CUST) if ((norm(c.name) === k || canon(c.name) === kc) && (!best || c.peak > best.peak)) best = c;
+  const r = best ? best.key : (typeof BOOKN !== 'undefined' && (BOOKN[k] || BOOKC[kc])) || xpayKeyOf(company);
+  return MERGE[r] || r;
 }
 const driverId = (mnv, plate) => (mnv && String(mnv).trim()) ? String(mnv).trim() : 'BS ' + String(plate || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
@@ -538,6 +565,36 @@ function renderZoom(d, C, A) {
    </tbody></table></div></details>`;
   return h;
 }
+/* duyệt doanh nghiệp trùng mã: đã gộp (tự động / tay) + nghi trùng theo tên gần giống */
+const MG_STOP = new Set(['CTY', 'TNHH', 'CP', 'COLTD', 'LTD', 'JSC', 'VPDD', 'CN', 'TAI', 'TP', 'VN', 'MTV', 'THE', 'AND', 'VA', 'CO', 'GROUP']);
+const mgTok = n => new Set(canonSp(n).split(' ').filter(w => w && !MG_STOP.has(w)));
+function mergeSuggest() {
+  const xk = {}; for (const t of S.tx) if (String(t[2]).startsWith('XPAY-') && !LIQ.has(t[2])) { const x = xk[t[2]] = xk[t[2]] || {key: t[2], name: String(t[7] || ''), gmv: 0, n: 0}; x.gmv += t[4]; x.n++; }
+  const targets = [...BK.rows.map(r => ({key: r[0], name: r[1]})), ...CUST.map(c => ({key: c.key, name: c.name}))].filter(x => !String(x.key).startsWith('XPAY-') && !MERGE[x.key]);
+  const seenT = new Set(), T = targets.filter(x => !seenT.has(x.key) && seenT.add(x.key)).map(x => ({...x, tok: mgTok(x.name)}));
+  const out = [];
+  for (const x of Object.values(xk)) { if (S.nomerge[canon(x.name)]) continue; const A = mgTok(x.name); if (!A.size) continue;
+    let best = null; for (const y of T) { let i = 0; A.forEach(w => { if (y.tok.has(w)) i++; }); if (!i) continue; const sc = i / (A.size + y.tok.size - i); if (!best || sc > best.sc) best = {y, sc}; }
+    out.push({...x, cand: best && best.sc >= 0.5 ? best : null}); }
+  return out.sort((a, b) => (b.cand ? b.cand.sc : 0) - (a.cand ? a.cand.sc : 0) || b.gmv - a.gmv);
+}
+function mergeCard() {
+  if (!CANWRITE) return '';
+  const done = Object.entries(S.mergeLog || {}).filter(([f, v]) => MERGE[f] && !S.nomerge[canon(v.name)]).map(([f, v]) => ({from: f, ...v})), sug = mergeSuggest();
+  const gm = k => { let g = 0; for (const t of S.tx) if (t[2] === k) g += t[4]; return g; };
+  const opts = [...new Map([...BK.rows.map(r => [r[0], r[1]]), ...CUST.map(c => [c.key, c.name])]).entries()].filter(([k]) => !String(k).startsWith('XPAY-') && !MERGE[k]);
+  return `<div class="card"><div class="hd"><div><div class="eyebrow">Doanh nghiệp trùng mã</div><h2 class="card-title">${n0(done.length)} cặp đã gộp · ${n0(sug.filter(x => x.cand).length)} cặp nghi trùng cần xem · ${n0(sug.filter(x => !x.cand).length)} khách ngoài sổ chưa khớp</h2></div><div class="card-note">So tên sau khi chuẩn hoá: bỏ dấu, TP. = thành phố, VPĐD, CN, Cty, TNHH, Co.,Ltd…</div></div>
+    <datalist id="mgopts">${opts.map(([k, n]) => `<option value="${esc(k)} · ${esc(n)}">`).join('')}</datalist>
+    ${sug.length ? `<div class="eyebrow" style="margin:4px 0 6px">Cần xem: mã tạm (XPAY-…) từ bảng kê chưa khớp mã hợp đồng</div><div class="tw" style="max-height:360px;overflow:auto"><table><thead><tr><th class="l">Tên trên bảng kê</th><th>GMV</th><th>Giao dịch</th><th class="l">Gợi ý gộp vào</th><th>Giống</th><th class="l">Thao tác</th></tr></thead><tbody>
+      ${sug.map(x => `<tr><td class="l name">${esc(x.name)}<span class="def">${esc(x.key)}</span></td><td>${money(x.gmv)}</td><td>${n0(x.n)}</td>
+        <td class="l">${x.cand ? `${esc(x.cand.y.name)}<span class="def">HĐ ${esc(x.cand.y.key)}</span>` : '<span class="lbl">không có tên gần giống — chọn tay</span>'}</td><td>${x.cand ? pct(x.cand.sc) : '—'}</td>
+        <td class="l" style="white-space:nowrap">${x.cand ? `<button class="btn pri" data-mgo="${esc(x.key)}" data-mgto="${esc(x.cand.y.key)}">Gộp</button> ` : ''}<input list="mgopts" class="mgpick" data-mgfrom="${esc(x.key)}" placeholder="Gộp vào mã khác…" style="width:190px;font:12.5px var(--font-family-sans-serif);padding:5px 8px;border:1px solid var(--line);border-radius:8px"> <button class="btn" data-mgno="${esc(x.name)}" title="Đây là doanh nghiệp khác, không gộp">Khác nhau</button></td></tr>`).join('')}
+    </tbody></table></div>` : '<div class="hint">Không còn mã tạm nào chưa khớp.</div>'}
+    ${done.length ? `<details style="margin-top:12px"><summary class="eyebrow" style="cursor:pointer">Đã gộp · ${n0(done.length)} cặp (bấm để xem, tách lại nếu gộp nhầm)</summary><div class="tw" style="margin-top:6px;max-height:320px;overflow:auto"><table><thead><tr><th class="l">Tên trên bảng kê</th><th class="l">Đã gộp vào</th><th>GMV sau gộp</th><th class="l">Cách gộp</th><th></th></tr></thead><tbody>
+      ${done.map(d => `<tr><td class="l">${esc(d.name)}<span class="def">${esc(d.from)}</span></td><td class="l name">${esc(cname(d.to))}<span class="def">HĐ ${esc(d.to)}</span></td><td>${money(gm(d.to))}</td><td class="l">${d.auto ? 'Tự động (trùng tên)' : 'Chọn tay'} · ${d.at ? dmy(d.at) : ''}</td><td><button class="btn" data-mgsplit="${esc(d.name)}" data-mgfrom="${esc(d.from)}">Tách ra</button></td></tr>`).join('')}
+    </tbody></table></div></details>` : ''}
+    <div class="hint" id="mgmsg">Mỗi thao tác lưu ngay vào dashboard. Gộp: toàn bộ giao dịch, GMV, PIC, mốc, cuộc gọi của mã tạm về chung mã hợp đồng; lần nạp bảng kê sau tên này tự vào đúng mã.</div></div>`;
+}
 function renderUpload() {
   const lastDrv = S.drv.dates.filter((x, i) => S.drv.rows.some(r => r.vals[i] != null)).pop();
   let h = `<div class="card"><div class="hd"><div><div class="eyebrow">Cập nhật số liệu cuối ngày</div><h2 class="card-title">Upload bảng kê taxi + file độ phủ tài xế</h2></div>
@@ -555,6 +612,7 @@ function renderUpload() {
       <div style="display:flex;gap:8px;align-items:center;margin:8px 0"><span class="lbl" style="width:120px">Thẻ đã phát hành</span> <input type="number" id="mk" value="${manualAt(LASTDAY, 'cards_issued') || ''}"><span class="lbl">nhập tay</span></div></div>
     <div style="display:flex;gap:10px;margin-top:14px"><button class="btn" id="bprev">Kiểm tra file</button><button class="btn pri" id="bsave" ${PENDING ? '' : 'disabled'}>Lưu & cập nhật dashboard</button></div>
     <div class="log" id="ulog" style="margin-top:12px">${PENDING ? esc(PENDING.log) : 'Chọn file rồi bấm "Kiểm tra file".'}</div></div>`;
+  h += mergeCard();
   return h;
 }
 
@@ -1044,8 +1102,9 @@ function bindPattern() {
 /* ---------- SỔ KHÁCH (sheet Customers) + nhóm thu gọn dùng chung ---------- */
 const BK = S.book || {pl: [], crm: [], pic: [''], rows: []};
 const BOOK = {}, BOOKN = {};
+const BOOKC = {};
 BK.rows.forEach(r => { const o = BOOK[r[0]] = {key: r[0], name: r[1], pic: BK.pic[r[2]] || '', pl: r[3], xp: r[4], crm: r[5], fpl: r[6], fhd: r[7], peak: r[8], next: r[9], src: r[10], tl: r[11] || 0};
-  const k = norm(o.name); if (!BOOKN[k]) BOOKN[k] = o.key; });
+  const k = norm(o.name); if (!BOOKN[k]) BOOKN[k] = o.key; const c = canon(o.name); if (c && !BOOKC[c]) BOOKC[c] = o.key; });
 const TXN = {}; S.tx.forEach(t => { if (!TXN[t[2]]) TXN[t[2]] = String(t[7] || '').replace(/^[A-Z0-9]{3,6}\s*-\s*/, ''); });
 const cname = k => (BOOK[k] || BYKEY[k] || {}).name || ((S.jr || {})[k] || {}).name || TXN[k] || k;
 const picOf = k => (BOOK[k] || {}).pic || (BYKEY[k] || {}).ae || '';
@@ -1167,6 +1226,12 @@ function crmSuggest(r, d) {
 }
 const stageTxt = ['Chưa gọi', 'Có XPAY, chưa gọi', 'Đã gọi', 'Đã meeting', 'Có doanh thu'];
 /* ---- DB ---- */
+/* dữ liệu nhập (PIC, mốc, cuộc gọi) đã ghi dưới mã tạm → gộp vào mã hợp đồng; mã hợp đồng được ưu tiên khi trùng trường */
+function mergeDbx(o) {
+  for (const [from, to] of Object.entries(MERGE)) { const a = o[from]; if (!a) continue; const b = o[to] = o[to] || {};
+    for (const [f, v] of Object.entries(a)) { if (b[f] == null || b[f] === '') b[f] = v; else if (Array.isArray(b[f]) && Array.isArray(v)) { const seen = new Set(b[f].map(x => JSON.stringify(x))); v.forEach(x => { if (!seen.has(JSON.stringify(x))) b[f].push(x); }); } }
+    delete o[from]; }
+}
 let DBQ = Promise.resolve();
 async function crmWrite(k, patch) {
   const db = await claude.use('db'); if (!db) throw {code: 'not_granted'};
@@ -1180,7 +1245,7 @@ function crmInit() {
     if (!db) { DBST = 'off'; if (TAB === 'jr') crmRerender(); return; }
     try { const u = await claude.use('user'); const c = u ? await u.can('data.write') : null; DBW = c; } catch (e) { DBW = null; }
     db.collection('crm').onSnapshot(snap => { const o = {}; snap.docs.forEach(x => { const v = x.data() || {}; for (const [k, e] of Object.entries(v)) if (e && typeof e === 'object') o[k] = e; });
-      DBX = o; DBST = 'ok'; CRM_ = null; AUTOC_ = null; crmRerender(true); }, () => { DBST = 'off'; crmRerender(); });
+      mergeDbx(o); DBX = o; DBST = 'ok'; CRM_ = null; AUTOC_ = null; crmRerender(true); }, () => { DBST = 'off'; crmRerender(); });
     db.doc('cfg/main').onSnapshot(s => { CFG = s.exists ? (s.data() || {cats: []}) : {cats: []}; }, () => {});
   })();
 }
@@ -1836,6 +1901,20 @@ function bind() {
   if ($('blog')) $('blog').onclick = () => { CH.log = !CH.log; render(); };
   if ($('bprev')) $('bprev').onclick = preview;
   if ($('bsave')) $('bsave').onclick = save;
+  const mgSave = async (fn, what) => { const m = $('mgmsg'); if (!window.confirm(what)) return; fn();
+    const art = window.claude ? await claude.use('artifact') : null; if (!art) { if (m) m.textContent = 'Không lưu được: trang đang mở ngoài web.'; return; }
+    if (m) m.textContent = 'Đang lưu…';
+    try { S.meta.updated = new Date().toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'}); await art.publish(docHtml()); if (m) m.textContent = 'Đã lưu. Dashboard đang tải lại…'; }
+    catch (e) { if (m) m.textContent = 'Không lưu được: ' + (e && (e.message || e.code) || e); } };
+  const doMerge = (from, to) => { const nm = (S.tx.find(t => t[2] === from) || [])[7] || from;
+    mgSave(() => { S.merge[from] = to; S.mergeLog[from] = {to, name: String(nm), auto: 0, at: TODAY}; delete S.nomerge[canon(nm)]; S.alias[nm] = to; S.tx.forEach(t => { if (t[2] === from) t[2] = to; }); },
+      `Gộp "${nm}" vào ${to} · ${cname(to)}?\nToàn bộ giao dịch và dữ liệu nhập của mã tạm sẽ về chung mã hợp đồng.`); };
+  document.querySelectorAll('[data-mgo]').forEach(b => b.onclick = () => doMerge(b.dataset.mgo, b.dataset.mgto));
+  document.querySelectorAll('.mgpick').forEach(inp => inp.onchange = () => { const k = inp.value.split(' · ')[0].trim(); if (!k) return; if (!BOOK[k] && !BYKEY[k]) { const m = $('mgmsg'); if (m) m.textContent = 'Không tìm thấy mã hợp đồng ' + k + ' — chọn trong danh sách gợi ý.'; return; } doMerge(inp.dataset.mgfrom, k); });
+  document.querySelectorAll('[data-mgno]').forEach(b => b.onclick = () => mgSave(() => { S.nomerge[canon(b.dataset.mgno)] = 1; }, `Đánh dấu "${b.dataset.mgno}" là doanh nghiệp riêng, không gộp?`));
+  document.querySelectorAll('[data-mgsplit]').forEach(b => b.onclick = () => { const nm = b.dataset.mgsplit, from = b.dataset.mgfrom;
+    mgSave(() => { S.nomerge[canon(nm)] = 1; delete S.merge[from]; delete S.mergeLog[from]; if (S.alias[nm]) delete S.alias[nm]; S.tx.forEach(t => { if (canon(t[7]) === canon(nm)) t[2] = xpayKeyOf(t[7]); }); },
+      `Tách "${nm}" ra khỏi ${cname(MERGE[from] || from)}?\nGiao dịch của tên này quay về mã riêng.`); });
   ['mctm', 'mobm'].forEach(id => { if ($(id)) $(id).onchange = e => { const s = e.target, i = $(s.dataset.for); i.disabled = s.value === 'auto';
     if (s.value === 'auto') i.value = s.dataset.auto; else if (s.value === 'manual' && s.dataset.man) i.value = s.dataset.man; }; });
   bindPattern();
