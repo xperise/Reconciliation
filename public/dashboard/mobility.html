@@ -114,6 +114,8 @@ const AUTO_MERGED = [];
   (S.tx || []).forEach(t => { if (MERGE[t[2]]) t[2] = MERGE[t[2]]; });
 })();
 const $ = id => document.getElementById(id);
+/* tên doanh nghiệp sửa tay trong Hồ sơ doanh nghiệp: mã → tên (nạp từ dữ liệu nhập) */
+const NAMEOVR = {};
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 /* ---------- units (theme §5) ---------- */
@@ -149,7 +151,9 @@ function companyKey(company) {
   const k = norm(company), kc = canon(company);
   let best = null;
   for (const c of CUST) if ((norm(c.name) === k || canon(c.name) === kc) && (!best || c.peak > best.peak)) best = c;
-  const r = best ? best.key : (typeof BOOKN !== 'undefined' && (BOOKN[k] || BOOKC[kc])) || xpayKeyOf(company);
+  let r = best ? best.key : (typeof BOOKN !== 'undefined' && (BOOKN[k] || BOOKC[kc])) || null;
+  if (!r) for (const [key, nm] of Object.entries(NAMEOVR)) if (canon(nm) === kc) { r = key; break; }   // tên đã sửa tay trong hồ sơ
+  r = r || xpayKeyOf(company);
   return MERGE[r] || r;
 }
 const driverId = (mnv, plate) => (mnv && String(mnv).trim()) ? String(mnv).trim() : 'BS ' + String(plate || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -578,6 +582,37 @@ function mergeSuggest() {
     out.push({...x, cand: best && best.sc >= 0.5 ? best : null}); }
   return out.sort((a, b) => (b.cand ? b.cand.sc : 0) - (a.cand ? a.cand.sc : 0) || b.gmv - a.gmv);
 }
+/* mã hợp đồng gần giống nhất cho 1 tên trên bảng kê */
+function bestTarget(name) {
+  const A = mgTok(name); if (!A.size) return null;
+  if (!bestTarget.T) { const seen = new Set(); bestTarget.T = [...BK.rows.map(r => ({key: r[0], name: r[1]})), ...CUST.map(c => ({key: c.key, name: c.name})), ...Object.entries(NAMEOVR).map(([key, name]) => ({key, name}))].filter(x => !String(x.key).startsWith('XPAY-') && !MERGE[x.key] && !seen.has(x.key + '|' + x.name) && seen.add(x.key + '|' + x.name)).map(x => ({...x, tok: mgTok(x.name)})); }
+  let best = null; for (const y of bestTarget.T) { let i = 0; A.forEach(w => { if (y.tok.has(w)) i++; }); if (!i) continue; const sc = i / (A.size + y.tok.size - i); if (!best || sc > best.sc) best = {key: y.key, name: cname(y.key), sc}; }
+  return best && best.sc >= 0.4 ? best : null;
+}
+/* bảng "Công ty chưa có trên hệ thống" hiện ngay sau khi Kiểm tra file */
+function unkPanel() {
+  const U = (PENDING && PENDING.unk) || []; if (!U.length) return '';
+  const M = PENDING.map, nDone = Object.values(M).filter(Boolean).length;
+  const opt = (u) => { const d = M[u.key] || {}; return `<select class="unksel" data-uk="${esc(u.key)}" style="font:12.5px var(--font-family-sans-serif);padding:5px 8px;border:1px solid var(--line);border-radius:8px;max-width:260px">
+      <option value="" ${!d.to && !d.new ? 'selected' : ''}>Để sau (giữ mã tạm)</option>
+      ${u.cand ? `<option value="to:${esc(u.cand.key)}" ${d.to === u.cand.key ? 'selected' : ''}>Gộp vào ${esc(u.cand.name)} · HĐ ${esc(u.cand.key)} (${pct(u.cand.sc)})</option>` : ''}
+      ${d.to && (!u.cand || d.to !== u.cand.key) ? `<option value="to:${esc(d.to)}" selected>Gộp vào ${esc(cname(d.to))} · HĐ ${esc(d.to)}</option>` : ''}
+      <option value="new" ${d.new ? 'selected' : ''}>Ghi nhận là khách mới</option></select>`; };
+  return `<div class="card" style="margin-top:12px;border:1px solid var(--accent)"><div class="hd"><div><div class="eyebrow">Công ty chưa có trên hệ thống</div><h2 class="card-title">${n0(U.length)} công ty trong file chưa khớp mã hợp đồng · đã chọn ${n0(nDone)}</h2></div>
+      <div style="display:flex;gap:8px">${U.some(u => u.cand && u.cand.sc >= 0.7) ? '<button class="btn" id="unkall">Gộp tất cả gợi ý ≥ 70%</button>' : ''}</div></div>
+    <div class="tw" style="max-height:420px;overflow:auto"><table><thead><tr><th class="l">Tên trên bảng kê</th><th>Giao dịch</th><th>GMV</th><th class="l">Đơn vị phát sinh</th><th class="l">Xử lý</th><th class="l">Hoặc gộp vào mã khác</th></tr></thead><tbody>
+      ${U.map(u => `<tr><td class="l name">${esc(u.name)}${u.old ? '<span class="def">đã có từ lần nạp trước, chưa khớp</span>' : '<span class="def">mới xuất hiện</span>'}</td><td>${n0(u.n)}</td><td>${money(u.gmv)}</td><td class="l">${esc(u.units.slice(0, 2).join(', '))}${u.units.length > 2 ? '…' : ''}</td>
+        <td class="l">${opt(u)}</td><td class="l"><input list="mgopts" class="unkpick" data-uk="${esc(u.key)}" placeholder="Gõ mã hoặc tên…" style="width:190px;font:12.5px var(--font-family-sans-serif);padding:5px 8px;border:1px solid var(--line);border-radius:8px"></td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="hint"><b>Gộp</b>: giao dịch vào đúng mã hợp đồng, lần sau tên này tự khớp. <b>Ghi nhận là khách mới</b>: giữ mã riêng, không hỏi lại. <b>Để sau</b>: vẫn lưu giao dịch, công ty hiện trong khung "Doanh nghiệp trùng mã" để xử lý sau. Lựa chọn được áp dụng khi bấm <b>Lưu & cập nhật dashboard</b>.</div></div>`;
+}
+function bindUnk() {
+  if (!PENDING || !PENDING.unk) return;
+  const re = () => { if ($('unkp')) { $('unkp').innerHTML = unkPanel(); bindUnk(); } };
+  document.querySelectorAll('.unksel').forEach(sl => sl.onchange = () => { const v = sl.value; PENDING.map[sl.dataset.uk] = v.startsWith('to:') ? {to: v.slice(3)} : v === 'new' ? {new: 1} : null; re(); });
+  document.querySelectorAll('.unkpick').forEach(inp => inp.onchange = () => { const k = inp.value.split(' · ')[0].trim(); if (!k) return; if (!BOOK[k] && !BYKEY[k] && !NAMEOVR[k]) { inp.value = ''; inp.placeholder = 'Không có mã ' + k; return; } PENDING.map[inp.dataset.uk] = {to: k}; re(); });
+  if ($('unkall')) $('unkall').onclick = () => { PENDING.unk.forEach(u => { if (u.cand && u.cand.sc >= 0.7 && !PENDING.map[u.key]) PENDING.map[u.key] = {to: u.cand.key}; }); re(); };
+}
 function mergeCard() {
   if (!CANWRITE) return '';
   const done = Object.entries(S.mergeLog || {}).filter(([f, v]) => MERGE[f] && !S.nomerge[canon(v.name)]).map(([f, v]) => ({from: f, ...v})), sug = mergeSuggest();
@@ -592,6 +627,9 @@ function mergeCard() {
     </tbody></table></div>` : '<div class="hint">Không còn mã tạm nào chưa khớp.</div>'}
     ${done.length ? `<details style="margin-top:12px"><summary class="eyebrow" style="cursor:pointer">Đã gộp · ${n0(done.length)} cặp (bấm để xem, tách lại nếu gộp nhầm)</summary><div class="tw" style="margin-top:6px;max-height:320px;overflow:auto"><table><thead><tr><th class="l">Tên trên bảng kê</th><th class="l">Đã gộp vào</th><th>GMV sau gộp</th><th class="l">Cách gộp</th><th></th></tr></thead><tbody>
       ${done.map(d => `<tr><td class="l">${esc(d.name)}<span class="def">${esc(d.from)}</span></td><td class="l name">${esc(cname(d.to))}<span class="def">HĐ ${esc(d.to)}</span></td><td>${money(gm(d.to))}</td><td class="l">${d.auto ? 'Tự động (trùng tên)' : 'Chọn tay'} · ${d.at ? dmy(d.at) : ''}</td><td><button class="btn" data-mgsplit="${esc(d.name)}" data-mgfrom="${esc(d.from)}">Tách ra</button></td></tr>`).join('')}
+    </tbody></table></div></details>` : ''}
+    ${Object.keys(S.newco || {}).length ? `<details style="margin-top:12px"><summary class="eyebrow" style="cursor:pointer">Đã ghi nhận là khách mới · ${n0(Object.keys(S.newco).length)} (gộp sau nếu phát hiện trùng)</summary><div class="tw" style="margin-top:6px;max-height:280px;overflow:auto"><table><thead><tr><th class="l">Tên trên bảng kê</th><th class="l">Ghi nhận ngày</th><th>GMV</th><th class="l">Gộp vào mã hợp đồng</th></tr></thead><tbody>
+      ${Object.entries(S.newco).filter(([k]) => !MERGE[k]).map(([k, v]) => `<tr><td class="l name">${esc(cname(k))}<span class="def">${esc(k)}</span></td><td class="l">${v.at ? dmy(v.at) : ''}</td><td>${money(gm(k))}</td><td class="l"><input list="mgopts" class="mgpick" data-mgfrom="${esc(k)}" placeholder="Gõ mã hoặc tên…" style="width:220px;font:12.5px var(--font-family-sans-serif);padding:5px 8px;border:1px solid var(--line);border-radius:8px"></td></tr>`).join('')}
     </tbody></table></div></details>` : ''}
     <div class="hint" id="mgmsg">Mỗi thao tác lưu ngay vào dashboard. Gộp: toàn bộ giao dịch, GMV, PIC, mốc, cuộc gọi của mã tạm về chung mã hợp đồng; lần nạp bảng kê sau tên này tự vào đúng mã.</div></div>`;
 }
@@ -611,7 +649,7 @@ function renderUpload() {
           <input type="number" id="${id}" value="${cs.v == null ? '' : cs.v}" ${md === 'auto' ? 'disabled' : ''}><span class="lbl">Đang dùng: <b>${cs.src === 'manual' ? `số nhập tay ngày ${dmy(cs.d)}` : `số tự động từ tab Tiến độ khách hàng`}</b>. "Theo số cập nhật gần nhất": số nhập tay được dùng cho tới khi tab Tiến độ khách hàng có cập nhật ${d} mới hơn.</span></div>`; }).join('')}
       <div style="display:flex;gap:8px;align-items:center;margin:8px 0"><span class="lbl" style="width:120px">Thẻ đã phát hành</span> <input type="number" id="mk" value="${manualAt(LASTDAY, 'cards_issued') || ''}"><span class="lbl">nhập tay</span></div></div>
     <div style="display:flex;gap:10px;margin-top:14px"><button class="btn" id="bprev">Kiểm tra file</button><button class="btn pri" id="bsave" ${PENDING ? '' : 'disabled'}>Lưu & cập nhật dashboard</button></div>
-    <div class="log" id="ulog" style="margin-top:12px">${PENDING ? esc(PENDING.log) : 'Chọn file rồi bấm "Kiểm tra file".'}</div></div>`;
+    <div class="log" id="ulog" style="margin-top:12px">${PENDING ? esc(PENDING.log) : 'Chọn file rồi bấm "Kiểm tra file".'}</div><div id="unkp">${unkPanel()}</div></div>`;
   h += mergeCard();
   return h;
 }
@@ -678,12 +716,17 @@ async function preview() {
   }
   const days = [...new Set(add.map(t => t[0]))].sort();
   if (days.length) log.push(`Ngày có giao dịch mới: ${days.map(dm).join(', ')} · GMV mới ${nf(add.reduce((a, t) => a + t[4], 0), 0)} VND.`);
-  const unk = [...new Set(add.filter(t => t[2].startsWith('XPAY-')).map(t => t[7]))];
-  if (unk.length) log.push(`Khách chưa có trong sổ ML (xếp "Ngoài phân bổ"): ${unk.join('; ')}`);
+  // công ty chưa khớp mã hợp đồng nào: gom theo tên để chọn gộp / ghi nhận ngay ở bước này
+  const unkMap = {};
+  for (const t of add) if (String(t[2]).startsWith('XPAY-')) { const u = unkMap[t[2]] = unkMap[t[2]] || {key: t[2], name: t[7], gmv: 0, n: 0, units: new Set(), old: TXK.has(t[2])}; u.gmv += t[4]; u.n++; if (t[6]) u.units.add(t[6]); }
+  const unk = Object.values(unkMap).sort((a, b) => b.gmv - a.gmv);
+  unk.forEach(u => { const c = bestTarget(u.name); u.cand = c; u.units = [...u.units]; });
+  if (unk.length) log.push(`${unk.length} công ty chưa có mã hợp đồng trên hệ thống — chọn gộp hoặc ghi nhận ở bảng bên dưới trước khi lưu.`);
   if (mTxt) log.push('Số lũy kế: ' + mTxt + '.');
-  PENDING = (add.length || drv || fill.length || mChg.length || modeChg) ? {add, drv, fill, log: log.join('\n')} : null;
+  PENDING = (add.length || drv || fill.length || mChg.length || modeChg) ? {add, drv, fill, log: log.join('\n'), unk, map: {}} : null;
   if (!PENDING) log.push('Không có dữ liệu mới để lưu.');
   $('ulog').textContent = log.join('\n'); $('bsave').disabled = !PENDING;
+  if ($('unkp')) { $('unkp').innerHTML = unkPanel(); bindUnk(); }
 }
 function docHtml() {
   const st = JSON.stringify(S).replace(/</g, '\\u003c');
@@ -694,6 +737,11 @@ function docHtml() {
 async function save() {
   if (!PENDING) return;
   const b = $('bsave'); b.disabled = true; b.textContent = 'Đang lưu…';
+  S.merge = S.merge || {}; S.mergeLog = S.mergeLog || {}; S.nomerge = S.nomerge || {}; S.newco = S.newco || {};
+  for (const [xk, dcs] of Object.entries(PENDING.map || {})) { const u = (PENDING.unk || []).find(x => x.key === xk); if (!u || !dcs) continue;
+    if (dcs.to) { S.merge[xk] = dcs.to; S.mergeLog[xk] = {to: dcs.to, name: u.name, auto: 0, at: TODAY, src: 'upload'}; S.alias[u.name] = dcs.to; delete S.nomerge[canon(u.name)];
+      PENDING.add.forEach(t => { if (t[2] === xk) t[2] = dcs.to; }); S.tx.forEach(t => { if (t[2] === xk) t[2] = dcs.to; }); }
+    else if (dcs.new) { S.newco[xk] = {name: u.name, at: TODAY}; S.nomerge[canon(u.name)] = 1; } }
   for (const t of PENDING.add) { S.tx.push(t); if (!S.alias[t[7]] && !t[2].startsWith('XPAY-')) S.alias[t[7]] = t[2]; }
   S.tx.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
   if (PENDING.drv) S.drv = PENDING.drv;
@@ -1106,7 +1154,7 @@ const BOOKC = {};
 BK.rows.forEach(r => { const o = BOOK[r[0]] = {key: r[0], name: r[1], pic: BK.pic[r[2]] || '', pl: r[3], xp: r[4], crm: r[5], fpl: r[6], fhd: r[7], peak: r[8], next: r[9], src: r[10], tl: r[11] || 0};
   const k = norm(o.name); if (!BOOKN[k]) BOOKN[k] = o.key; const c = canon(o.name); if (c && !BOOKC[c]) BOOKC[c] = o.key; });
 const TXN = {}; S.tx.forEach(t => { if (!TXN[t[2]]) TXN[t[2]] = String(t[7] || '').replace(/^[A-Z0-9]{3,6}\s*-\s*/, ''); });
-const cname = k => (BOOK[k] || BYKEY[k] || {}).name || ((S.jr || {})[k] || {}).name || TXN[k] || k;
+const cname = k => NAMEOVR[k] || (BOOK[k] || BYKEY[k] || {}).name || ((S.jr || {})[k] || {}).name || TXN[k] || k;
 const picOf = k => (BOOK[k] || {}).pic || (BYKEY[k] || {}).ae || '';
 const G1 = ['Đã khởi tạo XPAY', 'Chưa khởi tạo XPAY', 'Đã thanh lý'];
 const TXK = new Set(S.tx.map(t => t[2]));
@@ -1245,7 +1293,7 @@ function crmInit() {
     if (!db) { DBST = 'off'; if (TAB === 'jr') crmRerender(); return; }
     try { const u = await claude.use('user'); const c = u ? await u.can('data.write') : null; DBW = c; } catch (e) { DBW = null; }
     db.collection('crm').onSnapshot(snap => { const o = {}; snap.docs.forEach(x => { const v = x.data() || {}; for (const [k, e] of Object.entries(v)) if (e && typeof e === 'object') o[k] = e; });
-      mergeDbx(o); DBX = o; DBST = 'ok'; CRM_ = null; AUTOC_ = null; crmRerender(true); }, () => { DBST = 'off'; crmRerender(); });
+      mergeDbx(o); for (const k of Object.keys(NAMEOVR)) delete NAMEOVR[k]; for (const [k, e] of Object.entries(o)) if (e && e.name) NAMEOVR[k] = String(e.name); DBX = o; DBST = 'ok'; CRM_ = null; AUTOC_ = null; crmRerender(true); }, () => { DBST = 'off'; crmRerender(); });
     db.doc('cfg/main').onSnapshot(s => { CFG = s.exists ? (s.data() || {cats: []}) : {cats: []}; }, () => {});
   })();
 }
@@ -1472,8 +1520,21 @@ function profView(r) {
   const na = '<span class="lbl">chưa có</span>', D = CARDD[r.key], ed = CANWRITE;
   const grid = rows => `<div style="display:grid;grid-template-columns:170px 1fr;gap:6px 12px;font-size:13px">${rows.map(([k, v]) => `<span class="lbl">${k}</span><span>${v == null || v === '' ? na : v}</span>`).join('')}</div>`;
   const co = (D && D.company) || {}, cs = CARDS[r.key] || {};
-  let h = `<div class="g2" style="margin-top:12px"><div class="card"><h3 style="margin:0 0 10px;font-size:14px">Thông tin doanh nghiệp</h3>${grid([
-      ['Tên pháp nhân', esc(r.name)], ['Số hợp đồng', esc(r.key)], ['MST', esc(co.mst || cs.mst || '')], ['Địa chỉ', esc(co.address || cs.address || '')], ['Email doanh nghiệp', esc(co.email || cs.email || '')]])}</div>
+  const orig = (BOOK[r.key] || BYKEY[r.key] || {}).name || TXN[r.key] || '', ovr = NAMEOVR[r.key];
+  const inp = (id, v, ph) => `<input id="${id}" value="${esc(v || '')}" placeholder="${ph || ''}" style="width:100%;box-sizing:border-box;font:13px var(--font-family-sans-serif);padding:6px 9px;border:1px solid var(--line);border-radius:8px">`;
+  const infoBox = CR.coEdit === r.key
+    ? `<div class="card"><h3 style="margin:0 0 10px;font-size:14px">Sửa thông tin doanh nghiệp</h3>
+        <div style="display:grid;grid-template-columns:150px 1fr;gap:8px 12px;font-size:13px;align-items:center">
+          <span class="lbl">Tên pháp nhân</span>${inp('coname', r.name, 'Tên đầy đủ như trên hợp đồng')}
+          <span class="lbl">Số hợp đồng</span><span>${esc(r.key)}</span>
+          ${CARDST === 'ok' ? `<span class="lbl">MST</span>${inp('comst', co.mst || cs.mst, '10 số hoặc 10 số-3 số')}<span class="lbl">Địa chỉ</span>${inp('coaddr', co.address || cs.address)}<span class="lbl">Email doanh nghiệp</span>${inp('comail', co.email || cs.email, 'ketoan@congty.vn')}` : ''}
+        </div>
+        ${orig && orig !== r.name ? `<div class="hint" style="margin-top:8px">Tên gốc trong sổ / bảng kê: <b>${esc(orig)}</b>. Xoá trống ô tên rồi lưu để dùng lại tên gốc.</div>` : ''}
+        <div class="hint" style="margin-top:6px">Tên mới hiện ở mọi màn hình và file xuất; lần nạp bảng kê sau, giao dịch ghi đúng tên này cũng tự vào mã ${esc(r.key)}.</div>
+        <div style="display:flex;gap:8px;margin-top:10px;align-items:center"><button class="btn pri" id="cosave">Lưu</button><button class="btn" id="cocancel">Huỷ</button><span class="lbl" id="comsg"></span></div></div>`
+    : `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3 style="margin:0;font-size:14px">Thông tin doanh nghiệp</h3>${ed ? '<button class="btn" id="coedit" style="padding:4px 12px">Sửa</button>' : ''}</div>${grid([
+      ['Tên pháp nhân', esc(r.name) + (ovr && orig && ovr !== orig ? `<div class="lbl" style="font-size:11.5px">đã sửa · tên gốc: ${esc(orig)}</div>` : '')], ['Số hợp đồng', esc(r.key)], ['MST', esc(co.mst || cs.mst || '')], ['Địa chỉ', esc(co.address || cs.address || '')], ['Email doanh nghiệp', esc(co.email || cs.email || '')]])}</div>`;
+  let h = `<div class="g2" style="margin-top:12px">${infoBox}
     <div class="card"><h3 style="margin:0 0 10px;font-size:14px">Phân loại & phụ trách</h3>${grid([
       ['Nhóm', `${r.grp === 9 ? '' : r.grp + '. '}${esc(GRP[r.grp])}${r.grpM ? ' (chọn tay)' : ''}`], ['Phân loại Mai Linh', esc(r.sub)], ['Nhóm client', r.gname ? esc(r.gname) + (r.grank ? ` (hạng ${r.grank})` : '') : ''], ['Hạng Top 200', esc(r.rank)],
       ['PIC', r.pic ? esc(r.pic) : '<b style="color:var(--critical)">Chưa phân công</b>'], ['PIC cũ (sổ khách)', esc(r.picOld)], ['Tình trạng', esc(r.st)], ['Tiến độ', stageTxt[r.stage]]])}</div></div>`;
@@ -1859,6 +1920,24 @@ function bindDrawer() {
   document.onkeydown = e => { if (e.key === 'Escape' && CR.open) close(); };
   const k = CR.open, msg = t => { if ($('crmmsg')) $('crmmsg').textContent = t; };
   document.querySelectorAll('[data-ptab]').forEach(b => b.onclick = () => keep(() => { CR.ptab = b.dataset.ptab; }));
+  if ($('coedit')) $('coedit').onclick = () => keep(() => { CR.coEdit = k; if (CARDST === 'ok' && !CARDD[k]) CARDD[k] = null; });
+  if ($('cocancel')) $('cocancel').onclick = () => keep(() => { CR.coEdit = null; });
+  if ($('cosave')) $('cosave').onclick = async () => {
+    const m = t => { if ($('comsg')) $('comsg').textContent = t; }, b = $('cosave'); b.disabled = true; m('Đang lưu…');
+    const r0 = crmRows(CR.day).find(x => x.key === k) || {}, orig = (BOOK[k] || BYKEY[k] || {}).name || TXN[k] || '';
+    const nm = $('coname').value.trim(), errs = [];
+    try {
+      if (nm !== (r0.name || '')) { const v = !nm || nm === orig ? null : nm; await crmWrite(k, {name: v}); if (v) NAMEOVR[k] = v; else delete NAMEOVR[k]; DBX[k] = Object.assign({}, DBX[k] || {}); if (v) DBX[k].name = v; else delete DBX[k].name; CRM_ = null; }
+      if (CARDST === 'ok' && $('comst')) {
+        const D = CARDD[k] || {}, co = D.company || {}, cs = CARDS[k] || {}, cur = {mst: co.mst || cs.mst || '', address: co.address || cs.address || '', email: co.email || cs.email || ''};
+        const nw = {mst: $('comst').value.replace(/\s/g, ''), address: $('coaddr').value.trim(), email: $('comail').value.trim()};
+        const patch = {key: k}; let any = false; for (const f of ['mst', 'address', 'email']) if (nw[f] !== cur[f]) { patch[f] = nw[f] || null; any = true; }
+        if (any) { const c = await claude.use('cards'); const res = await c.save({companies: [patch], cards: [], deletes: [], dry: false}); (res.errors || []).forEach(e => errs.push(e.replace(/^Thong_tin_DN dòng \d+: /, ''))); CARDD[k] = null; await cardsLoad(); }
+      }
+      if (errs.length) { b.disabled = false; m('Chưa lưu được: ' + errs.join('; ')); return; }
+      keep(() => { CR.coEdit = null; });
+    } catch (e) { b.disabled = false; m('Chưa lưu được: ' + ((e && (e.message || e.code)) || e)); }
+  };
   if ($('cdq')) $('cdq').oninput = e => { CR.cq = e.target.value; const D = CARDD[k]; if (!D || !D.cards) return; const R = cardRowsHtml(D.cards, CR.cq); $('cdbody').innerHTML = R.html; $('cdn').innerHTML = (R.n === D.cards.length ? `${n0(R.n)} thẻ` : `${n0(R.n)} / ${n0(D.cards.length)} thẻ khớp`) + (D.full ? '' : ' · số thẻ hiện 4 số cuối (chỉ Quản trị / Kế toán xem đầy đủ)'); };
   if (CARDST === 'ok' && CR.ptab === 'profile' && !CARDD[k]) { CARDD[k] = {loading: true}; cardDetail(k, CANWRITE).catch(e => { CARDD[k] = {err: 'Chưa tải được: ' + (e.message || e)}; }).then(() => { if (CR.open === k) keep(() => {}); }); }
   if ($('cdfull')) $('cdfull').onclick = () => keep(() => { CR.tok = !CR.tok; });
@@ -1901,13 +1980,14 @@ function bind() {
   if ($('blog')) $('blog').onclick = () => { CH.log = !CH.log; render(); };
   if ($('bprev')) $('bprev').onclick = preview;
   if ($('bsave')) $('bsave').onclick = save;
+  bindUnk();
   const mgSave = async (fn, what) => { const m = $('mgmsg'); if (!window.confirm(what)) return; fn();
     const art = window.claude ? await claude.use('artifact') : null; if (!art) { if (m) m.textContent = 'Không lưu được: trang đang mở ngoài web.'; return; }
     if (m) m.textContent = 'Đang lưu…';
     try { S.meta.updated = new Date().toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'}); await art.publish(docHtml()); if (m) m.textContent = 'Đã lưu. Dashboard đang tải lại…'; }
     catch (e) { if (m) m.textContent = 'Không lưu được: ' + (e && (e.message || e.code) || e); } };
   const doMerge = (from, to) => { const nm = (S.tx.find(t => t[2] === from) || [])[7] || from;
-    mgSave(() => { S.merge[from] = to; S.mergeLog[from] = {to, name: String(nm), auto: 0, at: TODAY}; delete S.nomerge[canon(nm)]; S.alias[nm] = to; S.tx.forEach(t => { if (t[2] === from) t[2] = to; }); },
+    mgSave(() => { S.merge[from] = to; S.mergeLog[from] = {to, name: String(nm), auto: 0, at: TODAY}; delete S.nomerge[canon(nm)]; if (S.newco) delete S.newco[from]; S.alias[nm] = to; S.tx.forEach(t => { if (t[2] === from) t[2] = to; }); },
       `Gộp "${nm}" vào ${to} · ${cname(to)}?\nToàn bộ giao dịch và dữ liệu nhập của mã tạm sẽ về chung mã hợp đồng.`); };
   document.querySelectorAll('[data-mgo]').forEach(b => b.onclick = () => doMerge(b.dataset.mgo, b.dataset.mgto));
   document.querySelectorAll('.mgpick').forEach(inp => inp.onchange = () => { const k = inp.value.split(' · ')[0].trim(); if (!k) return; if (!BOOK[k] && !BYKEY[k]) { const m = $('mgmsg'); if (m) m.textContent = 'Không tìm thấy mã hợp đồng ' + k + ' — chọn trong danh sách gợi ý.'; return; } doMerge(inp.dataset.mgfrom, k); });
