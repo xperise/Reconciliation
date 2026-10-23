@@ -3,7 +3,7 @@
 export const ISSUER = {
   name: 'CÔNG TY TNHH VẬN TẢI CÔNG NGHỆ MAI LINH XPERISE',
   address:
-    'Tầng 3, Tòa Harbour View, 35 Nguyễn Huệ, Phường Sài Gòn, Thành phố Hồ Chí Minh, Việt Nam',
+    '48/2/4 Quang Trung, Phường Gò Vấp, Thành phố Hồ Chí Minh, Việt Nam',
   mst: '0316953111',
 };
 
