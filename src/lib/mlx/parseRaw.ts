@@ -1,6 +1,6 @@
 import type ExcelJS from 'exceljs';
 import { COLUMNS, type ColumnKey } from './config';
-import { boTienToBe, docSheetBe, laSheetBe } from './parseBe';
+import { boTienToBe, docSheetBe, kyCuaNgay, laSheetBe } from './parseBe';
 import { normalizeText, parseFileName } from './normalize';
 import type { ParsedRawFile, Period, RawRow } from './types';
 
@@ -207,6 +207,13 @@ export async function parseRawFile(
     const def = COLUMNS.find((c) => (c.aliases as readonly string[]).includes(h));
     if (def && !colIndex.has(def.key)) colIndex.set(def.key, col);
   });
+  // Cột "Công ty" chỉ có ở file master (1 file gồm giao dịch của nhiều khách)
+  let congTyCol = 0;
+  ws.getRow(headerRow).eachCell({ includeEmpty: false }, (cell, col) => {
+    if (!congTyCol && normalizeText(asText(cell.value)) === 'cong ty') congTyCol = col;
+  });
+  const congTyOf = new Map<RawRow, string>();
+
   const missing = COLUMNS.filter((c) => c.key !== 'khoangCach' && !colIndex.has(c.key));
   if (missing.length) {
     throw new Error(`Thiếu cột: ${missing.map((c) => c.header).join(', ')}`);
@@ -244,6 +251,7 @@ export async function parseRawFile(
       khoangCach: asNumberOrText(get('khoangCach')),
     };
     for (const k of DATE_KEYS) (rawRow as unknown as Record<string, unknown>)[k] = asDate(get(k));
+    if (congTyCol) congTyOf.set(rawRow, asText(row.getCell(congTyCol).value).replace(/\s+/g, ' ').trim());
     rows.push(rawRow);
   }
 
@@ -276,6 +284,54 @@ export async function parseRawFile(
       rows: giuLai,
       zeroRows,
       total,
+    };
+  }
+
+  // ---- File master: tách theo cột "Công ty", mỗi công ty thành 1 phần như 1 file raw riêng
+  if (congTyCol) {
+    const nhom = new Map<string, { name: string; code: string; rows: RawRow[]; zero: number }>();
+    let noiBo = 0;
+    for (const r of rows) {
+      const ten = congTyOf.get(r) || '';
+      if (/xperise\s+internal/i.test(ten)) { noiBo++; continue; } // giao dịch nội bộ Xperise không lập bảng kê
+      const { code, name } = splitCodeAndName(ten || '(Không ghi công ty)');
+      const k = normalizeText(name);
+      const g = nhom.get(k) ?? { name, code, rows: [], zero: 0 };
+      if (!nhom.has(k)) nhom.set(k, g);
+      if (!g.code && code) g.code = code;
+      if ((r.soTien ?? 0) === 0) g.zero++;
+      else g.rows.push(r);
+    }
+    const kyOf = (rs: RawRow[]): Period | null => {
+      // Kỳ 26 → 25: lấy kỳ xuất hiện nhiều nhất theo ngày đi thực tế (thiếu thì ngày giao dịch)
+      const dem = new Map<string, { p: Period; n: number }>();
+      for (const r of rs) {
+        const d = r.ngayDiThucTe instanceof Date ? r.ngayDiThucTe : r.ngayGiaoDich instanceof Date ? r.ngayGiaoDich : null;
+        if (!d) continue;
+        const p = kyCuaNgay({ y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate() });
+        const key = `${p.year}-${p.month}`;
+        const cu = dem.get(key);
+        if (cu) cu.n++; else dem.set(key, { p, n: 1 });
+      }
+      return [...dem.values()].sort((a, b) => b.n - a.n)[0]?.p ?? null;
+    };
+    const parts: ParsedRawFile[] = [...nhom.values()]
+      .filter((g) => g.rows.length)
+      .sort((a, b) => a.name.localeCompare(b.name, 'vi'))
+      .map((g) => ({
+        fileName: `${fileName} › ${g.name}`,
+        source: 'XPAY' as const,
+        companyFromFile: g.name,
+        codeFromFile: g.code,
+        mstFromFile: '',
+        periodFromFile: kyOf(g.rows) ?? kyTuFile,
+        rows: g.rows,
+        zeroRows: g.zero,
+        total: g.rows.reduce((s, r) => s + (r.soTien ?? 0), 0),
+      }));
+    return {
+      fileName, source: 'XPAY', companyFromFile: '', codeFromFile: '', mstFromFile: '', periodFromFile: kyTuFile,
+      rows: giuLai, zeroRows, total, parts, internalRows: noiBo,
     };
   }
 

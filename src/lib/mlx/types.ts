@@ -61,4 +61,11 @@ export interface ParsedRawFile {
   /** Số dòng 0đ đã loại khỏi file xuất */
   zeroRows: number;
   total: number;
+  /**
+   * File master (raw XPAY có cột "Công ty", gồm nhiều khách): mỗi phần là 1 công ty,
+   * xử lý như 1 file raw riêng. Không có = file của 1 khách.
+   */
+  parts?: ParsedRawFile[];
+  /** Số giao dịch nội bộ Xperise đã bỏ khỏi file master */
+  internalRows?: number;
 }

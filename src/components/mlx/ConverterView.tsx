@@ -9,7 +9,7 @@ import { downloadBlob, loadExcelJS, XLSX_MIME } from '@/lib/mlx/download';
 import { findRelated, HistoryNotReadyError, saveStatement, sha256, type StatementRecord } from '@/lib/mlx/history';
 import { loadCustomers } from '@/lib/mlx/masterData';
 import { hintsFromFile, matchCustomer } from '@/lib/mlx/matching';
-import { inputToPeriod, kyLabel, periodLabel, periodToInput, periodToKy } from '@/lib/mlx/normalize';
+import { companyKey, inputToPeriod, kyLabel, periodLabel, periodToInput, periodToKy } from '@/lib/mlx/normalize';
 import { parseRawFile } from '@/lib/mlx/parseRaw';
 import type { MlxCustomer, ParsedRawFile, Period, RawRow } from '@/lib/mlx/types';
 
@@ -144,6 +144,31 @@ export default function ConverterView() {
           try {
             const buf = await file.arrayBuffer();
             const [hash, parsed] = await Promise.all([sha256(buf.slice(0)), parseRawFile(ExcelJS, file.name, buf)]);
+            // File master: thay dòng của file bằng từng công ty trong file (mỗi công ty = 1 file raw riêng)
+            if (parsed.parts) {
+              const parts = parsed.parts;
+              setItems((prev) => {
+                const at = prev.findIndex((it) => it.uid === uid);
+                const each: Item[] = parts.map((p, k) => ({
+                  uid: `${uid}#${k}`,
+                  fileName: p.fileName,
+                  status: 'ready',
+                  parsed: p,
+                  hash: `${hash}#${companyKey(p.companyFromFile)}`,
+                  customerId: matchCustomer(hintsFromFile(p), customers)?.id ?? '',
+                  period: p.periodFromFile,
+                }));
+                return at < 0 ? [...prev, ...each] : [...prev.slice(0, at), ...each, ...prev.slice(at + 1)];
+              });
+              setMessage({
+                type: parts.length ? 'ok' : 'err',
+                text: parts.length
+                  ? `File master "${file.name}": tách thành ${parts.length} công ty, ${parts.reduce((n, p) => n + p.rows.length, 0)} giao dịch` +
+                    `${parsed.internalRows ? ` · bỏ ${parsed.internalRows} giao dịch nội bộ Xperise` : ''}. Kiểm tra khách được khớp ở bảng dưới.`
+                  : `File master "${file.name}" không có giao dịch nào để lập bảng kê.`,
+              });
+              return;
+            }
             const matched = matchCustomer(hintsFromFile(parsed), customers);
             setItems((prev) =>
               prev.map((it) =>
@@ -406,10 +431,13 @@ export default function ConverterView() {
             addFiles(e.dataTransfer.files);
           }}
         >
-          <div className={s.dropTitle}>Kéo thả file raw XPAY, bảng kê CMS và bảng kê Be vào đây hoặc bấm để chọn</div>
+          <div className={s.dropTitle}>Kéo thả file raw XPAY, file master (nhiều công ty), bảng kê CMS và bảng kê Be vào đây hoặc bấm để chọn</div>
           <div className={s.note} style={{ marginTop: 4 }}>
             Hệ thống tự nhận loại file, khớp khách theo tên công ty / mã hợp đồng / MST, rồi gộp giao dịch của cùng một
             khách trong cùng một kỳ vào <b>một bảng kê</b>. Dòng 0đ và file đã xử lý trước đó được bỏ qua.
+            <br />
+            <b>File master</b> (raw XPAY có cột <b>Công ty</b>): tự tách thành từng công ty, mỗi công ty một bảng kê đã
+            format; kỳ tính theo ngày đi thực tế (26 → 25). Giao dịch nội bộ Xperise được bỏ qua.
           </div>
           <input
             ref={inputRef}
