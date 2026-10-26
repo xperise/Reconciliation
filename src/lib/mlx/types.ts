@@ -66,6 +66,6 @@ export interface ParsedRawFile {
    * xử lý như 1 file raw riêng. Không có = file của 1 khách.
    */
   parts?: ParsedRawFile[];
-  /** Số giao dịch nội bộ Xperise đã bỏ khỏi file master */
+  /** Số giao dịch có đơn vị phát sinh Cygnus đã bỏ khỏi file master */
   internalRows?: number;
 }

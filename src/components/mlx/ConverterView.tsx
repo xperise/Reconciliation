@@ -164,7 +164,7 @@ export default function ConverterView() {
                 type: parts.length ? 'ok' : 'err',
                 text: parts.length
                   ? `File master "${file.name}": tách thành ${parts.length} công ty, ${parts.reduce((n, p) => n + p.rows.length, 0)} giao dịch` +
-                    `${parsed.internalRows ? ` · bỏ ${parsed.internalRows} giao dịch nội bộ Xperise` : ''}. Kiểm tra khách được khớp ở bảng dưới.`
+                    `${parsed.internalRows ? ` · bỏ ${parsed.internalRows} giao dịch đơn vị Cygnus` : ''}. Kiểm tra khách được khớp ở bảng dưới.`
                   : `File master "${file.name}" không có giao dịch nào để lập bảng kê.`,
               });
               return;
@@ -437,7 +437,7 @@ export default function ConverterView() {
             khách trong cùng một kỳ vào <b>một bảng kê</b>. Dòng 0đ và file đã xử lý trước đó được bỏ qua.
             <br />
             <b>File master</b> (raw XPAY có cột <b>Công ty</b>): tự tách thành từng công ty, mỗi công ty một bảng kê đã
-            format; kỳ tính theo ngày đi thực tế (26 → 25). Giao dịch nội bộ Xperise được bỏ qua.
+            format; kỳ tính theo ngày đi thực tế (26 → 25). Chỉ bỏ giao dịch có đơn vị phát sinh là Cygnus.
           </div>
           <input
             ref={inputRef}

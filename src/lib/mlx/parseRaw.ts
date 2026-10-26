@@ -293,7 +293,8 @@ export async function parseRawFile(
     let noiBo = 0;
     for (const r of rows) {
       const ten = congTyOf.get(r) || '';
-      if (/xperise\s+internal/i.test(ten)) { noiBo++; continue; } // giao dịch nội bộ Xperise không lập bảng kê
+      // Chỉ bỏ giao dịch có đơn vị phát sinh là Cygnus (giao dịch khởi tạo / test); mọi công ty khác đều lập bảng kê
+      if (/cygnus/i.test(r.donViPhatSinh)) { noiBo++; continue; }
       const { code, name } = splitCodeAndName(ten || '(Không ghi công ty)');
       const k = normalizeText(name);
       const g = nhom.get(k) ?? { name, code, rows: [], zero: 0 };
