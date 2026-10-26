@@ -138,6 +138,40 @@ const wd = s => WD[new Date(s + 'T00:00:00Z').getUTCDay()];
 const dm = s => s.slice(8, 10) + '/' + s.slice(5, 7);
 const dmy = s => dm(s) + '/' + s.slice(0, 4);
 const PLAN = {}; S.plan.forEach(p => PLAN[p.d] = p);
+
+/* ---------- Lộ trình KPI 26/10 → 31/12 (bản final 26/10/2026, theo file XPAY_Lo_Trinh_Ngay_26-10_31-12) ----------
+   Điểm xuất phát: số thực tế hết 25/10. DN có thẻ, DN active, thẻ/DN tăng theo NGÀY LÀM VIỆC (T7, CN đứng yên);
+   GMV ngày làm việc tăng gg mỗi ngày, T7 = fS, CN = fU so với ngày làm việc; GMV/chuyến tăng gt mỗi ngày.
+   Tốc độ được giải để 31/12 đạt đích: 3.000 DN có thẻ = 3.000 DN active, 3 thẻ/DN, 797.680 đ/chuyến, GMV T12 = 60 tỷ. */
+const RM = (() => {
+  const ACT0 = [["2026-10-01",9469000.0,8.0,503.0,10.0,19.0,28706000.0],["2026-10-02",4274000.0,6.0,503.0,11.0,20.0,32980000.0],["2026-10-03",1100000.0,4.0,503.0,12.0,21.0,34080000.0],["2026-10-04",2200000.0,2.0,503.0,13.0,23.0,36280000.0],["2026-10-05",1988000.0,5.0,503.0,13.0,23.0,38268000.0],["2026-10-06",15768000.0,16.0,503.0,18.0,30.0,54036000.0],["2026-10-07",3149000.0,4.0,503.0,18.0,31.0,57185000.0],["2026-10-08",14612000.0,16.0,503.0,19.0,34.0,71797000.0],["2026-10-09",14771000.0,17.0,503.0,23.0,40.0,86568000.0],["2026-10-10",5770000.0,11.0,503.0,25.0,42.0,92338000.0],["2026-10-11",4274000.0,8.0,503.0,26.0,44.0,96612000.0],["2026-10-12",11499000.0,17.0,503.0,30.0,48.0,108111000.0],["2026-10-13",13085700.0,19.0,503.0,32.0,52.0,121196700.0],["2026-10-14",22064000.0,20.0,534.0,35.0,59.0,143260700.0],["2026-10-15",19141000.0,24.0,534.0,37.0,62.0,162401700.0],["2026-10-16",14872000.0,28.0,534.0,42.0,69.0,176039700.0],["2026-10-17",8933000.0,20.0,534.0,45.0,74.0,184972700.0],["2026-10-18",2904000.0,8.0,558.0,45.0,75.0,187326700.0],["2026-10-19",19762000.0,39.0,559.0,49.0,79.0,205888700.0],["2026-10-20",21106000.0,34.0,564.0,54.0,88.0,226994700.0],["2026-10-21",25330000.0,53.0,564.0,61.0,100.0,251844700.0],["2026-10-22",34342000.0,59.0,564.0,66.0,110.0,286028700.0],["2026-10-23",24670000.0,55.0,564.0,75.0,123.0,310612700.0],["2026-10-24",7164000.0,27.0,564.0,75.0,126.0,315542700.0],["2026-10-25",851000.0,4.0,564.0,75.0,126.0,315045700.0]]; // [ngày, GMV, chuyến, DN có thẻ, DN active, thẻ active 30N, GMV 30N] 1–25/10
+  const D0 = '2026-10-25', END = '2026-12-31', N = 67, B0 = 25042000, PT0 = 598946, CARD0 = 564, AC0 = 75, CPD0 = 126 / 75;
+  const T = {card: 3000, act: 3000, cpd: 3, pt: 797680, gmv: 60e9}, fS = .25, fU = .10;
+  const dAt = n => addD(D0, n), dow = d => new Date(d + 'T00:00:00Z').getUTCDay(), isWd = d => { const w = dow(d); return w !== 0 && w !== 6; };
+  const fac = d => { const w = dow(d); return w === 6 ? fS : w === 0 ? fU : 1; };
+  const WD = [0]; for (let n = 1; n <= N; n++) WD.push(WD[n - 1] + (isWd(dAt(n)) ? 1 : 0)); const WT = WD[N];
+  const solveG = (b, t, n) => Math.pow(t / b, 1 / n) - 1;
+  const decTotal = g => { let s = 0; for (let n = 37; n <= 67; n++) s += B0 * Math.pow(1 + g, n) * fac(dAt(n)); return s; };
+  let lo = 0, hi = .5; for (let i = 0; i < 80; i++) { const m = (lo + hi) / 2; decTotal(m) < T.gmv ? lo = m : hi = m; }
+  const R = {gg: (lo + hi) / 2, gc: solveG(CARD0, T.card, WT), ga: solveG(AC0, T.act, WT), gp: solveG(CPD0, T.cpd, WT), gt: solveG(PT0, T.pt, N), fS, fU, WT};
+  const rows = {}, gm = [], tr = [];
+  const hg = (315045700 - 303098700) / 5; for (let k = 0; k < 5; k++) { gm.push(hg); tr.push(hg / PT0); }
+  let prevCard = null;
+  for (const [d, gmv, trips, card, act, c30, g30] of ACT0) { gm.push(gmv); tr.push(trips);
+    rows[d] = {gmv, trips, onboard: card, newco: prevCard == null ? 0 : card - prevCard, cos30: act, cards30: c30, gmv30: g30, gpc30: g30 / act, cpd: c30 / act, pt: PT0, t30: g30 / PT0, act: 1}; prevCard = card; }
+  for (let n = 1; n <= N; n++) { const d = dAt(n), wd = WD[n];
+    const card = CARD0 * Math.pow(1 + R.gc, wd), act = Math.min(AC0 * Math.pow(1 + R.ga, wd), card), cpd = CPD0 * Math.pow(1 + R.gp, wd), pt = PT0 * Math.pow(1 + R.gt, n);
+    const gmv = B0 * Math.pow(1 + R.gg, n) * fac(d), trips = gmv / pt; gm.push(gmv); tr.push(trips);
+    let g30 = 0, t30 = 0; for (let k = gm.length - 30; k < gm.length; k++) { g30 += gm[k]; t30 += tr[k]; }
+    rows[d] = {gmv, trips, onboard: Math.round(card), newco: Math.round(card) - prevCard, cos30: Math.round(act), cards30: Math.round(act * cpd), gmv30: g30, gpc30: g30 / act, cpd, pt, t30}; prevCard = Math.round(card); }
+  return {rows, R, T, D0, END, fac, isWd};
+})();
+// thay số kế hoạch theo lộ trình mới (các chỉ số khác của kế hoạch cũ giữ nguyên)
+(() => { const byD = {}; S.plan.forEach(p => byD[p.d] = p);
+  for (const [d, r] of Object.entries(RM.rows)) { const p = byD[d] || (S.plan.push(byD[d] = {d}), byD[d]); Object.assign(p, {gmv: r.gmv, onboard: r.onboard, newco: r.newco, cos30: r.cos30, cards30: r.cards30, gmv30: r.gmv30, gpc30: r.gpc30, cpd: r.cpd, pt: r.pt, t30: r.t30, trips: r.trips}); }
+  S.plan.sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : 0);
+  S.plan.forEach(p => { PLAN[p.d] = p; });
+  Object.assign(P, {ob_tgt: RM.T.card, act_tgt: RM.T.act, c30_tgt: RM.T.act * RM.T.cpd, dec: RM.T.gmv, gpt: RM.T.pt}); })();
 const PDAYS = S.plan.map(p => p.d);
 (function(){ let m = '', acc = 0; for (const p of S.plan) { if (p.d.slice(0, 7) !== m) { m = p.d.slice(0, 7); acc = 0; } acc += p.gmv; p.mtd = acc; } })();
 
@@ -208,6 +242,7 @@ function computeActuals() {
       mtd, onboard: manualAt(d, 'onboard'), cards_issued: manualAt(d, 'cards_issued'),
       units: sp.units, init: sp.init, dact: sp.dact, ok40: sp.ok40, hasTx: d <= LASTDAY
     };
+    const py = ACT[addD(d, -1)]; ACT[d].newco = (py && py.onboard != null && ACT[d].onboard != null) ? Math.max(0, ACT[d].onboard - py.onboard) : null;
   }
 }
 
@@ -215,19 +250,20 @@ function computeActuals() {
 const PE = () => PLAN[P.end];
 const ROWS = [
   'Demand — doanh nghiệp & thẻ',
-  {k:'DN đã khởi tạo XPAY (đã giao)', def:'Lũy kế đã bàn giao XPAY', f:'n', kind:'stock', a:x=>x.onboard, p:p=>p.onboard, t:()=>P.ob_tgt},
-  {k:'DN active', def:'≥ 1 giao dịch trong 30 ngày', f:'n', kind:'stock', a:x=>x.cos30, p:p=>p.cos30, t:()=>P.act_tgt},
-  {k:'Thẻ phát hành', def:'Lũy kế thẻ XPAY đã phát hành', f:'n', kind:'stock', a:x=>x.cards_issued, p:p=>p.cards_issued, t:()=>P.k_tgt},
+  {k:'DN đã khởi tạo XPAY (đã giao)', def:'Lũy kế DN có thẻ XPAY · đích 3.000 = DN active', f:'n', kind:'stock', a:x=>x.onboard, p:p=>p.onboard, t:()=>P.ob_tgt, sp:'wd', kr:'gc'},
+  {k:'Hợp đồng ký mới trong ngày', def:'DN mới ký & giao thẻ (chỉ ngày làm việc)', f:'n', kind:'flow', a:x=>x.newco, p:p=>p.newco, t:()=>PE().newco, sp:'cnt'},
+  {k:'DN active', def:'≥ 1 giao dịch trong 30 ngày', f:'n', kind:'stock', a:x=>x.cos30, p:p=>p.cos30, t:()=>P.act_tgt, sp:'wd', kr:'ga'},
+  {k:'Thẻ phát hành', def:'Lũy kế thẻ XPAY đã phát hành', f:'n', kind:'stock', a:x=>x.cards_issued, p:p=>p.cards_issued, t:()=>P.k_tgt, sp:'wd'},
   {k:'Thẻ active trong ngày', def:'Thẻ có ≥ 1 giao dịch trong ngày', f:'n', kind:'flow', a:x=>x.cards, p:p=>p.cards, t:()=>PE().cards},
-  {k:'Thẻ active 30N', def:'Thẻ có ≥ 1 giao dịch trong 30 ngày', f:'n', kind:'stock', a:x=>x.cards30, p:p=>p.cards30, t:()=>P.c30_tgt},
-  {k:'GMV ngày', def:'Tổng tiền giao dịch XPAY trong ngày', f:'m', kind:'flow', a:x=>x.gmv, p:p=>p.gmv, t:()=>PE().gmv, zoom:1},
-  {k:'GMV lũy kế tháng', def:'Từ ngày 1 đến hôm nay · đích = tháng 12', f:'m', kind:'mtd', a:x=>x.mtd, p:p=>p.mtd, t:()=>P.dec, zoom:1},
-  {k:'GMV 30N', def:'Tổng GMV 30 ngày gần nhất', f:'m', kind:'stock', a:x=>x.gmv30, p:p=>p.gmv30, t:()=>P.dec, zoom:1},
-  {k:'(TB 30N) GMV / DN active', def:'GMV 30N ÷ DN active', f:'m', kind:'ratio', a:x=>x.gmv30/x.cos30, p:p=>p.gpc30, t:()=>P.dec/P.act_tgt},
-  {k:'(TB 30N) GMV / thẻ active', def:'GMV 30N ÷ thẻ active 30N', f:'m', kind:'ratio', a:x=>x.gmv30/x.cards30, p:p=>p.gmv30/p.cards30, t:()=>P.dec/P.c30_tgt},
-  {k:'(TB 30N) Chuyến / DN active', def:'Chuyến 30N ÷ DN active', f:'d', kind:'ratio', a:x=>x.trips30/x.cos30, p:p=>p.gmv30/P.gpt/p.cos30, t:()=>P.f_tgt*P.c_tgt},
-  {k:'(TB 30N) Chuyến / thẻ active', def:'Chuyến 30N ÷ thẻ active 30N', f:'d', kind:'ratio', a:x=>x.trips30/x.cards30, p:p=>p.gmv30/P.gpt/p.cards30, t:()=>P.f_tgt},
-  {k:'(TB 30N) GMV / chuyến', def:'GMV 30N ÷ chuyến 30N', f:'m', kind:'ratio', a:x=>x.gmv30/x.trips30, p:()=>P.gpt, t:()=>P.gpt},
+  {k:'Thẻ active 30N', def:'Thẻ có ≥ 1 giao dịch trong 30 ngày · đích 3 thẻ × 3.000 DN', f:'n', kind:'stock', a:x=>x.cards30, p:p=>p.cards30, t:()=>P.c30_tgt, sp:'wd', kr:'c30'},
+  {k:'GMV ngày', def:'Tổng tiền giao dịch XPAY trong ngày · T7 25%, CN 10% so với ngày làm việc', f:'m', kind:'flow', a:x=>x.gmv, p:p=>p.gmv, t:()=>PE().gmv, zoom:1, sp:'gmv', kr:'gg'},
+  {k:'GMV lũy kế tháng', def:'Từ ngày 1 đến hôm nay · đích = tháng 12', f:'m', kind:'mtd', a:x=>x.mtd, p:p=>p.mtd, t:()=>P.dec, zoom:1, sp:'gmv', kr:'gg'},
+  {k:'GMV 30N', def:'Tổng GMV 30 ngày gần nhất', f:'m', kind:'stock', a:x=>x.gmv30, p:p=>p.gmv30, t:()=>P.dec, zoom:1, sp:'gmv', kr:'gg'},
+  {k:'(TB 30N) GMV / DN active', def:'GMV 30N ÷ DN active', f:'m', kind:'ratio', a:x=>x.gmv30/x.cos30, p:p=>p.gpc30, t:()=>P.dec/P.act_tgt, sp:'cal'},
+  {k:'(TB 30N) GMV / thẻ active', def:'GMV 30N ÷ thẻ active 30N', f:'m', kind:'ratio', a:x=>x.gmv30/x.cards30, p:p=>p.gmv30/p.cards30, t:()=>P.dec/P.c30_tgt, sp:'cal'},
+  {k:'(TB 30N) Chuyến / DN active', def:'Chuyến 30N ÷ DN active', f:'d', kind:'ratio', a:x=>x.trips30/x.cos30, p:p=>(p.t30 || p.gmv30/P.gpt)/p.cos30, t:()=>PE().t30/P.act_tgt, sp:'cal'},
+  {k:'(TB 30N) Chuyến / thẻ active', def:'Chuyến 30N ÷ thẻ active 30N', f:'d', kind:'ratio', a:x=>x.trips30/x.cards30, p:p=>(p.t30 || p.gmv30/P.gpt)/p.cards30, t:()=>PE().t30/P.c30_tgt, sp:'cal'},
+  {k:'(TB 30N) GMV / chuyến', def:'GMV 30N ÷ chuyến 30N · đích 797.680 đ', f:'m', kind:'ratio', a:x=>x.gmv30/x.trips30, p:p=>p.pt || P.gpt, t:()=>P.gpt, sp:'cal', kr:'gt'},
   'Supply — đơn vị & tài xế',
   {k:'Đơn vị cung ứng đã triển khai', def:'Tỉnh/đơn vị ML có tài xế khởi tạo XPAY', f:'n', kind:'none', a:x=>x.units, p:null, t:()=>P.u_tgt},
   {k:'Tài xế khởi tạo XPAY', def:'Lũy kế tài xế đã khởi tạo (file độ phủ)', f:'n', kind:'none', a:x=>x.init, p:null, t:()=>P.dr_init_tgt},
@@ -238,6 +274,35 @@ const FMT = {n: n0, d: n2, m: money};
 const safe = v => (v == null || !isFinite(v)) ? null : v;
 const status = r => r == null ? 'mute' : r >= 1 ? 'stable' : r >= .9 ? 'watch' : r >= .7 ? 'high' : 'critical';
 
+/* ---------- tốc độ tăng mỗi ngày: cần để đạt đích / hiện tại / theo lộ trình ---------- */
+const isWdD = d => { const w = new Date(d + 'T00:00:00Z').getUTCDay(); return w !== 0 && w !== 6; };
+const wdBetween = (a, b) => { let n = 0; for (let x = addD(a, 1); x <= b; x = addD(x, 1)) if (isWdD(x)) n++; return n; };
+const backWd = (d, k) => { let x = d, n = 0; while (n < k) { x = addD(x, -1); if (isWdD(x)) n++; } return x; };
+/* GMV ngày làm việc gần đây (TB 5 ngày làm việc kết thúc tại d) */
+const wdLevel = d => { let s = 0, n = 0, x = d; for (let i = 0; i < 20 && n < 5; i++, x = addD(x, -1)) if (isWdD(x) && ACT[x] && ACT[x].hasTx) { s += ACT[x].gmv; n++; } return n ? s / n : null; };
+/* tốc độ GMV cần: từ mức hiện tại, tăng g mỗi ngày (T7/CN theo hệ số) để GMV tháng 12 = đích */
+function gmvNeed(d) {
+  const b = wdLevel(d); if (!b) return null; const dec0 = '2026-12-01', end = P.end;
+  let done = 0; if (d >= dec0) for (let x = dec0; x <= d; x = addD(x, 1)) done += ACT[x] ? ACT[x].gmv : 0;
+  const rest = P.dec - done; if (rest <= 0) return 0;
+  const tot = g => { let s = 0; for (let x = addD(d, 1); x <= end; x = addD(x, 1)) if (x >= dec0) s += b * Math.pow(1 + g, diffD(x, d)) * RM.fac(x); return s; };
+  if (tot(0) >= rest) return 0; let lo = 0, hi = 1; for (let i = 0; i < 70; i++) { const m = (lo + hi) / 2; tot(m) < rest ? lo = m : hi = m; } return (lo + hi) / 2;
+}
+/* GMV: mức ngày làm việc hôm nay so với 7 ngày làm việc trước, quy ra tốc độ mỗi ngày (lịch, cùng đơn vị với lộ trình) */
+const gmvNow = d => { const b7 = backWd(d, 7), a = wdLevel(d), b = wdLevel(b7), n = diffD(d, b7); return a && b && n ? Math.pow(a / b, 1 / n) - 1 : null; };
+function speedOf(r, d, c) {
+  if (!r.sp || c.t == null) return {need: null, now: null, plan: null};
+  const plan = r.kr === 'c30' ? (1 + RM.R.ga) * (1 + RM.R.gp) - 1 : r.kr ? RM.R[r.kr] : null;
+  if (r.sp === 'gmv') return {need: gmvNeed(d), now: gmvNow(d), plan, unit: 'ngày'};
+  if (r.sp === 'cnt') { const ob = ACT[d] && ACT[d].onboard, left = wdBetween(d, P.end); return {need: ob != null && left ? Math.max(0, P.ob_tgt - ob) / left : null, now: (() => { let s = 0, n = 0; for (let x = d, i = 0; i < 20 && n < 7; i++, x = addD(x, -1)) if (isWdD(x) && ACT[x] && ACT[x].newco != null) { s += ACT[x].newco; n++; } return n ? s / n : null; })(), plan: null, cnt: 1}; }
+  const tg = c.tg; if (tg == null || !(c.t > 0)) return {need: null, now: null, plan};
+  const b7 = backWd(d, 7), v7 = ACT[b7] ? safe(r.a(ACT[b7])) : null;   // 7 ngày làm việc trước
+  if (r.sp === 'wd') { const left = wdBetween(d, P.end);
+    return {need: left ? Math.pow(Math.max(tg, c.t) / c.t, 1 / left) - 1 : null, now: v7 > 0 ? Math.pow(c.t / v7, 1 / 7) - 1 : null, plan, unit: 'ngày làm việc'}; }
+  const left = diffD(P.end, d), n7 = diffD(d, b7);
+  return {need: left > 0 ? Math.pow(Math.max(tg, c.t) / c.t, 1 / left) - 1 : null, now: v7 > 0 && n7 ? Math.pow(c.t / v7, 1 / n7) - 1 : null, plan, unit: 'ngày'};
+}
+const spf = v => v == null || !isFinite(v) ? '—' : (v >= 0 ? '+' : '−') + nf(Math.abs(v) * 100, 2) + '%';
 function rowCalc(r, d) {
   const dy = addD(d, -1), dt = addD(d, 1), A = ACT[d], Ay = ACT[dy], p = PLAN[d], pt = PLAN[dt];
   const t = safe(r.a(A)), y = Ay ? safe(r.a(Ay)) : null, pl = (r.p && p) ? safe(r.p(p)) : null;
@@ -254,7 +319,9 @@ function rowCalc(r, d) {
   let a7 = null; { let sm = 0, n = 0; for (let i = 7; i >= 1; i--) { const x = addD(d, -i), Ax = ACT[x]; if (!Ax || (r.kind === 'flow' && !Ax.hasTx)) continue; const v = safe(r.a(Ax)); if (v != null) { sm += v; n++; } } a7 = n ? sm / n : null; }
   let wk = null; if (r.p) { const ws = addD(d, -((new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7)); let we = addD(ws, 6); if (we > P.end) we = P.end;
     if (r.kind === 'flow') { wk = 0; for (let x = ws; x <= we; x = addD(x, 1)) if (PLAN[x]) wk += r.p(PLAN[x]) || 0; } else if (PLAN[we]) wk = safe(r.p(PLAN[we])); }
-  return {y, a7, wk, t, pl, ratio: (pl && t != null) ? t / pl : null, def, ptm, adj, tg, gap: (tg != null && t != null) ? Math.max(0, tg - t) : null};
+  const out = {y, a7, wk, t, pl, ratio: (pl && t != null) ? t / pl : null, def, ptm, adj, tg, gap: (tg != null && t != null) ? Math.max(0, tg - t) : null};
+  out.sp = speedOf(r, d, out);
+  return out;
 }
 function tableCalc(d) {
   const out = {};
@@ -508,18 +575,23 @@ function renderOverview(d, C, A, p) {
   ];
   if (single) h += `<div class="kpis">${tiles.join('')}</div>`;
   h += `<div class="card"><div class="hd"><div><div class="eyebrow">Bảng CEO · Demand & Supply${single ? '' : ` · tại ngày ${dmy(d)}${OV.units.length ? ' · toàn bộ đơn vị' : ''}`}</div><h2 class="card-title">Hôm nay vs trung bình 7 ngày vs lộ trình · kế hoạch ngày mai đã bù thâm hụt</h2></div><div class="card-note">Tiền: ${unitLabel()} · tại ${dmy(d)} · số liệu giao dịch đến ${dmy(LASTDAY)}</div></div>
-    <div class="tw"><table><thead><tr><th class="l">Chỉ số</th><th>Hôm qua</th><th>TB 7 ngày gần nhất</th><th>Hôm nay</th><th>+/− TB 7 ngày</th><th>KH hôm nay</th><th>% đạt</th><th>Thâm hụt phải bù</th><th>KH ngày mai (gốc)</th><th>KH ngày mai (đã bù)</th><th>KH tuần</th><th>Đích T12 / 31/12</th><th>Còn thiếu</th><th class="l">Quyết định</th></tr></thead><tbody>`;
+    <div class="tw"><table><thead><tr><th class="l">Chỉ số</th><th>Hôm qua</th><th>TB 7 ngày gần nhất</th><th>Hôm nay</th><th title="Tốc độ tăng trung bình mỗi ngày trong 7 ngày làm việc gần nhất">Tốc độ hiện tại / ngày</th><th title="Tốc độ tăng đều mỗi ngày cần giữ từ hôm nay để chạm đích 31/12">Tốc độ mục tiêu / ngày</th><th>KH hôm nay</th><th>% đạt</th><th>Thâm hụt phải bù</th><th>KH ngày mai (gốc)</th><th>KH ngày mai (đã bù)</th><th>KH tuần</th><th>Đích T12 / 31/12</th><th>Còn thiếu</th><th class="l">Quyết định</th></tr></thead><tbody>`;
   for (const r of ROWS) {
-    if (typeof r === 'string') { h += `<tr class="sec"><td colspan="14">${r}</td></tr>`; continue; }
+    if (typeof r === 'string') { h += `<tr class="sec"><td colspan="15">${r}</td></tr>`; continue; }
     const c = C[r.k], F = FMT[r.f], dl = (c.t != null && c.a7 != null) ? c.t - c.a7 : null, st = status(c.ratio);
     const dec = c.pl == null ? '<span class="pill p-mute">Cần chốt đích</span>' : c.ratio >= 1 ? '<span class="pill p-stable">Giữ</span>' : dl > 0 ? '<span class="pill p-high">Action · hơn TB 7N</span>' : '<span class="pill p-critical">Action</span>';
     h += `<tr><td class="l name">${r.zoom ? `<a href="#" data-tab="zoom" style="color:var(--accent)">${r.k}</a>` : r.k}<span class="def">${r.def}</span></td>
-      <td>${F(c.y)}</td><td>${F(c.a7)}</td><td><b>${F(c.t)}</b></td><td class="${dl > 0 ? 'up' : dl < 0 ? 'dn' : ''}">${dl == null ? '—' : (dl > 0 ? '▲ ' : dl < 0 ? '▼ ' : '= ') + F(Math.abs(dl))}${dl && c.a7 ? `<span class="def">${pctCh(c.t, c.a7)}</span>` : ''}</td>
+      <td>${F(c.y)}</td><td>${F(c.a7)}</td><td><b>${F(c.t)}</b></td>
+      ${(() => { const q = c.sp || {};
+        if (q.cnt) return `<td class="${q.now != null && q.need != null ? (q.now >= q.need ? 'up' : 'dn') : ''}">${q.now == null ? '—' : nf(q.now, 1) + ' HĐ'}<span class="def">TB 7 ngày làm việc</span></td><td><b>${q.need == null ? '—' : '~' + nf(q.need, 1) + ' HĐ'}</b><span class="def">/ngày làm việc</span></td>`;
+        const ok = q.need != null && q.now != null ? q.now >= q.need : null;
+        return `<td class="${ok == null ? '' : ok ? 'up' : 'dn'}">${q.now == null ? '—' : Math.abs(q.now) < 5e-5 ? '= 0,00%' : (q.now > 0 ? '▲ ' : '▼ ') + spf(q.now).slice(1)}${q.now != null && q.need != null ? `<span class="def">${ok ? 'đủ nhanh' : 'chậm ' + nf((q.need - q.now) * 100, 2) + ' điểm %'}</span>` : ''}</td>
+          <td><b>${spf(q.need)}</b>${q.unit ? `<span class="def">/${q.unit}${q.plan != null ? ` · lộ trình ${spf(q.plan)}` : ''}</span>` : ''}</td>`; })()}
       <td>${c.pl == null ? '<span class="lbl">cần chốt</span>' : F(c.pl)}</td><td class="c-${st}"><b>${pct(c.ratio)}</b></td>
       <td>${c.def == null ? '—' : F(c.def)}</td><td>${c.ptm == null ? '—' : F(c.ptm)}</td><td class="${c.adj != null ? 'adj' : ''}">${c.adj == null ? '—' : F(c.adj)}</td>
       <td>${c.wk == null ? '—' : F(c.wk)}</td><td>${c.tg == null ? '<span class="lbl">cần chốt</span>' : F(c.tg)}</td><td>${F(c.gap)}</td><td class="l">${dec}</td></tr>`;
   }
-  h += `</tbody></table></div><div class="hint"><b>Cách bù:</b> chỉ số theo ngày (GMV, thẻ active, tài xế có giao dịch): KH ngày mai đã bù = KH gốc + thâm hụt cộng dồn từ 01/10 ÷ số ngày còn lại đến 31/12. Chỉ số lũy kế (DN, thẻ, GMV lũy kế tháng, GMV 30N): KH ngày mai đã bù = KH gốc ngày mai + khoảng hụt hôm nay so với kế hoạch ÷ số ngày còn lại. Vượt KH thì không giảm kế hoạch; chỉ số tỷ lệ giữ KH gốc.</div></div>`;
+  h += `</tbody></table></div><div class="hint"><b>Tốc độ hiện tại</b>: tăng trung bình mỗi ngày trong 7 ngày làm việc gần nhất (DN, thẻ: tính theo ngày làm việc; GMV: mức GMV ngày làm việc hôm nay so với 7 ngày làm việc trước, quy ra mỗi ngày; tỷ lệ: mỗi ngày). <b>Tốc độ mục tiêu</b>: tốc độ tăng đều mỗi ngày từ số hôm nay để chạm đích 31/12 (GMV: giữ T7 25%, CN 10% và để GMV tháng 12 đạt 60 tỷ). Xanh = đang đủ nhanh, đỏ = chậm hơn mức cần.<br><b>Cách bù:</b> chỉ số theo ngày (GMV, thẻ active, tài xế có giao dịch): KH ngày mai đã bù = KH gốc + thâm hụt cộng dồn từ 01/10 ÷ số ngày còn lại đến 31/12. Chỉ số lũy kế (DN, thẻ, GMV lũy kế tháng, GMV 30N): KH ngày mai đã bù = KH gốc ngày mai + khoảng hụt hôm nay so với kế hoạch ÷ số ngày còn lại. Vượt KH thì không giảm kế hoạch; chỉ số tỷ lệ giữ KH gốc.</div></div>`;
   // charts
   const all = PDAYS, win = CH.full ? all : all.filter(x => x <= addD(d, 14));
   const mark = win.indexOf(d);
@@ -527,7 +599,7 @@ function renderOverview(d, C, A, p) {
   const c2 = comboChart(win, win.map(x => PLAN[x].cos30), win.map(x => ACT[x] && ACT[x].hasTx ? ACT[x].cos30 : null), {log: CH.log, mark});
   const tools = `<div class="legend"><span><i style="background:var(--color-display-cyan-default)"></i>Thực tế</span><span><i style="background:var(--color-display-purple-default);height:3px"></i>Kế hoạch</span>
     <button class="btn" id="bfull">${CH.full ? 'Đến hôm nay +14 ngày' : 'Cả lộ trình đến 31/12'}</button><button class="btn" id="blog">${CH.log ? 'Thang thường' : 'Thang log'}</button></div>`;
-  h += `<div class="g2"><div class="card"><div class="hd"><div><div class="eyebrow">Lộ trình GMV ngày</div><h2 class="card-title">Kế hoạch vs thực tế</h2></div>${tools}</div>${c1}<div class="hint">Tháng 12 phải đạt 60 tỷ: đầu T12 ~${short(PLAN['2026-12-01'].gmv)}/ngày → cuối T12 ~${short(PE().gmv)}/ngày (ngày thường). T7 = 20%, CN = 2,5% thứ 6.</div></div>
+  h += `<div class="g2"><div class="card"><div class="hd"><div><div class="eyebrow">Lộ trình GMV ngày</div><h2 class="card-title">Kế hoạch vs thực tế</h2></div>${tools}</div>${c1}<div class="hint">Tháng 12 phải đạt 60 tỷ: đầu T12 ~${short(PLAN['2026-12-01'].gmv)}/ngày → cuối T12 ~${short(PE().gmv)}/ngày (ngày thường). T7 = 25%, CN = 10% ngày làm việc.</div></div>
     <div class="card"><div class="hd"><div><div class="eyebrow">Lộ trình DN active 30N</div><h2 class="card-title">Kế hoạch (plan raw) vs thực tế</h2></div><div class="card-note">đích 31/12: ${n0(P.act_tgt)} DN</div></div>${c2}</div></div>`;
   h += unitSection();   // thống kê đơn vị phát sinh: đặt dưới cùng, sau bảng CEO và lộ trình
   return h;
