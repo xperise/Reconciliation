@@ -277,6 +277,13 @@ export default function ConverterView() {
   const totalRows = sapXuat.reduce((n, g) => n + g.rows.length, 0);
   const totalAmount = sapXuat.reduce((n, g) => n + g.total, 0);
   const zeroTotal = sapXuat.reduce((n, g) => n + g.zeroRows, 0);
+  // Đối chiếu với tổng các file đã tải: phần chưa khớp khách / đã xử lý trước không nằm trong số sẽ xuất
+  const allReady = items.filter((i) => i.status === 'ready' && i.parsed);
+  const fileTotal = allReady.reduce((n, i) => n + (i.parsed?.total ?? 0), 0);
+  const chuaKhop = allReady.filter((i) => !boQua(i) && (!i.customerId || !byId.has(i.customerId)));
+  const chuaKhopTotal = chuaKhop.reduce((n, i) => n + (i.parsed?.total ?? 0), 0);
+  const daXuLy = allReady.filter((i) => boQua(i));
+  const daXuLyTotal = daXuLy.reduce((n, i) => n + (i.parsed?.total ?? 0), 0);
   const blocking = active.filter((i) => i.status !== 'ready' || !i.customerId || !byId.has(i.customerId)).length;
   const canConfirm = sapXuat.length > 0 && blocking === 0 && !busy && !checking && !historyError;
 
@@ -392,7 +399,26 @@ export default function ConverterView() {
         <div className={s.kpi}>
           <div className={s.kpiLabel}>Tổng số tiền</div>
           <div className={s.kpiNum}>{fmt.format(totalAmount)}</div>
-          <div className={s.kpiSub}>trước chiết khấu, đã gồm VAT</div>
+          <div className={s.kpiSub}>trước chiết khấu, đã gồm VAT · chỉ tính bảng kê sẽ xuất</div>
+          {fileTotal > totalAmount && (
+            <div className={s.kpiSub} style={{ marginTop: 4, lineHeight: 1.5 }}>
+              Tổng file đã tải: <b>{fmt.format(fileTotal)}</b>
+              {chuaKhopTotal > 0 && (
+                <>
+                  <br />
+                  <span style={{ color: 'var(--critical, #e83c3f)' }}>
+                    Chưa khớp khách: <b>{fmt.format(chuaKhopTotal)}</b> ({chuaKhop.length} dòng) — chọn khách để tính vào
+                  </span>
+                </>
+              )}
+              {daXuLyTotal > 0 && (
+                <>
+                  <br />
+                  Đã xử lý trước / trùng: {fmt.format(daXuLyTotal)} ({daXuLy.length} dòng, bỏ qua)
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
