@@ -321,6 +321,10 @@ function rowCalc(r, d) {
     if (r.kind === 'flow') { wk = 0; for (let x = ws; x <= we; x = addD(x, 1)) if (PLAN[x]) wk += r.p(PLAN[x]) || 0; } else if (PLAN[we]) wk = safe(r.p(PLAN[we])); }
   const out = {y, a7, wk, t, pl, ratio: (pl && t != null) ? t / pl : null, def, ptm, adj, tg, gap: (tg != null && t != null) ? Math.max(0, tg - t) : null};
   out.sp = speedOf(r, d, out);
+  // mục tiêu theo cùng phương pháp: KH hôm nay so với TB KH 7 ngày trước đó
+  if (r.p && pl != null) { let sm = 0, n = 0; for (let i = 7; i >= 1; i--) { const px = PLAN[addD(d, -i)]; const v = px ? safe(r.p(px)) : null; if (v != null) { sm += v; n++; } } out.pa7 = n ? sm / n : null; }
+  out.gr = (t != null && a7) ? t / a7 - 1 : null;
+  out.tgr = (pl != null && out.pa7) ? pl / out.pa7 - 1 : null;
   return out;
 }
 function tableCalc(d) {
@@ -575,23 +579,22 @@ function renderOverview(d, C, A, p) {
   ];
   if (single) h += `<div class="kpis">${tiles.join('')}</div>`;
   h += `<div class="card"><div class="hd"><div><div class="eyebrow">Bảng CEO · Demand & Supply${single ? '' : ` · tại ngày ${dmy(d)}${OV.units.length ? ' · toàn bộ đơn vị' : ''}`}</div><h2 class="card-title">Hôm nay vs trung bình 7 ngày vs lộ trình · kế hoạch ngày mai đã bù thâm hụt</h2></div><div class="card-note">Tiền: ${unitLabel()} · tại ${dmy(d)} · số liệu giao dịch đến ${dmy(LASTDAY)}</div></div>
-    <div class="tw"><table><thead><tr><th class="l">Chỉ số</th><th>Hôm qua</th><th>TB 7 ngày gần nhất</th><th title="Số hôm nay · dòng dưới: tăng/giảm so với TB 7 ngày gần nhất">Hôm nay<span style="display:block;font-weight:500;font-size:10.5px;text-transform:none">+/− so TB 7 ngày</span></th><th title="Tốc độ tăng trung bình mỗi ngày trong 7 ngày làm việc gần nhất">Tốc độ hiện tại / ngày</th><th title="Tốc độ tăng đều mỗi ngày cần giữ từ hôm nay để chạm đích 31/12">Tốc độ mục tiêu / ngày</th><th>KH hôm nay</th><th>% đạt</th><th>Thâm hụt phải bù</th><th>KH ngày mai (gốc)</th><th>KH ngày mai (đã bù)</th><th>KH tuần</th><th>Đích T12 / 31/12</th><th>Còn thiếu</th><th class="l">Quyết định</th></tr></thead><tbody>`;
+    <div class="tw"><table><thead><tr><th class="l">Chỉ số</th><th>Hôm qua</th><th>TB 7 ngày gần nhất</th><th>Hôm nay</th><th title="(Hôm nay − TB 7 ngày) ÷ TB 7 ngày">Tăng so TB 7 ngày</th><th title="Theo lộ trình: (KH hôm nay − TB KH 7 ngày) ÷ TB KH 7 ngày">Mục tiêu tăng so TB 7 ngày</th><th>KH hôm nay</th><th>% đạt</th><th>Thâm hụt phải bù</th><th>KH ngày mai (gốc)</th><th>KH ngày mai (đã bù)</th><th>KH tuần</th><th>Đích T12 / 31/12</th><th>Còn thiếu</th><th class="l">Quyết định</th></tr></thead><tbody>`;
   for (const r of ROWS) {
     if (typeof r === 'string') { h += `<tr class="sec"><td colspan="15">${r}</td></tr>`; continue; }
     const c = C[r.k], F = FMT[r.f], dl = (c.t != null && c.a7 != null) ? c.t - c.a7 : null, st = status(c.ratio);
     const dec = c.pl == null ? '<span class="pill p-mute">Cần chốt đích</span>' : c.ratio >= 1 ? '<span class="pill p-stable">Giữ</span>' : dl > 0 ? '<span class="pill p-high">Action · hơn TB 7N</span>' : '<span class="pill p-critical">Action</span>';
     h += `<tr><td class="l name">${r.zoom ? `<a href="#" data-tab="zoom" style="color:var(--accent)">${r.k}</a>` : r.k}<span class="def">${r.def}</span></td>
-      <td>${F(c.y)}</td><td>${F(c.a7)}</td><td><b>${F(c.t)}</b>${dl == null ? '' : `<span class="def" style="font-weight:600;color:${dl > 0 ? 'var(--stable)' : dl < 0 ? 'var(--critical)' : 'var(--ink-2)'}">${dl > 0 ? '▲ ' : dl < 0 ? '▼ ' : '= '}${F(Math.abs(dl))}${dl && c.a7 ? ' · ' + pctCh(c.t, c.a7) : ''} so TB 7N</span>`}</td>
-      ${(() => { const q = c.sp || {};
-        if (q.cnt) return `<td class="${q.now != null && q.need != null ? (q.now >= q.need ? 'up' : 'dn') : ''}">${q.now == null ? '—' : nf(q.now, 1) + ' HĐ'}<span class="def">TB 7 ngày làm việc</span></td><td><b>${q.need == null ? '—' : '~' + nf(q.need, 1) + ' HĐ'}</b><span class="def">/ngày làm việc</span></td>`;
-        const ok = q.need != null && q.now != null ? q.now >= q.need : null;
-        return `<td class="${ok == null ? '' : ok ? 'up' : 'dn'}">${q.now == null ? '—' : Math.abs(q.now) < 5e-5 ? '= 0,00%' : (q.now > 0 ? '▲ ' : '▼ ') + spf(q.now).slice(1)}${q.now != null && q.need != null ? `<span class="def">${ok ? 'đủ nhanh' : 'chậm ' + nf((q.need - q.now) * 100, 2) + ' điểm %'}</span>` : ''}</td>
-          <td><b>${spf(q.need)}</b>${q.unit ? `<span class="def">/${q.unit}${q.plan != null ? ` · lộ trình ${spf(q.plan)}` : ''}</span>` : ''}</td>`; })()}
+      <td>${F(c.y)}</td><td>${F(c.a7)}</td><td><b>${F(c.t)}</b></td>
+      ${(() => { const ok = c.gr != null && c.tgr != null ? c.gr >= c.tgr - 5e-4 : null, col = ok == null ? '' : ok ? 'up' : 'dn';
+        const pc = v => v == null || !isFinite(v) ? '—' : (v > 0 ? '+' : v < 0 ? '−' : '') + nf(Math.abs(v) * 100, 1) + '%';
+        return `<td class="${col || (dl > 0 ? 'up' : dl < 0 ? 'dn' : '')}"><b>${pc(c.gr)}</b>${dl == null ? '' : `<span class="def">${dl > 0 ? '▲ ' : dl < 0 ? '▼ ' : '= '}${F(Math.abs(dl))}${ok == null ? '' : ok ? ' · đạt mục tiêu' : ' · thấp hơn ' + nf((c.tgr - c.gr) * 100, 1) + ' điểm %'}</span>`}</td>
+          <td><b>${pc(c.tgr)}</b>${c.pa7 != null && c.pl != null ? `<span class="def">${F(c.pl)} so TB ${F(c.pa7)}</span>` : ''}</td>`; })()}
       <td>${c.pl == null ? '<span class="lbl">cần chốt</span>' : F(c.pl)}</td><td class="c-${st}"><b>${pct(c.ratio)}</b></td>
       <td>${c.def == null ? '—' : F(c.def)}</td><td>${c.ptm == null ? '—' : F(c.ptm)}</td><td class="${c.adj != null ? 'adj' : ''}">${c.adj == null ? '—' : F(c.adj)}</td>
       <td>${c.wk == null ? '—' : F(c.wk)}</td><td>${c.tg == null ? '<span class="lbl">cần chốt</span>' : F(c.tg)}</td><td>${F(c.gap)}</td><td class="l">${dec}</td></tr>`;
   }
-  h += `</tbody></table></div><div class="hint"><b>Tốc độ hiện tại</b>: tăng trung bình mỗi ngày trong 7 ngày làm việc gần nhất (DN, thẻ: tính theo ngày làm việc; GMV: mức GMV ngày làm việc hôm nay so với 7 ngày làm việc trước, quy ra mỗi ngày; tỷ lệ: mỗi ngày). <b>Tốc độ mục tiêu</b>: tốc độ tăng đều mỗi ngày từ số hôm nay để chạm đích 31/12 (GMV: giữ T7 25%, CN 10% và để GMV tháng 12 đạt 60 tỷ). Xanh = đang đủ nhanh, đỏ = chậm hơn mức cần.<br><b>Cách bù:</b> chỉ số theo ngày (GMV, thẻ active, tài xế có giao dịch): KH ngày mai đã bù = KH gốc + thâm hụt cộng dồn từ 01/10 ÷ số ngày còn lại đến 31/12. Chỉ số lũy kế (DN, thẻ, GMV lũy kế tháng, GMV 30N): KH ngày mai đã bù = KH gốc ngày mai + khoảng hụt hôm nay so với kế hoạch ÷ số ngày còn lại. Vượt KH thì không giảm kế hoạch; chỉ số tỷ lệ giữ KH gốc.</div></div>`;
+  h += `</tbody></table></div><div class="hint"><b>Tăng so TB 7 ngày</b> = (Hôm nay − TB 7 ngày gần nhất) ÷ TB 7 ngày. <b>Mục tiêu tăng so TB 7 ngày</b> = cùng công thức trên số kế hoạch của lộ trình: (KH hôm nay − TB KH 7 ngày trước) ÷ TB KH 7 ngày. Xanh = tăng bằng hoặc nhanh hơn mục tiêu, đỏ = chậm hơn.<br><b>Cách bù:</b> chỉ số theo ngày (GMV, thẻ active, tài xế có giao dịch): KH ngày mai đã bù = KH gốc + thâm hụt cộng dồn từ 01/10 ÷ số ngày còn lại đến 31/12. Chỉ số lũy kế (DN, thẻ, GMV lũy kế tháng, GMV 30N): KH ngày mai đã bù = KH gốc ngày mai + khoảng hụt hôm nay so với kế hoạch ÷ số ngày còn lại. Vượt KH thì không giảm kế hoạch; chỉ số tỷ lệ giữ KH gốc.</div></div>`;
   // charts
   const all = PDAYS, win = CH.full ? all : all.filter(x => x <= addD(d, 14));
   const mark = win.indexOf(d);
