@@ -5,6 +5,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import s from './mlx.module.css';
 import CustomerPicker from './CustomerPicker';
 import { buildStatement, outputNames } from '@/lib/mlx/buildStatement';
+import { computeDiscount, type DiscountResult } from '@/lib/mlx/discount';
+import { loadLoaiCk, makeLookup, parseLoaiCkFile, saveLoaiCk, type CkLookup, type LoaiCkRow } from '@/lib/mlx/loaiCk';
+import type { Source } from '@/lib/mlx/types';
 import { downloadBlob, loadExcelJS, XLSX_MIME } from '@/lib/mlx/download';
 import { findRelated, HistoryNotReadyError, saveStatement, sha256, type StatementRecord } from '@/lib/mlx/history';
 import { loadCustomers } from '@/lib/mlx/masterData';
@@ -40,8 +43,13 @@ type Group = {
   period: Period;
   files: Item[];
   rows: RawRow[];
+  /** Nguồn của từng dòng, cùng thứ tự với rows */
+  sources: Source[];
   total: number;
   zeroRows: number;
+  /** Chiết khấu tính trên tổng cả 3 nguồn theo loại CK của khách */
+  ck?: CkLookup;
+  disc?: DiscountResult;
   /** Khoá nhận dạng bộ file nguồn: các hash thành phần sắp xếp rồi nối lại */
   hash: string;
   kind: Kind;
@@ -73,7 +81,24 @@ export default function ConverterView() {
     loadCustomers()
       .then(setCustomers)
       .catch((e: Error) => setLoadError(e.message));
+    loadLoaiCk().then(setLoaiCk).catch((e: Error) => setLoaiCkErr(e.message));
   }, []);
+  // Bảng phân loại chiết khấu (CK 4 / CK 5 / CK đặc biệt / SGS)
+  const [loaiCk, setLoaiCk] = useState<LoaiCkRow[]>([]);
+  const [loaiCkErr, setLoaiCkErr] = useState('');
+  const [loaiCkMsg, setLoaiCkMsg] = useState('');
+  const ckOf = useMemo(() => makeLookup(loaiCk), [loaiCk]);
+  async function napLoaiCk(f: File) {
+    setLoaiCkMsg('Đang đọc file phân loại…'); setLoaiCkErr('');
+    try {
+      const ExcelJS = await loadExcelJS();
+      const rows = await parseLoaiCkFile(ExcelJS, await f.arrayBuffer());
+      setLoaiCkMsg(`Đang lưu ${rows.length} hợp đồng…`);
+      await saveLoaiCk(rows);
+      setLoaiCk(await loadLoaiCk());
+      setLoaiCkMsg(`Đã nạp ${fmt.format(rows.length)} hợp đồng từ "${f.name}".`);
+    } catch (e) { setLoaiCkMsg(''); setLoaiCkErr((e as Error).message); }
+  }
 
   const byId = useMemo(() => new Map(customers.map((c) => [c.id as string, c])), [customers]);
 
@@ -216,6 +241,7 @@ export default function ConverterView() {
           period,
           files: [],
           rows: [],
+          sources: [],
           total: 0,
           zeroRows: 0,
           hash: '',
@@ -239,6 +265,10 @@ export default function ConverterView() {
       const thuTu = (it: Item) => BAC[it.parsed?.source ?? 'XPAY'] ?? 0;
       g.files.sort((a, b) => thuTu(a) - thuTu(b));
       g.rows = g.files.flatMap((f) => f.parsed!.rows);
+      g.sources = g.files.flatMap((f) => f.parsed!.rows.map(() => f.parsed!.source));
+      // Chiết khấu trên TỔNG cả 3 nguồn theo loại CK; chưa có loại CK thì dùng % cũ trong master data
+      const cus = byId.get(g.customerId);
+      if (cus) { g.ck = ckOf(cus); g.disc = computeDiscount(g.rows.map((r) => r.soTien ?? 0), g.ck.rule, Number(cus.chiet_khau) || 0); }
       g.total = g.files.reduce((n, f) => n + f.parsed!.total, 0);
       g.zeroRows = g.files.reduce((n, f) => n + f.parsed!.zeroRows, 0);
       g.hash = g.files
@@ -260,7 +290,7 @@ export default function ConverterView() {
     }
 
     return { groups: [...map.values()], groupOfFile, trungTrongLo };
-  }, [items, byId, defaultPeriod, related]);
+  }, [items, byId, defaultPeriod, related, ckOf]);
 
   const groupByKey = useMemo(() => new Map(groups.map((g) => [g.key, g])), [groups]);
   const kindOfFile = (uid: string) => groupByKey.get(groupOfFile.get(uid) ?? '')?.kind;
@@ -285,7 +315,10 @@ export default function ConverterView() {
   const daXuLy = allReady.filter((i) => boQua(i));
   const daXuLyTotal = daXuLy.reduce((n, i) => n + (i.parsed?.total ?? 0), 0);
   const blocking = active.filter((i) => i.status !== 'ready' || !i.customerId || !byId.has(i.customerId)).length;
-  const canConfirm = sapXuat.length > 0 && blocking === 0 && !busy && !checking && !historyError;
+  const ckLa = sapXuat.filter((g) => g.ck?.rule?.kind === 'UNKNOWN');
+  const ckChua = sapXuat.filter((g) => g.ck && !g.ck.rule);
+  const ckTotal = sapXuat.reduce((n, g) => n + (g.disc?.discount ?? 0), 0);
+  const canConfirm = sapXuat.length > 0 && blocking === 0 && ckLa.length === 0 && !busy && !checking && !historyError;
 
   async function confirm() {
     if (!canConfirm) return;
@@ -299,7 +332,7 @@ export default function ConverterView() {
 
       for (const g of sapXuat) {
         const customer = byId.get(g.customerId)!;
-        const out = await buildStatement(ExcelJS, { customer, period: g.period, rows: g.rows });
+        const out = await buildStatement(ExcelJS, { customer, period: g.period, rows: g.rows, sources: g.sources, discount: g.disc });
         try {
           await saveStatement(
             {
@@ -400,6 +433,7 @@ export default function ConverterView() {
           <div className={s.kpiLabel}>Tổng số tiền</div>
           <div className={s.kpiNum}>{fmt.format(totalAmount)}</div>
           <div className={s.kpiSub}>trước chiết khấu, đã gồm VAT · chỉ tính bảng kê sẽ xuất</div>
+          {ckTotal > 0 && <div className={s.kpiSub} style={{ marginTop: 4 }}>Chiết khấu (tính trên tổng 3 nguồn): <b>{fmt.format(ckTotal)}</b>{ckChua.length ? ` · ${ckChua.length} khách chưa có loại CK, dùng % master data` : ''}</div>}
           {fileTotal > totalAmount && (
             <div className={s.kpiSub} style={{ marginTop: 4, lineHeight: 1.5 }}>
               Tổng file đã tải: <b>{fmt.format(fileTotal)}</b>
@@ -479,6 +513,32 @@ export default function ConverterView() {
         </div>
       </div>
 
+      {/* Bảng phân loại chiết khấu */}
+      <div className={s.card}>
+        <div className={s.cardHead}>
+          <div>
+            <div className={s.eyebrow}>Chiết khấu</div>
+            <h2 className={s.title}>Bảng phân loại chiết khấu</h2>
+            <div className={s.note}>
+              Chiết khấu tính trên <b>tổng giao dịch cả 3 nguồn</b> (CMS + XPAY + Be) theo loại CK của khách: CK 4, CK 5 (lũy tiến từng phần),
+              CK đặc biệt x% (phẳng), SGS (cuốc ≥ 700k CK 2%, phần còn lại 8,5%). Khách tra theo mã hợp đồng = SO_HD CMS, rồi mã khách hàng = SO_HD_CU, rồi MST.
+              Khách chưa có trong bảng dùng % chiết khấu cũ ở master data.
+            </div>
+          </div>
+          <div className={s.row}>
+            {loaiCk.length > 0 && (() => { const c: Record<string, number> = {}; loaiCk.forEach((r) => { const k = /^ck\s*[45]$/i.test(r.loai_ck) ? r.loai_ck.toUpperCase().replace(/\s+/, ' ') : /700/.test(r.loai_ck) ? 'SGS' : /biệt|biet/i.test(r.loai_ck) ? 'CK đặc biệt' : r.loai_ck || '(trống)'; c[k] = (c[k] ?? 0) + 1; });
+              return <span className={s.chip}>{fmt.format(loaiCk.length)} hợp đồng · {Object.entries(c).map(([k, n]) => `${k}: ${fmt.format(n)}`).join(' · ')}</span>; })()}
+            <label className={s.btn} style={{ cursor: 'pointer' }}>
+              Nạp file phân loại CK
+              <input type="file" accept=".xlsx" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) napLoaiCk(f); e.target.value = ''; }} />
+            </label>
+          </div>
+        </div>
+        {loaiCkMsg && <div className={s.note}>{loaiCkMsg}</div>}
+        {loaiCkErr && <div className={s.note} style={{ color: 'var(--critical, #e83c3f)' }}>{loaiCkErr}</div>}
+        {!loaiCk.length && !loaiCkErr && <div className={s.note}>Chưa có bảng phân loại. Nạp file THOP_AR02 (sheet C NGUYET: SO_HD_CU | SO_HD CMS | TEN_KH | MA_SO_THUE | loại CK).</div>}
+      </div>
+
       {/* Review */}
       <div className={s.card}>
         <div className={s.cardHead}>
@@ -492,6 +552,7 @@ export default function ConverterView() {
           <div className={s.row}>
             {checking && <span className={s.chip}>Đang kiểm tra lịch sử…</span>}
             {blocking > 0 && <span className={`${s.chip} ${s.chipWarn}`}>{blocking} file cần xử lý</span>}
+            {ckLa.length > 0 && <span className={`${s.chip} ${s.chipWarn}`}>{ckLa.length} khách có loại CK chưa hỗ trợ</span>}
             <button className={s.btn} onClick={() => setItems([])} disabled={!items.length || busy}>
               Xoá tất cả
             </button>
@@ -582,6 +643,13 @@ export default function ConverterView() {
                       <td className={s.num}>{it.parsed ? fmt.format(it.parsed.total) : '—'}</td>
                       <td className={s.muted}>
                         {customer ? outputNames(customer, period).fileName : '—'}
+                        {g?.disc && (
+                          <div className={s.note} style={{ color: g.ck?.rule?.kind === 'UNKNOWN' ? 'var(--critical, #e83c3f)' : !g.ck?.rule ? '#b45309' : undefined }}>
+                            {g.ck?.rule?.kind === 'UNKNOWN'
+                              ? `Loại CK chưa hỗ trợ: "${g.ck.rule.raw}" — cần xác nhận cách tính`
+                              : <>CK: <b>{g.disc.rule.label}</b> · {fmt.format(g.disc.discount)} trên tổng {fmt.format(g.disc.total)}{!g.ck?.rule && ` · ${g.ck?.note ?? 'chưa có trong bảng phân loại'}`}</>}
+                          </div>
+                        )}
                         {g && g.files.length > 1 && (
                           <div className={s.note}>
                             gộp {g.files.length} file · {fmt.format(g.rows.length)} dòng ·{' '}

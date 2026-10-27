@@ -1,7 +1,8 @@
 import type ExcelJS from 'exceljs';
 import { COLUMNS, ISSUER, STATEMENT_TITLE, VAT_RATE } from './config';
 import { periodLabel, periodRangeText, safeFileName, safeSheetName } from './normalize';
-import type { MlxCustomer, Period, RawRow } from './types';
+import type { MlxCustomer, Period, RawRow, Source } from './types';
+import { computeDiscount, type DiscountResult } from './discount';
 
 const FONT_TEXT = 'Arial';
 const FONT_HEAD = 'Times New Roman';
@@ -26,6 +27,10 @@ export interface BuildInput {
   customer: MlxCustomer;
   period: Period;
   rows: RawRow[];
+  /** Nguồn của từng dòng (cùng thứ tự với rows) — để chia doanh số và liệt kê cuốc ≥ 700k */
+  sources?: Source[];
+  /** Chiết khấu đã tính trên tổng 3 nguồn. Không truyền = % cố định trong master data (cách cũ) */
+  discount?: DiscountResult;
 }
 
 export function outputNames(customer: MlxCustomer, period: Period) {
@@ -43,8 +48,8 @@ export function outputNames(customer: MlxCustomer, period: Period) {
 /** Dựng workbook bảng kê cho 1 khách hàng, trả về buffer .xlsx */
 export async function buildStatement(
   ExcelJSLib: typeof ExcelJS,
-  { customer, period, rows }: BuildInput,
-): Promise<{ fileName: string; buffer: ArrayBuffer; total: number; payable: number }> {
+  { customer, period, rows, sources, discount: dsc }: BuildInput,
+): Promise<{ fileName: string; buffer: ArrayBuffer; total: number; payable: number; discount: number }> {
   const { fileName, sheetName } = outputNames(customer, period);
   const wb = new ExcelJSLib.Workbook();
   wb.creator = 'Xperise – MLX';
@@ -156,18 +161,19 @@ export async function buildStatement(
   for (let c = 1; c <= LAST_COL; c++) ws.getCell(totalRow, c).border = BORDER;
 
   // ---- Bảng tổng hợp (nhãn G:H, giá trị I:J) ----
-  const rate = (Number(customer.chiet_khau) || 0) / 100;
-  const discount = Math.round(total * rate);
+  const D = dsc ?? computeDiscount(rows.map((r) => r.soTien ?? 0), null, Number(customer.chiet_khau) || 0);
+  const discount = D.discount;
   const beforeVat = Math.round((total - discount) / (1 + VAT_RATE));
   const vat = total - discount - beforeVat;
   const payable = beforeVat + vat;
 
   const s0 = totalRow + 2;
   const I = (n: number) => `I${s0 + n}`;
-  const pctText = `${+(rate * 100).toFixed(3)}%`;
+  const flat = D.rule.kind === 'FLAT' ? (D.rule.pct || 0) / 100 : null;
+  const ckLabel = D.rule.kind === 'FLAT' ? `${String(+(D.rule.pct || 0).toFixed(3)).replace('.', ',')}%` : D.rule.kind === 'SGS' ? 'SGS – xem sheet Chiết khấu' : `${D.rule.kind === 'CK4' ? 'CK 4' : 'CK 5'} lũy tiến – xem sheet Chiết khấu`;
   const lines: [string, ExcelJS.CellValue, boolean][] = [
     ['1. Cước phí taxi', { formula: `${J}${totalRow}`, result: total }, false],
-    [`2. Số tiền chiết khấu (${pctText})`, { formula: `ROUND(${I(0)}*${rate},0)`, result: discount }, false],
+    [`2. Số tiền chiết khấu (${ckLabel})`, flat != null ? { formula: `ROUND(${I(0)}*${flat},0)`, result: discount } : discount, false],
     ['3. Số tiền chưa bao gồm VAT', { formula: `ROUND((${I(0)}-${I(1)})/${1 + VAT_RATE},0)`, result: beforeVat }, false],
     [`4. Số tiền VAT (${VAT_RATE * 100}%)`, { formula: `${I(0)}-${I(1)}-${I(2)}`, result: vat }, false],
     ['5. Phí khác (Nếu có)', 0, false],
@@ -211,6 +217,48 @@ export async function buildStatement(
     note.alignment = { horizontal: 'center' };
   });
 
+  if (D.rule.kind !== 'FLAT' || sources?.length) addDiscountSheet(wb, customer, period, rows, sources, D);
   const buffer = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
-  return { fileName, buffer, total, payable };
+  return { fileName, buffer, total, payable, discount };
 }
+
+/** Sheet "Chiết khấu": doanh số theo nguồn, bảng bậc CK 4 / CK 5 hoặc T700 · CK1 · CK2 của SGS */
+function addDiscountSheet(wb: ExcelJS.Workbook, customer: MlxCustomer, period: Period, rows: RawRow[], sources: Source[] | undefined, D: DiscountResult) {
+  const ws = wb.addWorksheet('Chiết khấu', { views: [{ showGridLines: false }] });
+  [26, 18, 16, 18, 20, 16, 18].forEach((w, i) => (ws.getColumn(i + 1).width = w));
+  const F = (bold = false, size = 11): Partial<ExcelJS.Font> => ({ name: FONT_TITLE, size, bold });
+  const put = (r: number, c: number, v: ExcelJS.CellValue, o: { bold?: boolean; money?: boolean; pct?: boolean; border?: boolean } = {}) => {
+    const cell = ws.getCell(r, c); cell.value = v; cell.font = F(!!o.bold);
+    if (o.money) { cell.numFmt = MONEY; cell.alignment = { horizontal: 'right' }; }
+    if (o.pct) { cell.numFmt = '0.0%'; cell.alignment = { horizontal: 'right' }; }
+    if (o.border) cell.border = BORDER;
+  };
+  put(1, 1, 'DIỄN GIẢI CHIẾT KHẤU', { bold: true }); ws.getCell(1, 1).font = F(true, 13);
+  put(2, 1, customer.ten_cong_ty.trim()); put(3, 1, periodRangeText(period));
+  put(4, 1, `Loại CK: ${D.rule.label}${D.rule.kind === 'SGS' && D.rule.raw ? ` (bảng phân loại: ${D.rule.raw})` : ''}`, { bold: true });
+  // doanh số theo nguồn — chiết khấu tính trên TỔNG, không tính riêng từng nguồn
+  let r = 6;
+  put(r, 1, 'Nguồn', { bold: true, border: true }); put(r, 2, 'Số cuốc', { bold: true, border: true }); put(r, 3, 'Số tiền', { bold: true, border: true }); r++;
+  const by: Record<string, [number, number]> = {};
+  rows.forEach((x, i) => { const k = sources?.[i] === 'BE' ? 'Be' : sources?.[i] ?? 'Bảng kê'; const a = (by[k] = by[k] ?? [0, 0]); a[0]++; a[1] += x.soTien ?? 0; });
+  for (const k of ['CMS', 'XPAY', 'Be', 'Bảng kê']) if (by[k]) { put(r, 1, k, { border: true }); put(r, 2, by[k][0], { border: true }); put(r, 3, by[k][1], { money: true, border: true }); r++; }
+  put(r, 1, 'Tổng doanh số (T)', { bold: true, border: true }); put(r, 2, rows.length, { bold: true, border: true }); put(r, 3, D.total, { bold: true, money: true, border: true });
+  r += 2;
+  if (D.tiers) {
+    ['Phần còn lại', 'Độ rộng bậc', '% CK', 'Tiền CK'].forEach((h, i) => put(r, i + 1, h, { bold: true, border: true })); r++;
+    for (const t of D.tiers) { put(r, 1, t.rest, { money: true, border: true }); put(r, 2, t.width == null ? 'phần còn lại' : t.width, { money: t.width != null, border: true }); put(r, 3, t.pct, { pct: true, border: true }); put(r, 4, Math.round(t.amount), { money: true, border: true }); r++; }
+    put(r, 1, 'Tiền chiết khấu', { bold: true, border: true }); put(r, 4, D.discount, { bold: true, money: true, border: true });
+  } else if (D.rule.kind === 'SGS') {
+    const L: [string, number][] = [['T700 = tổng cuốc ≥ 700.000', D.t700 ?? 0], ['CK1 = T700 × 2%', D.ck1 ?? 0], ['T − CK1', D.total - (D.ck1 ?? 0)], ['CK2 = (T − CK1) × 8,5%', D.ck2 ?? 0], ['Tiền chiết khấu = CK1 + CK2', D.discount]];
+    L.forEach(([k, v], i) => { put(r, 1, k, { bold: i === L.length - 1, border: true }); put(r, 3, i === 3 ? Math.round(v * 100) / 100 : v, { money: true, bold: i === L.length - 1, border: true }); r++; });
+    r++; put(r, 1, `Các cuốc ≥ 700.000 (${n(D.trips700?.length)} cuốc)`, { bold: true }); r++;
+    ['Nguồn', 'Ngày đi', 'Số thẻ / người đi', 'Biển số', 'Số giao dịch', 'Số tiền'].forEach((h, i) => put(r, i + 1, h, { bold: true, border: true })); r++;
+    for (const i of D.trips700 ?? []) { const x = rows[i];
+      put(r, 1, sources?.[i] === 'BE' ? 'Be' : sources?.[i] ?? '', { border: true }); put(r, 2, x.ngayDiThucTe ?? x.ngayGiaoDich ?? '', { border: true });
+      if (x.ngayDiThucTe instanceof Date || x.ngayGiaoDich instanceof Date) ws.getCell(r, 2).numFmt = 'dd/mm/yyyy';
+      put(r, 3, x.soThe || x.tenTrenThe, { border: true }); put(r, 4, x.bienSoXe, { border: true }); put(r, 5, x.soGiaoDich, { border: true }); put(r, 6, x.soTien ?? 0, { money: true, border: true }); r++; }
+  } else {
+    put(r, 1, `Tiền chiết khấu = T × ${String(+(D.rule.pct || 0).toFixed(3)).replace('.', ',')}%`, { bold: true, border: true }); put(r, 3, D.discount, { bold: true, money: true, border: true });
+  }
+}
+const n = (x: number | undefined) => new Intl.NumberFormat('vi-VN').format(x ?? 0);
