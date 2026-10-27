@@ -22,7 +22,8 @@ export function parseRule(text: string | null | undefined): Rule | null {
   const raw = String(text ?? '').trim();
   if (!raw) return null;
   const f = fold(raw);
-  if (/700\s*k|700\.?000/.test(f) && /2\s*%/.test(f) && /8[,.]5\s*%/.test(f)) return { kind: 'SGS', label: 'SGS: cuốc ≥ 700k CK 2%, phần còn lại 8,5%', raw };
+  if (f === 'sgs' || (/700\s*k|700\.?000/.test(f) && /2\s*%/.test(f) && /8[,.]5\s*%/.test(f))) return { kind: 'SGS', label: 'SGS: cuốc ≥ 700k CK 2%, phần còn lại 8,5%', raw };
+  if (/^khac\b/.test(f)) return { kind: 'UNKNOWN', label: raw.replace(/^khác\s*:?\s*/i, '') || 'Rule khác', raw };
   if (/^ck\s*4$/.test(f)) return { kind: 'CK4', label: 'CK 4 (lũy tiến)', raw };
   if (/^ck\s*5$/.test(f)) return { kind: 'CK5', label: 'CK 5 (lũy tiến)', raw };
   const m = f.match(/dac biet\s*([\d.,]+)\s*%/);

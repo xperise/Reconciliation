@@ -10,8 +10,10 @@ export interface MlxCustomer {
   ten_viet_tat: string;
   dia_chi: string;
   mst: string;
-  /** % chiết khấu, nhập dạng 0–100 (5 = 5%) */
+  /** % chiết khấu, nhập dạng 0–100 (5 = 5%) — dùng cho CK đặc biệt x%, hoặc khi chưa chọn loại CK */
   chiet_khau: number;
+  /** Loại chiết khấu: 'CK 4' | 'CK 5' | 'CK đặc biệt x%' | 'SGS' | 'Khác: …' | '' (chưa chọn) */
+  loai_ck?: string;
 }
 
 /** Kỳ bảng kê theo tháng */

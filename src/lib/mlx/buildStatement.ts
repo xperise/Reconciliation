@@ -12,6 +12,9 @@ const DATE_FMT = 'dd/mm/yyyy hh:mm:ss';
 
 const thin: Partial<ExcelJS.Border> = { style: 'thin', color: { argb: 'FF000000' } };
 const BORDER: Partial<ExcelJS.Borders> = { top: thin, left: thin, bottom: thin, right: thin };
+const p2 = (n: number) => String(n).padStart(2, '0');
+/** Ngày lưu dạng UTC → "dd/mm/yyyy" (thêm " hh:mm:ss" khi có giờ) */
+const dateText = (d: Date) => { const s = `${p2(d.getUTCDate())}/${p2(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`; const h = d.getUTCHours(), m = d.getUTCMinutes(), x = d.getUTCSeconds(); return h || m || x ? `${s} ${p2(h)}:${p2(m)}:${p2(x)}` : s; };
 
 /**
  * Bố cục (khớp template "Trang tính1", đã bỏ dòng mô tả và Số SK).
@@ -125,7 +128,12 @@ export async function buildStatement(
       cell.font = { name: FONT_TEXT, size: 11 };
       cell.border = BORDER;
       cell.alignment = { vertical: 'middle' };
-      if (v instanceof Date) {
+      if ((c.key === 'ngayDiThucTe' || c.key === 'ngayHieuLuc') && v != null && v !== '') {
+        // Ngày đi thực tế, Ngày hiệu lực: ghi dạng Text như bảng kê CMS (dd/mm/yyyy, có giờ nếu file gốc có giờ)
+        cell.value = v instanceof Date ? dateText(v) : String(v);
+        cell.numFmt = '@';
+        cell.alignment = { vertical: 'middle', horizontal: 'left' };
+      } else if (v instanceof Date) {
         cell.numFmt = DATE_FMT;
         cell.alignment = { vertical: 'middle', horizontal: 'left' };
       } else if (c.key === 'soTien') {

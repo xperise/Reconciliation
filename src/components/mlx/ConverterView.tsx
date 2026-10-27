@@ -5,8 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import s from './mlx.module.css';
 import CustomerPicker from './CustomerPicker';
 import { buildStatement, outputNames } from '@/lib/mlx/buildStatement';
-import { computeDiscount, type DiscountResult } from '@/lib/mlx/discount';
-import { loadLoaiCk, makeLookup, parseLoaiCkFile, saveLoaiCk, type CkLookup, type LoaiCkRow } from '@/lib/mlx/loaiCk';
+import { computeDiscount, parseRule, type DiscountResult } from '@/lib/mlx/discount';
+import { loadLoaiCk, makeLookup, type CkLookup, type LoaiCkRow } from '@/lib/mlx/loaiCk';
 import type { Source } from '@/lib/mlx/types';
 import { downloadBlob, loadExcelJS, XLSX_MIME } from '@/lib/mlx/download';
 import { findRelated, HistoryNotReadyError, saveStatement, sha256, type StatementRecord } from '@/lib/mlx/history';
@@ -86,19 +86,7 @@ export default function ConverterView() {
   // Bảng phân loại chiết khấu (CK 4 / CK 5 / CK đặc biệt / SGS)
   const [loaiCk, setLoaiCk] = useState<LoaiCkRow[]>([]);
   const [loaiCkErr, setLoaiCkErr] = useState('');
-  const [loaiCkMsg, setLoaiCkMsg] = useState('');
   const ckOf = useMemo(() => makeLookup(loaiCk), [loaiCk]);
-  async function napLoaiCk(f: File) {
-    setLoaiCkMsg('Đang đọc file phân loại…'); setLoaiCkErr('');
-    try {
-      const ExcelJS = await loadExcelJS();
-      const rows = await parseLoaiCkFile(ExcelJS, await f.arrayBuffer());
-      setLoaiCkMsg(`Đang lưu ${rows.length} hợp đồng…`);
-      await saveLoaiCk(rows);
-      setLoaiCk(await loadLoaiCk());
-      setLoaiCkMsg(`Đã nạp ${fmt.format(rows.length)} hợp đồng từ "${f.name}".`);
-    } catch (e) { setLoaiCkMsg(''); setLoaiCkErr((e as Error).message); }
-  }
 
   const byId = useMemo(() => new Map(customers.map((c) => [c.id as string, c])), [customers]);
 
@@ -268,7 +256,8 @@ export default function ConverterView() {
       g.sources = g.files.flatMap((f) => f.parsed!.rows.map(() => f.parsed!.source));
       // Chiết khấu trên TỔNG cả 3 nguồn theo loại CK; chưa có loại CK thì dùng % cũ trong master data
       const cus = byId.get(g.customerId);
-      if (cus) { g.ck = ckOf(cus); g.disc = computeDiscount(g.rows.map((r) => r.soTien ?? 0), g.ck.rule, Number(cus.chiet_khau) || 0); }
+      // loại CK chọn trong master data được ưu tiên; chưa chọn thì tra bảng phân loại
+      if (cus) { g.ck = cus.loai_ck?.trim() ? { rule: parseRule(cus.loai_ck), row: null, via: null } : ckOf(cus); g.disc = computeDiscount(g.rows.map((r) => r.soTien ?? 0), g.ck.rule, Number(cus.chiet_khau) || 0); }
       g.total = g.files.reduce((n, f) => n + f.parsed!.total, 0);
       g.zeroRows = g.files.reduce((n, f) => n + f.parsed!.zeroRows, 0);
       g.hash = g.files
@@ -513,32 +502,6 @@ export default function ConverterView() {
         </div>
       </div>
 
-      {/* Bảng phân loại chiết khấu */}
-      <div className={s.card}>
-        <div className={s.cardHead}>
-          <div>
-            <div className={s.eyebrow}>Chiết khấu</div>
-            <h2 className={s.title}>Bảng phân loại chiết khấu</h2>
-            <div className={s.note}>
-              Chiết khấu tính trên <b>tổng giao dịch cả 3 nguồn</b> (CMS + XPAY + Be) theo loại CK của khách: CK 4, CK 5 (lũy tiến từng phần),
-              CK đặc biệt x% (phẳng), SGS (cuốc ≥ 700k CK 2%, phần còn lại 8,5%). Khách tra theo mã hợp đồng = SO_HD CMS, rồi mã khách hàng = SO_HD_CU, rồi MST.
-              Khách chưa có trong bảng dùng % chiết khấu cũ ở master data.
-            </div>
-          </div>
-          <div className={s.row}>
-            {loaiCk.length > 0 && (() => { const c: Record<string, number> = {}; loaiCk.forEach((r) => { const k = /^ck\s*[45]$/i.test(r.loai_ck) ? r.loai_ck.toUpperCase().replace(/\s+/, ' ') : /700/.test(r.loai_ck) ? 'SGS' : /biệt|biet/i.test(r.loai_ck) ? 'CK đặc biệt' : r.loai_ck || '(trống)'; c[k] = (c[k] ?? 0) + 1; });
-              return <span className={s.chip}>{fmt.format(loaiCk.length)} hợp đồng · {Object.entries(c).map(([k, n]) => `${k}: ${fmt.format(n)}`).join(' · ')}</span>; })()}
-            <label className={s.btn} style={{ cursor: 'pointer' }}>
-              Nạp file phân loại CK
-              <input type="file" accept=".xlsx" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) napLoaiCk(f); e.target.value = ''; }} />
-            </label>
-          </div>
-        </div>
-        {loaiCkMsg && <div className={s.note}>{loaiCkMsg}</div>}
-        {loaiCkErr && <div className={s.note} style={{ color: 'var(--critical, #e83c3f)' }}>{loaiCkErr}</div>}
-        {!loaiCk.length && !loaiCkErr && <div className={s.note}>Chưa có bảng phân loại. Nạp file THOP_AR02 (sheet C NGUYET: SO_HD_CU | SO_HD CMS | TEN_KH | MA_SO_THUE | loại CK).</div>}
-      </div>
-
       {/* Review */}
       <div className={s.card}>
         <div className={s.cardHead}>
@@ -552,7 +515,7 @@ export default function ConverterView() {
           <div className={s.row}>
             {checking && <span className={s.chip}>Đang kiểm tra lịch sử…</span>}
             {blocking > 0 && <span className={`${s.chip} ${s.chipWarn}`}>{blocking} file cần xử lý</span>}
-            {ckLa.length > 0 && <span className={`${s.chip} ${s.chipWarn}`}>{ckLa.length} khách có loại CK chưa hỗ trợ</span>}
+            {ckLa.length > 0 && <span className={`${s.chip} ${s.chipWarn}`}>{ckLa.length} khách thuộc rule khác — cần define</span>}
             <button className={s.btn} onClick={() => setItems([])} disabled={!items.length || busy}>
               Xoá tất cả
             </button>
@@ -646,7 +609,7 @@ export default function ConverterView() {
                         {g?.disc && (
                           <div className={s.note} style={{ color: g.ck?.rule?.kind === 'UNKNOWN' ? 'var(--critical, #e83c3f)' : !g.ck?.rule ? '#b45309' : undefined }}>
                             {g.ck?.rule?.kind === 'UNKNOWN'
-                              ? `Loại CK chưa hỗ trợ: "${g.ck.rule.raw}" — cần xác nhận cách tính`
+                              ? `Rule khác: "${g.ck.rule.label}" — cần define, báo Vân để cập nhật hệ thống`
                               : <>CK: <b>{g.disc.rule.label}</b> · {fmt.format(g.disc.discount)} trên tổng {fmt.format(g.disc.total)}{!g.ck?.rule && ` · ${g.ck?.note ?? 'chưa có trong bảng phân loại'}`}</>}
                           </div>
                         )}

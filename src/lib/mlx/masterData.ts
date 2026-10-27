@@ -2,7 +2,10 @@ import { getSupabase } from './supabase';
 import type { MlxCustomer } from './types';
 
 const TABLE = 'mlx_customers';
-const COLS = 'id, ma_khach_hang, ma_hop_dong, ten_cong_ty, ten_viet_tat, dia_chi, mst, chiet_khau';
+const COLS = 'id, ma_khach_hang, ma_hop_dong, ten_cong_ty, ten_viet_tat, dia_chi, mst, chiet_khau, loai_ck';
+const COLS_CU = 'id, ma_khach_hang, ma_hop_dong, ten_cong_ty, ten_viet_tat, dia_chi, mst, chiet_khau';
+/** true khi chưa chạy SQL 27 (chưa có cột loai_ck) */
+export let thieuCotLoaiCk = false;
 
 /** Giới hạn trên của số khách tải về một lần. PostgREST mặc định chỉ trả 1000 dòng. */
 const MAX_ROWS = 20000;
@@ -22,11 +25,12 @@ function check(error: PgError) {
 }
 
 export async function loadCustomers(): Promise<MlxCustomer[]> {
-  const { data, error } = await getSupabase()
-    .from(TABLE)
-    .select(COLS)
-    .order('ten_cong_ty')
-    .range(0, MAX_ROWS - 1);
+  let { data, error } = await getSupabase().from(TABLE).select(COLS).order('ten_cong_ty').range(0, MAX_ROWS - 1);
+  thieuCotLoaiCk = false;
+  if (error && /loai_ck/.test(error.message)) {
+    thieuCotLoaiCk = true;
+    ({ data, error } = await getSupabase().from(TABLE).select(COLS_CU).order('ten_cong_ty').range(0, MAX_ROWS - 1));
+  }
   check(error);
   return (data ?? []).map((r: MlxCustomer) => ({
     id: r.id,
@@ -37,6 +41,7 @@ export async function loadCustomers(): Promise<MlxCustomer[]> {
     dia_chi: r.dia_chi ?? '',
     mst: r.mst ?? '',
     chiet_khau: Number(r.chiet_khau ?? 0),
+    loai_ck: r.loai_ck ?? '',
   }));
 }
 
@@ -88,7 +93,11 @@ export async function saveCustomers(rows: MlxCustomer[], originalIds: string[]):
     dia_chi: r.dia_chi.trim(),
     mst: r.mst.trim(),
     chiet_khau: Number(r.chiet_khau) || 0,
+    loai_ck: (r.loai_ck ?? '').trim(),
   }));
+  if (thieuCotLoaiCk && payload.some((p) => p.loai_ck)) {
+    throw new Error('Chưa lưu được loại chiết khấu: chạy supabase/migrations/27_mlx_loai_ck_khach.sql trong SQL Editor của Supabase rồi lưu lại.');
+  }
 
   const { data, error } = await getSupabase().rpc('mlx_luu_master_data', {
     payload,
