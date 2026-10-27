@@ -1304,8 +1304,8 @@ const SEEDACT = {}; C0.acts.forEach((a, i) => (SEEDACT[a[0]] = SEEDACT[a[0]] || 
 let CRM_ = null, CRMD_ = null;
 function crmRows(d) {
   if (CRM_ && CRMD_ === d) return CRM_;
-  const first = {}, gm = {}, lo30 = addD(d, -29);
-  S.tx.forEach(t => { if (t[0] > d) return; const f = first[t[2]]; if (!f || t[0] < f[0]) first[t[2]] = t;
+  const first = {}, gm = {}, lo30 = addD(d, -29), kd = {};
+  S.tx.forEach(t => { if (t[0] > d) return; const f = first[t[2]]; if (!f || t[0] < f[0]) first[t[2]] = t; (kd[t[2]] = kd[t[2]] || []).push(t[0]);
     const g = gm[t[2]] = gm[t[2]] || {g: 0, n: 0, g30: 0, last: ''}; g.g += t[4]; g.n++; if (t[0] >= lo30) g.g30 += t[4]; if (t[0] > g.last) g.last = t[0]; });
   const keys = new Set([...BK.rows.map(r => r[0]), ...Object.keys(first), ...Object.keys(DBX)].filter(k => !MERGE[k]));
   const val = (v, def) => v == null ? def : v;
@@ -1323,6 +1323,12 @@ function crmRows(d) {
     r.lastRes = acts[0] ? acts[0].res : '';
     r.stage = r.first ? 4 : done(r.meet) ? 3 : done(r.call) ? 2 : done(r.xp) ? 1 : 0;
     r.todo = {nocall: !done(r.call), nomeet: !done(r.meet), unused: done(r.xp) && !r.gmv30, due: isoOk(r.nx) && r.nx <= d, nopic: !r.pic && r.grp <= 3, g1: r.grp === 1, topnc: r.grp === 2 && !done(r.call), topnm: r.grp === 2 && done(r.call) && !done(r.meet), stopped: r.gmv > 0 && !r.gmv30, never: done(r.xp) && !r.gmv};
+    // mục tiêu active: PIC cam kết ngày khách có giao dịch; đạt = có giao dịch đúng / trước ngày đó
+    r.tact = isoOk(e.tact) ? e.tact : ''; r.tactSet = isoOk(e.tactSet) ? e.tactSet : ''; r.tactAch = ''; r.tactSt = '';
+    if (r.tact) { const from = r.first && r.tactSet && r.first < r.tactSet ? r.tactSet : '';   // đã từng dùng trước lúc đặt → cần giao dịch mới
+      const dts = (kd[k] || []).filter(x => x >= from).sort(); r.tactAch = dts[0] || '';
+      r.tactSt = r.tactAch ? (r.tactAch <= r.tact ? 'dat' : 'datTre') : r.tact < d ? 'tre' : diffD(r.tact, d) <= 7 ? 'sap' : 'cho'; }
+    r.todo.tactlate = r.tactSt === 'tre'; r.todo.tactsoon = r.tactSt === 'sap';
     r.sug = crmSuggest(r, d);
     return r; });
   CRMD_ = d; return CRM_;
@@ -1331,6 +1337,8 @@ function crmSuggest(r, d) {
   const s = [];
   if (r.liq) return ['Đã thanh lý: không cần xử lý'];
   if (r.todo.due) s.push(`Hẹn gọi lại đến hạn (${dmy(r.nx)}): gọi lại theo hẹn`);
+  if (r.tactSt === 'tre') s.push(`Quá ngày mục tiêu active (${dmy(r.tact)}) mà chưa có giao dịch: liên hệ khách, đặt lại ngày mục tiêu`);
+  else if (r.tactSt === 'sap') s.push(`Còn ${diffD(r.tact, d)} ngày tới mục tiêu active (${dmy(r.tact)}): nhắc khách đặt chuyến đầu`);
   if (r.grp === 1) s.push('Đã ký phụ lục, chưa có XPAY: báo Ops khởi tạo tài khoản, phát thẻ; xác nhận người nhận thẻ');
   if (!r.pic) s.push('Chưa có người phụ trách: quản lý phân công');
   if (!done(r.call)) s.push(done(r.xp) ? 'Chưa gọi: gọi xác nhận đã nhận thẻ, đã phát thẻ cho nhân viên, hướng dẫn quản trị thẻ' : 'Chưa gọi: gọi giới thiệu XPAY, mời ký phụ lục');
@@ -1477,6 +1485,9 @@ function crmDash(ALL, f, t) {
     tile('Khách được liên hệ', n0(kT), sgnCls(kT, kP), `${deltaTxt(kT, kP)} ${vsTxt}`, `trên ${n0(R.length)} khách phụ trách`),
     tile('Khởi tạo XPAY trong kỳ', n0(xT), sgnCls(xT, xP), `${deltaTxt(xT, xP)} ${vsTxt}`, `lũy kế ${n0(R.filter(r => done(r.xp)).length)} khách`),
     tile('Khách có doanh thu đầu', n0(fT), sgnCls(fT, fP), `${deltaTxt(fT, fP)} ${vsTxt}`, `lũy kế ${n0(R.filter(r => r.first).length)} khách có doanh thu`),
+    (() => { const inK = R.filter(r => r.tact && r.tact >= f && r.tact <= t), ok = inK.filter(r => r.tactSt === 'dat').length, late = inK.filter(r => r.tactSt === 'datTre').length, miss = inK.filter(r => r.tactSt === 'tre').length, wait = inK.filter(r => r.tactSt === 'sap' || r.tactSt === 'cho').length;
+      const over = R.filter(r => r.tactSt === 'tre').length, nxt = R.filter(r => r.tact && r.tact > t && !r.tactAch).length;
+      return tile('Mục tiêu active trong kỳ', inK.length ? `${n0(ok)}/${n0(inK.length)}` : '—', inK.length ? (ok / inK.length >= .8 ? 'up' : 'dn') : '', inK.length ? `đạt đúng hạn <b>${pct(ok / inK.length)}</b>${late ? ` · ${n0(late)} đạt trễ` : ''}${miss ? ` · <b style="color:var(--critical)">${n0(miss)} chưa đạt</b>` : ''}${wait ? ` · ${n0(wait)} chưa đến hạn` : ''}` : 'chưa có khách nào hẹn active trong kỳ', `${n0(over)} quá hạn chưa giao dịch · ${n0(nxt)} hẹn sau kỳ này`, inK.length ? ok / inK.length : null); })(),
     tile('Khách phụ trách', n0(R.length), '', `${n0(R.filter(r => done(r.call)).length)} đã gọi · ${n0(R.filter(r => done(r.meet)).length)} đã meeting`, `${n0(R.filter(r => r.todo.unused).length)} có thẻ chưa dùng 30 ngày`)].join('')}</div>`;
   const card = (eb, ti, note, body) => `<div class="card"><div class="hd"><div><div class="eyebrow">${eb}</div><h2 class="card-title">${ti}</h2></div><div class="card-note">${note}</div></div>${body}</div>`;
   if (!who) {
@@ -1486,9 +1497,12 @@ function crmDash(ALL, f, t) {
       const cell = (a, b) => `<b class="${sgnCls(a, b)}">${n0(a)}</b> <span class="def ${sgnCls(a, b)}">${a === b ? '= kỳ trước' : (a > b ? '▲ ' : '▼ ') + n0(Math.abs(a - b)) + ' so với kỳ trước'}</span>`;
       return `<tr class="hit" data-crwho="${p}" style="cursor:pointer"><td class="l name">${p === '_none' ? 'Chưa phân công' : p}<span class="def">${ROLE[p] || 'quản lý chia khách'}</span></td><td>${n0(my.length)}</td><td>${n0(my.filter(r => done(r.call)).length)} <span class="lbl">(${my.length ? pct(my.filter(r => done(r.call)).length / my.length) : '—'})</span></td>
         <td>${pp ? cell(c1, c0) : '—'}</td><td>${pp && tc ? n0(Math.round(tc)) : '—'}</td><td>${pp ? cell(m1, m0) : '—'}</td><td>${pp && tm ? nf(tm, 1) : '—'}</td>
-        <td>${kp == null ? '<span class="lbl">—</span>' : `<span class="pill p-${status(kp)}">${pct(kp)}</span>`}</td><td>${n0(my.filter(r => r.todo.nocall).length)}</td><td>${n0(my.filter(r => r.todo.nomeet && r.grp <= 2).length)}</td><td>${n0(my.filter(r => r.todo.unused).length)}</td><td>${n0(my.filter(r => r.first).length)}</td><td>${money(my.reduce((a, r) => a + r.gmv, 0))}</td></tr>`; });
-    h += card('KPI từng người', `Kết quả ${lab} so với kỳ trước và chỉ tiêu`, `bấm dòng để xem riêng người đó · xanh = tăng, đỏ = giảm · tiền: ${unitLabel()}`, `<div class="tw"><table><thead><tr><th class="l">Người</th><th>Khách</th><th>Đã gọi</th><th>Cuộc gọi trong kỳ</th><th>Chỉ tiêu gọi</th><th>Meeting trong kỳ</th><th>Chỉ tiêu meeting</th><th>Đạt KPI kỳ</th><th>Chưa gọi</th><th>Top 200 chưa meeting</th><th>Có thẻ chưa dùng 30N</th><th>Có doanh thu</th><th>GMV lũy kế</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>
-      <div class="hint">Cuộc gọi, meeting tính theo người thực hiện và ngày ghi trong mỗi lần cập nhật. Kỳ trước = cùng số ngày ngay trước kỳ đang xem. Chỉ tiêu theo file KPI Sales và AE: AE tính meeting/tuần, SDR (Nguyệt, Hiền) tính 75 cuộc gọi/tuần. Chỉ tiêu ngày = tuần ÷ 5 ngày làm việc, cộng dồn theo số ngày làm việc trong kỳ. Lộ trình bắt đầu W1 ${dmy(W1)}.</div>`);
+        <td>${kp == null ? '<span class="lbl">—</span>' : `<span class="pill p-${status(kp)}">${pct(kp)}</span>`}</td><td>${n0(my.filter(r => r.todo.nocall).length)}</td><td>${n0(my.filter(r => r.todo.nomeet && r.grp <= 2).length)}</td><td>${n0(my.filter(r => r.todo.unused).length)}</td><td>${n0(my.filter(r => r.first).length)}</td>
+        ${(() => { const inK = my.filter(r => r.tact && r.tact >= f && r.tact <= t), ok = inK.filter(r => r.tactSt === 'dat').length, over = my.filter(r => r.tactSt === 'tre').length, nxt = my.filter(r => r.tact && r.tact > t && !r.tactAch).length;
+          return `<td>${inK.length ? `<b>${n0(ok)}/${n0(inK.length)}</b> <span class="pill p-${status(ok / inK.length)}">${pct(ok / inK.length)}</span>` : '<span class="lbl">—</span>'}</td><td class="${over ? 'dn' : ''}">${over ? n0(over) : '0'}</td><td>${n0(nxt)}</td>`; })()}
+        <td>${money(my.reduce((a, r) => a + r.gmv, 0))}</td></tr>`; });
+    h += card('KPI từng người', `Kết quả ${lab} so với kỳ trước và chỉ tiêu`, `bấm dòng để xem riêng người đó · xanh = tăng, đỏ = giảm · tiền: ${unitLabel()}`, `<div class="tw"><table><thead><tr><th class="l">Người</th><th>Khách</th><th>Đã gọi</th><th>Cuộc gọi trong kỳ</th><th>Chỉ tiêu gọi</th><th>Meeting trong kỳ</th><th>Chỉ tiêu meeting</th><th>Đạt KPI kỳ</th><th>Chưa gọi</th><th>Top 200 chưa meeting</th><th>Có thẻ chưa dùng 30N</th><th>Có doanh thu</th><th title="Khách có ngày mục tiêu active nằm trong kỳ: đạt đúng hạn / tổng">MT active trong kỳ · đạt</th><th title="Đã qua ngày mục tiêu, chưa có giao dịch">Quá hạn MT active</th><th title="Ngày mục tiêu sau kỳ đang xem">Hẹn active sắp tới</th><th>GMV lũy kế</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>
+      <div class="hint">Cuộc gọi, meeting tính theo người thực hiện và ngày ghi trong mỗi lần cập nhật. Kỳ trước = cùng số ngày ngay trước kỳ đang xem. Chỉ tiêu theo file KPI Sales và AE: AE tính meeting/tuần, SDR (Nguyệt, Hiền) tính 75 cuộc gọi/tuần. Chỉ tiêu ngày = tuần ÷ 5 ngày làm việc, cộng dồn theo số ngày làm việc trong kỳ. Lộ trình bắt đầu W1 ${dmy(W1)}. <b>Mục tiêu active</b>: PIC nhập ở Tiến độ & các mốc; đạt = khách có giao dịch đúng hoặc trước ngày mục tiêu (khách đã từng dùng thì cần giao dịch mới kể từ ngày đặt mục tiêu).</div>`);
   }
   const G = [1, 2, 3, 4, 5], SC = ['#d9d9db', '#b9e9e2', '#5ed6c8', '#00a693', '#006e61'];
   const W = 1100, L = 330, rh = 36, bw = W - L - 90;
@@ -1533,8 +1547,10 @@ const ACTK = [
   ['topnm', 'Top 200 đã gọi, chưa meeting', 'watch', 'Đặt lịch gặp trực tiếp'],
   ['never', 'Có thẻ, chưa từng dùng', 'watch', 'Kiểm tra đã phát thẻ cho nhân viên, hướng dẫn đặt xe'],
   ['nopic', 'Chưa có người phụ trách', 'critical', 'Quản lý phân công'],
+  ['tactlate', 'Quá hạn mục tiêu active', 'critical', 'Đã qua ngày PIC cam kết mà khách chưa có giao dịch'],
+  ['tactsoon', 'Sắp đến mục tiêu active', 'high', 'Còn ≤ 7 ngày: nhắc khách đặt chuyến đầu'],
 ];
-const prioScore = r => (r.todo.due ? 1000 : 0) + (r.grp === 1 ? 800 : 0) + (r.todo.topnc ? 600 : 0) + (r.todo.stopped ? 500 : 0) + (r.todo.topnm ? 400 : 0) + (r.todo.never ? 200 : 0) + Math.min(300, (r.pot || 0) * 3) + (r.grp === 2 ? Math.max(0, 100 - (r.grank || 200) / 2) : 0) + Math.min(100, (r.ml69 || 0) / 1e6);
+const prioScore = r => (r.todo.due ? 1000 : 0) + (r.todo.tactlate ? 900 : 0) + (r.todo.tactsoon ? 450 : 0) + (r.grp === 1 ? 800 : 0) + (r.todo.topnc ? 600 : 0) + (r.todo.stopped ? 500 : 0) + (r.todo.topnm ? 400 : 0) + (r.todo.never ? 200 : 0) + Math.min(300, (r.pot || 0) * 3) + (r.grp === 2 ? Math.max(0, 100 - (r.grank || 200) / 2) : 0) + Math.min(100, (r.ml69 || 0) / 1e6);
 function crmAction(R, d) {
   const A = R.filter(r => !r.liq && r.st !== 'Tạm dừng'), pot = L => L.reduce((a, r) => a + (r.pot || 0), 0);
   const tiles = ACTK.map(([k, l, c, act]) => { const L = A.filter(r => r.todo[k]);
@@ -1645,9 +1661,14 @@ function crmDrawer(r, d) {
     ${(() => {
       const mk = f => done(r[f]) ? (isoOk(r[f]) ? dm(r[f]) : '✓') : '—', tr = S.tx.filter(t => t[2] === r.key && t.length > 9).map(mkTrip), ps = patSummary(d)[r.key], cs = CARDS[r.key] || {};
       const A = r.acts[0], sec = (k, title, sum, body) => `<details class="card crsec" data-sec="${k}" style="margin-top:10px;padding:14px 20px" ${secOn(k) ? 'open' : ''}><summary style="cursor:pointer;list-style:none;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap"><b style="font-size:14px">${secOn(k) ? '▾' : '▸'} ${title}</b><span class="lbl" style="font-size:12.5px">${sum}</span></summary><div style="margin-top:10px">${body}</div></details>`;
-      return sec('ms', 'Tiến độ & các mốc', `${stageTxt[r.stage]} · ký PL ${mk('pl')} · XPAY ${mk('xp')} · gọi ${mk('call')} · meeting ${mk('meet')} · doanh thu đầu ${r.first ? dm(r.first) : '—'}`, `
+      return sec('ms', 'Tiến độ & các mốc', `${stageTxt[r.stage]} · ký PL ${mk('pl')} · XPAY ${mk('xp')} · gọi ${mk('call')} · meeting ${mk('meet')} · doanh thu đầu ${r.first ? dm(r.first) : '—'}${r.tact ? ` · mục tiêu active ${dm(r.tact)}` : ''}`, `
       ${ms('pl', 'Ký phụ lục (vào tủ)')}${ms('xp', 'Khởi tạo XPAY')}${ms('call', 'Gọi khách', r.calls.length ? `${r.calls.length} lần · tự lấy ngày gọi gần nhất` : '')}${ms('meet', 'Meeting', r.meets.length ? `${r.meets.length} lần · tự lấy ngày gần nhất` : '')}
       <div style="display:flex;gap:8px;align-items:center;padding:6px 0"><span style="width:150px;font-weight:600">Doanh thu đầu tiên</span>${r.firstAmt != null ? `<span>${dmy(r.first)} · ${n0(r.firstAmt)} đồng <span class="lbl">(tự động từ bảng kê)</span></span>` : `<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-ms="first" ${done(r.first) ? 'checked' : ''} ${dis}> đã có</label><input type="date" data-msd="first" value="${isoOk(r.first) ? r.first : ''}" ${dis} style="${inp}"><span class="lbl">chưa thấy trong bảng kê</span>`}</div>
+      ${(() => { const T = {dat: ['stable', 'Đạt'], datTre: ['watch', 'Đạt trễ'], tre: ['critical', 'Quá hạn, chưa có giao dịch'], sap: ['high', 'Sắp đến hạn'], cho: ['mute', 'Chưa đến hạn']}[r.tactSt];
+        return `<div style="display:flex;gap:8px;align-items:center;padding:8px 0;border-top:1px dashed var(--line);margin-top:4px;flex-wrap:wrap"><span style="width:150px;font-weight:600">Mục tiêu active</span>
+          <input type="date" id="crf_tact" value="${r.tact}" ${dis} style="${inp}" title="Ngày PIC cam kết khách có giao dịch XPAY">
+          ${T ? `<span class="pill p-${T[0]}">${T[1]}</span>` : ''}
+          <span class="lbl">${r.tact ? (r.tactAch ? `giao dịch ${dmy(r.tactAch)}${r.tactSt === 'datTre' ? ` · trễ ${diffD(r.tactAch, r.tact)} ngày` : ''}` : r.tactSt === 'tre' ? `quá ${diffD(d, r.tact)} ngày` : `còn ${diffD(r.tact, d)} ngày`) + (r.tactSet ? ` · đặt ngày ${dmy(r.tactSet)}` : '') : 'ngày PIC cam kết khách có giao dịch đầu tiên (hoặc giao dịch lại)'}</span></div>`; })()}
       <div style="margin-top:10px"><button class="btn pri crf-save" ${dis}>Lưu mốc và phân công</button></div>`)
       + sec('act', 'Cuộc gọi / meeting', r.acts.length ? `${n0(r.calls.length)} lần gọi · ${n0(r.meets.length)} meeting · gần nhất ${isoOk(A.d) ? dmy(A.d) : esc(A.d)}${A.res ? ' · ' + esc(A.res) : ''}${isoOk(r.nx) ? ` · hẹn lại ${dmy(r.nx)}` : ''}` : 'chưa liên hệ · bấm để ghi lần liên hệ đầu tiên', `
 
@@ -2040,6 +2061,7 @@ function bindDrawer() {
       ms[f] = v === auto[f] ? null : v; });
     const st = $('crf_st').value, stAuto = b.tl ? 'Thanh lý' : '';
     const patch = {ms, pic: $('crf_pic').value === (c[2] || '') ? null : $('crf_pic').value, grp: $('crf_grp').value || null, st: st === stAuto ? null : st, note: $('crf_note').value.trim()};
+    const tv = $('crf_tact') ? $('crf_tact').value : r.tact; if (tv !== r.tact) { patch.tact = tv || null; patch.tactSet = tv ? TODAY : null; }
     if (['pl', 'xp'].some(f => (ms[f] == null ? null : ms[f]) !== (((DBX[k] || {}).ms || {})[f] == null ? null : DBX[k].ms[f]))) patch.mts = Date.now();
     document.querySelectorAll('.crf-save').forEach(b => b.disabled = true); msg('Đang lưu…');
     try { await crmWrite(k, patch); msg('Đã lưu.'); CR.open = null; CRM_ = null; AUTOC_ = null; const y = window.scrollY; render(); window.scrollTo(0, y); } catch (e) { fail(e); document.querySelectorAll('.crf-save').forEach(b => b.disabled = false); }
