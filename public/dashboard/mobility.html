@@ -1314,8 +1314,8 @@ function crmRows(d) {
     const calls = acts.filter(a => a.t === 'call'), meets = acts.filter(a => a.t === 'meet');
     const r = {key: k, name: cname(k), b, pl: val(ms.pl, c[0] || (b.fpl === 'Y' ? 'Y' : '')), xp: val(ms.xp, c[1] || (b.xp || f ? 'Y' : '')),
       call: val(ms.call, calls[0] ? calls[0].d : ''), meet: val(ms.meet, meets[0] ? meets[0].d : ''), first: f ? f[0] : val(ms.first, ''), firstAmt: f ? f[4] : null,
-      gmv: g.g, gmv30: g.g30, trips: g.n, lastTx: g.last, pic: e.pic != null ? e.pic : (c[2] || ''), picOld: b.pic || '', rank: c[3] || '', gname: c[4] || '', grank: c[5] || 0,
-      pot: c[6] || 0, ml69: c[7] || 0, acts, calls, meets, note: e.note || '', nx: e.nx || '', st: e.st != null ? e.st : (b.tl ? 'Thanh lý' : ''), grpM: e.grp || ''};
+      gmv: g.g, gmv30: g.g30, trips: g.n, lastTx: g.last, pic: e.pic != null ? e.pic : (c[2] || ''), picOld: b.pic || '', rank: c[3] || '', gname: e.gname || c[4] || '', grank: c[5] || 0,
+      pot: e.pot != null && e.pot !== '' ? +e.pot || 0 : c[6] || 0, isNew: !!e.created, ml69: c[7] || 0, acts, calls, meets, note: e.note || '', nx: e.nx || '', st: e.st != null ? e.st : (b.tl ? 'Thanh lý' : ''), grpM: e.grp || ''};
     r.liq = r.st === 'Thanh lý' && !f;
     r.grpA = r.liq ? 9 : done(r.pl) && !done(r.xp) ? 1 : /Top 1–100|Top 101–200/.test(r.rank) ? 2 : done(r.xp) && !r.gmv30 ? 3 : !done(r.pl) && r.ml69 > 0 ? 4 : 5;
     r.grp = r.liq ? 9 : +(r.grpM || r.grpA);
@@ -1588,6 +1588,29 @@ function crmFilterTxt() {
   for (const [k, l] of MSF) { const v = (CR.ms || {})[k]; if (v) t.push(`${l}: ${v === 'y' ? 'đã có' : 'chưa có'}`); }
   return t.join(' · ');
 }
+/* ---- Thêm khách hàng mới (lưu vào dữ liệu nhập, ai mở dashboard cũng thấy) ---- */
+function newCoModal() {
+  const F = CR.nc, inp = (id, v, ph, t = 'text') => `<input id="${id}" type="${t}" value="${esc(v || '')}" placeholder="${ph || ''}" style="width:100%;box-sizing:border-box;font:13px var(--font-family-sans-serif);padding:7px 10px;border:1px solid var(--line);border-radius:9px">`;
+  const sel = (id, v, opts) => `<select id="${id}" style="width:100%">${opts.map(([k, l]) => `<option value="${esc(k)}" ${String(v || '') === String(k) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+  return `<div id="ncmask" style="position:fixed;inset:0;background:#0007;z-index:40;display:grid;place-items:center;padding:16px">
+    <div class="card" style="width:min(640px,96vw);margin:0;max-height:92vh;overflow:auto"><div class="eyebrow">Tiến độ khách hàng</div><h2 class="card-title" style="margin:2px 0 10px">Thêm khách hàng mới</h2>
+      <div style="display:grid;grid-template-columns:150px 1fr;gap:9px 12px;align-items:center;font-size:13px">
+        <span class="lbl">Tên pháp nhân *</span>${inp('nc_name', F.name, 'Tên đầy đủ như trên hợp đồng / bảng kê')}
+        <span class="lbl">Số hợp đồng</span>${inp('nc_key', F.key, 'Để trống nếu chưa có — hệ thống cấp mã tạm')}
+        <span class="lbl">Người phụ trách</span>${sel('nc_pic', F.pic, [['', 'Chưa phân công'], ...PICS.map(p => [p, p])])}
+        <span class="lbl">Nhóm</span>${sel('nc_grp', F.grp, [['', 'Tự xếp theo mốc'], ...[1, 2, 3, 4, 5].map(g => [String(g), g + '. ' + GRP[g]])])}
+        <span class="lbl">Nhóm client</span>${inp('nc_gname', F.gname, 'Không bắt buộc')}
+        <span class="lbl">Tiềm năng (triệu/tháng)</span>${inp('nc_pot', F.pot, 'Ví dụ 15', 'number')}
+        <span class="lbl">Ký phụ lục</span>${inp('nc_pl', F.pl, '', 'date')}
+        ${CARDST === 'ok' && CANWRITE ? `<span class="lbl">MST</span>${inp('nc_mst', F.mst, '10 số')}<span class="lbl">Địa chỉ</span>${inp('nc_addr', F.addr)}<span class="lbl">Email doanh nghiệp</span>${inp('nc_mail', F.mail)}` : ''}
+        <span class="lbl">Ghi chú</span>${inp('nc_note', F.note, 'Nguồn khách, người giới thiệu…')}
+      </div>
+      ${F.dup ? `<div class="hint" style="color:var(--critical);margin-top:10px">Đã có khách trùng tên: <b>${esc(F.dup.name)}</b> (HĐ ${esc(F.dup.key)}). <a href="#" id="nc_open" style="color:var(--accent);font-weight:700">Mở hồ sơ khách này</a></div>` : ''}
+      ${F.err ? `<div class="hint" style="color:var(--critical);margin-top:10px">${esc(F.err)}</div>` : ''}
+      <div class="hint" style="margin-top:10px">Khách mới hiện ngay trong danh sách Nhập liệu. Khi bảng kê taxi có giao dịch ghi đúng tên này, giao dịch tự vào mã khách.</div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="btn" id="nc_x">Huỷ</button><button class="btn pri" id="nc_ok" ${F.busy ? 'disabled' : ''}>${F.busy ? 'Đang lưu…' : 'Lưu khách hàng'}</button></div>
+    </div></div>`;
+}
 function crmInput(ALL, d) {
   const R = crmFilter(ALL, d), q = fold(CR.q);
   const ed = DBST === 'ok' && DBW !== false;
@@ -1599,8 +1622,9 @@ function crmInput(ALL, d) {
     <input id="crq" placeholder="Tìm tên, số hợp đồng, nhóm client…" value="${esc(CR.q)}" style="font:13px var(--font-family-sans-serif);padding:6px 10px;border:1px solid var(--color-border-default);border-radius:10px;width:250px"><span class="lbl">${n0(R.length)} khách</span>
     <div style="flex-basis:100%;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="lbl">Mốc</span>${MSF.map(([k, l]) => { const v = (CR.ms || {})[k] || ''; return `<select data-crms="${k}" style="${v ? 'border-color:var(--accent);color:var(--color-action-theme-primary-active);font-weight:600' : ''}"><option value="" ${!v ? 'selected' : ''}>${l}: tất cả</option><option value="y" ${v === 'y' ? 'selected' : ''}>${l}: đã có</option><option value="n" ${v === 'n' ? 'selected' : ''}>${l}: chưa có</option></select>`; }).join('')}
       ${crmFilterTxt() ? '<a id="crclr" style="cursor:pointer;color:var(--accent);font-weight:600;font-size:12.5px">Xoá mọi bộ lọc</a>' : ''}</div>
-    <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="crxls" title="Xuất đúng danh sách đang lọc: mỗi pháp nhân 1 dòng (PIC, nhóm, mốc tiến độ, doanh thu, pattern, gợi ý) + sheet lịch sử liên hệ">Xuất Excel ${crmFilterTxt() ? `(${n0(R.length)} khách đang lọc)` : 'khách hàng'}</button><button class="btn" id="crpict" title="Sheet PIC; Quản trị / Kế toán có thêm sheet thông tin doanh nghiệp và thẻ XPAY">Tải template cập nhật</button>${ed && CANWRITE ? `<label class="btn pri" style="cursor:pointer" title="Upload template đã điền: PIC, thông tin doanh nghiệp, thẻ XPAY">Upload file cập nhật<input type="file" id="crpicf" accept=".xlsx,.xls" hidden></label>` : ''}</span></div></div>` + picPanel();
-  const row = r => `<tr class="hit" data-cropen="${esc(r.key)}" style="cursor:pointer"><td class="l name" style="min-width:240px;padding-left:34px;color:var(--accent)">${esc(r.name)}<span class="def">HĐ ${esc(r.key)}${r.gname ? ' · ' + esc(r.gname) + (r.grank ? ' #' + r.grank : '') : ''}</span></td><td class="l">${r.pic ? esc(r.pic) : '<b style="color:var(--critical)">Chưa phân công</b>'}</td>
+    <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">${ed ? '<button class="btn pri" id="crnew" title="Thêm khách chưa có trong sổ khách / bảng kê">+ Thêm khách hàng</button>' : ''}<button class="btn" id="crxls" title="Xuất đúng danh sách đang lọc: mỗi pháp nhân 1 dòng (PIC, nhóm, mốc tiến độ, doanh thu, pattern, gợi ý) + sheet lịch sử liên hệ">Xuất Excel ${crmFilterTxt() ? `(${n0(R.length)} khách đang lọc)` : 'khách hàng'}</button><button class="btn" id="crpict" title="Sheet PIC; Quản trị / Kế toán có thêm sheet thông tin doanh nghiệp và thẻ XPAY">Tải template cập nhật</button>${ed && CANWRITE ? `<label class="btn pri" style="cursor:pointer" title="Upload template đã điền: PIC, thông tin doanh nghiệp, thẻ XPAY">Upload file cập nhật<input type="file" id="crpicf" accept=".xlsx,.xls" hidden></label>` : ''}</span></div></div>` + picPanel();
+  if (CR.nc) h += newCoModal();
+  const row = r => `<tr class="hit" data-cropen="${esc(r.key)}" style="cursor:pointer"><td class="l name" style="min-width:240px;padding-left:34px;color:var(--accent)">${esc(r.name)}${r.isNew ? ' <span class="pill p-stable" style="font-size:10.5px">mới thêm</span>' : ''}<span class="def">HĐ ${esc(r.key)}${r.gname ? ' · ' + esc(r.gname) + (r.grank ? ' #' + r.grank : '') : ''}</span></td><td class="l">${r.pic ? esc(r.pic) : '<b style="color:var(--critical)">Chưa phân công</b>'}</td>
     ${['pl', 'xp', 'call', 'meet'].map(f => `<td class="l">${done(r[f]) ? `<span class="c-stable">✓</span> ${isoOk(r[f]) ? dm(r[f]) : ''}${f === 'call' && r.calls.length > 1 ? `<span class="def">${r.calls.length} lần</span>` : ''}` : '<span class="lbl">—</span>'}</td>`).join('')}
     <td class="l">${r.first ? dmy(r.first) : '<span class="lbl">chưa</span>'}</td><td>${r.gmv ? money(r.gmv) : '—'}<span class="def">${r.gmv30 ? '30N ' + nf(r.gmv30 / UNIT.div, UNIT.dec) : r.gmv ? 'ngừng 30N' : ''}</span></td><td class="l" style="white-space:normal;min-width:170px;font-size:12px">${PS[r.key] ? `${esc(PS[r.key].route)} <span class="lbl">(${PS[r.key].rn}/${PS[r.key].n} chuyến)</span><span class="def">${esc(PS[r.key].p)} · ${PS[r.key].band}${PS[r.key].short ? ' · <b style="color:var(--critical)">thiếu xe</b>' : ''}</span>` : (((S.cs || {})[r.key] || {}).custom || []).length ? '<span class="pill p-mute">CS đã khai báo</span>' : '<span class="lbl">—</span>'}</td>
     <td class="l" style="white-space:normal;max-width:160px">${r.lastRes ? esc(r.lastRes) : '<span class="lbl">—</span>'}${r.st ? `<span class="def" style="color:var(--critical)">${esc(r.st)}</span>` : ''}</td><td class="l" style="white-space:normal;min-width:220px;font-size:12px">${esc(r.sug[0])}</td></tr>`;
@@ -2010,6 +2034,30 @@ function bindJourney() {
   document.querySelectorAll('[data-crms]').forEach(sl => sl.onchange = () => keep(() => { CR.ms = Object.assign({}, CR.ms || {}, {[sl.dataset.crms]: sl.value}); }));
   if ($('crclr')) $('crclr').onclick = () => keep(() => { CR.ms = {}; CR.grp = ''; CR.todo = ''; CR.res = ''; CR.q = ''; });
   if ($('crxls')) $('crxls').onclick = crmExport;
+  if ($('crnew')) $('crnew').onclick = () => keep(() => { CR.nc = {name: CR.q || ''}; });
+  if ($('ncmask')) {
+    const rd = () => Object.assign(CR.nc, {name: $('nc_name').value.trim(), key: $('nc_key').value.trim(), pic: $('nc_pic').value, grp: $('nc_grp').value, gname: $('nc_gname').value.trim(), pot: $('nc_pot').value, pl: $('nc_pl').value, note: $('nc_note').value.trim(),
+      mst: $('nc_mst') ? $('nc_mst').value.replace(/\s/g, '') : '', addr: $('nc_addr') ? $('nc_addr').value.trim() : '', mail: $('nc_mail') ? $('nc_mail').value.trim() : ''});
+    $('ncmask').onclick = e => { if (e.target.id === 'ncmask') keep(() => { CR.nc = null; }); };
+    $('nc_x').onclick = () => keep(() => { CR.nc = null; });
+    if ($('nc_open')) $('nc_open').onclick = e => { e.preventDefault(); const k = CR.nc.dup.key; keep(() => { CR.nc = null; CR.open = k; CR.ptab = 'input'; }); };
+    $('nc_ok').onclick = async () => { const F = rd(); F.err = ''; F.dup = null;
+      if (!F.name) { F.err = 'Cần nhập tên pháp nhân.'; return keep(() => {}); }
+      const all = crmRows(CR.day), cn = canon(F.name), dup = all.find(r => canon(r.name) === cn);
+      if (dup) { F.dup = {key: dup.key, name: dup.name}; return keep(() => {}); }
+      let k = F.key.replace(/\s+/g, '');
+      if (k && (all.some(r => r.key === k) || BOOK[k] || MERGE[k])) { F.err = `Số hợp đồng ${k} đã có trong danh sách.`; return keep(() => {}); }
+      if (!k) { k = 'MOI-' + TODAY.slice(2).replace(/-/g, '') + '-' + Math.random().toString(36).slice(2, 5).toUpperCase(); }
+      if (F.pot && !(+F.pot >= 0)) { F.err = 'Tiềm năng phải là số.'; return keep(() => {}); }
+      F.busy = true; keep(() => {});
+      const patch = {name: F.name, created: TODAY, pic: F.pic || null, grp: F.grp || null, gname: F.gname || null, pot: F.pot === '' ? null : +F.pot, note: F.note || null, ...(F.pl ? {ms: {pl: F.pl}} : {})};
+      try {
+        await crmWrite(k, patch);
+        DBX[k] = Object.assign({}, DBX[k] || {}, JSON.parse(JSON.stringify(patch))); NAMEOVR[k] = F.name;
+        if (CARDST === 'ok' && CANWRITE && (F.mst || F.addr || F.mail)) { try { const c = await claude.use('cards'); await c.save({companies: [{key: k, mst: F.mst || null, address: F.addr || null, email: F.mail || null}], cards: [], deletes: [], dry: false}); await cardsLoad(); } catch (e) { /* thông tin DN sửa sau trong hồ sơ */ } }
+        CRM_ = null; AUTOC_ = null; keep(() => { CR.nc = null; CR.open = k; CR.ptab = 'input'; });
+      } catch (e) { F.busy = false; F.err = 'Chưa lưu được: ' + ((e && (e.message || e.code)) || e); keep(() => {}); } };
+  }
   if ($('crpict')) $('crpict').onclick = picTemplate;
   if ($('crpicf')) $('crpicf').onchange = async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return;
     try { CR.picImp = await updParse(f); } catch (er) { CR.picImp = {file: f.name, pic: null, srv: null, errors: [er.message || String(er)]}; }
