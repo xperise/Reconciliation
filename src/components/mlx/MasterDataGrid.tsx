@@ -75,6 +75,9 @@ export default function MasterDataGrid() {
   const [search, setSearch] = useState('');
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [tableMissing, setTableMissing] = useState(false);
+  const [fCk, setFCk] = useState<'' | 'NONE' | CkKind>('');
+  const [sortCk, setSortCk] = useState<0 | 1 | -1>(0);
+  const [upMsg, setUpMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   // Bảng phân loại chiết khấu (file THOP_AR02 "C NGUYET")
   const [loaiCk, setLoaiCk] = useState<LoaiCkRow[]>([]);
   const [ckErr, setCkErr] = useState('');
@@ -234,9 +237,59 @@ export default function MasterDataGrid() {
   }
 
   const q = companyKey(search);
+  const ORD: Record<CkKind, number> = { '': 0, CK4: 1, CK5: 2, DB: 3, SGS: 4, KHAC: 5 };
   const visible = rows
-    .map((r, i) => ({ r, i }))
-    .filter(({ r }) => !q || FIELDS.some((f) => companyKey(r[f.key]).includes(q)));
+    .map((r, i) => ({ r, i, ck: ckOf(r.chiet_khau) }))
+    .filter(({ r }) => !q || FIELDS.some((f) => companyKey(r[f.key]).includes(q)))
+    .filter(({ r, ck }) => !fCk || (fCk === 'NONE' ? !isBlank(r) && !ck.kind : ck.kind === fCk))
+    .sort((a, b) => !sortCk ? a.i - b.i : sortCk * (ORD[a.ck.kind] - ORD[b.ck.kind] || (a.ck.kind === 'DB' ? (parsePct(a.ck.x) || 0) - (parsePct(b.ck.x) || 0) : 0)) || a.i - b.i);
+  const demLoai = (k: CkKind | 'NONE') => rows.filter((r) => !isBlank(r) && (k === 'NONE' ? !ckOf(r.chiet_khau).kind : ckOf(r.chiet_khau).kind === k)).length;
+
+  /* ---- Template & upload master data (cùng cột với bảng) ---- */
+  const HEAD = FIELDS.map((f) => f.label.replace(' *', ''));
+  async function taiTemplate() {
+    const ExcelJS = await loadExcelJS(); const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet('Master data');
+    ws.addRow(HEAD); ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }; ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0D6E63' } };
+    [16, 16, 18, 48, 56, 16, 22].forEach((w, i) => (ws.getColumn(i + 1).width = w));
+    [1, 2, 6].forEach((c) => (ws.getColumn(c).numFmt = '@'));
+    rows.filter((r) => !isBlank(r)).forEach((r) => ws.addRow(FIELDS.map((f) => r[f.key])));
+    const hd = wb.addWorksheet('Huong dan');
+    [['Cột', 'Cách nhập'], ['Tên công ty', 'Bắt buộc. Dòng có tên trùng (không phân biệt hoa/thường) hoặc cùng Mã hợp đồng sẽ được cập nhật, còn lại thêm mới.'],
+     ['Chiết khấu', 'CK 4 · CK 5 · CK đặc biệt 7% (hoặc chỉ ghi 7) · SGS · Khác: <mô tả cách tính> · để trống = chưa chọn'],
+     ['Ô để trống', 'Giữ nguyên giá trị đang có trên hệ thống'], ['Mã hợp đồng, MST', 'Định dạng Text để không mất số 0 đầu']].forEach((x) => hd.addRow(x));
+    hd.getColumn(1).width = 20; hd.getColumn(2).width = 110; hd.getRow(1).font = { bold: true };
+    const buf = await wb.xlsx.writeBuffer(); const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })); a.download = `Master_data_MLX_${new Date().toISOString().slice(0, 10)}.xlsx`; a.click();
+  }
+  async function uploadMaster(file: File) {
+    setUpMsg(null);
+    try {
+      const ExcelJS = await loadExcelJS(); const wb = new ExcelJS.Workbook(); await wb.xlsx.load(await file.arrayBuffer());
+      const ws = wb.worksheets.find((w) => /master/i.test(w.name)) ?? wb.worksheets[0];
+      const fold = (x: string) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9%]+/g, ' ').trim();
+      const txt = (v: unknown) => { if (v == null) return ''; if (typeof v === 'object' && v && 'text' in (v as object)) return String((v as { text: unknown }).text ?? '').trim(); if (typeof v === 'object' && v && 'result' in (v as object)) return String((v as { result: unknown }).result ?? '').trim(); return String(v).trim(); };
+      let hr = 0; const col: Partial<Record<Field, number>> = {};
+      for (let r = 1; r <= Math.min(10, ws.rowCount) && !hr; r++) { const m: Partial<Record<Field, number>> = {};
+        ws.getRow(r).eachCell((c, ci) => { const h = fold(txt(c.value)); const f = FIELDS.find((x) => fold(x.label.replace(' *', '')) === h || (x.key === 'chiet_khau' && /chiet khau/.test(h))); if (f && !m[f.key]) m[f.key] = ci; });
+        if (m.ten_cong_ty) { hr = r; Object.assign(col, m); } }
+      if (!hr) throw new Error('Không thấy cột "Tên công ty". Hãy dùng file tải từ nút "Tải template".');
+      const next = rows.filter((r) => !isBlank(r)).map((r) => ({ ...r }));
+      const byHd = new Map(next.filter((r) => r.ma_hop_dong.trim()).map((r) => [r.ma_hop_dong.trim(), r])), byTen = new Map(next.map((r) => [r.ten_cong_ty.trim().toLowerCase(), r]));
+      let sua = 0, them = 0, bo = 0;
+      for (let r = hr + 1; r <= ws.rowCount; r++) {
+        const row = ws.getRow(r), v: Partial<Record<Field, string>> = {};
+        (Object.keys(col) as Field[]).forEach((k) => (v[k] = txt(row.getCell(col[k]!).value)));
+        if (!Object.values(v).some(Boolean)) continue;
+        if (v.chiet_khau !== undefined && v.chiet_khau !== '') { const c = v.chiet_khau; v.chiet_khau = /^\d+([.,]\d+)?\s*%?$/.test(c) && parsePct(c) > 0 ? `CK đặc biệt ${c.replace('%', '').trim()}%` : ruleToText(parseRule(c)) || ''; }
+        const ten = (v.ten_cong_ty || '').toLowerCase(), cur = (v.ma_hop_dong && byHd.get(v.ma_hop_dong)) || (ten && byTen.get(ten));
+        if (cur) { let ch = false; (Object.keys(v) as Field[]).forEach((k) => { if (v[k] && v[k] !== cur[k]) { (cur as Record<Field, string>)[k] = v[k]!; ch = true; } }); if (ch) sua++; }
+        else if (v.ten_cong_ty) { const nr = { ...emptyRow(), ...v } as GridRow; next.push(nr); byTen.set(ten, nr); if (nr.ma_hop_dong) byHd.set(nr.ma_hop_dong, nr); them++; }
+        else bo++;
+      }
+      setRows(next.length ? next : [emptyRow()]);
+      setUpMsg({ type: 'ok', text: `Đã đọc "${file.name}": cập nhật ${sua} khách, thêm ${them} khách${bo ? `, bỏ qua ${bo} dòng thiếu tên công ty` : ''}. Kiểm tra rồi bấm Lưu thay đổi.` });
+    } catch (e) { setUpMsg({ type: 'err', text: (e as Error).message }); }
+  }
 
   const nChua = rows.filter((r) => !isBlank(r) && !r.chiet_khau.trim()).length;
   const nKhac = rows.filter((r) => ckOf(r.chiet_khau).kind === 'KHAC').length;
@@ -287,6 +340,20 @@ export default function MasterDataGrid() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
+            <select className={s.input} style={{ width: 'auto' }} value={fCk} onChange={(e) => setFCk(e.target.value as typeof fCk)} title="Lọc theo chiết khấu">
+              <option value="">Chiết khấu: tất cả</option>
+              <option value="NONE">Chưa chọn ({demLoai('NONE')})</option>
+              <option value="CK4">CK 4 ({demLoai('CK4')})</option>
+              <option value="CK5">CK 5 ({demLoai('CK5')})</option>
+              <option value="DB">CK đặc biệt ({demLoai('DB')})</option>
+              <option value="SGS">SGS ({demLoai('SGS')})</option>
+              <option value="KHAC">Rule khác ({demLoai('KHAC')})</option>
+            </select>
+            <button className={s.btn} onClick={taiTemplate} disabled={tableMissing} title="Tải file Excel cùng cột với bảng, kèm dữ liệu hiện có">Tải template</button>
+            <label className={s.btn} style={{ cursor: tableMissing ? 'default' : 'pointer' }} title="Upload file theo template: cập nhật khách có sẵn, thêm khách mới">
+              Upload file
+              <input type="file" accept=".xlsx" hidden disabled={tableMissing} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadMaster(f); e.target.value = ''; }} />
+            </label>
             <button className={s.btn} onClick={() => setRows((p) => [...p, emptyRow()])} disabled={tableMissing}>
               + Thêm dòng
             </button>
@@ -302,6 +369,17 @@ export default function MasterDataGrid() {
         {msg && (
           <div className={`${s.banner} ${msg.type === 'ok' ? s.bannerOk : s.bannerErr}`} style={{ marginBottom: 12 }}>
             {msg.text}
+          </div>
+        )}
+        {upMsg && (
+          <div className={`${s.banner} ${upMsg.type === 'ok' ? s.bannerOk : s.bannerErr}`} style={{ marginBottom: 12 }}>
+            {upMsg.text}
+          </div>
+        )}
+        {nChua > 0 && fCk !== 'NONE' && (
+          <div className={`${s.banner} ${s.bannerErr}`} style={{ marginBottom: 12, background: '#fff7e6', color: '#8a6200', borderColor: '#f3d48a' }}>
+            {nChua} khách chưa chọn chiết khấu (tô vàng bên dưới) — đang dùng % cũ hoặc tra bảng phân loại khi lập bảng kê.{' '}
+            <button className={s.iconBtn} style={{ width: 'auto', textDecoration: 'underline' }} onClick={() => setFCk('NONE')}>Chỉ xem khách chưa chọn</button>
           </div>
         )}
         {issues.list.length > 0 && (
@@ -322,16 +400,18 @@ export default function MasterDataGrid() {
                 <tr>
                   <th style={{ width: 40 }}>#</th>
                   {FIELDS.map((f) => (
-                    <th key={f.key} style={{ minWidth: f.width, textAlign: f.numeric ? 'right' : 'left' }}>
-                      {f.label}
+                    <th key={f.key} style={{ minWidth: f.width, textAlign: f.numeric ? 'right' : 'left', cursor: f.key === 'chiet_khau' ? 'pointer' : undefined }}
+                      onClick={f.key === 'chiet_khau' ? () => setSortCk((x) => (x === 0 ? 1 : x === 1 ? -1 : 0)) : undefined}
+                      title={f.key === 'chiet_khau' ? 'Bấm để sắp xếp theo chiết khấu' : undefined}>
+                      {f.label}{f.key === 'chiet_khau' ? (sortCk === 1 ? ' ▲' : sortCk === -1 ? ' ▼' : ' ⇅') : ''}
                     </th>
                   ))}
                   <th style={{ width: 40 }} />
                 </tr>
               </thead>
               <tbody>
-                {visible.map(({ r, i }) => (
-                  <tr key={r._k}>
+                {visible.map(({ r, i, ck }) => (
+                  <tr key={r._k} style={!isBlank(r) && !ck.kind ? { background: '#fff7e6', boxShadow: 'inset 3px 0 0 #e8a600' } : undefined}>
                     <td className={s.rowNo}>{i + 1}</td>
                     {FIELDS.map((f, fi) => f.key === 'chiet_khau' ? (
                       <td key={f.key} className={issues.bad.has(`${r._k}:chiet_khau`) ? s.cellInvalid : ''}>
