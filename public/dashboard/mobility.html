@@ -1565,12 +1565,31 @@ function crmAction(R, d) {
     </tbody></table></div><div class="hint">Thứ tự ưu tiên: hẹn gọi lại đến hạn → đã ký phụ lục chưa có XPAY → Top 200 chưa gọi → khách đã dùng nhưng ngừng 30 ngày → Top 200 chưa meeting → có thẻ chưa từng dùng; cùng mức thì khách tiềm năng GMV cao, hạng Top 200 cao, giao dịch Mai Linh T6–T9 lớn đứng trước. Khách "Tạm dừng" không đưa vào danh sách.</div></div>`;
 }
 let CMORE = {}, COPEN = {};
-function crmInput(ALL, d) {
+/* lọc theo mốc tiến độ: '' tất cả · 'y' đã có · 'n' chưa có */
+const MSF = [['pl', 'Ký phụ lục'], ['xp', 'Khởi tạo XPAY'], ['call', 'Gọi khách'], ['meet', 'Meeting'], ['first', 'Doanh thu đầu']];
+const msDone = (r, k) => k === 'first' ? !!r.first : done(r[k]);
+/* danh sách khách theo mọi bộ lọc đang chọn ở Nhập liệu — dùng chung cho bảng và file xuất */
+function crmFilter(ALL, d) {
   let R = crmScope(ALL);
   if (CR.grp) R = R.filter(r => String(r.grp) === CR.grp || (CR.grp.includes('|') && String(r.grp) === CR.grp.split('|')[0] && r.stage === +CR.grp.split('|')[1]));
   if (CR.todo) R = R.filter(r => r.todo[CR.todo]);
   if (CR.res) R = R.filter(r => r.acts.some(a => (a.res || 'Khác') === CR.res && a.d >= addD(d, -29)));
   const q = fold(CR.q); if (q) R = R.filter(r => fold(r.name).includes(q) || r.key.includes(q) || fold(r.gname).includes(q));
+  for (const [k] of MSF) { const v = (CR.ms || {})[k]; if (v) R = R.filter(r => msDone(r, k) === (v === 'y')); }
+  return R;
+}
+/* mô tả các bộ lọc đang bật (ghi vào file xuất) */
+function crmFilterTxt() {
+  const t = [];
+  if (CR.grp) t.push('Nhóm ' + (CR.grp.includes('|') ? GRP[CR.grp.split('|')[0]] + ' · ' + stageTxt[CR.grp.split('|')[1]] : GRP[CR.grp]));
+  if (CR.todo) t.push('Việc: ' + (Object.fromEntries(ACTK.map(([k, l]) => [k, l]))[CR.todo] || {nocall: 'Chưa gọi', nomeet: 'Chưa meeting', unused: 'Có thẻ chưa dùng 30 ngày', due: 'Hẹn gọi lại đến hạn', nopic: 'Chưa phân công'}[CR.todo] || CR.todo));
+  if (CR.res) t.push('Kết quả: ' + CR.res);
+  if (CR.q) t.push('Tìm: “' + CR.q + '”');
+  for (const [k, l] of MSF) { const v = (CR.ms || {})[k]; if (v) t.push(`${l}: ${v === 'y' ? 'đã có' : 'chưa có'}`); }
+  return t.join(' · ');
+}
+function crmInput(ALL, d) {
+  const R = crmFilter(ALL, d), q = fold(CR.q);
   const ed = DBST === 'ok' && DBW !== false;
   const TD = {'': 'Tất cả', nocall: 'Chưa gọi', nomeet: 'Chưa meeting', unused: 'Có thẻ chưa dùng 30 ngày', due: 'Hẹn gọi lại đến hạn', nopic: 'Chưa phân công'};
   const ACTL = Object.fromEntries(ACTK.map(([k, l]) => [k, l])), PS = patSummary(d);
@@ -1578,7 +1597,9 @@ function crmInput(ALL, d) {
     <span class="lbl" style="margin-left:8px">Nhóm</span><select id="crgrp"><option value="">Tất cả nhóm</option>${[1, 2, 3, 4, 5, 9].map(g => `<option value="${g}" ${CR.grp === String(g) ? 'selected' : ''}>${g === 9 ? '' : g + '. '}${GRP[g]}</option>`).join('')}${CR.grp.includes('|') ? `<option value="${CR.grp}" selected>${GRP[CR.grp.split('|')[0]]} · ${stageTxt[CR.grp.split('|')[1]]}</option>` : ''}</select>
     ${CR.res ? `<span class="pill p-mute">Kết quả: ${esc(CR.res)} <a id="crresx" style="cursor:pointer;font-weight:700">×</a></span>` : ''}${CR.todo && !(CR.todo in TD) ? `<span class="pill p-mute">Việc: ${esc(ACTL[CR.todo] || CR.todo)} <a data-crtodo="" style="cursor:pointer;font-weight:700">×</a></span>` : ''}
     <input id="crq" placeholder="Tìm tên, số hợp đồng, nhóm client…" value="${esc(CR.q)}" style="font:13px var(--font-family-sans-serif);padding:6px 10px;border:1px solid var(--color-border-default);border-radius:10px;width:250px"><span class="lbl">${n0(R.length)} khách</span>
-    <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="crxls" title="Mỗi pháp nhân 1 dòng: PIC, nhóm, mốc tiến độ, doanh thu, pattern, gợi ý + sheet lịch sử liên hệ">Xuất Excel khách hàng</button><button class="btn" id="crpict" title="Sheet PIC; Quản trị / Kế toán có thêm sheet thông tin doanh nghiệp và thẻ XPAY">Tải template cập nhật</button>${ed && CANWRITE ? `<label class="btn pri" style="cursor:pointer" title="Upload template đã điền: PIC, thông tin doanh nghiệp, thẻ XPAY">Upload file cập nhật<input type="file" id="crpicf" accept=".xlsx,.xls" hidden></label>` : ''}</span></div></div>` + picPanel();
+    <div style="flex-basis:100%;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="lbl">Mốc</span>${MSF.map(([k, l]) => { const v = (CR.ms || {})[k] || ''; return `<select data-crms="${k}" style="${v ? 'border-color:var(--accent);color:var(--color-action-theme-primary-active);font-weight:600' : ''}"><option value="" ${!v ? 'selected' : ''}>${l}: tất cả</option><option value="y" ${v === 'y' ? 'selected' : ''}>${l}: đã có</option><option value="n" ${v === 'n' ? 'selected' : ''}>${l}: chưa có</option></select>`; }).join('')}
+      ${crmFilterTxt() ? '<a id="crclr" style="cursor:pointer;color:var(--accent);font-weight:600;font-size:12.5px">Xoá mọi bộ lọc</a>' : ''}</div>
+    <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="crxls" title="Xuất đúng danh sách đang lọc: mỗi pháp nhân 1 dòng (PIC, nhóm, mốc tiến độ, doanh thu, pattern, gợi ý) + sheet lịch sử liên hệ">Xuất Excel ${crmFilterTxt() ? `(${n0(R.length)} khách đang lọc)` : 'khách hàng'}</button><button class="btn" id="crpict" title="Sheet PIC; Quản trị / Kế toán có thêm sheet thông tin doanh nghiệp và thẻ XPAY">Tải template cập nhật</button>${ed && CANWRITE ? `<label class="btn pri" style="cursor:pointer" title="Upload template đã điền: PIC, thông tin doanh nghiệp, thẻ XPAY">Upload file cập nhật<input type="file" id="crpicf" accept=".xlsx,.xls" hidden></label>` : ''}</span></div></div>` + picPanel();
   const row = r => `<tr class="hit" data-cropen="${esc(r.key)}" style="cursor:pointer"><td class="l name" style="min-width:240px;padding-left:34px;color:var(--accent)">${esc(r.name)}<span class="def">HĐ ${esc(r.key)}${r.gname ? ' · ' + esc(r.gname) + (r.grank ? ' #' + r.grank : '') : ''}</span></td><td class="l">${r.pic ? esc(r.pic) : '<b style="color:var(--critical)">Chưa phân công</b>'}</td>
     ${['pl', 'xp', 'call', 'meet'].map(f => `<td class="l">${done(r[f]) ? `<span class="c-stable">✓</span> ${isoOk(r[f]) ? dm(r[f]) : ''}${f === 'call' && r.calls.length > 1 ? `<span class="def">${r.calls.length} lần</span>` : ''}` : '<span class="lbl">—</span>'}</td>`).join('')}
     <td class="l">${r.first ? dmy(r.first) : '<span class="lbl">chưa</span>'}</td><td>${r.gmv ? money(r.gmv) : '—'}<span class="def">${r.gmv30 ? '30N ' + nf(r.gmv30 / UNIT.div, UNIT.dec) : r.gmv ? 'ngừng 30N' : ''}</span></td><td class="l" style="white-space:normal;min-width:170px;font-size:12px">${PS[r.key] ? `${esc(PS[r.key].route)} <span class="lbl">(${PS[r.key].rn}/${PS[r.key].n} chuyến)</span><span class="def">${esc(PS[r.key].p)} · ${PS[r.key].band}${PS[r.key].short ? ' · <b style="color:var(--critical)">thiếu xe</b>' : ''}</span>` : (((S.cs || {})[r.key] || {}).custom || []).length ? '<span class="pill p-mute">CS đã khai báo</span>' : '<span class="lbl">—</span>'}</td>
@@ -1734,10 +1755,10 @@ function crmExport() {
     const btn = $('crxls'); if (btn) { btn.disabled = true; btn.textContent = 'Đang tạo file…'; }
     try {
       await loadScript(EXCELJS_URL);
-      const d = CR.day, GS = crmGroups(crmScope(crmRows(d))), R = GS.flatMap(G => G.subs.flatMap(x => x.rows)), PS = patSummary(d);
+      const d = CR.day, GS = crmGroups(crmFilter(crmRows(d), d)), R = GS.flatMap(G => G.subs.flatMap(x => x.rows)), PS = patSummary(d);
       const K = xlKit(), wbk = new ExcelJS.Workbook(), VN = '#,##0;(#,##0);-', DT = 'dd/mm/yyyy', N1 = '#,##0.0;(#,##0.0);-';
       const ws = wbk.addWorksheet('Khach_hang', {views: [{state: 'frozen', ySplit: 4, xSplit: 3, showGridLines: false}]});
-      K.title(ws, 'XPAY — TIẾN ĐỘ KHÁCH HÀNG (mỗi pháp nhân 1 dòng)', `${scopeTxt()} · số liệu đến ${dmy(d)} · xuất lúc ${xlStamp()}`);
+      K.title(ws, 'XPAY — TIẾN ĐỘ KHÁCH HÀNG (mỗi pháp nhân 1 dòng)', `${scopeTxt()}${crmFilterTxt() ? ' · lọc: ' + crmFilterTxt() : ''} · ${n0(R.length)} khách · số liệu đến ${dmy(d)} · xuất lúc ${xlStamp()}`);
       const cols = [['Nhóm', 34], ['Số hợp đồng', 13], ['Tên pháp nhân', 46], ['PIC', 11], ['PIC cũ (sổ khách)', 13], ['Cách xếp nhóm', 11], ['Phân loại Mai Linh', 26], ['Nhóm client', 24], ['Hạng nhóm client', 9], ['Hạng Top 200', 13], ['Tình trạng đặc biệt', 12], ['Tiến độ', 16],
         ['Ký phụ lục (vào tủ)', 13], ['Khởi tạo XPAY', 13], ['Gọi khách gần nhất', 13], ['Số lần gọi', 8], ['Meeting gần nhất', 13], ['Số meeting', 8], ['Hẹn gọi lại', 12], ['Liên hệ gần nhất', 12], ['Kết quả gần nhất', 22],
         ['Ngày doanh thu đầu tiên', 13], ['Giao dịch đầu tiên (VND)', 14], ['GMV lũy kế (VND)', 15], ['GMV 30 ngày (VND)', 15], ['Số chuyến', 9], ['Giao dịch gần nhất', 13], ['Tiềm năng (triệu/tháng)', 11], ['Giao dịch Mai Linh T6–T9 (VND)', 15],
@@ -1762,7 +1783,7 @@ function crmExport() {
       if (CANWRITE && CARDST === 'ok') { const {items} = await cardsGrouped(GS); if (items.length) cardsSheet(K, wbk, items, false); }
       await xlSave(wbk, `XPAY_Khach_hang_${d.replace(/-/g, '')}.xlsx`);
     } catch (e) { alert('Không tạo được file Excel: ' + (e.message || e)); }
-    if (btn) { btn.disabled = false; btn.textContent = 'Xuất Excel khách hàng'; }
+    if (btn) { btn.disabled = false; btn.textContent = crmFilterTxt() ? 'Xuất Excel (đang lọc)' : 'Xuất Excel khách hàng'; }
   })();
 }
 const PIC_CLEAR = '(Bỏ phân công)';
@@ -1986,6 +2007,8 @@ function bindJourney() {
   if ($('crgrp')) $('crgrp').onchange = e => keep(() => { CR.grp = e.target.value; });
   if ($('crresx')) $('crresx').onclick = () => keep(() => { CR.res = ''; });
   if ($('crq')) $('crq').onchange = e => keep(() => { CR.q = e.target.value; });
+  document.querySelectorAll('[data-crms]').forEach(sl => sl.onchange = () => keep(() => { CR.ms = Object.assign({}, CR.ms || {}, {[sl.dataset.crms]: sl.value}); }));
+  if ($('crclr')) $('crclr').onclick = () => keep(() => { CR.ms = {}; CR.grp = ''; CR.todo = ''; CR.res = ''; CR.q = ''; });
   if ($('crxls')) $('crxls').onclick = crmExport;
   if ($('crpict')) $('crpict').onclick = picTemplate;
   if ($('crpicf')) $('crpicf').onchange = async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return;
