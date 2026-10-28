@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from 'react';
 import s from './mlx.module.css';
 import { loadCustomers, saveCustomers, TableMissingError, thieuCotLoaiCk } from '@/lib/mlx/masterData';
 import { parseRule, type Rule } from '@/lib/mlx/discount';
+import { bestOf, findDupes } from '@/lib/mlx/dupes';
+import { saveAlias } from '@/lib/mlx/aliases';
+import { getSupabase } from '@/lib/mlx/supabase';
 import { loadLoaiCk, makeLookup, parseLoaiCkFile, saveLoaiCk, type LoaiCkRow } from '@/lib/mlx/loaiCk';
 import { loadExcelJS } from '@/lib/mlx/download';
 import { companyKey } from '@/lib/mlx/normalize';
@@ -78,6 +81,10 @@ export default function MasterDataGrid() {
   const [fCk, setFCk] = useState<'' | 'NONE' | CkKind>('');
   const [sortCk, setSortCk] = useState<0 | 1 | -1>(0);
   const [upMsg, setUpMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [fData, setFData] = useState('');
+  /** dòng đã gộp (bị xoá) → dòng giữ lại: chuyển phần ghi nhớ tên sang dòng giữ lại khi lưu */
+  const [mergedTo, setMergedTo] = useState<{ from: string; to: string; name: string }[]>([]);
+  const [weakOk, setWeakOk] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem('mlx_dup_ok') || '[]'); } catch { return []; } });
   // Bảng phân loại chiết khấu (file THOP_AR02 "C NGUYET")
   const [loaiCk, setLoaiCk] = useState<LoaiCkRow[]>([]);
   const [ckErr, setCkErr] = useState('');
@@ -141,6 +148,21 @@ export default function MasterDataGrid() {
     return () => window.removeEventListener('beforeunload', h);
   }, [dirty]);
 
+  // Khách bị nhập nhiều dòng: cùng mã HĐ / cùng mã KH / cùng tên (đã chuẩn hoá)
+  const dups = useMemo(() => findDupes(rows.filter((r) => !isBlank(r)), (r) => r._k).filter((g) => g.strong || !weakOk.includes([...g.ids].sort().join('|'))), [rows, weakOk]);
+  const dupOf = useMemo(() => { const m = new Map<string, number>(); dups.forEach((g, i) => g.ids.forEach((k) => m.set(k, i))); return m; }, [dups]);
+  /** gộp 1 nhóm trùng: giữ 1 dòng, điền các ô trống từ dòng khác, bỏ các dòng còn lại */
+  function gopNhom(ids: string[], keepK: string) {
+    const keep = rows.find((r) => r._k === keepK); if (!keep) return;
+    const others = rows.filter((r) => ids.includes(r._k) && r._k !== keepK);
+    const merged = { ...keep } as GridRow;
+    for (const o of others) for (const f of FIELDS) if (!merged[f.key].trim() && o[f.key].trim()) merged[f.key] = o[f.key];
+    if (!merged.pct_cu && others.some((o) => o.pct_cu)) merged.pct_cu = others.find((o) => o.pct_cu)!.pct_cu;
+    setMergedTo((m) => [...m, ...others.filter((o) => o.id && keep.id).map((o) => ({ from: o.id!, to: keep.id!, name: o.ten_cong_ty }))]);
+    setRows((prev) => prev.filter((r) => !others.some((o) => o._k === r._k)).map((r) => (r._k === keepK ? merged : r)));
+  }
+  const [keepSel, setKeepSel] = useState<Record<string, string>>({});
+
   // Kiểm tra dữ liệu
   const issues = useMemo(() => {
     const bad = new Set<string>(); // `${_k}:${field}`
@@ -165,8 +187,9 @@ export default function MasterDataGrid() {
         } else seen.set(key, i);
       }
     });
+    dups.filter((g) => g.strong).forEach((g) => { g.ids.forEach((k) => bad.add(`${k}:ten_cong_ty`)); list.push(`Khách bị nhập ${g.ids.length} dòng (${g.label}): ${rows.find((r) => r._k === g.ids[0])?.ten_cong_ty ?? ''} — gộp để chỉ giữ 1 dòng`); });
     return { bad, list };
-  }, [rows]);
+  }, [rows, dups]);
 
   const setCell = (k: string, field: Field, value: string) =>
     setRows((prev) => prev.map((r) => (r._k === k ? { ...r, [field]: value } : r)));
@@ -220,7 +243,12 @@ export default function MasterDataGrid() {
           chiet_khau: (() => { const c = ckOf(r.chiet_khau); return c.kind === 'DB' ? parsePct(c.x) || 0 : c.kind === '' ? r.pct_cu : 0; })(),
           loai_ck: r.chiet_khau.trim(),
         }));
+      // gộp dòng trùng: chuyển phần ghi nhớ tên của dòng bị bỏ sang dòng giữ lại (trước khi dòng bị xoá)
+      for (const m of mergedTo) {
+        try { await getSupabase().from('mlx_alias').update({ customer_id: m.to }).eq('customer_id', m.from); await saveAlias(m.name, m.to); } catch { /* chưa có bảng ghi nhớ: bỏ qua */ }
+      }
       const kq = await saveCustomers(payload, original.ids);
+      setMergedTo([]);
       await reload();
       const chiTiet = [kq.them && `thêm ${kq.them}`, kq.sua && `cập nhật ${kq.sua}`, kq.xoa && `xoá ${kq.xoa}`]
         .filter(Boolean)
@@ -242,6 +270,7 @@ export default function MasterDataGrid() {
     .map((r, i) => ({ r, i, ck: ckOf(r.chiet_khau) }))
     .filter(({ r }) => !q || FIELDS.some((f) => companyKey(r[f.key]).includes(q)))
     .filter(({ r, ck }) => !fCk || (fCk === 'NONE' ? !isBlank(r) && !ck.kind : ck.kind === fCk))
+    .filter(({ r }) => !fData || (fData === 'dup' ? dupOf.has(r._k) : fData === 'new' ? !r.id && !isBlank(r) : fData === 'nohd' ? !r.ma_hop_dong.trim() : fData === 'nokh' ? !r.ma_khach_hang.trim() : fData === 'nomst' ? !r.mst.trim() : fData === 'noaddr' ? !r.dia_chi.trim() : fData === 'noshort' ? !r.ten_viet_tat.trim() : true) && !isBlank(r))
     .sort((a, b) => !sortCk ? a.i - b.i : sortCk * (ORD[a.ck.kind] - ORD[b.ck.kind] || (a.ck.kind === 'DB' ? (parsePct(a.ck.x) || 0) - (parsePct(b.ck.x) || 0) : 0)) || a.i - b.i);
   const demLoai = (k: CkKind | 'NONE') => rows.filter((r) => !isBlank(r) && (k === 'NONE' ? !ckOf(r.chiet_khau).kind : ckOf(r.chiet_khau).kind === k)).length;
 
@@ -349,6 +378,17 @@ export default function MasterDataGrid() {
               <option value="SGS">SGS ({demLoai('SGS')})</option>
               <option value="KHAC">Rule khác ({demLoai('KHAC')})</option>
             </select>
+            <select className={s.input} style={{ width: 'auto' }} value={fData} onChange={(e) => setFData(e.target.value)} title="Lọc theo dữ liệu">
+              <option value="">Dữ liệu: tất cả</option>
+              <option value="dup">Bị trùng nhiều dòng ({dups.reduce((n, g) => n + g.ids.length, 0)})</option>
+              <option value="nohd">Thiếu mã hợp đồng</option>
+              <option value="nokh">Thiếu mã khách hàng</option>
+              <option value="nomst">Thiếu MST</option>
+              <option value="noaddr">Thiếu địa chỉ</option>
+              <option value="noshort">Thiếu tên viết tắt</option>
+              <option value="new">Dòng mới chưa lưu</option>
+            </select>
+            {(fCk || fData || search) && <button className={s.iconBtn} style={{ width: 'auto', textDecoration: 'underline' }} onClick={() => { setFCk(''); setFData(''); setSearch(''); }}>Xoá lọc</button>}
             <button className={s.btn} onClick={taiTemplate} disabled={tableMissing} title="Tải file Excel cùng cột với bảng, kèm dữ liệu hiện có">Tải template</button>
             <label className={s.btn} style={{ cursor: tableMissing ? 'default' : 'pointer' }} title="Upload file theo template: cập nhật khách có sẵn, thêm khách mới">
               Upload file
@@ -369,6 +409,26 @@ export default function MasterDataGrid() {
         {msg && (
           <div className={`${s.banner} ${msg.type === 'ok' ? s.bannerOk : s.bannerErr}`} style={{ marginBottom: 12 }}>
             {msg.text}
+          </div>
+        )}
+        {dups.length > 0 && (
+          <div className={`${s.banner} ${s.bannerErr}`} style={{ marginBottom: 12 }}>
+            <b>{dups.filter((g) => g.strong).length} khách bị nhập thành nhiều dòng</b>{dups.some((g) => !g.strong) ? ` · ${dups.filter((g) => !g.strong).length} nhóm nghi trùng (cùng tên, khác mã hợp đồng)` : ''} — mỗi khách chỉ giữ 1 dòng, nếu không bảng kê sẽ bị tách nhiều file.
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+              {dups.map((g) => { const R = g.ids.map((k) => rows.find((r) => r._k === k)!).filter(Boolean), gid = [...g.ids].sort().join('|'), keepK = keepSel[gid] ?? bestOf(R)._k;
+                return (
+                  <div key={gid} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', background: '#fff', borderRadius: 8, padding: '6px 8px', color: 'inherit' }}>
+                    <span style={{ fontWeight: 600, color: g.strong ? '#c81e1e' : '#b45309' }}>{g.strong ? 'Trùng' : 'Nghi trùng'} · {g.label}:</span>
+                    <span>Giữ dòng</span>
+                    <select className={s.input} style={{ width: 'auto', maxWidth: 520 }} value={keepK} onChange={(e) => setKeepSel((m) => ({ ...m, [gid]: e.target.value }))}>
+                      {R.map((r) => <option key={r._k} value={r._k}>{[r.ma_hop_dong, r.ma_khach_hang, r.ten_cong_ty].filter(Boolean).join(' · ')}</option>)}
+                    </select>
+                    <button className={`${s.btn} ${s.btnPrimary}`} onClick={() => gopNhom(g.ids, keepK)}>Gộp, giữ 1 dòng</button>
+                    {!g.strong && <button className={s.btn} onClick={() => { const n = [...weakOk, gid]; setWeakOk(n); try { localStorage.setItem('mlx_dup_ok', JSON.stringify(n)); } catch { /* */ } }}>Không phải trùng</button>}
+                    <button className={s.iconBtn} style={{ width: 'auto', textDecoration: 'underline' }} onClick={() => { setFData('dup'); setSearch(''); }}>Xem các dòng</button>
+                  </div>); })}
+            </div>
+            <div style={{ fontSize: 12, marginTop: 6 }}>Gộp: giữ dòng được chọn, các ô trống được điền từ dòng còn lại, tên của dòng bị bỏ được ghi nhớ để file upload sau vẫn khớp vào dòng giữ lại. Bấm Lưu thay đổi để ghi.</div>
           </div>
         )}
         {upMsg && (
@@ -411,7 +471,7 @@ export default function MasterDataGrid() {
               </thead>
               <tbody>
                 {visible.map(({ r, i, ck }) => (
-                  <tr key={r._k} style={!isBlank(r) && !ck.kind ? { background: '#fff7e6', boxShadow: 'inset 3px 0 0 #e8a600' } : undefined}>
+                  <tr key={r._k} style={dupOf.has(r._k) ? { background: dups[dupOf.get(r._k)!].strong ? '#fdecec' : '#fff4e5', boxShadow: `inset 3px 0 0 ${dups[dupOf.get(r._k)!].strong ? '#e83c3f' : '#e8a600'}` } : !isBlank(r) && !ck.kind ? { background: '#fff7e6', boxShadow: 'inset 3px 0 0 #e8a600' } : undefined}>
                     <td className={s.rowNo}>{i + 1}</td>
                     {FIELDS.map((f, fi) => f.key === 'chiet_khau' ? (
                       <td key={f.key} className={issues.bad.has(`${r._k}:chiet_khau`) ? s.cellInvalid : ''}>

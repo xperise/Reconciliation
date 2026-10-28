@@ -8,6 +8,7 @@ import { buildStatement, outputNames } from '@/lib/mlx/buildStatement';
 import { computeDiscount, parseRule, type DiscountResult } from '@/lib/mlx/discount';
 import { loadLoaiCk, makeLookup, type CkLookup, type LoaiCkRow } from '@/lib/mlx/loaiCk';
 import { aliasKey, loadAliases, saveAlias, type Alias } from '@/lib/mlx/aliases';
+import { bestOf, findDupes } from '@/lib/mlx/dupes';
 import { loadCustomers as reloadCustomers, saveCustomers } from '@/lib/mlx/masterData';
 import type { Source } from '@/lib/mlx/types';
 import { downloadBlob, loadExcelJS, XLSX_MIME } from '@/lib/mlx/download';
@@ -104,6 +105,10 @@ export default function ConverterView() {
   const ckOf = useMemo(() => makeLookup(loaiCk), [loaiCk]);
 
   const byId = useMemo(() => new Map(customers.map((c) => [c.id as string, c])), [customers]);
+  // Khách bị nhập nhiều dòng trong master data: gom về 1 dòng (dòng nhiều thông tin nhất) để chỉ ra 1 bảng kê
+  const dupRep = useMemo(() => { const m = new Map<string, { rep: string; ids: string[]; label: string }>();
+    findDupes(customers).filter((g) => g.strong).forEach((g) => { const rep = bestOf(g.ids.map((id) => byId.get(id)!).filter(Boolean)).id as string; g.ids.forEach((id) => m.set(id, { rep, ids: g.ids, label: g.label })); });
+    return m; }, [customers, byId]);
 
   // Master data tải xong sau khi đã thả file → tự khớp lại các file chưa có khách
   useEffect(() => {
@@ -276,12 +281,13 @@ export default function ConverterView() {
     for (const it of items) {
       if (it.status !== 'ready' || !it.parsed || !it.customerId || !byId.has(it.customerId)) continue;
       const period = it.period ?? defaultPeriod;
-      const key = `${it.customerId}|${periodToKy(period)}`;
+      const cid = dupRep.get(it.customerId)?.rep ?? it.customerId;
+      const key = `${cid}|${periodToKy(period)}`;
 
       if (!map.has(key)) {
         map.set(key, {
           key,
-          customerId: it.customerId,
+          customerId: cid,
           period,
           files: [],
           rows: [],
@@ -322,7 +328,8 @@ export default function ConverterView() {
         .join('+');
 
       const ky = periodToKy(g.period);
-      const cungKhachCungKy = related.filter((r) => r.customer_id === g.customerId && r.ky === ky);
+      const ids = dupRep.get(g.customerId)?.ids ?? [g.customerId];
+      const cungKhachCungKy = related.filter((r) => ids.includes(r.customer_id as string) && r.ky === ky);
       const giongHet = cungKhachCungKy.find((r) => r.source_hash === g.hash);
       g.kind = giongHet
         ? {
@@ -335,7 +342,7 @@ export default function ConverterView() {
     }
 
     return { groups: [...map.values()], groupOfFile, trungTrongLo };
-  }, [items, byId, defaultPeriod, related, ckOf]);
+  }, [items, byId, defaultPeriod, related, ckOf, dupRep]);
 
   const groupByKey = useMemo(() => new Map(groups.map((g) => [g.key, g])), [groups]);
   const kindOfFile = (uid: string) => groupByKey.get(groupOfFile.get(uid) ?? '')?.kind;
@@ -571,6 +578,7 @@ export default function ConverterView() {
           <div className={s.row}>
             {checking && <span className={s.chip}>Đang kiểm tra lịch sử…</span>}
             {blocking > 0 && <span className={`${s.chip} ${s.chipWarn}`}>{blocking} file cần xử lý</span>}
+            {(() => { const n = new Set(sapXuat.filter((g) => dupRep.has(g.customerId)).map((g) => g.customerId)).size; return n ? <span className={`${s.chip} ${s.chipWarn}`}>{n} khách bị trùng trong master data — đã gộp 1 bảng kê/khách</span> : null; })()}
             {ckLa.length > 0 && <span className={`${s.chip} ${s.chipWarn}`}>{ckLa.length} khách thuộc rule khác — cần define</span>}
             <button className={s.btn} onClick={() => setItems([])} disabled={!items.length || busy}>
               Xoá tất cả
@@ -667,7 +675,12 @@ export default function ConverterView() {
                       </td>
                       <td className={s.num}>{it.parsed ? fmt.format(it.parsed.total) : '—'}</td>
                       <td className={s.muted}>
-                        {customer ? outputNames(customer, period).fileName : '—'}
+                        {(() => { const gc = g ? byId.get(g.customerId) : customer; return gc ? outputNames(gc, period).fileName : '—'; })()}
+                        {g && dupRep.has(g.customerId) && (
+                          <div className={s.note} style={{ color: 'var(--critical, #e83c3f)' }}>
+                            Khách bị trùng {dupRep.get(g.customerId)!.ids.length} dòng trong master data ({dupRep.get(g.customerId)!.label}) — đã gộp 1 bảng kê theo dòng “{byId.get(g.customerId)?.ten_cong_ty}”. Vào Master data để chỉ giữ 1 dòng.
+                          </div>
+                        )}
                         {g?.disc && (
                           <div className={s.note} style={{ color: g.ck?.rule?.kind === 'UNKNOWN' ? 'var(--critical, #e83c3f)' : !g.ck?.rule ? '#b45309' : undefined }}>
                             {g.ck?.rule?.kind === 'UNKNOWN'
