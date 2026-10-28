@@ -7,6 +7,8 @@ import CustomerPicker from './CustomerPicker';
 import { buildStatement, outputNames } from '@/lib/mlx/buildStatement';
 import { computeDiscount, parseRule, type DiscountResult } from '@/lib/mlx/discount';
 import { loadLoaiCk, makeLookup, type CkLookup, type LoaiCkRow } from '@/lib/mlx/loaiCk';
+import { aliasKey, loadAliases, saveAlias, type Alias } from '@/lib/mlx/aliases';
+import { loadCustomers as reloadCustomers, saveCustomers } from '@/lib/mlx/masterData';
 import type { Source } from '@/lib/mlx/types';
 import { downloadBlob, loadExcelJS, XLSX_MIME } from '@/lib/mlx/download';
 import { findRelated, HistoryNotReadyError, saveStatement, sha256, type StatementRecord } from '@/lib/mlx/history';
@@ -82,7 +84,20 @@ export default function ConverterView() {
       .then(setCustomers)
       .catch((e: Error) => setLoadError(e.message));
     loadLoaiCk().then(setLoaiCk).catch((e: Error) => setLoaiCkErr(e.message));
+    loadAliases().then(setAliases).catch((e: Error) => setAliasErr(e.message));
   }, []);
+  // Ghi nhớ tên trên file → khách: chọn lại / tạo mới một lần, lần sau tự khớp
+  const [aliases, setAliases] = useState<Alias[]>([]);
+  const [aliasErr, setAliasErr] = useState('');
+  const aliasRef = useRef<Map<string, string>>(new Map());
+  aliasRef.current = useMemo(() => new Map(aliases.map((a) => [a.alias_key, a.customer_id])), [aliases]);
+  /** khớp khách cho 1 file: tên đã ghi nhớ → MST → mã → tên (cách cũ) */
+  const matchFile = (p: ParsedRawFile, cs: MlxCustomer[] = customers): string => {
+    const id = aliasRef.current.get(aliasKey(p.companyFromFile));
+    if (id && cs.some((c) => c.id === id)) return id;
+    return matchCustomer(hintsFromFile(p), cs)?.id ?? '';
+  };
+  const [newCus, setNewCus] = useState<{ uid: string; name: string; f: Record<string, string>; busy?: boolean; err?: string } | null>(null);
   // Bảng phân loại chiết khấu (CK 4 / CK 5 / CK đặc biệt / SGS)
   const [loaiCk, setLoaiCk] = useState<LoaiCkRow[]>([]);
   const [loaiCkErr, setLoaiCkErr] = useState('');
@@ -96,11 +111,11 @@ export default function ConverterView() {
     setItems((prev) =>
       prev.map((it) =>
         it.status === 'ready' && !it.customerId && it.parsed
-          ? { ...it, customerId: matchCustomer(hintsFromFile(it.parsed), customers)?.id ?? '' }
+          ? { ...it, customerId: matchFile(it.parsed) }
           : it,
       ),
     );
-  }, [customers]);
+  }, [customers, aliases]);
 
   // Tra lịch sử mỗi khi danh sách hash / kỳ thay đổi
   const hashes = useMemo(() => [...new Set(items.map((i) => i.hash).filter(Boolean) as string[])], [items]);
@@ -168,7 +183,7 @@ export default function ConverterView() {
                   status: 'ready',
                   parsed: p,
                   hash: `${hash}#${companyKey(p.companyFromFile)}`,
-                  customerId: matchCustomer(hintsFromFile(p), customers)?.id ?? '',
+                  customerId: matchFile(p),
                   period: p.periodFromFile,
                 }));
                 return at < 0 ? [...prev, ...each] : [...prev.slice(0, at), ...each, ...prev.slice(at + 1)];
@@ -182,7 +197,7 @@ export default function ConverterView() {
               });
               return;
             }
-            const matched = matchCustomer(hintsFromFile(parsed), customers);
+            const matched = { id: matchFile(parsed) };
             setItems((prev) =>
               prev.map((it) =>
                 it.uid === uid
@@ -205,6 +220,47 @@ export default function ConverterView() {
 
   const update = (uid: string, patch: Partial<Item>) =>
     setItems((prev) => prev.map((it) => (it.uid === uid ? { ...it, ...patch } : it)));
+
+  /** Chọn lại khách bằng tay: ghi nhớ tên trên file → khách, áp luôn cho các dòng cùng tên đang chờ */
+  async function pickCustomer(it: Item, id: string) {
+    update(it.uid, { customerId: id });
+    const name = it.parsed?.companyFromFile?.trim();
+    if (!id || !name) return;
+    const auto = matchCustomer(hintsFromFile(it.parsed!), customers)?.id ?? '';
+    if (auto === id && !aliasRef.current.has(aliasKey(name))) return; // hệ thống đã tự khớp đúng, không cần ghi nhớ
+    const k = aliasKey(name);
+    setItems((prev) => prev.map((x) => (x.uid !== it.uid && x.status === 'ready' && x.parsed && aliasKey(x.parsed.companyFromFile) === k ? { ...x, customerId: id } : x)));
+    try {
+      const a = await saveAlias(name, id);
+      if (a) setAliases((prev) => [...prev.filter((x) => x.alias_key !== a.alias_key), a]);
+      const c = customers.find((x) => x.id === id);
+      setMessage({ type: 'ok', text: `Đã ghi nhớ: tên “${name}” → ${c?.ten_cong_ty ?? 'khách đã chọn'}. Lần sau upload, tên này tự khớp.` });
+    } catch (e) { setMessage({ type: 'err', text: `Đã chọn khách nhưng chưa ghi nhớ được tên: ${(e as Error).message}` }); }
+  }
+  /** Tạo khách mới từ dòng chưa khớp: lưu vào master data + ghi nhớ tên */
+  function openNew(it: Item) {
+    const p = it.parsed!;
+    setNewCus({ uid: it.uid, name: p.companyFromFile, f: { ten_cong_ty: p.companyFromFile.replace(/^\s*[A-Za-z0-9]{2,12}\s*[-–_]\s*/, '').trim(), ma_khach_hang: p.codeFromFile && !/^\d{6,}$/.test(p.codeFromFile) ? p.codeFromFile : '', ma_hop_dong: /^\d{6,}$/.test(p.codeFromFile || '') ? p.codeFromFile! : '', ten_viet_tat: '', dia_chi: '', mst: p.mstFromFile || '', loai_ck: '', x: '' } });
+  }
+  async function saveNew() {
+    if (!newCus) return; const f = newCus.f;
+    if (!f.ten_cong_ty.trim()) { setNewCus({ ...newCus, err: 'Cần nhập tên công ty.' }); return; }
+    if (customers.some((c) => c.ten_cong_ty.trim().toLowerCase() === f.ten_cong_ty.trim().toLowerCase())) { setNewCus({ ...newCus, err: 'Đã có khách trùng tên trong master data — chọn khách đó ở ô Khách hàng.' }); return; }
+    const loai = f.loai_ck === 'DB' ? `CK đặc biệt ${f.x || '0'}%` : f.loai_ck;
+    setNewCus({ ...newCus, busy: true, err: '' });
+    try {
+      await saveCustomers([{ ma_khach_hang: f.ma_khach_hang, ma_hop_dong: f.ma_hop_dong, ten_cong_ty: f.ten_cong_ty, ten_viet_tat: f.ten_viet_tat, dia_chi: f.dia_chi, mst: f.mst, chiet_khau: f.loai_ck === 'DB' ? Number(String(f.x).replace(',', '.')) || 0 : 0, loai_ck: loai }], []);
+      const cs = await reloadCustomers(); setCustomers(cs);
+      const c = cs.find((x) => x.ten_cong_ty.trim().toLowerCase() === f.ten_cong_ty.trim().toLowerCase());
+      if (c?.id) {
+        const cid = c.id, k = aliasKey(newCus.name);
+        setItems((prev) => prev.map((x) => (x.uid === newCus.uid || (x.status === 'ready' && x.parsed && !x.customerId && aliasKey(x.parsed.companyFromFile) === k) ? { ...x, customerId: cid } : x)));
+        try { const a = await saveAlias(newCus.name, cid); if (a) setAliases((prev) => [...prev.filter((x) => x.alias_key !== a.alias_key), a]); } catch { /* ghi nhớ lỗi không chặn */ }
+      }
+      setMessage({ type: 'ok', text: `Đã thêm khách “${f.ten_cong_ty}” vào master data và ghi nhớ tên trên file.` });
+      setNewCus(null);
+    } catch (e) { setNewCus({ ...newCus, busy: false, err: (e as Error).message }); }
+  }
 
   /**
    * Gom file thành các bảng kê sẽ xuất.
@@ -584,8 +640,14 @@ export default function ConverterView() {
                           customers={customers}
                           value={it.customerId}
                           disabled={it.status !== 'ready' || busy}
-                          onChange={(id) => update(it.uid, { customerId: id })}
+                          onChange={(id) => pickCustomer(it, id)}
                         />
+                        {it.status === 'ready' && it.parsed && !it.customerId && !busy && (
+                          <button type="button" className={s.linkBtn} style={{ marginTop: 4, fontSize: 12 }} onClick={() => openNew(it)}>+ Tạo khách mới</button>
+                        )}
+                        {it.customerId && it.parsed && aliasRef.current.get(aliasKey(it.parsed.companyFromFile)) === it.customerId && (
+                          <div className={s.note} style={{ fontSize: 11 }}>khớp theo tên đã ghi nhớ</div>
+                        )}
                       </td>
                       <td>
                         <input
@@ -672,6 +734,34 @@ export default function ConverterView() {
           </div>
         )}
       </div>
+      {newCus && (
+        <div style={{ position: 'fixed', inset: 0, background: '#0008', zIndex: 60, display: 'grid', placeItems: 'center' }} onClick={(e) => { if (e.target === e.currentTarget && !newCus.busy) setNewCus(null); }}>
+          <div className={s.card} style={{ width: 'min(620px, 94vw)', margin: 0 }}>
+            <div className={s.eyebrow}>Tạo khách mới</div>
+            <h2 className={s.title}>Thêm vào master data</h2>
+            <div className={s.note} style={{ marginBottom: 10 }}>Tên trên file: <b>{newCus.name}</b> — sẽ được ghi nhớ để lần sau tự khớp vào khách này.</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: '8px 12px', alignItems: 'center' }}>
+              {([['ten_cong_ty', 'Tên công ty *'], ['ma_khach_hang', 'Mã khách hàng'], ['ma_hop_dong', 'Mã hợp đồng'], ['ten_viet_tat', 'Tên viết tắt'], ['dia_chi', 'Địa chỉ'], ['mst', 'MST']] as const).map(([k, l]) => (
+                <label key={k} style={{ display: 'contents' }}><span className={s.note}>{l}</span>
+                  <input className={s.input} value={newCus.f[k]} onChange={(e) => setNewCus({ ...newCus, f: { ...newCus.f, [k]: e.target.value } })} /></label>
+              ))}
+              <span className={s.note}>Chiết khấu</span>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <select className={s.input} value={newCus.f.loai_ck} onChange={(e) => setNewCus({ ...newCus, f: { ...newCus.f, loai_ck: e.target.value } })}>
+                  <option value="">Chưa chọn</option><option value="CK 4">CK 4 — lũy tiến</option><option value="CK 5">CK 5 — lũy tiến</option><option value="DB">CK đặc biệt x%</option><option value="SGS">SGS — cuốc ≥ 700k</option>
+                </select>
+                {newCus.f.loai_ck === 'DB' && <><input className={s.input} style={{ width: 70 }} value={newCus.f.x} placeholder="x" onChange={(e) => setNewCus({ ...newCus, f: { ...newCus.f, x: e.target.value } })} />%</>}
+              </div>
+            </div>
+            {newCus.err && <div className={s.note} style={{ color: 'var(--critical, #e83c3f)', marginTop: 8 }}>{newCus.err}</div>}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
+              <button className={s.btn} disabled={newCus.busy} onClick={() => setNewCus(null)}>Huỷ</button>
+              <button className={`${s.btn} ${s.btnPrimary}`} disabled={newCus.busy} onClick={saveNew}>{newCus.busy ? 'Đang lưu…' : 'Lưu vào master data'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {aliasErr && <div className={s.note} style={{ color: '#b45309' }}>{aliasErr}</div>}
     </div>
   );
 }
