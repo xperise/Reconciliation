@@ -127,7 +127,9 @@ const ty = v => (v == null || !isFinite(v)) ? '—' : nf(v / UNIT.div, Math.abs(
 const unitLabel = () => UNIT.label;
 const money = v => `<span title="${v == null ? '' : nf(v, 0) + ' VND'}">${ty(v)}</span>`;
 const pctCh = (t, y) => (t == null || y == null || !y) ? '' : `${t >= y ? '+' : '−'}${nf(Math.abs(t - y) / Math.abs(y) * 100, 1)}%`;
-const n0 = v => nf(v, 0), n2 = v => nf(v, 2), pct = v => (v == null || !isFinite(v)) ? '—' : nf(v * 100, 0) + '%';
+const n0 = v => nf(v, 0), n2 = v => nf(v, 2), pct = v => { if (v == null || !isFinite(v)) return '—'; const p = v * 100;
+  // chưa đủ 100% thì không làm tròn lên 100%: 99,74% hiện 99,7%
+  return (p >= 99.5 && p < 100 ? nf(Math.floor(p * 10) / 10, 1) : nf(p, 0)) + '%'; };
 const short = v => { const a = Math.abs(v); return a >= 1e9 ? nf(v/1e9, 2) + ' tỷ' : a >= 1e6 ? nf(v/1e6, 1) + ' tr' : a >= 1e3 ? nf(v/1e3, 0) + 'k' : nf(v, 0); };
 
 /* ---------- dates ---------- */

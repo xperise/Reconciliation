@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 
 // Đổi số này mỗi lần cập nhật public/dashboard/mobility.html để trình duyệt không dùng bản cũ
-export const MOBILITY_BUILD = "20261028b";
+export const MOBILITY_BUILD = "20261029a";
 
 export default function MobilityFrame({ reloadKey }: { reloadKey: number }) {
   const ref = useRef<HTMLIFrameElement>(null);
