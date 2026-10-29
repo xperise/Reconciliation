@@ -1279,12 +1279,20 @@ const PAT_HEAD = '<thead><tr><th class="l">Doanh nghiệp</th><th>GMV</th><th>Ch
 
 /* ---------- TIẾN ĐỘ KHÁCH HÀNG (CRM: dashboard + nhập liệu) ---------- */
 const C0 = S.crm0 || {rows: {}, acts: []};
-const PICS = ['Khoa', 'Phú', 'Hằng', 'Đạt', 'Kimy', 'Long', 'Nguyệt', 'Hiền'];
-const ROLE = {Khoa: 'AE Top 200', 'Phú': 'AE Top 200', 'Hằng': 'AE hạng 201–300', 'Đạt': 'AE hạng 201–300', Kimy: 'Lead hạng 201–300', Long: 'Sales Ops hạng 201–300', 'Nguyệt': 'SDR (nửa KPI)', 'Hiền': 'SDR (nửa KPI)'};
+/* Danh sách người phụ trách: mặc định như dưới; Quản trị / Kế toán sửa được (lưu ở cfg/main → team) */
+const TEAM0 = [['Khoa', 'AE Top 200'], ['Phú', 'AE Top 200'], ['Hằng', 'AE hạng 201–300'], ['Đạt', 'AE hạng 201–300'], ['Kimy', 'Lead hạng 201–300'], ['Long', 'Sales Ops hạng 201–300'], ['Nguyệt', 'SDR (nửa KPI)'], ['Hiền', 'SDR (nửa KPI)']];
+/* chỉ tiêu tuần theo vai trò (file KPI Sales và AE) */
+const ROLE_KPI = {'AE Top 200': {meet: [15, 15, 15, 15, 15, 15, 10, 0, 0, 0, 0]}, 'AE hạng 201–300': {meet: [3, 3, 3, 3, 3, 3, 3, 4, 0, 0, 0]}, 'Lead hạng 201–300': {meet: [3, 3, 3, 3, 3, 3, 3, 4, 0, 0, 0]}, 'Sales Ops hạng 201–300': {meet: [3, 3, 3, 3, 3, 3, 3, 4, 0, 0, 0]}, 'SDR (nửa KPI)': {call: Array(11).fill(75)}};
+const ROLES = Object.keys(ROLE_KPI);
+let PICS = [], ROLE = {}, KPI_W = {};
+function applyTeam(team) {
+  const T = (Array.isArray(team) && team.length ? team : TEAM0).map(x => Array.isArray(x) ? x : [x.name, x.role]).filter(x => x[0]);
+  PICS = T.map(x => String(x[0]).trim()); ROLE = Object.fromEntries(T.map(x => [String(x[0]).trim(), x[1] || ROLES[1]]));
+  KPI_W = Object.fromEntries(PICS.map(p => [p, ROLE_KPI[ROLE[p]] || ROLE_KPI['AE hạng 201–300']]));
+}
+applyTeam(null);
+async function saveTeam(team) { const db = await claude.use('db'); if (!db) throw new Error('Chưa kết nối được dữ liệu nhập'); const next = Object.assign({}, CFG || {}, {team: team.map(([n, r]) => ({name: n, role: r}))}); await db.doc('cfg/main').set(next); CFG = next; applyTeam(next.team); CRM_ = null; AUTOC_ = null; }
 const W1 = '2026-10-19';
-const KPI_W = {Khoa: {meet: [15, 15, 15, 15, 15, 15, 10, 0, 0, 0, 0]}, 'Phú': {meet: [15, 15, 15, 15, 15, 15, 10, 0, 0, 0, 0]},
-  'Hằng': {meet: [3, 3, 3, 3, 3, 3, 3, 4, 0, 0, 0]}, 'Đạt': {meet: [3, 3, 3, 3, 3, 3, 3, 4, 0, 0, 0]}, Kimy: {meet: [3, 3, 3, 3, 3, 3, 3, 4, 0, 0, 0]}, Long: {meet: [3, 3, 3, 3, 3, 3, 3, 4, 0, 0, 0]},
-  'Nguyệt': {call: Array(11).fill(75)}, 'Hiền': {call: Array(11).fill(75)}};
 const GRP = {1: 'Đã ký phụ lục, chưa khởi tạo XPAY', 2: 'Top 200', 3: 'Đã khởi tạo XPAY, chưa có giao dịch 30 ngày', 4: 'Chưa ký phụ lục, có giao dịch Mai Linh T6–T9', 5: 'Các khách còn lại', 9: 'Đã thanh lý'};
 const SPECIAL = ['', 'Vướng mắc', 'Tạm dừng', 'Thanh lý'];
 const CAT0 = ['Đồng ý meeting', 'Hẹn gọi lại', 'Không liên lạc được', 'Sử dụng bình thường', 'Sử dụng tốt', 'Chưa có nhu cầu', 'Quản trị thẻ', 'Đặt xe + tài xế', 'Hợp đồng', 'Đối soát và hóa đơn', 'Yêu cầu thanh lý', 'Khác'];
@@ -1379,7 +1387,7 @@ function crmInit() {
     try { const u = await claude.use('user'); const c = u ? await u.can('data.write') : null; DBW = c; } catch (e) { DBW = null; }
     db.collection('crm').onSnapshot(snap => { const o = {}; snap.docs.forEach(x => { const v = x.data() || {}; for (const [k, e] of Object.entries(v)) if (e && typeof e === 'object') o[k] = e; });
       mergeDbx(o); for (const k of Object.keys(NAMEOVR)) delete NAMEOVR[k]; for (const [k, e] of Object.entries(o)) if (e && e.name) NAMEOVR[k] = String(e.name); DBX = o; DBST = 'ok'; CRM_ = null; AUTOC_ = null; crmRerender(true); }, () => { DBST = 'off'; crmRerender(); });
-    db.doc('cfg/main').onSnapshot(s => { CFG = s.exists ? (s.data() || {cats: []}) : {cats: []}; }, () => {});
+    db.doc('cfg/main').onSnapshot(s => { CFG = s.exists ? (s.data() || {cats: []}) : {cats: []}; const before = PICS.join('|'); applyTeam(CFG.team); if (PICS.join('|') !== before) { CRM_ = null; AUTOC_ = null; crmRerender(true); } }, () => {});
   })();
 }
 /* ---- Thẻ XPAY & thông tin doanh nghiệp (API riêng; chỉ có khi chạy trong web Reconciliation) ---- */
@@ -1624,8 +1632,17 @@ function crmInput(ALL, d) {
     <input id="crq" placeholder="Tìm tên, số hợp đồng, nhóm client…" value="${esc(CR.q)}" style="font:13px var(--font-family-sans-serif);padding:6px 10px;border:1px solid var(--color-border-default);border-radius:10px;width:250px"><span class="lbl">${n0(R.length)} khách</span>
     <div style="flex-basis:100%;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="lbl">Mốc</span>${MSF.map(([k, l]) => { const v = (CR.ms || {})[k] || ''; return `<select data-crms="${k}" style="${v ? 'border-color:var(--accent);color:var(--color-action-theme-primary-active);font-weight:600' : ''}"><option value="" ${!v ? 'selected' : ''}>${l}: tất cả</option><option value="y" ${v === 'y' ? 'selected' : ''}>${l}: đã có</option><option value="n" ${v === 'n' ? 'selected' : ''}>${l}: chưa có</option></select>`; }).join('')}
       ${crmFilterTxt() ? '<a id="crclr" style="cursor:pointer;color:var(--accent);font-weight:600;font-size:12.5px">Xoá mọi bộ lọc</a>' : ''}</div>
-    <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">${ed ? '<button class="btn pri" id="crnew" title="Thêm khách chưa có trong sổ khách / bảng kê">+ Thêm khách hàng</button>' : ''}<button class="btn" id="crxls" title="Xuất đúng danh sách đang lọc: mỗi pháp nhân 1 dòng (PIC, nhóm, mốc tiến độ, doanh thu, pattern, gợi ý) + sheet lịch sử liên hệ">Xuất Excel ${crmFilterTxt() ? `(${n0(R.length)} khách đang lọc)` : 'khách hàng'}</button><button class="btn" id="crpict" title="Sheet PIC; Quản trị / Kế toán có thêm sheet thông tin doanh nghiệp và thẻ XPAY">Tải template cập nhật</button>${ed && CANWRITE ? `<label class="btn pri" style="cursor:pointer" title="Upload template đã điền: PIC, thông tin doanh nghiệp, thẻ XPAY">Upload file cập nhật<input type="file" id="crpicf" accept=".xlsx,.xls" hidden></label>` : ''}</span></div></div>` + picPanel();
+    <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">${ed && CANWRITE ? '<button class="btn" id="crteam" title="Thêm / đổi tên / đổi vai trò người phụ trách">Danh sách PIC</button>' : ''}${ed ? '<button class="btn pri" id="crnew" title="Thêm khách chưa có trong sổ khách / bảng kê">+ Thêm khách hàng</button>' : ''}<button class="btn" id="crxls" title="Xuất đúng danh sách đang lọc: mỗi pháp nhân 1 dòng (PIC, nhóm, mốc tiến độ, doanh thu, pattern, gợi ý) + sheet lịch sử liên hệ">Xuất Excel ${crmFilterTxt() ? `(${n0(R.length)} khách đang lọc)` : 'khách hàng'}</button><button class="btn" id="crpict" title="Sheet PIC; Quản trị / Kế toán có thêm sheet thông tin doanh nghiệp và thẻ XPAY">Tải template cập nhật</button>${ed && CANWRITE ? `<label class="btn pri" style="cursor:pointer" title="Upload template đã điền: PIC, thông tin doanh nghiệp, thẻ XPAY">Upload file cập nhật<input type="file" id="crpicf" accept=".xlsx,.xls" hidden></label>` : ''}</span></div></div>` + picPanel();
   if (CR.nc) h += newCoModal();
+  if (CR.team) { const cnt = p => ALL.filter(r => r.pic === p).length;
+    h += `<div id="tmmask" style="position:fixed;inset:0;background:#0007;z-index:40;display:grid;place-items:center;padding:16px"><div class="card" style="width:min(620px,96vw);margin:0;max-height:90vh;overflow:auto">
+      <div class="eyebrow">Tiến độ khách hàng</div><h2 class="card-title" style="margin:2px 0 6px">Danh sách người phụ trách</h2>
+      <div class="hint" style="margin-bottom:8px">Vai trò quyết định chỉ tiêu tuần: AE Top 200 = 15 meeting · AE / Lead / Sales Ops hạng 201–300 = 3–4 meeting · SDR = 75 cuộc gọi. Bỏ một người khỏi danh sách không xoá phân công cũ — khách của họ vẫn ghi tên đó cho đến khi đổi PIC.</div>
+      <table><thead><tr><th class="l">Tên</th><th class="l">Vai trò</th><th>Khách đang phụ trách</th><th></th></tr></thead><tbody>
+      ${CR.team.map(([n, r], i) => `<tr data-tmrow="${i}"><td class="l"><input class="tm_n" value="${esc(n)}" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:8px"></td><td class="l"><select class="tm_r">${ROLES.map(x => `<option ${x === r ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></td><td>${n ? n0(cnt(n)) : '—'}</td><td><button class="btn" data-tmdel="${i}" title="Bỏ khỏi danh sách">✕</button></td></tr>`).join('')}
+      </tbody></table>
+      <div style="display:flex;gap:8px;justify-content:space-between;margin-top:12px"><button class="btn" id="tm_add">+ Thêm người</button><span style="display:flex;gap:8px"><button class="btn" id="tm_x">Huỷ</button><button class="btn pri" id="tm_ok">Lưu danh sách</button></span></div>
+    </div></div>`; }
   const row = r => `<tr class="hit" data-cropen="${esc(r.key)}" style="cursor:pointer"><td class="l name" style="min-width:240px;padding-left:34px;color:var(--accent)">${esc(r.name)}${r.isNew ? ' <span class="pill p-stable" style="font-size:10.5px">mới thêm</span>' : ''}<span class="def">HĐ ${esc(r.key)}${r.gname ? ' · ' + esc(r.gname) + (r.grank ? ' #' + r.grank : '') : ''}</span></td><td class="l">${r.pic ? esc(r.pic) : '<b style="color:var(--critical)">Chưa phân công</b>'}</td>
     ${['pl', 'xp', 'call', 'meet'].map(f => `<td class="l">${done(r[f]) ? `<span class="c-stable">✓</span> ${isoOk(r[f]) ? dm(r[f]) : ''}${f === 'call' && r.calls.length > 1 ? `<span class="def">${r.calls.length} lần</span>` : ''}` : '<span class="lbl">—</span>'}</td>`).join('')}
     <td class="l">${r.first ? dmy(r.first) : '<span class="lbl">chưa</span>'}</td><td>${r.gmv ? money(r.gmv) : '—'}<span class="def">${r.gmv30 ? '30N ' + nf(r.gmv30 / UNIT.div, UNIT.dec) : r.gmv ? 'ngừng 30N' : ''}</span></td><td class="l" style="white-space:normal;min-width:170px;font-size:12px">${PS[r.key] ? `${esc(PS[r.key].route)} <span class="lbl">(${PS[r.key].rn}/${PS[r.key].n} chuyến)</span><span class="def">${esc(PS[r.key].p)} · ${PS[r.key].band}${PS[r.key].short ? ' · <b style="color:var(--critical)">thiếu xe</b>' : ''}</span>` : (((S.cs || {})[r.key] || {}).custom || []).length ? '<span class="pill p-mute">CS đã khai báo</span>' : '<span class="lbl">—</span>'}</td>
@@ -1897,20 +1914,20 @@ function picRows(A) {
   const H = A[hi].map(c => fold(c)), ck = H.indexOf(fold('Số hợp đồng')), cp = H.indexOf(fold('PIC mới')), cn = H.indexOf(fold('Tên pháp nhân'));
   const byKey = {}; crmRows(CR.day).forEach(r => byKey[r.key] = r);
   const pick = v => { const x = fold(v); if (!x) return undefined; if (x === fold(PIC_CLEAR) || x === fold('Chưa phân công')) return ''; return PICS.find(p => fold(p) === x) ?? null; };
-  const seen = {}, changes = [], errors = []; let same = 0, filled = 0;
+  const seen = {}, changes = [], errors = [], unknown = {}; let same = 0, filled = 0;
   for (let i = hi + 1; i < A.length; i++) {
     const raw = A[i], k0 = String(raw[ck] == null ? '' : raw[ck]).trim(), pv = String(raw[cp] == null ? '' : raw[cp]).trim();
     if (!k0 || !pv) continue; filled++;
     const k = MERGE[k0] || k0, r = byKey[k], np = pick(pv), line = i + 1, nm = cn >= 0 ? String(raw[cn] || '') : '';
     if (!r) { errors.push(`Dòng ${line}: không có số hợp đồng "${k0}"${nm ? ' (' + nm + ')' : ''} trong hệ thống`); continue; }
-    if (np === null) { errors.push(`Dòng ${line}: "${pv}" không có trong danh sách PIC (${r.name})`); continue; }
+    if (np === null) { unknown[pv] = (unknown[pv] || 0) + 1; if (Object.keys(unknown).length <= 3 && unknown[pv] <= 3) errors.push(`Dòng ${line}: "${pv}" không có trong danh sách PIC (${r.name})`); continue; }
     if (k in seen && seen[k] !== np) { errors.push(`Dòng ${line}: ${r.name} bị điền 2 PIC khác nhau (${seen[k] || PIC_CLEAR} / ${np || PIC_CLEAR}), bỏ qua dòng này`); continue; }
     if (k in seen) continue; seen[k] = np;
     if ((r.pic || '') === np) { same++; continue; }
     changes.push({key: k, name: r.name, grp: r.grp, from: r.pic || '', to: np});
   }
   const go = [1, 2, 3, 4, 5, 9]; changes.sort((a, b) => go.indexOf(a.grp) - go.indexOf(b.grp) || a.name.localeCompare(b.name, 'vi'));
-  return {changes, errors, same, filled};
+  return {changes, errors, same, filled, unknown};
 }
 const isClr = v => fold(v) === fold(CLR);
 const cellTxt = v => v instanceof Date ? isoOf(v) : String(v == null ? '' : v).trim();
@@ -1962,7 +1979,9 @@ async function updParse(file) {
   await loadScript(XLSX_URL);
   const wb = XLSX.read(await file.arrayBuffer(), {type: 'array', cellDates: true}), SH = wb.Sheets;
   const byKey = {}; crmRows(CR.day).forEach(r => byKey[r.key] = r);
-  const I = {file: file.name, pic: null, errors: [], payload: null, srv: null};
+  const I = {file: file.name, pic: null, errors: [], payload: null, srv: null, roles: {}};
+  CR.picFile = file;
+  if (SH.DS_PIC) sheetRows(SH.DS_PIC).forEach(r => { const n = cellTxt(r[0]), ro = cellTxt(r[1]); if (n && ro && !/người phụ trách/i.test(n)) I.roles[n] = ro; });
   if (SH.Phan_cong_PIC || (!SH.Thong_tin_DN && !SH.The_XPAY)) { try { I.pic = picRows(sheetRows(SH.Phan_cong_PIC || SH[wb.SheetNames[0]])); } catch (e) { if (SH.Phan_cong_PIC || !(SH.Thong_tin_DN || SH.The_XPAY)) I.errors.push(e.message); } }
   if ((SH.Thong_tin_DN || SH.The_XPAY) && !CANWRITE) I.errors.push('Bạn không có quyền cập nhật thông tin doanh nghiệp / thẻ, bỏ qua 2 sheet này.');
   else if (SH.Thong_tin_DN || SH.The_XPAY) {
@@ -2000,6 +2019,9 @@ function picPanel() {
       ...V.deleted.map(c => `<tr><td class="l name">${esc(cname(c.key))}<span class="def">HĐ ${esc(c.key)}</span></td><td class="l">${esc(c.holder || '')}<span class="def">UID ${esc(c.uid)}</span></td><td class="l"><span class="pill p-critical">Gỡ thẻ</span></td><td colspan="2"></td></tr>`)];
     parts.push(sec(`Thẻ XPAY · ${n0(V.added.length)} thẻ mới · ${n0(V.changed.length)} thẻ sửa · ${n0(V.deleted.length)} thẻ gỡ · ${n0(V.same)} giữ nguyên`, cr.length ? tbl(['Doanh nghiệp', 'Chủ thẻ', 'Thông tin', 'Hiện tại', 'Mới'], cr.join('')) : '<div class="hint">Không có thay đổi.</div>'));
   }
+  const unk = P && P.unknown ? Object.entries(P.unknown) : [];
+  if (unk.length) parts.unshift(`<div class="banner" style="margin:8px 0;border-color:var(--critical)"><b>${n0(unk.reduce((a, [, n]) => a + n, 0))} dòng ghi người phụ trách chưa có trong danh sách PIC:</b> ${unk.map(([n, c]) => `<b>${esc(n)}</b> (${n0(c)} khách${I.roles[n] ? ' · ' + esc(I.roles[n]) : ''})`).join(' · ')}.
+    ${CANWRITE ? `<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn pri" id="crpicadd">Thêm ${unk.map(([n]) => esc(n)).join(', ')} vào danh sách PIC rồi kiểm tra lại</button><span class="lbl">Vai trò lấy theo sheet DS_PIC của file (thiếu thì là AE hạng 201–300); sửa sau ở “Danh sách người phụ trách”.</span></div>` : '<div class="lbl">Nhờ Quản trị / Kế toán thêm người này vào danh sách PIC.</div>'}</div>`);
   return `<div class="card" id="crpicp" style="border:1px solid var(--accent)"><div class="hd"><div><div class="eyebrow">Upload file cập nhật · ${esc(I.file)}</div><h2 class="card-title">${n0(total)} thay đổi · ${n0(errs.length)} lỗi</h2></div>
     <div style="display:flex;gap:8px"><button class="btn" id="crpicx">Huỷ</button><button class="btn pri" id="crpicok" ${total && !I.busy ? '' : 'disabled'}>${I.busy ? 'Đang lưu…' : 'Áp dụng ' + n0(total) + ' thay đổi'}</button></div></div>
     ${I.msg ? `<div class="hint" style="margin-bottom:8px"><b>${esc(I.msg)}</b></div>` : ''}
@@ -2065,6 +2087,22 @@ function bindJourney() {
     try { CR.picImp = await updParse(f); } catch (er) { CR.picImp = {file: f.name, pic: null, srv: null, errors: [er.message || String(er)]}; }
     keep(() => {}); if ($('crpicp')) $('crpicp').scrollIntoView({behavior: 'smooth', block: 'start'}); };
   if ($('crpicx')) $('crpicx').onclick = () => keep(() => { CR.picImp = null; });
+  if ($('crpicadd')) $('crpicadd').onclick = async () => { const I = CR.picImp, b = $('crpicadd'); b.disabled = true; b.textContent = 'Đang thêm…';
+    try { const add = Object.keys(I.pic.unknown).map(n => [n, ROLES.includes(I.roles[n]) ? I.roles[n] : ROLES.find(r => fold(r) === fold(I.roles[n] || '')) || 'AE hạng 201–300']);
+      await saveTeam([...PICS.map(p => [p, ROLE[p]]), ...add]);
+      CR.picImp = await updParse(CR.picFile); keep(() => {}); }
+    catch (e) { b.disabled = false; b.textContent = 'Thử lại'; alert('Chưa thêm được: ' + (e.message || e)); } };
+  if ($('crteam')) $('crteam').onclick = () => keep(() => { CR.team = PICS.map(p => [p, ROLE[p]]); });
+  if ($('tmmask')) {
+    const rd = () => { CR.team = [...document.querySelectorAll('[data-tmrow]')].map(tr => [tr.querySelector('.tm_n').value.trim(), tr.querySelector('.tm_r').value]); };
+    $('tmmask').onclick = e => { if (e.target.id === 'tmmask') keep(() => { CR.team = null; }); };
+    $('tm_x').onclick = () => keep(() => { CR.team = null; });
+    $('tm_add').onclick = () => { rd(); keep(() => { CR.team.push(['', 'AE hạng 201–300']); }); };
+    document.querySelectorAll('[data-tmdel]').forEach(b => b.onclick = () => { rd(); keep(() => { CR.team.splice(+b.dataset.tmdel, 1); }); });
+    $('tm_ok').onclick = async () => { rd(); const T = CR.team.filter(x => x[0]); const dup = T.find((x, i) => T.findIndex(y => fold(y[0]) === fold(x[0])) !== i);
+      if (dup) { alert(`Tên "${dup[0]}" bị trùng.`); return; } if (!T.length) { alert('Cần ít nhất 1 người.'); return; }
+      try { await saveTeam(T); keep(() => { CR.team = null; }); } catch (e) { alert('Chưa lưu được: ' + (e.message || e)); } };
+  }
   if ($('crpicok')) $('crpicok').onclick = async () => { const I = CR.picImp, n = I ? updCount(I) : 0; if (!I || I.busy || !n) return;
     if (!window.confirm(`Áp dụng ${n} thay đổi theo file "${I.file}"?`)) return;
     I.busy = true; I.msg = ''; keep(() => {}); const done_ = [];
@@ -2120,7 +2158,7 @@ function bindDrawer() {
     const id = 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     const patch = {acts: {[id]: {t: $('cat_t').value, d, who: $('cat_w').value, res, det: $('cat_x').value.trim(), ts: Date.now()}}};
     const nx = $('cat_nx').value; patch.nx = isoOk(nx) ? nx : null;
-    if (!PICS.includes(res) && !cats().includes(res)) { try { const db = await claude.use('db'); const c = [...new Set([...(CFG.cats || []), res])]; await db.doc('cfg/main').set({cats: c}); } catch (e) {} }
+    if (!PICS.includes(res) && !cats().includes(res)) { try { const db = await claude.use('db'); const c = [...new Set([...(CFG.cats || []), res])]; await db.doc('cfg/main').set(Object.assign({}, CFG || {}, {cats: c})); } catch (e) {} }
     $('cat_add').disabled = true; msg('Đang lưu…');
     try { await crmWrite(k, patch); msg('Đã lưu.'); CR.open = null; CRM_ = null; const y = window.scrollY; render(); window.scrollTo(0, y); } catch (e) { fail(e); $('cat_add').disabled = false; }
   };
