@@ -89,6 +89,8 @@ const canon = s => canonSp(s).replace(/ /g, '');
 const xpayKeyOf = name => 'XPAY-' + String(name || '').toUpperCase().trim().replace(/^[A-Z0-9]{3,6}\s*-\s*/, '').replace(/[^\p{L}\p{N}]/gu, '').slice(0, 20);
 /* gộp mã trùng: (1) tách lại các tên Van đã chọn tách; (2) mã tạm XPAY-… có tên trùng (sau chuẩn hoá) với đúng 1 mã hợp đồng → gộp tự động; (3) các cặp Van đã chọn gộp tay */
 const AUTO_MERGED = [];
+/* merchant test CYGNUS: loại mọi giao dịch đã lưu (kể cả có tiền) */
+if (Array.isArray(S.tx)) S.tx = S.tx.filter(t => !/cygnus/i.test(String(t[6] || '')));
 (() => {
   S.merge = S.merge || {}; S.nomerge = S.nomerge || {}; S.mergeLog = S.mergeLog || {};
   for (const t of S.tx || []) if (S.nomerge[canon(t[7])]) t[2] = xpayKeyOf(t[7]);
@@ -267,10 +269,10 @@ const ROWS = [
   {k:'(TB 30N) Chuyến / thẻ active', def:'Chuyến 30N ÷ thẻ active 30N', f:'d', kind:'ratio', a:x=>x.trips30/x.cards30, p:p=>(p.t30 || p.gmv30/P.gpt)/p.cards30, t:()=>PE().t30/P.c30_tgt, sp:'cal'},
   {k:'(TB 30N) GMV / chuyến', def:'GMV 30N ÷ chuyến 30N · đích 797.680 đ', f:'m', kind:'ratio', a:x=>x.gmv30/x.trips30, p:p=>p.pt || P.gpt, t:()=>P.gpt, sp:'cal', kr:'gt'},
   'Supply — đơn vị & tài xế',
-  {k:'Đơn vị cung ứng đã triển khai', def:'Tỉnh/đơn vị ML có tài xế khởi tạo XPAY', f:'n', kind:'none', a:x=>x.units, p:null, t:()=>P.u_tgt},
-  {k:'Tài xế khởi tạo XPAY', def:'Lũy kế tài xế đã khởi tạo (file độ phủ)', f:'n', kind:'none', a:x=>x.init, p:null, t:()=>P.dr_init_tgt},
-  {k:'Tài xế active XPAY', def:'Tài xế đã active (file độ phủ)', f:'n', kind:'none', a:x=>x.dact, p:null, t:()=>P.dr_act_tgt},
-  {k:'Tài xế active trong ngày', def:'Mã NV (thiếu thì biển số) có ≥ 1 giao dịch trong ngày', f:'n', kind:'flow', a:x=>x.drivers, p:p=>p.drivers, t:()=>PE().drivers},
+  {k:'Đơn vị cung ứng đã triển khai', def:'Tỉnh/đơn vị ML có tài xế khởi tạo XPAY · chỉ số thực tế', f:'n', kind:'none', a:x=>x.units, p:null, t:null},
+  {k:'Tài xế khởi tạo XPAY', def:'Lũy kế tài xế đã khởi tạo (file độ phủ) · chỉ số thực tế', f:'n', kind:'none', a:x=>x.init, p:null, t:null},
+  {k:'Tài xế active XPAY', def:'Tài xế đã active (file độ phủ) · chỉ số thực tế', f:'n', kind:'none', a:x=>x.dact, p:null, t:null},
+  {k:'Tài xế active trong ngày', def:'Mã NV (thiếu thì biển số) có ≥ 1 giao dịch trong ngày · chỉ số thực tế', f:'n', kind:'flow', a:x=>x.drivers, p:null, t:null},
 ];
 const FMT = {n: n0, d: n2, m: money};
 const safe = v => (v == null || !isFinite(v)) ? null : v;
@@ -588,16 +590,16 @@ function renderOverview(d, C, A, p) {
   for (const r of ROWS) {
     if (typeof r === 'string') { h += `<tr class="sec"><td colspan="15">${r}</td></tr>`; continue; }
     const c = C[r.k], F = FMT[r.f], dl = (c.t != null && c.a7 != null) ? c.t - c.a7 : null, st = status(c.ratio);
-    const dec = c.pl == null ? '<span class="pill p-mute">Cần chốt đích</span>' : c.ratio >= 1 ? '<span class="pill p-stable">Giữ</span>' : dl > 0 ? '<span class="pill p-high">Action · hơn TB 7N</span>' : '<span class="pill p-critical">Action</span>';
+    const dec = c.pl == null ? (r.p ? '<span class="pill p-mute">Cần chốt đích</span>' : '<span class="lbl">thực tế</span>') : c.ratio >= 1 ? '<span class="pill p-stable">Giữ</span>' : dl > 0 ? '<span class="pill p-high">Action · hơn TB 7N</span>' : '<span class="pill p-critical">Action</span>';
     h += `<tr><td class="l name">${r.zoom ? `<a href="#" data-tab="zoom" style="color:var(--accent)">${r.k}</a>` : r.k}<span class="def">${r.def}</span></td>
       <td>${F(c.y)}</td><td>${F(c.a7)}</td><td><b>${F(c.t)}</b></td>
       ${(() => { const ok = c.gr != null && c.tgr != null ? c.gr >= c.tgr - 5e-4 : null, col = ok == null ? '' : ok ? 'up' : 'dn';
         const pc = v => v == null || !isFinite(v) ? '—' : (v > 0 ? '+' : v < 0 ? '−' : '') + nf(Math.abs(v) * 100, 1) + '%';
         return `<td class="${col || (dl > 0 ? 'up' : dl < 0 ? 'dn' : '')}"><b>${pc(c.gr)}</b>${dl == null ? '' : `<span class="def">${dl > 0 ? '▲ ' : dl < 0 ? '▼ ' : '= '}${F(Math.abs(dl))}${ok == null ? '' : ok ? ' · đạt mục tiêu' : ' · thấp hơn ' + nf((c.tgr - c.gr) * 100, 1) + ' điểm %'}</span>`}</td>
           <td><b>${pc(c.tgr)}</b>${c.pa7 != null && c.pl != null ? `<span class="def">${F(c.pl)} so TB ${F(c.pa7)}</span>` : ''}</td>`; })()}
-      <td>${c.pl == null ? '<span class="lbl">cần chốt</span>' : F(c.pl)}</td><td class="c-${st}"><b>${pct(c.ratio)}</b></td>
+      <td>${c.pl == null ? (r.p ? '<span class="lbl">cần chốt</span>' : '—') : F(c.pl)}</td><td class="c-${st}"><b>${pct(c.ratio)}</b></td>
       <td>${c.def == null ? '—' : F(c.def)}</td><td>${c.ptm == null ? '—' : F(c.ptm)}</td><td class="${c.adj != null ? 'adj' : ''}">${c.adj == null ? '—' : F(c.adj)}</td>
-      <td>${c.wk == null ? '—' : F(c.wk)}</td><td>${c.tg == null ? '<span class="lbl">cần chốt</span>' : F(c.tg)}</td><td>${F(c.gap)}</td><td class="l">${dec}</td></tr>`;
+      <td>${c.wk == null ? '—' : F(c.wk)}</td><td>${c.tg == null ? (r.t ? '<span class="lbl">cần chốt</span>' : '—') : F(c.tg)}</td><td>${F(c.gap)}</td><td class="l">${dec}</td></tr>`;
   }
   h += `</tbody></table></div><div class="hint"><b>Tăng so TB 7 ngày</b> = (Hôm nay − TB 7 ngày gần nhất) ÷ TB 7 ngày. <b>Mục tiêu tăng so TB 7 ngày</b> = cùng công thức trên số kế hoạch của lộ trình: (KH hôm nay − TB KH 7 ngày trước) ÷ TB KH 7 ngày. Xanh = tăng bằng hoặc nhanh hơn mục tiêu, đỏ = chậm hơn.<br><b>Cách bù:</b> chỉ số theo ngày (GMV, thẻ active, tài xế có giao dịch): KH ngày mai đã bù = KH gốc + thâm hụt cộng dồn từ 01/10 ÷ số ngày còn lại đến 31/12. Chỉ số lũy kế (DN, thẻ, GMV lũy kế tháng, GMV 30N): KH ngày mai đã bù = KH gốc ngày mai + khoảng hụt hôm nay so với kế hoạch ÷ số ngày còn lại. Vượt KH thì không giảm kế hoạch; chỉ số tỷ lệ giữ KH gốc.</div></div>`;
   // charts
@@ -718,7 +720,7 @@ function renderUpload() {
   let h = `<div class="card"><div class="hd"><div><div class="eyebrow">Cập nhật số liệu cuối ngày</div><h2 class="card-title">Upload bảng kê taxi + file độ phủ tài xế</h2></div>
    <div class="card-note">Giao dịch đến ${dmy(LASTDAY)} · tài xế đến ${lastDrv ? dmy(lastDrv) : '—'} · cập nhật lần cuối ${S.meta.updated ? esc(S.meta.updated) : '—'}</div></div>`;
   if (!CANWRITE) return h + `<div class="hint">Bạn đang xem ở chế độ chỉ xem. Chỉ người có quyền chỉnh sửa dashboard mới upload được số liệu.</div></div>`;
-  h += `<div class="g2"><div class="drop"><b>1. Bảng kê taxi (.xlsx) — chọn được nhiều file</b><input type="file" id="ftx" accept=".xlsx,.xls" multiple><div class="hint">Gộp với dữ liệu cũ, bỏ trùng theo "Số giao dịch", loại giao dịch 0đ và nội bộ Xperise.<br><span style="font-weight:700">Lưu ý:</span> giao dịch có Đơn vị phát sinh là <span style="font-weight:700">CYGNUS™ Universal Transportation Service</span> và số tiền <span style="font-weight:700">0đ</span> là giao dịch khởi tạo/test — không tính vào bất kỳ thống kê nào.</div></div>
+  h += `<div class="g2"><div class="drop"><b>1. Bảng kê taxi (.xlsx) — chọn được nhiều file</b><input type="file" id="ftx" accept=".xlsx,.xls" multiple><div class="hint">Gộp với dữ liệu cũ, bỏ trùng theo "Số giao dịch", loại giao dịch 0đ. Thiếu ngày đi thực tế thì lấy ngày giao dịch. Giao dịch nội bộ Xperise <b>vẫn tính</b>.<br><span style="font-weight:700">Lưu ý:</span> giao dịch có Đơn vị phát sinh là <span style="font-weight:700">CYGNUS™</span> (merchant test) bị loại <span style="font-weight:700">với mọi số tiền</span> — không tính vào bất kỳ thống kê nào.</div></div>
     <div class="drop"><b>2. File độ phủ tài xế (.xlsx, sheet "Nhập active")</b><input type="file" id="fdrv" accept=".xlsx,.xls"><div class="hint">Thay toàn bộ bảng tài xế bằng file mới. Ngày không nhập lấy số gần nhất.</div></div></div>
     <div class="drop" style="margin-top:12px"><b>3. Số lũy kế — tự tính hoặc nhập tay (áp cho ngày giao dịch mới nhất ${LASTDAY ? dmy(LASTDAY) : ''}) — có thể lưu riêng, không cần chọn file</b>
       ${[['appendix', 'mct', 'Phụ lục đã ký', 'số khách đã ký phụ lục'], ['onboard', 'mob', 'DN đã khởi tạo XPAY', 'số khách đã khởi tạo XPAY']].map(([k, id, l, d]) => { const cs = LASTDAY ? countSrc(LASTDAY, k) : {v: null, src: ''}, ac = autoCounts()[k], md = MMODE(k), ml = manualLast(LASTDAY || '9999', k);
@@ -767,8 +769,8 @@ async function preview() {
     for (const r of rows) {
       const id = String(r['Số giao dịch'] || '').trim(), amt = Number(String(r['Số tiền']).replace(/[^\d.-]/g, '')), d = isoOf(r['Ngày đi thực tế'] || r['Ngày giao dịch']);
       if (!id || !d) { bad++; continue; }
-      if (/cygnus/i.test(r['Đơn vị phát sinh'] || '') && !(amt > 0)) { test++; continue; } // CYGNUS + 0đ = giao dịch khởi tạo/test
-      if (!(amt > 0) || /xperise internal/i.test(r['Công ty'] || '')) { zero++; continue; }
+      if (/cygnus/i.test(r['Đơn vị phát sinh'] || '')) { test++; continue; }   // CYGNUS = merchant test: loại mọi giao dịch, kể cả có tiền
+      if (!(amt > 0)) { zero++; continue; }   // giao dịch nội bộ Xperise vẫn tính
       if (have.has(id)) { dup++; const o = BYID[id]; if (o && o.length <= 9 && (r['Điểm đón/Ghi chú'] || r['Điểm trả'])) fill.push([id, String(r['Điểm đón/Ghi chú'] || '').trim(), String(r['Điểm trả'] || '').trim(), String(r['Khoảng cách (km)'] || '').trim(), String(r['Ngày giao dịch'] || '')]); continue; }
       have.add(id); n++;
       const comp = String(r['Công ty'] || '').trim();
@@ -776,7 +778,7 @@ async function preview() {
     }
     log.push(`✓ ${f.name}: ${rows.length} dòng → ${n} giao dịch mới.`);
   }
-  if (fx.length) log.push(`Bỏ qua: ${test} giao dịch khởi tạo/test (CYGNUS™ 0đ), ${dup} trùng, ${zero} giao dịch 0đ khác/nội bộ Xperise, ${bad} dòng thiếu mã/ngày.` + (fill.length ? ` Bổ sung điểm đón/trả cho ${fill.length} giao dịch cũ.` : ''));
+  if (fx.length) log.push(`Bỏ qua: ${test} giao dịch merchant test (CYGNUS), ${dup} trùng số giao dịch, ${zero} giao dịch 0đ, ${bad} dòng thiếu số giao dịch / ngày.` + (fill.length ? ` Bổ sung điểm đón/trả cho ${fill.length} giao dịch cũ.` : ''));
   let drv = null;
   if (fd) {
     const wb = XLSX.read(await fd.arrayBuffer(), {type: 'array', cellDates: true});
@@ -869,9 +871,9 @@ async function exportXlsx() {
       put(ws, r, 2, row.k, null, {name: 'Arial', size: 10, bold: true}); put(ws, r, 3, row.def, null, {name: 'Arial', size: 9, italic: true, color: {argb: 'FF6B7280'}});
       put(ws, r, 4, c.y, fm); put(ws, r, 5, c.a7, fm); put(ws, r, 6, c.t, fm, {name: 'Arial', size: 10, bold: true}); put(ws, r, 7, dl, fm);
       const tt = put(ws, r, 8, dl == null ? '' : dl > 0 ? '▲ Tốt' : dl < 0 ? '▼ Tệ' : '= Như cũ'); tt.font = {name: 'Arial', size: 10, bold: true, color: {argb: dl > 0 ? 'FF0D7A5F' : dl < 0 ? 'FFC0392B' : 'FF222222'}};
-      put(ws, r, 9, c.pl == null ? 'Cần chốt' : c.pl, fm); const pc = put(ws, r, 10, c.ratio, PC); if (c.ratio != null && c.ratio < 1) pc.font = {name: 'Arial', size: 10, color: {argb: 'FFC0392B'}};
+      put(ws, r, 9, c.pl == null ? (r.p ? 'Cần chốt' : '—') : c.pl, fm); const pc = put(ws, r, 10, c.ratio, PC); if (c.ratio != null && c.ratio < 1) pc.font = {name: 'Arial', size: 10, color: {argb: 'FFC0392B'}};
       put(ws, r, 11, c.def, fm); put(ws, r, 12, c.ptm, fm); const aj = put(ws, r, 13, c.adj, fm, {name: 'Arial', size: 10, bold: true}); if (c.adj != null) aj.fill = fill('FFFFF4CC');
-      put(ws, r, 14, c.wk, fm); put(ws, r, 15, c.tg == null ? 'Cần chốt' : c.tg, fm); put(ws, r, 16, c.gap, fm);
+      put(ws, r, 14, c.wk, fm); put(ws, r, 15, c.tg == null ? (r.t ? 'Cần chốt' : '—') : c.tg, fm); put(ws, r, 16, c.gap, fm);
       const dec = c.pl == null ? '—' : c.ratio >= 1 ? 'Giữ' : dl > 0 ? 'Action (tốt hơn TB 7 ngày nhưng dưới KH)' : 'Action';
       const dcell = put(ws, r, 17, dec, null, {name: 'Arial', size: 10, bold: true, color: {argb: dec === 'Giữ' ? 'FF0D7A5F' : dec === '—' ? 'FF6B7280' : 'FFC0392B'}});
       if (dec === 'Giữ') dcell.fill = fill('FFD6F1EC'); else if (dec !== '—') dcell.fill = fill('FFFDE7EC');
