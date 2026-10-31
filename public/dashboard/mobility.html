@@ -760,7 +760,7 @@ async function preview() {
     $('ulog').textContent = PENDING.log; $('bsave').disabled = false; return;
   }
   try { await loadScript(XLSX_URL); } catch (e) { $('ulog').textContent = e.message; return; }
-  const have = new Set(S.tx.map(t => t[1])); const BYID = {}; S.tx.forEach(t => BYID[t[1]] = t); const add = [], fill = []; let zero = 0, dup = 0, bad = 0, test = 0;
+  const have = new Set(S.tx.map(t => t[1])); const BYID = {}; S.tx.forEach(t => BYID[t[1]] = t); const add = [], fill = [], fillH = []; let zero = 0, dup = 0, bad = 0, test = 0;
   for (const f of fx) {
     const wb = XLSX.read(await f.arrayBuffer(), {type: 'array', cellDates: true});
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval: null, raw: true});
@@ -771,10 +771,11 @@ async function preview() {
       if (!id || !d) { bad++; continue; }
       if (/cygnus/i.test(r['Đơn vị phát sinh'] || '')) { test++; continue; }   // CYGNUS = merchant test: loại mọi giao dịch, kể cả có tiền
       if (!(amt > 0)) { zero++; continue; }   // giao dịch nội bộ Xperise vẫn tính
-      if (have.has(id)) { dup++; const o = BYID[id]; if (o && o.length <= 9 && (r['Điểm đón/Ghi chú'] || r['Điểm trả'])) fill.push([id, String(r['Điểm đón/Ghi chú'] || '').trim(), String(r['Điểm trả'] || '').trim(), String(r['Khoảng cách (km)'] || '').trim(), String(r['Ngày giao dịch'] || '')]); continue; }
+      const holder = String(r['Tên in trên Thẻ'] || r['Tên in trên thẻ'] || '').trim();
+      if (have.has(id)) { dup++; const o = BYID[id]; if (o && holder && !o[12]) fillH.push([id, holder]); if (o && o.length <= 9 && (r['Điểm đón/Ghi chú'] || r['Điểm trả'])) fill.push([id, String(r['Điểm đón/Ghi chú'] || '').trim(), String(r['Điểm trả'] || '').trim(), String(r['Khoảng cách (km)'] || '').trim(), String(r['Ngày giao dịch'] || '')]); continue; }
       have.add(id); n++;
       const comp = String(r['Công ty'] || '').trim();
-      add.push([d, id, companyKey(comp), String(r['Số thẻ'] || '').trim().slice(-4), amt, driverId(r['Mã NV'], r['BS Xe']), String(r['Đơn vị phát sinh'] || '').trim(), comp, String(r['Ngày giao dịch'] instanceof Date ? isoOf(r['Ngày giao dịch']) : r['Ngày giao dịch'] || ''), String(r['Điểm đón/Ghi chú'] || '').trim(), String(r['Điểm trả'] || '').trim(), String(r['Khoảng cách (km)'] || '').trim()]);
+      add.push([d, id, companyKey(comp), String(r['Số thẻ'] || '').trim().slice(-4), amt, driverId(r['Mã NV'], r['BS Xe']), String(r['Đơn vị phát sinh'] || '').trim(), comp, String(r['Ngày giao dịch'] instanceof Date ? isoOf(r['Ngày giao dịch']) : r['Ngày giao dịch'] || ''), String(r['Điểm đón/Ghi chú'] || '').trim(), String(r['Điểm trả'] || '').trim(), String(r['Khoảng cách (km)'] || '').trim(), holder]);
     }
     log.push(`✓ ${f.name}: ${rows.length} dòng → ${n} giao dịch mới.`);
   }
@@ -805,7 +806,7 @@ async function preview() {
   unk.forEach(u => { const c = bestTarget(u.name); u.cand = c; u.units = [...u.units]; });
   if (unk.length) log.push(`${unk.length} công ty chưa có mã hợp đồng trên hệ thống — chọn gộp hoặc ghi nhận ở bảng bên dưới trước khi lưu.`);
   if (mTxt) log.push('Số lũy kế: ' + mTxt + '.');
-  PENDING = (add.length || drv || fill.length || mChg.length || modeChg) ? {add, drv, fill, log: log.join('\n'), unk, map: {}} : null;
+  PENDING = (add.length || drv || fill.length || fillH.length || mChg.length || modeChg) ? {add, drv, fill, fillH, log: log.join('\n'), unk, map: {}} : null;
   if (!PENDING) log.push('Không có dữ liệu mới để lưu.');
   $('ulog').textContent = log.join('\n'); $('bsave').disabled = !PENDING;
   if ($('unkp')) { $('unkp').innerHTML = unkPanel(); bindUnk(); }
@@ -828,6 +829,7 @@ async function save() {
   S.tx.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
   if (PENDING.drv) S.drv = PENDING.drv;
   const IDX_ = {}; S.tx.forEach(t => IDX_[t[1]] = t); (PENDING.fill || []).forEach(([id, a, b2, km, ts]) => { const t = IDX_[id]; if (!t) return; while (t.length < 9) t.push(''); if (!t[8] && ts) t[8] = ts; t[9] = a; t[10] = b2; t[11] = km; });
+  (PENDING.fillH || []).forEach(([id, h]) => { const t = IDX_[id]; if (!t) return; while (t.length < 12) t.push(''); t[12] = h; });
   S.cmode = {appendix: $('mctm').value, onboard: $('mobm').value};
   const last = S.tx[S.tx.length - 1][0], k = Number($('mk').value), ob = S.cmode.onboard === 'auto' ? 0 : Number($('mob').value), ct = S.cmode.appendix === 'auto' ? 0 : Number($('mct').value);
   const curOb = manualAt(last, 'onboard'), curCt = manualAt(last, 'appendix'), nowTs = Date.now();
@@ -904,10 +906,27 @@ async function exportXlsx() {
     CC.list.forEach((c, i) => { [c.rank, c.grp, c.name, c.ae, c.card, c.peak, c.peak_m, c.tgt, c.g, c.n, c.last ? new Date(c.last + 'T00:00:00Z') : null, c.ptd, c.pc, SEG[c.seg].k, SEG[c.seg].act].forEach((x, j) => put(kw, 2 + i, 1 + j, x, j === 10 ? 'dd/mm/yyyy' : j === 12 ? PC : [5, 7, 8, 9, 11].includes(j) ? VN : null)); });
     [7, 11, 50, 12, 12, 15, 9, 15, 14, 9, 11, 14, 9, 22, 44].forEach((w, i) => kw.getColumn(i + 1).width = w);
     // Giao_dich
+    // Map thẻ: cùng công ty + 4 số cuối (+ tên chủ thẻ nếu bảng kê có) → tên công ty in trên thẻ, tên chủ thẻ, số thẻ đầy đủ (Quản trị / Kế toán)
+    let CB = null, cardNote = '';
+    if (CANWRITE && CARDST === 'ok') { try { const r = await (await claude.use('cards')).exportAll(); CB = {}; (r.cards || []).forEach(c => { const k = MERGE[c.key] || c.key; (CB[k] = CB[k] || []).push(c); }); } catch (e) { cardNote = 'Không tải được dữ liệu thẻ: ' + (e.message || e.code || e); } }
+    else cardNote = CARDST !== 'ok' ? 'Chưa có dữ liệu thẻ XPAY trên hệ thống' : 'Chỉ Quản trị / Kế toán xem được số thẻ đầy đủ';
+    const l4 = v => String(v || '').replace(/\D/g, '').slice(-4);
+    const mapCard = t => { if (!CB) return {st: 'off'}; const L = (CB[t[2]] || []).filter(c => l4(c.pan) === l4(t[3]));
+      if (!L.length) return {st: 'none', msg: 'Không tìm thấy thẻ trùng 4 số cuối trong công ty'};
+      let M = L; const h = fold(t[12] || ''); if (L.length > 1 && h) M = L.filter(c => fold(c.holder || '') === h);
+      if (M.length === 1) return {st: 'ok', c: M[0], msg: L.length > 1 ? 'Khớp theo 4 số cuối + tên chủ thẻ' : ''};
+      return {st: 'dup', msg: `${L.length} thẻ trùng 4 số cuối${h ? ', tên chủ thẻ không phân biệt được' : ' — bảng kê chưa có tên chủ thẻ để phân biệt'}: ${L.map(c => c.holder || '?').join(' / ')}`}; };
     const gw = wbk.addWorksheet('Giao_dich', {views: [{state: 'frozen', ySplit: 1}]});
-    hdr(gw, 1, ['Ngày đi', 'Thời điểm GD', 'Số giao dịch', 'Khách hàng', 'Thẻ (4 số cuối)', 'Số tiền (VND)', 'Tài xế (Mã NV / biển số)', 'Đơn vị cung ứng'], 1);
-    S.tx.forEach((t, i) => [new Date(t[0] + 'T00:00:00Z'), t[8], t[1], (BYKEY[t[2]] || {}).name || t[7], t[3], t[4], t[5], t[6]].forEach((x, j) => put(gw, 2 + i, 1 + j, x, j === 0 ? 'dd/mm/yyyy' : j === 5 ? VN : null)));
-    [11, 16, 26, 50, 10, 14, 18, 28].forEach((w, i) => gw.getColumn(i + 1).width = w);
+    hdr(gw, 1, ['Ngày đi', 'Thời điểm GD', 'Số giao dịch', 'Khách hàng', 'Thẻ (4 số cuối)', 'Số tiền (VND)', 'Tài xế (Mã NV / biển số)', 'Đơn vị cung ứng', 'Tên công ty in trên thẻ', 'Tên chủ thẻ', 'Số thẻ (16 số)', 'Ghi chú map thẻ'], 1);
+    const WARN = {type: 'pattern', pattern: 'solid', fgColor: {argb: 'FFFFE08A'}}, BAD = {type: 'pattern', pattern: 'solid', fgColor: {argb: 'FFF8C9C9'}};
+    let nOk = 0, nDup = 0, nNone = 0;
+    S.tx.forEach((t, i) => { const m = mapCard(t), c = m.c || {};
+      [new Date(t[0] + 'T00:00:00Z'), t[8], t[1], (BYKEY[t[2]] || {}).name || t[7], t[3], t[4], t[5], t[6], c.company_on_card || '', c.holder || t[12] || '', c.pan ? String(c.pan).replace(/\D/g, '') : '', m.st === 'off' ? cardNote : m.msg || '']
+        .forEach((x, j) => { const cell = put(gw, 2 + i, 1 + j, x, j === 0 ? 'dd/mm/yyyy' : j === 5 ? VN : j === 10 ? '@' : null);
+          if (j >= 8 && (m.st === 'dup' || m.st === 'none')) cell.fill = m.st === 'dup' ? WARN : BAD; });
+      if (m.st === 'ok') nOk++; else if (m.st === 'dup') nDup++; else if (m.st === 'none') nNone++; });
+    [11, 16, 26, 50, 10, 14, 18, 28, 36, 26, 20, 60].forEach((w, i) => gw.getColumn(i + 1).width = w);
+    if (CB) put(gw, S.tx.length + 3, 1, `Map thẻ: ${n0(nOk)} giao dịch khớp · ${n0(nDup)} trùng 4 số cuối không phân biệt được (tô vàng) · ${n0(nNone)} không tìm thấy thẻ (tô đỏ).`);
     const buf = await wbk.xlsx.writeBuffer();
     const name = `XPAY_CEO_Dashboard_${d.replace(/-/g, '')}.xlsx`;
     const dl = window.claude ? await claude.use('downloads') : null;
