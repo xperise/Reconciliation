@@ -516,6 +516,9 @@ const ovDay = () => { const ks = Object.keys(ACT).sort(), last = ks[ks.length - 
 /* ---------- render ---------- */
 let SEL = null, TAB = 'ov', CH = {log: false, full: false}, CANWRITE = false, PENDING = null;
 function render() {
+  try { renderInner(); } finally { if (typeof postRoute === 'function') postRoute(); }
+}
+function renderInner() {
   if (TAB === 'ov') SEL = ovDay();
   const d = SEL, dy = addD(d, -1), A = ACT[d], C = tableCalc(d), p = PLAN[d];
   const dates = Object.keys(ACT).filter(x => x >= P.start).sort().reverse();
@@ -2230,6 +2233,29 @@ SEL = LASTDAY;
 ovInit();
 try { const t = localStorage.getItem('xpay_tab'); if (t) TAB = t; } catch (e) {}
 if (TAB === 'pat') { TAB = 'jr'; CR.view = 'pat'; }
+/* ---- Đường dẫn riêng cho từng tab: /dashboard/mobility/overall · roadmap · progress/{dashboard|pattern|input} · update (?kh=<mã khách> mở hồ sơ) ---- */
+const ROUTE_TAB = {overall: 'ov', 'tong-quan': 'ov', roadmap: 'zoom', 'lo-trinh': 'zoom', progress: 'jr', 'tien-do': 'jr', update: 'up', 'cap-nhat': 'up'};
+const ROUTE_VIEW = {dashboard: 'dash', pattern: 'pat', input: 'input', 'nhap-lieu': 'input'};
+function applyRoute(path, kh) {
+  const [a, b] = String(path || '').split('/').filter(Boolean);
+  if (ROUTE_TAB[a]) TAB = ROUTE_TAB[a];
+  if (TAB === 'jr') CR.view = ROUTE_VIEW[b] || (kh ? 'input' : CR.view || 'dash');
+  if (kh) { CR.open = kh; if (TAB !== 'jr') { TAB = 'jr'; CR.view = 'input'; } } else if (kh === '') CR.open = null;
+}
+const routeOf = () => { const t = {ov: 'overall', zoom: 'roadmap', jr: 'progress', up: 'update'}[TAB] || 'overall';
+  return t === 'progress' ? t + '/' + ({dash: 'dashboard', pat: 'pattern', input: 'input'}[CR.view] || 'dashboard') : t; };
+var ROUTE_LAST = '';
+function postRoute() {
+  if (window.parent === window) return;
+  const path = routeOf(), kh = CR.open || '', key = path + '|' + kh;
+  if (key === ROUTE_LAST) return;
+  const push = ROUTE_LAST && ROUTE_LAST.split('|')[0] !== path;   // đổi tab: thêm vào lịch sử; mở / đóng hồ sơ: thay
+  ROUTE_LAST = key;
+  try { window.parent.postMessage({type: 'xpay-route', path, kh, push}, location.origin); } catch (e) {}
+}
+(() => { const h = new URLSearchParams(location.hash.slice(1)); if (h.get('r') || h.get('kh')) applyRoute(h.get('r') || '', h.get('kh') || undefined); })();
+window.addEventListener('message', e => { if (e.origin !== location.origin || !e.data || e.data.type !== 'xpay-go') return;
+  applyRoute(e.data.path, e.data.kh || ''); ROUTE_LAST = routeOf() + '|' + (CR.open || ''); render(); });
 render();
 crmInit();
 cardsLoad();

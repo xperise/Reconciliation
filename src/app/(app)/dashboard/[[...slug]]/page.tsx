@@ -1,6 +1,7 @@
 "use client";
 // Dashboard quản trị tài chính & KPI — /dashboard (tab thứ 3 cạnh Xperise | MLX)
-import "./dashboard.css";
+// Mỗi phần / tab có đường dẫn riêng: xem lib/dashboard/routes.ts
+import "../dashboard.css";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DataSet } from "@/lib/dashboard/types";
 import { makeCtx, hasActual, mergeEdits, segCtx, Seg } from "@/lib/dashboard/calc";
@@ -8,6 +9,7 @@ import { renderView, kpiStrip, drillPanel, buildVM, VM, ViewState } from "@/lib/
 import { kyIdx, kyAdd, tr, todayIso, setUnit, UNITS, UnitKey } from "@/lib/dashboard/util";
 import DataTab from "@/components/dashboard/DataTab";
 import MobilityFrame from "@/components/dashboard/MobilityFrame";
+import { parseRoute, routePath } from "@/lib/dashboard/routes";
 
 // Hai tầng điều hướng: PHẦN (Tổng quan · Travel & SaaS · Mobility) → TAB chỉ số trong phần đó.
 // [key, nhãn, icon RemixIcon] — bộ icon của Xperise Design System, không dùng emoji
@@ -45,8 +47,13 @@ const firstTab = (sec: Sec) => TABS[sec][0]?.[0] ?? "";
 export default function DashboardPage() {
   const [data, setData] = useState<DataSet | null>(null);
   const [err, setErr] = useState("");
-  const [sec, setSec] = useState<Sec>("all");
-  const [tab, setTab] = useState("home");
+  // Phần / tab mở đầu lấy theo đường dẫn (/dashboard/travel-saas/ar, /dashboard/mobility/progress/input…)
+  const [first] = useState(() => (typeof window === "undefined" ? parseRoute("/dashboard") : parseRoute(window.location.pathname, window.location.search)));
+  const [sec, setSec] = useState<Sec>(first.sec ?? "all");
+  const [tab, setTab] = useState(first.sec && first.sec !== "m" && first.tab && hasTab(first.sec, first.tab) ? first.tab : firstTab(first.sec && first.sec !== "m" ? first.sec : "all") || "home");
+  // Mobility: đường dẫn con do khung dashboard XPAY báo lên (overall · roadmap · progress/… · update)
+  const [mobPath] = useState(() => (first.sec === "m" ? first.mob : ""));
+  const [mobKh] = useState(() => (first.sec === "m" ? first.kh : ""));
   const [ky, setKy] = useState("");
   const [toastMsg, setToastMsg] = useState<{ m: string; err: boolean } | null>(null);
   // Mã tra cứu đang mở khi bấm vào một phần của biểu đồ
@@ -89,6 +96,19 @@ export default function DashboardPage() {
     const f = SECTIONS.find(([k]) => acc[k]);
     if (f) { setSec(f[0]); setTab(firstTab(f[0])); }
   }, [acc, sec]);
+
+  // Đồng bộ đường dẫn: đổi phần / tab → thêm vào lịch sử trình duyệt (nút Back quay lại đúng tab)
+  useEffect(() => {
+    if (sec === "m") { if (!location.pathname.startsWith("/dashboard/mobility")) history.pushState(null, "", routePath("m")); return; }
+    const p = routePath(sec, tab);
+    if (location.pathname !== p) history.pushState(null, "", p);
+  }, [sec, tab]);
+  useEffect(() => {
+    const on = () => { const r = parseRoute(location.pathname, location.search); const s2 = (r.sec ?? "all") as Sec;
+      setSec(s2); if (s2 !== "m") setTab(r.tab && hasTab(s2, r.tab) ? r.tab : firstTab(s2)); setDrillKey(null); };
+    window.addEventListener("popstate", on);
+    return () => window.removeEventListener("popstate", on);
+  }, []);
 
   const ctx = useMemo(() => (data ? makeCtx(mergeEdits(data)) : null), [data]);
   useEffect(() => {
@@ -376,7 +396,7 @@ export default function DashboardPage() {
           {TABS[sec].map(([k, l, ic]) => (<button key={k} className={"xd-tab" + (tab === k ? " on" : "")} onClick={() => { setTab(k); setDrillKey(null); }}><i className={ic} aria-hidden="true" />{l}{k === "alerts" && nCrit > 0 && <span className="cnt">{nCrit}</span>}</button>))}
         </div>
       </div>}</nav>
-      {sec === "m" ? <MobilityFrame reloadKey={mobKey} /> : <div className="xd-page">
+      {sec === "m" ? <MobilityFrame reloadKey={mobKey} initialPath={mobPath} initialKh={mobKh} /> : <div className="xd-page">
         {err && <div className="card notice">Lỗi tải dữ liệu: {err}</div>}
         {!data && !err && <div className="empty">Đang tải dữ liệu…</div>}
         {data && !ctx?.periods.length && tab !== "data" && (
