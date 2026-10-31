@@ -529,7 +529,7 @@ function renderInner() {
     <div class="tabs">${[['ov','Tổng quan'],['zoom','Lộ trình 60 tỷ'],['jr','Tiến độ khách hàng'],['up','Cập nhật số liệu']].map(([k, l]) => `<button class="tab ${TAB === k ? 'on' : ''}" data-tab="${k}">${l}</button>`).join('')}</div>
     <div class="ctl">${TAB === 'ov' ? `<span class="lbl">Thời gian</span>${rangePicker(OV)}${unitFilter()}` : TAB === 'jr' ? '' : `<span class="lbl">Ngày xem</span><select id="dsel">${dates.map(x => `<option value="${x}" ${x === d ? 'selected' : ''}>${wd(x)} ${dmy(x)}</option>`).join('')}</select>`}
       <span class="lbl">Đơn vị tiền</span><select id="usel">${Object.entries(UNITS).map(([k, u]) => `<option value="${k}" ${u === UNIT ? 'selected' : ''}>${u.label}</option>`).join('')}</select>
-      <button class="btn pri" id="bxls">Xuất Excel</button></div></div>`;
+      <button class="btn pri" id="bxls" title="Một file đầy đủ: CEO, lộ trình, daily, KPI khách, khách hàng, lịch sử liên hệ, thẻ, giao dịch — đang lọc ở Nhập liệu thì các sheet khách / giao dịch chỉ gồm khách đã lọc">Xuất Excel${crmFilterTxt() ? ' (đang lọc)' : ''}</button></div></div>`;
   let body = '';
   if (TAB === 'ov') body = renderOverview(d, C, A, p);
   else if (TAB === 'zoom') body = renderZoom(d, C, A);
@@ -845,8 +845,10 @@ async function save() {
 }
 
 /* ---------- Excel export (format theo template CEO Dashboard) ---------- */
-async function exportXlsx() {
-  const b = $('bxls'); b.disabled = true; b.textContent = 'Đang tạo file…';
+/* Một nút, một file đầy đủ: sheet CEO + sheet khách hàng / lịch sử liên hệ / thẻ (theo bộ lọc đang chọn ở Nhập liệu) + giao dịch */
+async function exportXlsx(fromBtn) {
+  const b = fromBtn || $('bxls'), lbl0 = b ? b.textContent : ''; if (b) { b.disabled = true; b.textContent = 'Đang tạo file…'; }
+  const FLT = crmFilterTxt(), KEYS = FLT ? new Set(crmFilter(crmRows(CR.day), CR.day).map(r => r.key)) : null;
   try {
     await loadScript(EXCELJS_URL);
     const d = SEL, C = tableCalc(d), A = ACT[d];
@@ -856,7 +858,7 @@ async function exportXlsx() {
     const bd = {top: {style: 'thin', color: {argb: 'FFD7DEE3'}}, left: {style: 'thin', color: {argb: 'FFD7DEE3'}}, bottom: {style: 'thin', color: {argb: 'FFD7DEE3'}}, right: {style: 'thin', color: {argb: 'FFD7DEE3'}}};
     const VN = '#,##0;(#,##0);-', DC = '#,##0.00;(#,##0.00);-', PC = '0%';
     const hdr = (ws, row, vals, c0 = 2) => { vals.forEach((v, i) => { const c = ws.getCell(row, c0 + i); c.value = v; c.font = HF; c.fill = fill('FF0D6E63'); c.alignment = {wrapText: true, vertical: 'middle', horizontal: 'center'}; c.border = bd; }); ws.getRow(row).height = 32; };
-    const put = (ws, row, col, v, fmt, font) => { const c = ws.getCell(row, col); c.value = (v == null || (typeof v === 'number' && !isFinite(v))) ? null : v; c.font = font || F; c.border = bd; if (fmt) c.numFmt = fmt; return c; };
+    const put = (ws, row, col, v, fmt, font) => { const c = ws.getCell(row, col); c.value = (v == null || (typeof v === 'number' && !isFinite(v)) || (v instanceof Date && isNaN(v))) ? null : v; c.font = font || F; c.border = bd; if (fmt) c.numFmt = fmt; return c; };
     // CEO Dashboard
     const ws = wbk.addWorksheet('CEO Dashboard', {views: [{state: 'frozen', ySplit: 6, showGridLines: false}]});
     ws.getCell('A1').value = 'XPAY — CEO DASHBOARD: ĐƯỜNG ĐẾN 60 TỶ GMV THÁNG 12/2026'; ws.getCell('A1').font = {name: 'Arial', size: 14, bold: true};
@@ -901,7 +903,7 @@ async function exportXlsx() {
       v.forEach((x, j) => put(dw, 2 + i, 1 + j, x, j === 0 ? 'dd/mm/yyyy' : VN)); });
     dcols.forEach((_, i) => dw.getColumn(i + 1).width = i < 2 ? 11 : 14);
     // Khach_hang
-    const kw = wbk.addWorksheet('Khach_hang', {views: [{state: 'frozen', xSplit: 3, ySplit: 1}]});
+    const kw = wbk.addWorksheet('KPI_khach_hang', {views: [{state: 'frozen', xSplit: 3, ySplit: 1}]});
     hdr(kw, 1, ['Hạng', 'Nhóm', 'Khách hàng', 'PIC', 'Thẻ XPAY', 'Tháng ML cao nhất', 'Tháng đỉnh', 'Mục tiêu GMV T12', 'GMV XPAY 30N', 'Chuyến 30N', 'GD gần nhất', 'KH hôm nay', '% đạt KH', 'Phân khúc', 'Hành động'], 1);
     CC.list.forEach((c, i) => { [c.rank, c.grp, c.name, c.ae, c.card, c.peak, c.peak_m, c.tgt, c.g, c.n, c.last ? new Date(c.last + 'T00:00:00Z') : null, c.ptd, c.pc, SEG[c.seg].k, SEG[c.seg].act].forEach((x, j) => put(kw, 2 + i, 1 + j, x, j === 10 ? 'dd/mm/yyyy' : j === 12 ? PC : [5, 7, 8, 9, 11].includes(j) ? VN : null)); });
     [7, 11, 50, 12, 12, 15, 9, 15, 14, 9, 11, 14, 9, 22, 44].forEach((w, i) => kw.getColumn(i + 1).width = w);
@@ -920,20 +922,23 @@ async function exportXlsx() {
     hdr(gw, 1, ['Ngày đi', 'Thời điểm GD', 'Số giao dịch', 'Khách hàng', 'Thẻ (4 số cuối)', 'Số tiền (VND)', 'Tài xế (Mã NV / biển số)', 'Đơn vị cung ứng', 'Tên công ty in trên thẻ', 'Tên chủ thẻ', 'Số thẻ (16 số)', 'Ghi chú map thẻ'], 1);
     const WARN = {type: 'pattern', pattern: 'solid', fgColor: {argb: 'FFFFE08A'}}, BAD = {type: 'pattern', pattern: 'solid', fgColor: {argb: 'FFF8C9C9'}};
     let nOk = 0, nDup = 0, nNone = 0;
-    S.tx.forEach((t, i) => { const m = mapCard(t), c = m.c || {};
+    const TXS = KEYS ? S.tx.filter(t => KEYS.has(t[2])) : S.tx;
+    TXS.forEach((t, i) => { const m = mapCard(t), c = m.c || {};
       [new Date(t[0] + 'T00:00:00Z'), t[8], t[1], (BYKEY[t[2]] || {}).name || t[7], t[3], t[4], t[5], t[6], c.company_on_card || '', c.holder || t[12] || '', c.pan ? String(c.pan).replace(/\D/g, '') : '', m.st === 'off' ? cardNote : m.msg || '']
         .forEach((x, j) => { const cell = put(gw, 2 + i, 1 + j, x, j === 0 ? 'dd/mm/yyyy' : j === 5 ? VN : j === 10 ? '@' : null);
           if (j >= 8 && (m.st === 'dup' || m.st === 'none')) cell.fill = m.st === 'dup' ? WARN : BAD; });
       if (m.st === 'ok') nOk++; else if (m.st === 'dup') nDup++; else if (m.st === 'none') nNone++; });
     [11, 16, 26, 50, 10, 14, 18, 28, 36, 26, 20, 60].forEach((w, i) => gw.getColumn(i + 1).width = w);
-    if (CB) put(gw, S.tx.length + 3, 1, `Map thẻ: ${n0(nOk)} giao dịch khớp · ${n0(nDup)} trùng 4 số cuối không phân biệt được (tô vàng) · ${n0(nNone)} không tìm thấy thẻ (tô đỏ).`);
+    if (FLT) put(gw, TXS.length + 4, 1, `Đang lọc: ${FLT} · ${n0(TXS.length)} giao dịch của ${n0(KEYS.size)} khách`);
+    if (CB) put(gw, TXS.length + 3, 1, `Map thẻ: ${n0(nOk)} giao dịch khớp · ${n0(nDup)} trùng 4 số cuối không phân biệt được (tô vàng) · ${n0(nNone)} không tìm thấy thẻ (tô đỏ).`);
+    await crmSheets(wbk);   // Khach_hang · Lich_su_lien_he · The_XPAY (theo bộ lọc)
     const buf = await wbk.xlsx.writeBuffer();
-    const name = `XPAY_CEO_Dashboard_${d.replace(/-/g, '')}.xlsx`;
+    const name = `XPAY_CEO_Dashboard_${d.replace(/-/g, '')}${FLT ? '_dang_loc' : ''}.xlsx`;
     const dl = window.claude ? await claude.use('downloads') : null;
     if (dl) { try { await dl.save({filename: name, data: new Uint8Array(buf)}); } catch (e) { if (e && e.code !== 'declined') alert('Không tải được file: ' + (e.message || e.code)); } }
     else { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})); a.download = name; a.click(); }
   } catch (e) { alert('Không tạo được file Excel: ' + (e.message || e)); }
-  b.disabled = false; b.textContent = 'Xuất Excel';
+  if (b) { b.disabled = false; b.textContent = lbl0 || 'Xuất Excel'; }
 }
 
 /* ---------- PATTERN DI CHUYỂN ---------- */
@@ -1656,7 +1661,7 @@ function crmInput(ALL, d) {
     <input id="crq" placeholder="Tìm tên, số hợp đồng, nhóm client…" value="${esc(CR.q)}" style="font:13px var(--font-family-sans-serif);padding:6px 10px;border:1px solid var(--color-border-default);border-radius:10px;width:250px"><span class="lbl">${n0(R.length)} khách</span>
     <div style="flex-basis:100%;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="lbl">Mốc</span>${MSF.map(([k, l]) => { const v = (CR.ms || {})[k] || ''; return `<select data-crms="${k}" style="${v ? 'border-color:var(--accent);color:var(--color-action-theme-primary-active);font-weight:600' : ''}"><option value="" ${!v ? 'selected' : ''}>${l}: tất cả</option><option value="y" ${v === 'y' ? 'selected' : ''}>${l}: đã có</option><option value="n" ${v === 'n' ? 'selected' : ''}>${l}: chưa có</option></select>`; }).join('')}
       ${crmFilterTxt() ? '<a id="crclr" style="cursor:pointer;color:var(--accent);font-weight:600;font-size:12.5px">Xoá mọi bộ lọc</a>' : ''}</div>
-    <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">${ed && CANWRITE ? '<button class="btn" id="crteam" title="Thêm / đổi tên / đổi vai trò người phụ trách">Danh sách PIC</button>' : ''}${ed ? '<button class="btn pri" id="crnew" title="Thêm khách chưa có trong sổ khách / bảng kê">+ Thêm khách hàng</button>' : ''}<button class="btn" id="crxls" title="Xuất đúng danh sách đang lọc: mỗi pháp nhân 1 dòng (PIC, nhóm, mốc tiến độ, doanh thu, pattern, gợi ý) + sheet lịch sử liên hệ">Xuất Excel ${crmFilterTxt() ? `(${n0(R.length)} khách đang lọc)` : 'khách hàng'}</button><button class="btn" id="crpict" title="Sheet PIC; Quản trị / Kế toán có thêm sheet thông tin doanh nghiệp và thẻ XPAY">Tải template cập nhật</button>${ed && CANWRITE ? `<label class="btn pri" style="cursor:pointer" title="Upload template đã điền: PIC, thông tin doanh nghiệp, thẻ XPAY">Upload file cập nhật<input type="file" id="crpicf" accept=".xlsx,.xls" hidden></label>` : ''}</span></div></div>` + picPanel();
+    <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">${ed && CANWRITE ? '<button class="btn" id="crteam" title="Thêm / đổi tên / đổi vai trò người phụ trách">Danh sách PIC</button>' : ''}${ed ? '<button class="btn pri" id="crnew" title="Thêm khách chưa có trong sổ khách / bảng kê">+ Thêm khách hàng</button>' : ''}<button class="btn" id="crxls" title="Cùng file với nút Xuất Excel trên cùng: sheet CEO + khách hàng, lịch sử liên hệ, thẻ, giao dịch — khi đang lọc chỉ gồm khách đã lọc">Xuất Excel ${crmFilterTxt() ? `(${n0(R.length)} khách đang lọc)` : ''}</button><button class="btn" id="crpict" title="Sheet PIC; Quản trị / Kế toán có thêm sheet thông tin doanh nghiệp và thẻ XPAY">Tải template cập nhật</button>${ed && CANWRITE ? `<label class="btn pri" style="cursor:pointer" title="Upload template đã điền: PIC, thông tin doanh nghiệp, thẻ XPAY">Upload file cập nhật<input type="file" id="crpicf" accept=".xlsx,.xls" hidden></label>` : ''}</span></div></div>` + picPanel();
   if (CR.nc) h += newCoModal();
   if (CR.team) { const cnt = p => ALL.filter(r => r.pic === p).length;
     h += `<div id="tmmask" style="position:fixed;inset:0;background:#0007;z-index:40;display:grid;place-items:center;padding:16px"><div class="card" style="width:min(620px,96vw);margin:0;max-height:90vh;overflow:auto">
@@ -1795,13 +1800,13 @@ function xlKit() {
   const fill = c => ({type: 'pattern', pattern: 'solid', fgColor: {argb: c}});
   const bd = {top: {style: 'thin', color: {argb: 'FFD7DEE3'}}, left: {style: 'thin', color: {argb: 'FFD7DEE3'}}, bottom: {style: 'thin', color: {argb: 'FFD7DEE3'}}, right: {style: 'thin', color: {argb: 'FFD7DEE3'}}};
   const head = (ws, row, cols) => { cols.forEach(([l, w], i) => { const c = ws.getCell(row, i + 1); c.value = l; c.font = HF; c.fill = fill('FF0D6E63'); c.border = bd; c.alignment = {wrapText: true, vertical: 'middle', horizontal: 'center'}; ws.getColumn(i + 1).width = w; }); ws.getRow(row).height = 34; };
-  const put = (ws, row, vals, fmts) => vals.forEach((v, i) => { const c = ws.getCell(row, i + 1); c.value = (v == null || v === '' || (typeof v === 'number' && !isFinite(v))) ? null : v; c.font = F; c.border = bd; if (fmts && fmts[i]) c.numFmt = fmts[i]; });
+  const put = (ws, row, vals, fmts) => vals.forEach((v, i) => { const c = ws.getCell(row, i + 1); c.value = (v == null || v === '' || (typeof v === 'number' && !isFinite(v)) || (v instanceof Date && isNaN(v))) ? null : v; c.font = F; c.border = bd; if (fmts && fmts[i]) c.numFmt = fmts[i]; });
   const title = (ws, t, sub) => { ws.getCell('A1').value = t; ws.getCell('A1').font = {name: 'Arial', size: 13, bold: true}; ws.getCell('A2').value = sub; ws.getCell('A2').font = {name: 'Arial', size: 9, italic: true, color: {argb: 'FF6B7280'}}; };
   return {F, fill, bd, head, put, title};
 }
 const xlStamp = () => new Date().toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'});
 const scopeTxt = () => CR.who ? (CR.who === '_none' ? 'khách chưa phân công' : 'khách của ' + CR.who) : 'tất cả khách';
-const msDate = v => isoOk(v) ? new Date(v + 'T00:00:00Z') : v === 'Y' ? 'Có (không rõ ngày)' : '';
+const msDate = v => { if (isoOk(v)) { const D = new Date(v + 'T00:00:00Z'); return isNaN(D) ? v : D; } return v === 'Y' ? 'Có (không rõ ngày)' : ''; };
 /* Nhóm khách giống hệt màn hình Nhập liệu: thứ tự nhóm 1→5→Đã thanh lý, cùng cách sắp xếp, nhóm 5 chia theo phân loại Mai Linh */
 function crmGroups(R) {
   const out = [];
@@ -1817,13 +1822,14 @@ function xlSec(K, ws, row, ncol, text, sub) {
   ws.getCell(row, 1).value = sub ? '      ' + text : text;
   for (let c = 1; c <= ncol; c++) { const x = ws.getCell(row, c); x.fill = K.fill(sub ? 'FFF3F4F6' : 'FFE6F2F0'); x.font = {name: 'Arial', size: 10, bold: true, color: {argb: sub ? 'FF374151' : 'FF0D6E63'}}; x.border = K.bd; }
 }
-function crmExport() {
-  (async () => {
-    const btn = $('crxls'); if (btn) { btn.disabled = true; btn.textContent = 'Đang tạo file…'; }
-    try {
-      await loadScript(EXCELJS_URL);
+/* nút Xuất Excel ở Nhập liệu = cùng file với nút Xuất Excel trên cùng */
+function crmExport() { exportXlsx($('crxls')); }
+/* các sheet khách hàng: đúng danh sách đang lọc ở Nhập liệu */
+async function crmSheets(wbk) {
+  {
+    {
       const d = CR.day, GS = crmGroups(crmFilter(crmRows(d), d)), R = GS.flatMap(G => G.subs.flatMap(x => x.rows)), PS = patSummary(d);
-      const K = xlKit(), wbk = new ExcelJS.Workbook(), VN = '#,##0;(#,##0);-', DT = 'dd/mm/yyyy', N1 = '#,##0.0;(#,##0.0);-';
+      const K = xlKit(), VN = '#,##0;(#,##0);-', DT = 'dd/mm/yyyy', N1 = '#,##0.0;(#,##0.0);-';
       const ws = wbk.addWorksheet('Khach_hang', {views: [{state: 'frozen', ySplit: 4, xSplit: 3, showGridLines: false}]});
       K.title(ws, 'XPAY — TIẾN ĐỘ KHÁCH HÀNG (mỗi pháp nhân 1 dòng)', `${scopeTxt()}${crmFilterTxt() ? ' · lọc: ' + crmFilterTxt() : ''} · ${n0(R.length)} khách · số liệu đến ${dmy(d)} · xuất lúc ${xlStamp()}`);
       const cols = [['Nhóm', 34], ['Số hợp đồng', 13], ['Tên pháp nhân', 46], ['PIC', 11], ['PIC cũ (sổ khách)', 13], ['Cách xếp nhóm', 11], ['Phân loại Mai Linh', 26], ['Nhóm client', 24], ['Hạng nhóm client', 9], ['Hạng Top 200', 13], ['Tình trạng đặc biệt', 12], ['Tiến độ', 16],
@@ -1848,10 +1854,8 @@ function crmExport() {
       let n = 5; R.forEach(r => r.acts.forEach(a => { K.put(wa, n, [(r.grp === 9 ? '' : r.grp + '. ') + GRP[r.grp], r.key, r.name, r.pic, isoOk(a.d) ? new Date(a.d + 'T00:00:00Z') : a.d, a.t === 'meet' ? 'Meeting' : 'Gọi khách', a.who, a.res, a.det, a.seed ? 'File giao thẻ' : 'Nhập liệu'], [null, null, null, null, DT]); wa.getCell(n, 2).numFmt = '@'; n++; }));
       wa.autoFilter = {from: {row: 4, column: 1}, to: {row: Math.max(4, n - 1), column: 10}};
       if (CANWRITE && CARDST === 'ok') { const {items} = await cardsGrouped(GS); if (items.length) cardsSheet(K, wbk, items, false); }
-      await xlSave(wbk, `XPAY_Khach_hang_${d.replace(/-/g, '')}.xlsx`);
-    } catch (e) { alert('Không tạo được file Excel: ' + (e.message || e)); }
-    if (btn) { btn.disabled = false; btn.textContent = crmFilterTxt() ? 'Xuất Excel (đang lọc)' : 'Xuất Excel khách hàng'; }
-  })();
+    }
+  }
 }
 const PIC_CLEAR = '(Bỏ phân công)';
 const CLR = '(Xoá)';
@@ -2207,7 +2211,7 @@ function bind() {
   document.querySelectorAll('[data-tab]').forEach(el => el.onclick = ev => { ev.preventDefault(); TAB = el.dataset.tab; try { localStorage.setItem('xpay_tab', TAB); } catch (e) {} render(); window.scrollTo(0, 0); });
   if ($('dsel')) $('dsel').onchange = e => { SEL = e.target.value; render(); };
   $('usel').onchange = e => { UNIT = UNITS[e.target.value]; try { localStorage.setItem('xpay_unit', e.target.value); } catch (er) {} render(); };
-  $('bxls').onclick = exportXlsx;
+  $('bxls').onclick = () => exportXlsx($('bxls'));
   if ($('bfull')) $('bfull').onclick = () => { CH.full = !CH.full; render(); };
   if ($('blog')) $('blog').onclick = () => { CH.log = !CH.log; render(); };
   if ($('bprev')) $('bprev').onclick = preview;
