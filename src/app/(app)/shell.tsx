@@ -51,8 +51,14 @@ export function Shell({ role, email, userId, soChoDuyet, thongBao, access, child
   // qua lại vẫn thấy số cũ. Với công cụ vận hành thì đó là sai. Mỗi lần đổi
   // đường dẫn, buộc lấy lại dữ liệu từ máy chủ.
   const lanDau = useRef(true);
+  const truoc = useRef(path);
   useEffect(() => {
+    const cu = truoc.current; truoc.current = path;
     if (lanDau.current) { lanDau.current = false; return; }
+    // Trong tab Dashboard, đổi phần / tab chỉ đổi đường dẫn trên thanh địa chỉ (trang tự quản dữ liệu):
+    // không tải lại trang, nếu không khung Mobility bị dựng lại và tải lại liên tục.
+    const trongDash = (x: string) => x === '/dashboard' || x.startsWith('/dashboard/');
+    if (trongDash(cu) && trongDash(path)) return;
     router.refresh();
   }, [path, router]);
 
