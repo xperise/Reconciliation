@@ -67,6 +67,23 @@ html,body{margin:0;background:#f7f7fa}
 .xd .hidden{display:none}
 .xd .tt{position:fixed;pointer-events:none;background:#222;color:#fff;font-size:12px;padding:7px 9px;border-radius:8px;opacity:0;z-index:20;line-height:1.5}
 @media (max-width:900px){.xd .g2{grid-template-columns:minmax(0,1fr)}.xd .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.xd .ctl{margin-left:0}.xd .page{padding:12px 16px 32px}.xd .top{padding:10px 16px}}
+
+.crbar{padding:12px 18px}
+.crbar-top{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.crbar-search{display:flex;gap:10px;align-items:center;flex:1;min-width:280px}
+.crbar-search input{font:13px var(--font-family-sans-serif);padding:8px 12px;border:1px solid var(--color-border-default);border-radius:10px;width:100%;max-width:380px}
+.crbar-act{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.crbar-flt{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--line-soft)}
+.crbar-flt select{padding:5px 8px;font-size:12.5px;max-width:190px}
+.crbar-clr{cursor:pointer;color:var(--accent);font-weight:600;font-size:12.5px;margin-left:4px}
+details.mn{position:relative;border:0!important;padding:0!important;margin:0!important;background:none!important;box-shadow:none!important;border-radius:0}
+.crbar{overflow:visible}
+details.mn>summary{list-style:none}
+details.mn>summary::-webkit-details-marker{display:none}
+.mnp{position:absolute;right:auto;left:0;top:calc(100% + 6px);z-index:30;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px #00000022;padding:6px;display:flex;flex-direction:column;gap:4px;min-width:200px}
+.mnp.mnr{left:auto;right:0}
+.mnp .btn{width:100%;text-align:left;border-color:transparent}
+.mnp .btn:hover{background:var(--color-surface-primary)}
 </style><div class="xd" id="app"><div class="page"><div class="card">Đang tải dashboard…</div></div></div><script id="state" type="application/json">{}</script><script id="main" type="text/plain">
 (function(){
 "use strict";
@@ -1594,14 +1611,9 @@ function crmAction(R, d) {
   const A = R.filter(r => !r.liq && r.st !== 'Tạm dừng'), pot = L => L.reduce((a, r) => a + (r.pot || 0), 0);
   const tiles = ACTK.map(([k, l, c, act]) => { const L = A.filter(r => r.todo[k]);
     return `<div class="kpi hit" data-crtodo="${k}" style="cursor:pointer;${CR.todo === k ? 'border-color:var(--accent);box-shadow:0 0 0 2px var(--color-surface-primary)' : L.length && c === 'critical' ? 'border-color:#e83c3f55' : ''}"><div class="k">${l}</div><div class="v c-${L.length ? c : 'stable'}">${n0(L.length)}</div><div class="s">${act}</div>${L.length && pot(L) ? `<div class="s">tiềm năng ${nf(pot(L), 0)} triệu/tháng</div>` : ''}</div>`; }).join('');
-  const P = A.filter(r => ACTK.some(([k]) => r.todo[k])).map(r => Object.assign(r, {score: prioScore(r)})).sort((a, b) => b.score - a.score).slice(0, 15);
-  const why = r => ACTK.filter(([k]) => r.todo[k]).map(([k, l, c]) => `<span class="pill p-${c}" style="margin:1px 2px">${l}</span>`).join('');
-  return `<div class="card"><div class="hd"><div><div class="eyebrow">Hành động</div><h2 class="card-title">Việc cần ưu tiên${CR.who ? ' · ' + (CR.who === '_none' ? 'chưa phân công' : esc(CR.who)) : ''}</h2></div><div class="card-note">bấm ô để lọc danh sách bên dưới · bấm khách để cập nhật</div></div>
+  return `<div class="card"><div class="hd"><div><div class="eyebrow">Hành động</div><h2 class="card-title">Việc cần ưu tiên${CR.who ? ' · ' + (CR.who === '_none' ? 'chưa phân công' : esc(CR.who)) : ''}</h2></div><div class="card-note">bấm ô để lọc danh sách bên dưới</div></div>
     <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">${tiles}</div>
-    <h3 style="font-size:14px;margin:16px 0 8px">15 khách nên làm trước</h3>
-    <div class="tw"><table><thead><tr><th>#</th><th class="l">Doanh nghiệp</th><th class="l">PIC</th><th class="l">Lý do ưu tiên</th><th class="l">Việc nên làm</th><th>Tiềm năng (triệu/tháng)</th><th class="l">Liên hệ gần nhất</th></tr></thead><tbody>
-    ${P.map((r, i) => `<tr class="hit" data-cropen="${esc(r.key)}" style="cursor:pointer"><td>${i + 1}</td><td class="l name" style="color:var(--accent)">${esc(r.name)}<span class="def">${r.grp === 9 ? '' : r.grp + '. '}${esc(GRP[r.grp])}${r.rank ? ' · ' + esc(r.rank) : ''}</span></td><td class="l">${r.pic ? esc(r.pic) : '<b style="color:var(--critical)">Chưa phân công</b>'}</td><td class="l" style="white-space:normal;min-width:180px">${why(r)}</td><td class="l" style="white-space:normal;min-width:240px;font-size:12px">${esc(r.sug[0])}</td><td>${r.pot ? nf(r.pot, 1) : '—'}</td><td class="l">${r.acts[0] ? dmy(r.acts[0].d) + '<span class="def">' + esc(r.acts[0].res || '') + '</span>' : '<span class="lbl">chưa liên hệ</span>'}</td></tr>`).join('') || '<tr><td colspan="7" class="l lbl">Không còn việc tồn.</td></tr>'}
-    </tbody></table></div><div class="hint">Thứ tự ưu tiên: hẹn gọi lại đến hạn → đã ký phụ lục chưa có XPAY → Top 200 chưa gọi → khách đã dùng nhưng ngừng 30 ngày → Top 200 chưa meeting → có thẻ chưa từng dùng; cùng mức thì khách tiềm năng GMV cao, hạng Top 200 cao, giao dịch Mai Linh T6–T9 lớn đứng trước. Khách "Tạm dừng" không đưa vào danh sách.</div></div>`;
+    </div>`;
 }
 let CMORE = {}, COPEN = {};
 /* lọc theo mốc tiến độ: '' tất cả · 'y' đã có · 'n' chưa có */
@@ -1655,13 +1667,29 @@ function crmInput(ALL, d) {
   const ed = DBST === 'ok' && DBW !== false;
   const TD = {'': 'Tất cả', nocall: 'Chưa gọi', nomeet: 'Chưa meeting', unused: 'Có thẻ chưa dùng 30 ngày', due: 'Hẹn gọi lại đến hạn', nopic: 'Chưa phân công'};
   const ACTL = Object.fromEntries(ACTK.map(([k, l]) => [k, l])), PS = patSummary(d);
-  let h = crmAction(crmScope(ALL), d) + `<div class="card" style="padding:12px 20px" id="crlist"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="lbl">Việc</span>${Object.entries(TD).map(([k, l]) => `<button class="btn" data-crtodo="${k}" style="padding:5px 10px;${CR.todo === k ? 'background:var(--color-surface-primary);border-color:var(--accent);color:var(--color-action-theme-primary-active)' : ''}">${l}</button>`).join('')}
-    <span class="lbl" style="margin-left:8px">Nhóm</span><select id="crgrp"><option value="">Tất cả nhóm</option>${[1, 2, 3, 4, 5, 9].map(g => `<option value="${g}" ${CR.grp === String(g) ? 'selected' : ''}>${g === 9 ? '' : g + '. '}${GRP[g]}</option>`).join('')}${CR.grp.includes('|') ? `<option value="${CR.grp}" selected>${GRP[CR.grp.split('|')[0]]} · ${stageTxt[CR.grp.split('|')[1]]}</option>` : ''}</select>
-    ${CR.res ? `<span class="pill p-mute">Kết quả: ${esc(CR.res)} <a id="crresx" style="cursor:pointer;font-weight:700">×</a></span>` : ''}${CR.todo && !(CR.todo in TD) ? `<span class="pill p-mute">Việc: ${esc(ACTL[CR.todo] || CR.todo)} <a data-crtodo="" style="cursor:pointer;font-weight:700">×</a></span>` : ''}
-    <input id="crq" placeholder="Tìm tên, số hợp đồng, nhóm client…" value="${esc(CR.q)}" style="font:13px var(--font-family-sans-serif);padding:6px 10px;border:1px solid var(--color-border-default);border-radius:10px;width:250px"><span class="lbl">${n0(R.length)} khách</span>
-    <div style="flex-basis:100%;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="lbl">Mốc</span>${MSF.map(([k, l]) => { const v = (CR.ms || {})[k] || ''; return `<select data-crms="${k}" style="${v ? 'border-color:var(--accent);color:var(--color-action-theme-primary-active);font-weight:600' : ''}"><option value="" ${!v ? 'selected' : ''}>${l}: tất cả</option><option value="y" ${v === 'y' ? 'selected' : ''}>${l}: đã có</option><option value="n" ${v === 'n' ? 'selected' : ''}>${l}: chưa có</option></select>`; }).join('')}
-      ${crmFilterTxt() ? '<a id="crclr" style="cursor:pointer;color:var(--accent);font-weight:600;font-size:12.5px">Xoá mọi bộ lọc</a>' : ''}</div>
-    <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">${ed && CANWRITE ? '<button class="btn" id="crteam" title="Thêm / đổi tên / đổi vai trò người phụ trách">Danh sách PIC</button>' : ''}${ed && CANWRITE && Object.values(DBX).some(e => e && e.deleted) ? `<button class="btn" id="crdeleted">Khách đã xoá (${n0(Object.values(DBX).filter(e => e && e.deleted).length)})</button>` : ''}${ed ? '<button class="btn pri" id="crnew" title="Thêm khách chưa có trong sổ khách / bảng kê">+ Thêm khách hàng</button>' : ''}<button class="btn" id="crxls" title="Cùng file với nút Xuất Excel trên cùng: sheet CEO + khách hàng, lịch sử liên hệ, thẻ, giao dịch — khi đang lọc chỉ gồm khách đã lọc">Xuất Excel ${crmFilterTxt() ? `(${n0(R.length)} khách đang lọc)` : ''}</button><button class="btn" id="crpict" title="Sheet PIC; Quản trị / Kế toán có thêm sheet thông tin doanh nghiệp và thẻ XPAY">Tải template cập nhật</button>${ed && CANWRITE ? `<label class="btn pri" style="cursor:pointer" title="Upload template đã điền: PIC, thông tin doanh nghiệp, thẻ XPAY">Upload file cập nhật<input type="file" id="crpicf" accept=".xlsx,.xls" hidden></label>` : ''}</span></div></div>` + picPanel();
+  const flt = crmFilterTxt(), nDel = Object.values(DBX).filter(e => e && e.deleted).length, sel = on => on ? 'border-color:var(--accent);color:var(--color-action-theme-primary-active);font-weight:600;background:var(--color-surface-primary)' : '';
+  const todoOpts = [...Object.entries(TD), ...ACTK.filter(([k]) => !(k in TD)).map(([k, l]) => [k, l])];
+  let h = crmAction(crmScope(ALL), d) + `<div class="card crbar" id="crlist">
+    <div class="crbar-top">
+      <div class="crbar-search"><input id="crq" placeholder="Tìm tên, số hợp đồng, nhóm client…" value="${esc(CR.q)}"><span class="lbl"><b>${n0(R.length)}</b> khách${flt ? ' đang lọc' : ''}</span></div>
+      <div class="crbar-act">
+        ${ed ? '<button class="btn pri" id="crnew" title="Thêm khách chưa có trong sổ khách / bảng kê">+ Thêm khách hàng</button>' : ''}
+        <button class="btn" id="crxls" title="Một file đầy đủ: CEO, khách hàng, lịch sử liên hệ, thẻ, giao dịch — đang lọc thì chỉ gồm khách đã lọc">Xuất Excel${flt ? ' (đang lọc)' : ''}</button>
+        <details class="mn"><summary class="btn">Cập nhật bằng file ▾</summary><div class="mnp">
+          <button class="btn" id="crpict" title="Sheet PIC; Quản trị / Kế toán có thêm sheet thông tin doanh nghiệp và thẻ XPAY">Tải template cập nhật</button>
+          ${ed && CANWRITE ? `<label class="btn" style="cursor:pointer" title="Upload template đã điền: PIC, thông tin doanh nghiệp, thẻ XPAY">Upload file cập nhật<input type="file" id="crpicf" accept=".xlsx,.xls" hidden></label>` : ''}</div></details>
+        ${ed && CANWRITE ? `<details class="mn"><summary class="btn" title="Quản lý">⋯</summary><div class="mnp mnr">
+          <button class="btn" id="crteam">Danh sách PIC</button>
+          <button class="btn" id="crdeleted" ${nDel ? '' : 'disabled'}>Khách đã xoá${nDel ? ` (${n0(nDel)})` : ''}</button></div></details>` : ''}
+      </div>
+    </div>
+    <div class="crbar-flt"><span class="lbl">Lọc</span>
+      <select id="crtodo" style="${sel(CR.todo)}">${todoOpts.map(([k, l]) => `<option value="${k}" ${CR.todo === k ? 'selected' : ''}>${k ? 'Việc: ' + l : 'Việc: tất cả'}</option>`).join('')}</select>
+      <select id="crgrp" style="${sel(CR.grp)}"><option value="">Nhóm: tất cả</option>${[1, 2, 3, 4, 5, 9].map(g => `<option value="${g}" ${CR.grp === String(g) ? 'selected' : ''}>${g === 9 ? '' : g + '. '}${GRP[g]}</option>`).join('')}${CR.grp.includes('|') ? `<option value="${CR.grp}" selected>${GRP[CR.grp.split('|')[0]]} · ${stageTxt[CR.grp.split('|')[1]]}</option>` : ''}</select>
+      ${MSF.map(([k, l]) => { const v = (CR.ms || {})[k] || ''; return `<select data-crms="${k}" style="${sel(v)}"><option value="" ${!v ? 'selected' : ''}>${l}: tất cả</option><option value="y" ${v === 'y' ? 'selected' : ''}>${l}: đã có</option><option value="n" ${v === 'n' ? 'selected' : ''}>${l}: chưa có</option></select>`; }).join('')}
+      ${CR.res ? `<span class="pill p-mute">Kết quả: ${esc(CR.res)} <a id="crresx" style="cursor:pointer;font-weight:700">×</a></span>` : ''}
+      ${flt ? '<a id="crclr" class="crbar-clr">Xoá lọc</a>' : ''}
+    </div></div>` + picPanel();
   if (CR.nc) h += newCoModal();
   if (CR.dl) { const L = Object.entries(DBX).filter(([, e]) => e && e.deleted).sort((a, b) => b[1].deleted.localeCompare(a[1].deleted));
     h += `<div id="dlmask" style="position:fixed;inset:0;background:#0007;z-index:40;display:grid;place-items:center;padding:16px"><div class="card" style="width:min(640px,96vw);margin:0;max-height:90vh;overflow:auto">
@@ -2103,6 +2131,8 @@ function bindJourney() {
   if ($('crgrp')) $('crgrp').onchange = e => keep(() => { CR.grp = e.target.value; });
   if ($('crresx')) $('crresx').onclick = () => keep(() => { CR.res = ''; });
   if ($('crq')) $('crq').onchange = e => keep(() => { CR.q = e.target.value; });
+  if ($('crtodo')) $('crtodo').onchange = e => keep(() => { CR.todo = e.target.value; });
+  document.querySelectorAll('details.mn').forEach(dt => dt.addEventListener('toggle', () => { if (dt.open) document.querySelectorAll('details.mn').forEach(o => { if (o !== dt) o.open = false; }); }));
   document.querySelectorAll('[data-crms]').forEach(sl => sl.onchange = () => keep(() => { CR.ms = Object.assign({}, CR.ms || {}, {[sl.dataset.crms]: sl.value}); }));
   if ($('crclr')) $('crclr').onclick = () => keep(() => { CR.ms = {}; CR.grp = ''; CR.todo = ''; CR.res = ''; CR.q = ''; });
   if ($('crxls')) $('crxls').onclick = crmExport;
