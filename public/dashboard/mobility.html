@@ -760,7 +760,7 @@ function renderUpload() {
       ${(() => { const md = MMODE('cards_issued') === 'auto' ? 'auto' : 'manual', ac = cardsCount(), ml = manualLast(LASTDAY || '9999', 'cards_issued'), cs = LASTDAY ? countSrc(LASTDAY, 'cards_issued') : {v: null};
         return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0"><span class="lbl" style="width:120px">Thẻ đã phát hành</span><select id="mkm" data-auto="${ac == null ? '' : ac}" data-man="${ml ? ml.v : ''}" data-for="mk">
             <option value="manual" ${md === 'manual' ? 'selected' : ''}>Nhập tay${ml ? ` (${n0(ml.v)} · ngày ${dmy(ml.d)})` : ''}</option>
-            <option value="auto" ${md === 'auto' ? 'selected' : ''} ${ac == null ? 'disabled' : ''}>Đếm theo thẻ trên hệ thống${ac == null ? ' (chưa tải được dữ liệu thẻ)' : ` (${n0(ac)} thẻ)`}</option></select>
+            <option value="auto" ${md === 'auto' ? 'selected' : ''} ${ac == null ? 'disabled' : ''}>Đếm theo thẻ trên hệ thống${ac == null ? (CARDST === 'loading' ? ' (đang tải dữ liệu thẻ…)' : CARDST === 'err' ? ` (lỗi: ${esc(CARDMSG)})` : ' (chưa tải được dữ liệu thẻ)') : ` (${n0(ac)} thẻ${cardsCount.liq ? `, đã loại ${n0(cardsCount.liq)} thẻ DN thanh lý` : ''})`}</option></select>
           <input type="number" id="mk" value="${cs.v == null ? '' : cs.v}" ${md === 'auto' ? 'disabled' : ''}><span class="lbl">Đang dùng: <b>${cs.src === 'cards' ? 'đếm thẻ trên hệ thống' : cs.src === 'manual' ? `số nhập tay ngày ${dmy(cs.d)}` : 'chưa có số'}</b>. Đếm theo thẻ = tổng thẻ XPAY trong Hồ sơ doanh nghiệp của mọi khách, <b>không tính thẻ của doanh nghiệp thanh lý</b>${cardsCount.liq ? ` (đang loại ${n0(cardsCount.liq)} thẻ)` : ''}; số tự cập nhật khi thêm / gỡ thẻ.</span></div>`; })()}</div>
     <div style="display:flex;gap:10px;margin-top:14px"><button class="btn" id="bprev">Kiểm tra file</button><button class="btn pri" id="bsave" ${PENDING ? '' : 'disabled'}>Lưu & cập nhật dashboard</button></div>
     <div class="log" id="ulog" style="margin-top:12px">${PENDING ? esc(PENDING.log) : 'Chọn file rồi bấm "Kiểm tra file".'}</div><div id="unkp">${unkPanel()}</div></div>`;
@@ -1461,7 +1461,12 @@ async function cardsLoad() {
   CARDST = 'loading';
   try { const r = await c.summary(); CARDS = r.sum || {}; CARDST = 'ok'; AUTOC_ = null; CARDMSG = r.keyOk ? '' : 'Chưa cấu hình khoá mã hoá MOB_CARD_KEY nên chưa lưu được số thẻ.'; }
   catch (e) { CARDST = 'err'; CARDMSG = e.message || String(e); }
-  if (TAB === 'jr') crmRerender(); else if ((TAB === 'up' || TAB === 'ov') && MMODE('cards_issued') === 'auto') render();
+  if (TAB === 'jr') crmRerender(); else if (TAB === 'ov' && MMODE('cards_issued') === 'auto') render();
+  else if ($('mkm')) {   // tab Cập nhật số liệu: chỉ cập nhật ô chọn, không vẽ lại (giữ file đã chọn)
+    const o = $('mkm').querySelector('option[value="auto"]'), n = cardsCount();
+    if (o) { o.disabled = n == null; o.textContent = 'Đếm theo thẻ trên hệ thống' + (n == null ? ` (${CARDST === 'err' ? 'lỗi: ' + CARDMSG : 'chưa tải được dữ liệu thẻ'})` : ` (${n0(n)} thẻ${cardsCount.liq ? `, đã loại ${n0(cardsCount.liq)} thẻ DN thanh lý` : ''})`); }
+    $('mkm').dataset.auto = n == null ? '' : n;
+  }
 }
 async function cardDetail(k, full) {
   const c = await claude.use('cards'); const r = await c.get(k, full);
