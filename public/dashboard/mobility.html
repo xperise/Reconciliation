@@ -296,7 +296,7 @@ const PE = () => PLAN[P.end];
 const ROWS = [
   'Demand — doanh nghiệp & thẻ',
   {k:'DN đã khởi tạo XPAY (đã giao)', def:'Lũy kế DN có thẻ XPAY · đích 3.000 = DN active', f:'n', kind:'stock', a:x=>x.onboard, p:p=>p.onboard, t:()=>P.ob_tgt, sp:'wd', kr:'gc'},
-  {k:'Ký phụ lục / HĐ mới trong ngày', def:'Số DN đã ký (phụ lục + hợp đồng mới) tăng so với hôm qua — cùng số với ô “DN đã ký” (kế hoạch: chỉ ngày làm việc)', f:'n', kind:'flow', a:x=>x.newco, p:p=>p.newco, t:()=>PE().newco, sp:'cnt'},
+  {k:'Ký phụ lục / HĐ mới trong ngày', def:'Số DN đã ký (phụ lục + hợp đồng mới) tăng so với hôm qua', f:'n', kind:'flow', a:x=>x.newco, p:p=>p.newco, t:()=>PE().newco, sp:'cnt'},
   {k:'DN active', def:'≥ 1 giao dịch trong 30 ngày', f:'n', kind:'stock', a:x=>x.cos30, p:p=>p.cos30, t:()=>P.act_tgt, sp:'wd', kr:'ga'},
   {k:'Thẻ phát hành', def:'Lũy kế thẻ XPAY đã phát hành', f:'n', kind:'stock', a:x=>x.cards_issued, p:p=>p.cards_issued, t:()=>P.k_tgt, sp:'wd'},
   {k:'Thẻ active trong ngày', def:'Thẻ có ≥ 1 giao dịch trong ngày', f:'n', kind:'flow', a:x=>x.cards, p:p=>p.cards, t:()=>PE().cards},
