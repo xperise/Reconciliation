@@ -243,6 +243,18 @@ function cardsCount() {
   for (const [k, v] of Object.entries(CARDS || {})) { const kk = MERGE[k] || k; if (liq.has(kk)) nl += v.n || 0; else n += v.n || 0; }
   cardsCount.liq = nl; return n;
 }
+/* mốc ký theo ngày (tab Tiến độ khách hàng, không tính khách thanh lý): đã ký mà không rõ ngày thì tính từ đầu */
+let SIGN_ = null;
+function signDates() { if (SIGN_) return SIGN_; let R = []; try { R = crmRows(LASTDAY || '9999').filter(r => !r.liq); } catch (e) { R = []; }
+  SIGN_ = {pl: R.filter(r => done(r.pl)).map(r => isoOk(r.pl) ? r.pl : ''), hd: R.filter(r => done(r.hd)).map(r => isoOk(r.hd) ? r.hd : '')}; return SIGN_; }
+const cntTo = (L, d) => L.reduce((n, x) => n + (!x || x <= d ? 1 : 0), 0);
+function hdCountAt(d) { return cntTo(signDates().hd, d); }
+/* DN đã ký = phụ lục + hợp đồng mới. Phụ lục: cùng nguồn với ô “DN đã ký” (tab Tiến độ khách hàng theo ngày ký, hoặc số nhập tay) để số so hôm qua không bị lệch nguồn */
+function signedAt(d) {
+  const src = LASTDAY ? countSrc(LASTDAY, 'appendix').src : '';
+  const a = src === 'crm' ? cntTo(signDates().pl, d) : manualAt(d, 'appendix');
+  return a == null ? null : a + hdCountAt(d);
+}
 function manualAt(d, k) { if ((k === 'appendix' || k === 'onboard' || k === 'cards_issued') && LASTDAY && d >= LASTDAY) return countSrc(d, k).v;
   let v = null, best = ''; for (const [dd, o] of Object.entries(S.manual)) if (dd <= d && dd >= best && o[k] != null) { best = dd; v = o[k]; } return v; }
 function supplyAt(d) {
@@ -274,7 +286,8 @@ function computeActuals() {
       mtd, onboard: manualAt(d, 'onboard'), cards_issued: manualAt(d, 'cards_issued'),
       units: sp.units, init: sp.init, dact: sp.dact, ok40: sp.ok40, hasTx: d <= LASTDAY
     };
-    const py = ACT[addD(d, -1)]; ACT[d].newco = (py && py.onboard != null && ACT[d].onboard != null) ? Math.max(0, ACT[d].onboard - py.onboard) : null;
+    ACT[d].signed = signedAt(d); const py = ACT[addD(d, -1)];
+    ACT[d].newco = (py && py.signed != null && ACT[d].signed != null) ? Math.max(0, ACT[d].signed - py.signed) : null;   // số DN ký mới (phụ lục + HĐ mới) tăng so với hôm qua
   }
 }
 
@@ -283,7 +296,7 @@ const PE = () => PLAN[P.end];
 const ROWS = [
   'Demand — doanh nghiệp & thẻ',
   {k:'DN đã khởi tạo XPAY (đã giao)', def:'Lũy kế DN có thẻ XPAY · đích 3.000 = DN active', f:'n', kind:'stock', a:x=>x.onboard, p:p=>p.onboard, t:()=>P.ob_tgt, sp:'wd', kr:'gc'},
-  {k:'DN khởi tạo XPAY mới trong ngày', def:'Số DN đã khởi tạo XPAY tăng thêm so với hôm qua (kế hoạch: chỉ ngày làm việc)', f:'n', kind:'flow', a:x=>x.newco, p:p=>p.newco, t:()=>PE().newco, sp:'cnt'},
+  {k:'Ký phụ lục / HĐ mới trong ngày', def:'Số DN đã ký (phụ lục + hợp đồng mới) tăng so với hôm qua — cùng số với ô “DN đã ký” (kế hoạch: chỉ ngày làm việc)', f:'n', kind:'flow', a:x=>x.newco, p:p=>p.newco, t:()=>PE().newco, sp:'cnt'},
   {k:'DN active', def:'≥ 1 giao dịch trong 30 ngày', f:'n', kind:'stock', a:x=>x.cos30, p:p=>p.cos30, t:()=>P.act_tgt, sp:'wd', kr:'ga'},
   {k:'Thẻ phát hành', def:'Lũy kế thẻ XPAY đã phát hành', f:'n', kind:'stock', a:x=>x.cards_issued, p:p=>p.cards_issued, t:()=>P.k_tgt, sp:'wd'},
   {k:'Thẻ active trong ngày', def:'Thẻ có ≥ 1 giao dịch trong ngày', f:'n', kind:'flow', a:x=>x.cards, p:p=>p.cards, t:()=>PE().cards},
@@ -602,8 +615,9 @@ function renderOverview(d, C, A, p) {
   const tiles = [
     tile('GMV hôm nay', mu(g.t), cmp(g.t, g.a7, mu), `Kế hoạch ${mu(g.pl)} · đạt <b>${pct(g.ratio)}</b>`, bar(g.ratio)),
     tile('GMV lũy kế tháng', mu(m.t), cmpY(m.t, m.y, mu), [`Kế hoạch ${mu(m.pl)} · đạt <b>${pct(m.ratio)}</b>`, `Đích tháng 12: ${mu(P.dec)}`], bar(m.ratio)),
-    tile('DN đã ký phụ lục', plC.v == null ? '—' : n0(plC.v), srcTxt(plC), `Mốc “Ký hợp đồng mới”: <b>${n0(CRR.filter(r => done(r.hd)).length)}</b> khách đã tick (tab Tiến độ khách hàng)`),
-    tile('DN đã khởi tạo XPAY', obC.v == null ? '—' : n0(obC.v) + (plC.v ? of(n0(plC.v)) : ''), plC.v && obC.v != null ? `<b>${pct(obC.v / plC.v)}</b> số DN đã ký phụ lục` : '', srcTxt(obC), bar(plC.v ? obC.v / plC.v : 0, 'var(--accent)')),
+    (() => { const sT = (ACT[d] || {}).signed, sY = (ACT[addD(d, -1)] || {}).signed, hdN = hdCountAt(d), plN = sT == null ? null : sT - hdN;
+      return tile('DN đã ký (phụ lục + HĐ mới)', sT == null ? '—' : n0(sT), sY != null && sT != null ? cmpY(sT, sY, n0) : '', [`Phụ lục <b>${plN == null ? '—' : n0(plN)}</b> · HĐ mới <b>${n0(hdN)}</b>`, srcTxt(plC)]); })(),
+    (() => { const sT = (ACT[d] || {}).signed; return tile('DN đã khởi tạo XPAY', obC.v == null ? '—' : n0(obC.v) + (sT ? of(n0(sT)) : ''), sT && obC.v != null ? `<b>${pct(obC.v / sT)}</b> số DN đã ký` : '', srcTxt(obC), bar(sT ? obC.v / sT : 0, 'var(--accent)')); })(),
     tile('DN active hôm nay', n0(A0.cos || 0) + of(n0(A0.cos30 || 0)), cmp(A0.cos, av(x => x.cos), n0), `Trên ${n0(A0.cos30 || 0)} DN active 30 ngày`, bar(A0.cos30 ? A0.cos / A0.cos30 : 0, 'var(--accent)')),
     tile('Thẻ active hôm nay', n0(A0.cards || 0) + of(n0(A0.cards30 || 0)), cmp(A0.cards, av(x => x.cards), n0), `Trên ${n0(A0.cards30 || 0)} thẻ active 30 ngày`, bar(A0.cards30 ? A0.cards / A0.cards30 : 0, 'var(--accent)')),
     tile('Cuộc gọi · meeting hôm nay', `${n0(cT)}<span style="font-size:14px;font-weight:600;color:var(--ink-2)"> gọi · </span>${n0(mT)}<span style="font-size:14px;font-weight:600;color:var(--ink-2)"> meeting</span>`,
@@ -1453,7 +1467,7 @@ function crmInit() {
     if (!db) { DBST = 'off'; if (TAB === 'jr') crmRerender(); return; }
     try { const u = await claude.use('user'); const c = u ? await u.can('data.write') : null; DBW = c; } catch (e) { DBW = null; }
     db.collection('crm').onSnapshot(snap => { const o = {}; snap.docs.forEach(x => { const v = x.data() || {}; for (const [k, e] of Object.entries(v)) if (e && typeof e === 'object') o[k] = e; });
-      mergeDbx(o); for (const k of Object.keys(NAMEOVR)) delete NAMEOVR[k]; for (const [k, e] of Object.entries(o)) if (e && e.name) NAMEOVR[k] = String(e.name); DBX = o; DBST = 'ok'; CRM_ = null; AUTOC_ = null; crmRerender(true); }, () => { DBST = 'off'; crmRerender(); });
+      mergeDbx(o); for (const k of Object.keys(NAMEOVR)) delete NAMEOVR[k]; for (const [k, e] of Object.entries(o)) if (e && e.name) NAMEOVR[k] = String(e.name); DBX = o; DBST = 'ok'; CRM_ = null; AUTOC_ = null; SIGN_ = null; computeActuals(); if (TAB === 'ov') render(); crmRerender(true); }, () => { DBST = 'off'; crmRerender(); });
     db.doc('cfg/main').onSnapshot(s => { CFG = s.exists ? (s.data() || {cats: []}) : {cats: []}; const before = PICS.join('|'); applyTeam(CFG.team); if (PICS.join('|') !== before) { CRM_ = null; AUTOC_ = null; crmRerender(true); } }, () => {});
   })();
 }
