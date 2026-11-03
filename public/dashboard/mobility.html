@@ -283,7 +283,7 @@ const PE = () => PLAN[P.end];
 const ROWS = [
   'Demand — doanh nghiệp & thẻ',
   {k:'DN đã khởi tạo XPAY (đã giao)', def:'Lũy kế DN có thẻ XPAY · đích 3.000 = DN active', f:'n', kind:'stock', a:x=>x.onboard, p:p=>p.onboard, t:()=>P.ob_tgt, sp:'wd', kr:'gc'},
-  {k:'Hợp đồng ký mới trong ngày', def:'DN mới ký & giao thẻ (chỉ ngày làm việc)', f:'n', kind:'flow', a:x=>x.newco, p:p=>p.newco, t:()=>PE().newco, sp:'cnt'},
+  {k:'DN khởi tạo XPAY mới trong ngày', def:'Số DN đã khởi tạo XPAY tăng thêm so với hôm qua (kế hoạch: chỉ ngày làm việc)', f:'n', kind:'flow', a:x=>x.newco, p:p=>p.newco, t:()=>PE().newco, sp:'cnt'},
   {k:'DN active', def:'≥ 1 giao dịch trong 30 ngày', f:'n', kind:'stock', a:x=>x.cos30, p:p=>p.cos30, t:()=>P.act_tgt, sp:'wd', kr:'ga'},
   {k:'Thẻ phát hành', def:'Lũy kế thẻ XPAY đã phát hành', f:'n', kind:'stock', a:x=>x.cards_issued, p:p=>p.cards_issued, t:()=>P.k_tgt, sp:'wd'},
   {k:'Thẻ active trong ngày', def:'Thẻ có ≥ 1 giao dịch trong ngày', f:'n', kind:'flow', a:x=>x.cards, p:p=>p.cards, t:()=>PE().cards},
@@ -602,7 +602,7 @@ function renderOverview(d, C, A, p) {
   const tiles = [
     tile('GMV hôm nay', mu(g.t), cmp(g.t, g.a7, mu), `Kế hoạch ${mu(g.pl)} · đạt <b>${pct(g.ratio)}</b>`, bar(g.ratio)),
     tile('GMV lũy kế tháng', mu(m.t), cmpY(m.t, m.y, mu), [`Kế hoạch ${mu(m.pl)} · đạt <b>${pct(m.ratio)}</b>`, `Đích tháng 12: ${mu(P.dec)}`], bar(m.ratio)),
-    tile('DN đã ký phụ lục', plC.v == null ? '—' : n0(plC.v), srcTxt(plC), `Ký hợp đồng mới: <b>${n0(CRR.filter(r => done(r.hd)).length)}</b> khách (theo Tiến độ khách hàng)`),
+    tile('DN đã ký phụ lục', plC.v == null ? '—' : n0(plC.v), srcTxt(plC), `Mốc “Ký hợp đồng mới”: <b>${n0(CRR.filter(r => done(r.hd)).length)}</b> khách đã tick (tab Tiến độ khách hàng)`),
     tile('DN đã khởi tạo XPAY', obC.v == null ? '—' : n0(obC.v) + (plC.v ? of(n0(plC.v)) : ''), plC.v && obC.v != null ? `<b>${pct(obC.v / plC.v)}</b> số DN đã ký phụ lục` : '', srcTxt(obC), bar(plC.v ? obC.v / plC.v : 0, 'var(--accent)')),
     tile('DN active hôm nay', n0(A0.cos || 0) + of(n0(A0.cos30 || 0)), cmp(A0.cos, av(x => x.cos), n0), `Trên ${n0(A0.cos30 || 0)} DN active 30 ngày`, bar(A0.cos30 ? A0.cos / A0.cos30 : 0, 'var(--accent)')),
     tile('Thẻ active hôm nay', n0(A0.cards || 0) + of(n0(A0.cards30 || 0)), cmp(A0.cards, av(x => x.cards), n0), `Trên ${n0(A0.cards30 || 0)} thẻ active 30 ngày`, bar(A0.cards30 ? A0.cards / A0.cards30 : 0, 'var(--accent)')),
