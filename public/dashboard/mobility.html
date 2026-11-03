@@ -1434,7 +1434,8 @@ const stageTxt = ['Chưa gọi', 'Có XPAY, chưa gọi', 'Đã gọi', 'Đã me
 /* dữ liệu nhập (PIC, mốc, cuộc gọi) đã ghi dưới mã tạm → gộp vào mã hợp đồng; mã hợp đồng được ưu tiên khi trùng trường */
 function mergeDbx(o) {
   for (const [from, to] of Object.entries(MERGE)) { const a = o[from]; if (!a) continue; const b = o[to] = o[to] || {};
-    for (const [f, v] of Object.entries(a)) { if (b[f] == null || b[f] === '') b[f] = v; else if (Array.isArray(b[f]) && Array.isArray(v)) { const seen = new Set(b[f].map(x => JSON.stringify(x))); v.forEach(x => { if (!seen.has(JSON.stringify(x))) b[f].push(x); }); } }
+    for (const [f, v] of Object.entries(a)) { if (b[f] == null || b[f] === '') b[f] = v; else if (Array.isArray(b[f]) && Array.isArray(v)) { const seen = new Set(b[f].map(x => JSON.stringify(x))); v.forEach(x => { if (!seen.has(JSON.stringify(x))) b[f].push(x); }); }
+      else if (v && typeof v === 'object' && typeof b[f] === 'object' && !Array.isArray(v)) { b[f] = Object.assign({}, v, b[f]); } }
     delete o[from]; }
 }
 let DBQ = Promise.resolve();
@@ -1698,6 +1699,7 @@ function newCoModal() {
 }
 function crmInput(ALL, d) {
   const R = crmFilter(ALL, d), q = fold(CR.q);
+  const SEL = CR.msel || (CR.msel = new Set());
   const ed = DBST === 'ok' && DBW !== false;
   const TD = {'': 'Tất cả', nocall: 'Chưa gọi', nomeet: 'Chưa meeting', unused: 'Có thẻ chưa dùng 30 ngày', due: 'Hẹn gọi lại đến hạn', nopic: 'Chưa phân công'};
   const ACTL = Object.fromEntries(ACTK.map(([k, l]) => [k, l])), PS = patSummary(d);
@@ -1725,6 +1727,17 @@ function crmInput(ALL, d) {
       ${flt ? '<a id="crclr" class="crbar-clr">Xoá lọc</a>' : ''}
     </div></div>` + picPanel();
   if (CR.nc) h += newCoModal();
+  if (SEL.size) h += `<div style="position:sticky;bottom:12px;z-index:20;display:flex;gap:10px;align-items:center;justify-content:center;margin:0 auto 10px;width:max-content;max-width:96%;padding:10px 16px;background:var(--ink);color:#fff;border-radius:14px;box-shadow:0 10px 28px #0004;font-size:13px">
+      Đã chọn <b>${n0(SEL.size)}</b> doanh nghiệp<button class="btn pri" id="crmg" ${SEL.size < 2 ? 'disabled' : ''}>Gộp thành 1 doanh nghiệp…</button><button class="btn" id="crselx" style="background:transparent;color:#fff;border-color:#ffffff55">Bỏ chọn</button></div>`;
+  if (CR.mg) { const L = [...SEL].map(k => ALL.find(r => r.key === k)).filter(Boolean), keep = CR.mg.to;
+    const fmtR = r => `${r.gmv ? money(r.gmv) + ' ' + unitLabel() + ' GMV' : 'chưa có GMV'} · ${n0(r.calls.length)} cuộc gọi · ${n0(r.meets.length)} meeting · ${n0((CARDS[r.key] || {}).n || 0)} thẻ${r.pic ? ' · PIC ' + esc(r.pic) : ''}`;
+    h += `<div id="mgmask" style="position:fixed;inset:0;background:#0007;z-index:40;display:grid;place-items:center;padding:16px"><div class="card" style="width:min(720px,96vw);margin:0;max-height:90vh;overflow:auto">
+      <div class="eyebrow">Gộp doanh nghiệp</div><h2 class="card-title" style="margin:2px 0 6px">Chọn doanh nghiệp giữ lại</h2>
+      <div class="hint" style="margin-bottom:8px">Toàn bộ dữ liệu của các doanh nghiệp còn lại được chuyển về doanh nghiệp giữ lại: giao dịch / GMV, PIC & mốc tiến độ (ô trống được điền), cuộc gọi, meeting, ghi chú, thẻ XPAY, MST / địa chỉ / email (nếu doanh nghiệp giữ lại còn trống). Bảng kê sau này ghi tên các doanh nghiệp bị gộp cũng tự vào doanh nghiệp giữ lại.</div>
+      ${L.map(r => `<label style="display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid ${r.key === keep ? 'var(--accent)' : 'var(--line)'};border-radius:12px;margin-bottom:8px;cursor:pointer;${r.key === keep ? 'background:var(--color-surface-primary)' : ''}">
+        <input type="radio" name="mgto" value="${esc(r.key)}" ${r.key === keep ? 'checked' : ''} style="margin-top:3px"><span><b>${esc(r.name)}</b> <span class="lbl">HĐ ${esc(r.key)}</span>${r.key === keep ? ' <span class="pill p-stable">giữ lại</span>' : ' <span class="pill p-mute">gộp vào</span>'}<div class="lbl" style="margin-top:3px">${fmtR(r)}</div></span></label>`).join('')}
+      ${CR.mg.err ? `<div class="hint" style="color:var(--critical)">${esc(CR.mg.err)}</div>` : ''}${CR.mg.msg ? `<div class="hint"><b>${esc(CR.mg.msg)}</b></div>` : ''}
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button class="btn" id="mg_x" ${CR.mg.busy ? 'disabled' : ''}>Huỷ</button><button class="btn pri" id="mg_ok" ${CR.mg.busy ? 'disabled' : ''}>${CR.mg.busy ? 'Đang gộp…' : `Gộp ${n0(L.length - 1)} doanh nghiệp vào “${esc((L.find(r => r.key === keep) || {}).name || '')}”`}</button></div></div></div>`; }
   if (CR.dl) { const L = Object.entries(DBX).filter(([, e]) => e && e.deleted).sort((a, b) => b[1].deleted.localeCompare(a[1].deleted));
     h += `<div id="dlmask" style="position:fixed;inset:0;background:#0007;z-index:40;display:grid;place-items:center;padding:16px"><div class="card" style="width:min(640px,96vw);margin:0;max-height:90vh;overflow:auto">
       <h2 class="card-title" style="margin:0 0 8px">Khách đã xoá</h2><table><thead><tr><th class="l">Doanh nghiệp</th><th class="l">Ngày xoá</th><th></th></tr></thead><tbody>
@@ -1739,7 +1752,7 @@ function crmInput(ALL, d) {
       </tbody></table>
       <div style="display:flex;gap:8px;justify-content:space-between;margin-top:12px"><button class="btn" id="tm_add">+ Thêm người</button><span style="display:flex;gap:8px"><button class="btn" id="tm_x">Huỷ</button><button class="btn pri" id="tm_ok">Lưu danh sách</button></span></div>
     </div></div>`; }
-  const row = r => `<tr class="hit" data-cropen="${esc(r.key)}" style="cursor:pointer"><td class="l name" style="min-width:240px;padding-left:34px;color:var(--accent)">${esc(r.name)}${r.isNew ? ' <span class="pill p-stable" style="font-size:10.5px">mới thêm</span>' : ''}<span class="def">HĐ ${esc(r.key)}${r.gname ? ' · ' + esc(r.gname) + (r.grank ? ' #' + r.grank : '') : ''}</span></td><td class="l">${r.pic ? esc(r.pic) : '<b style="color:var(--critical)">Chưa phân công</b>'}</td>
+  const row = r => `<tr class="hit" data-cropen="${esc(r.key)}" style="cursor:pointer${SEL.has(r.key) ? ';background:var(--color-surface-primary)' : ''}"><td class="l name" style="min-width:240px;padding-left:34px;color:var(--accent);position:relative">${ed && CANWRITE ? `<input type="checkbox" class="crsel" data-sel="${esc(r.key)}" ${SEL.has(r.key) ? 'checked' : ''} title="Chọn để gộp" style="position:absolute;left:10px;top:12px;cursor:pointer">` : ''}${esc(r.name)}${r.isNew ? ' <span class="pill p-stable" style="font-size:10.5px">mới thêm</span>' : ''}<span class="def">HĐ ${esc(r.key)}${r.gname ? ' · ' + esc(r.gname) + (r.grank ? ' #' + r.grank : '') : ''}</span></td><td class="l">${r.pic ? esc(r.pic) : '<b style="color:var(--critical)">Chưa phân công</b>'}</td>
     ${['pl', 'hd', 'xp', 'call', 'meet'].map(f => `<td class="l">${done(r[f]) ? `<span class="c-stable">✓</span> ${isoOk(r[f]) ? dm(r[f]) : ''}${f === 'call' && r.calls.length > 1 ? `<span class="def">${r.calls.length} lần</span>` : ''}` : '<span class="lbl">—</span>'}</td>`).join('')}
     <td class="l">${r.first ? dmy(r.first) : '<span class="lbl">chưa</span>'}</td><td>${r.gmv ? money(r.gmv) : '—'}<span class="def">${r.gmv30 ? '30N ' + nf(r.gmv30 / UNIT.div, UNIT.dec) : r.gmv ? 'ngừng 30N' : ''}</span></td><td class="l" style="white-space:normal;min-width:170px;font-size:12px">${PS[r.key] ? `${esc(PS[r.key].route)} <span class="lbl">(${PS[r.key].rn}/${PS[r.key].n} chuyến)</span><span class="def">${esc(PS[r.key].p)} · ${PS[r.key].band}${PS[r.key].short ? ' · <b style="color:var(--critical)">thiếu xe</b>' : ''}</span>` : (((S.cs || {})[r.key] || {}).custom || []).length ? '<span class="pill p-mute">CS đã khai báo</span>' : '<span class="lbl">—</span>'}</td>
     <td class="l" style="white-space:normal;max-width:160px">${r.lastRes ? esc(r.lastRes) : '<span class="lbl">—</span>'}${r.st ? `<span class="def" style="color:var(--critical)">${esc(r.st)}</span>` : ''}</td><td class="l" style="white-space:normal;min-width:220px;font-size:12px">${esc(r.sug[0])}</td></tr>`;
@@ -2264,6 +2277,32 @@ function bindJourney() {
     catch (e) { b.disabled = false; b.textContent = 'Thử lại'; alert('Chưa thêm được: ' + (e.message || e)); } };
   if ($('crteam')) $('crteam').onclick = () => keep(() => { CR.team = PICS.map(p => [p, ROLE[p]]); });
   if ($('crdeleted')) $('crdeleted').onclick = () => keep(() => { CR.dl = 1; });
+  document.querySelectorAll('.crsel').forEach(cb => { cb.onclick = ev => ev.stopPropagation(); cb.onchange = () => keep(() => { const S2 = CR.msel || (CR.msel = new Set()); if (cb.checked) S2.add(cb.dataset.sel); else S2.delete(cb.dataset.sel); }); });
+  if ($('crselx')) $('crselx').onclick = () => keep(() => { CR.msel = new Set(); });
+  if ($('crmg')) $('crmg').onclick = () => keep(() => { const L = [...CR.msel].map(k => crmRows(CR.day).find(r => r.key === k)).filter(Boolean);
+    // gợi ý giữ: mã hợp đồng thật, nhiều GMV / thẻ / liên hệ nhất
+    const sc = r => (/^(XPAY-|MOI-)/.test(r.key) ? 0 : 1e15) + r.gmv + ((CARDS[r.key] || {}).n || 0) * 1e6 + r.acts.length * 1e5 + (r.pic ? 1e4 : 0);
+    CR.mg = {to: L.sort((a, b) => sc(b) - sc(a))[0].key}; });
+  document.querySelectorAll('[name=mgto]').forEach(rb => rb.onchange = () => keep(() => { CR.mg.to = rb.value; }));
+  if ($('mg_x')) $('mg_x').onclick = () => keep(() => { CR.mg = null; });
+  if ($('mgmask')) $('mgmask').onclick = e => { if (e.target.id === 'mgmask' && !CR.mg.busy) keep(() => { CR.mg = null; }); };
+  if ($('mg_ok')) $('mg_ok').onclick = async () => { const to = CR.mg.to, froms = [...CR.msel].filter(k => k !== to);
+    if (!froms.length) return; if (!confirm(`Gộp ${froms.length} doanh nghiệp vào “${cname(to)}” (${to})?\nDữ liệu chuyển về doanh nghiệp giữ lại; tách lại được ở “Doanh nghiệp trùng mã” (tab Cập nhật số liệu).`)) return;
+    CR.mg.busy = true; CR.mg.err = ''; keep(() => {});
+    try {
+      // thẻ XPAY + thông tin doanh nghiệp: chuyển sang mã giữ lại
+      if (CARDST === 'ok') { const c = await claude.use('cards'); const tgt = (await c.get(to, true)) || {}; const tco = tgt.company || {}, cards = [], co = {key: to};
+        for (const f of froms) { const r = await c.get(f, true) || {}; (r.cards || []).forEach(x => cards.push({uid: x.uid, key: to})); const fc = r.company || {}; for (const k2 of ['mst', 'address', 'email']) if (!tco[k2] && !co[k2] && fc[k2]) co[k2] = fc[k2]; }
+        if (cards.length || Object.keys(co).length > 1) { CR.mg.msg = `Đang chuyển ${cards.length} thẻ…`; keep(() => {}); const res = await c.save({companies: Object.keys(co).length > 1 ? [co] : [], cards, deletes: [], dry: false}); if ((res.errors || []).length) throw new Error('Thẻ: ' + res.errors.join('; ')); } }
+      // giao dịch, dữ liệu nhập, tên ghi nhớ: dùng cơ chế gộp mã (lưu vào dashboard)
+      S.merge = S.merge || {}; S.mergeLog = S.mergeLog || {}; S.nomerge = S.nomerge || {};
+      for (const f of froms) { const nm = cname(f); S.merge[f] = to; S.mergeLog[f] = {to, name: nm, auto: 0, at: TODAY, src: 'chon-tay'}; delete S.nomerge[canon(nm)]; if (S.newco) delete S.newco[f];
+        S.alias[nm] = to; S.tx.forEach(t => { if (t[2] === f) t[2] = to; }); for (const [a, b] of Object.entries(S.merge)) if (b === f) S.merge[a] = to; }
+      const art = window.claude ? await claude.use('artifact') : null; if (!art) throw new Error('Chỉ gộp được trong web Reconciliation');
+      CR.mg.msg = 'Đang lưu…'; keep(() => {});
+      S.meta.updated = new Date().toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'}); await art.publish(docHtml());
+      CR.mg.msg = 'Đã gộp. Dashboard đang tải lại…'; keep(() => {});
+    } catch (e) { CR.mg.busy = false; CR.mg.err = 'Chưa gộp được: ' + (e.message || e.code || e); keep(() => {}); } };
   if ($('dl_x')) $('dl_x').onclick = () => keep(() => { CR.dl = 0; });
   if ($('dlmask')) $('dlmask').onclick = e => { if (e.target.id === 'dlmask') keep(() => { CR.dl = 0; }); };
   document.querySelectorAll('[data-restore]').forEach(b => b.onclick = async () => { const k2 = b.dataset.restore;
