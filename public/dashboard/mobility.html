@@ -623,6 +623,8 @@ function renderOverview(d, C, A, p) {
       <td>${F(c.y)}</td><td>${F(c.a7)}</td><td><b>${F(c.t)}</b></td>
       ${(() => { const ok = c.gr != null && c.tgr != null ? c.gr >= c.tgr - 5e-4 : null, col = ok == null ? '' : ok ? 'up' : 'dn';
         const pc = v => v == null || !isFinite(v) ? '—' : (v > 0 ? '+' : v < 0 ? '−' : '') + nf(Math.abs(v) * 100, 1) + '%';
+        if (c.gr == null && c.a7 === 0 && c.t != null) return `<td class="${c.t > 0 ? 'up' : ''}"><b>${c.t > 0 ? 'Tăng từ 0' : '= 0'}</b><span class="def">${c.t > 0 ? '▲ ' + F(c.t) + ' · ' : ''}TB 7 ngày = 0, không tính được %</span></td>
+          <td><b>${pc(c.tgr)}</b>${c.pa7 != null && c.pl != null ? `<span class="def">${F(c.pl)} so TB ${F(c.pa7)}</span>` : ''}</td>`;
         return `<td class="${col || (dl > 0 ? 'up' : dl < 0 ? 'dn' : '')}"><b>${pc(c.gr)}</b>${dl == null ? '' : `<span class="def">${dl > 0 ? '▲ ' : dl < 0 ? '▼ ' : '= '}${F(Math.abs(dl))}${ok == null ? '' : ok ? ' · đạt mục tiêu' : ' · thấp hơn ' + nf((c.tgr - c.gr) * 100, 1) + ' điểm %'}</span>`}</td>
           <td><b>${pc(c.tgr)}</b>${c.pa7 != null && c.pl != null ? `<span class="def">${F(c.pl)} so TB ${F(c.pa7)}</span>` : ''}</td>`; })()}
       <td>${c.pl == null ? (r.p ? '<span class="lbl">cần chốt</span>' : '—') : F(c.pl)}</td><td class="c-${st}"><b>${pct(c.ratio)}</b></td>
