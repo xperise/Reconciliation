@@ -591,7 +591,7 @@ function renderOverview(d, C, A, p) {
   const tiles = [
     tile('GMV hôm nay', mu(g.t), cmp(g.t, g.a7, mu), `Kế hoạch ${mu(g.pl)} · đạt <b>${pct(g.ratio)}</b>`, bar(g.ratio)),
     tile('GMV lũy kế tháng', mu(m.t), cmpY(m.t, m.y, mu), [`Kế hoạch ${mu(m.pl)} · đạt <b>${pct(m.ratio)}</b>`, `Đích tháng 12: ${mu(P.dec)}`], bar(m.ratio)),
-    tile('DN đã ký phụ lục', plC.v == null ? '—' : n0(plC.v), srcTxt(plC), 'Lũy kế · không tính khách thanh lý chưa có giao dịch'),
+    tile('DN đã ký phụ lục', plC.v == null ? '—' : n0(plC.v), srcTxt(plC), (() => { const RR = CRR.filter(r => done(r.pl)); return `<b>${n0(RR.filter(r => r.plType === 'moi').length)}</b> ký mới · <b>${n0(RR.filter(r => r.plType === 'ml').length)}</b> PL HĐ Mai Linh (theo Tiến độ khách hàng)`; })()),
     tile('DN đã khởi tạo XPAY', obC.v == null ? '—' : n0(obC.v) + (plC.v ? of(n0(plC.v)) : ''), plC.v && obC.v != null ? `<b>${pct(obC.v / plC.v)}</b> số DN đã ký phụ lục` : '', srcTxt(obC), bar(plC.v ? obC.v / plC.v : 0, 'var(--accent)')),
     tile('DN active hôm nay', n0(A0.cos || 0) + of(n0(A0.cos30 || 0)), cmp(A0.cos, av(x => x.cos), n0), `Trên ${n0(A0.cos30 || 0)} DN active 30 ngày`, bar(A0.cos30 ? A0.cos / A0.cos30 : 0, 'var(--accent)')),
     tile('Thẻ active hôm nay', n0(A0.cards || 0) + of(n0(A0.cards30 || 0)), cmp(A0.cards, av(x => x.cards), n0), `Trên ${n0(A0.cards30 || 0)} thẻ active 30 ngày`, bar(A0.cards30 ? A0.cards / A0.cards30 : 0, 'var(--accent)')),
@@ -1373,6 +1373,9 @@ function crmRows(d) {
       gmv: g.g, gmv30: g.g30, trips: g.n, lastTx: g.last, pic: e.pic != null ? e.pic : (c[2] || ''), picOld: b.pic || '', rank: c[3] || '', gname: e.gname || c[4] || '', grank: c[5] || 0,
       pot: e.pot != null && e.pot !== '' ? +e.pot || 0 : c[6] || 0, isNew: !!e.created, ml69: c[7] || 0, acts, calls, meets, note: e.note || '', nx: e.nx || '', st: e.st != null ? e.st : (b.tl ? 'Thanh lý' : ''), grpM: e.grp || ''};
     r.liq = r.st === 'Thanh lý' && !f;
+    // loại ký: chọn tay; chưa chọn thì tự xếp — khách trong sổ Mai Linh / có giao dịch Mai Linh = PL HĐ ML, còn lại = ký mới
+    r.plTypeA = (BOOK[k] || (r.ml69 > 0)) && !e.created ? 'ml' : 'moi'; r.plTypeM = e.plType === 'moi' || e.plType === 'ml';
+    r.plType = done(r.pl) ? (r.plTypeM ? e.plType : r.plTypeA) : '';
     r.grpA = r.liq ? 9 : done(r.pl) && !done(r.xp) ? 1 : /Top 1–100|Top 101–200/.test(r.rank) ? 2 : done(r.xp) && !r.gmv30 ? 3 : !done(r.pl) && r.ml69 > 0 ? 4 : 5;
     r.grp = r.liq ? 9 : +(r.grpM || r.grpA);
     r.sub = g2Of(k);
@@ -1525,8 +1528,11 @@ function crmDash(ALL, f, t) {
   const kT = touched(f, t), kP = touched(pf, pt);
   const xpIn = (a, b) => R.filter(r => isoOk(r.xp) && r.xp >= a && r.xp <= b).length, frIn = (a, b) => R.filter(r => r.first && r.first >= a && r.first <= b).length;
   const xT = xpIn(f, t), xP = xpIn(pf, pt), fT = frIn(f, t), fP = frIn(pf, pt);
+  const plIn = (a, b, ty, L = R) => L.filter(r => isoOk(r.pl) && r.pl >= a && r.pl <= b && (!ty || r.plType === ty)).length;
+  const pT = plIn(f, t), pP = plIn(pf, pt), pTm = plIn(f, t, 'moi'), pTl = plIn(f, t, 'ml'), pAm = R.filter(r => r.plType === 'moi').length, pAl = R.filter(r => r.plType === 'ml').length;
   const bul = [];
   bul.push(`<li class="${cTg && cT < cTg ? 'critical' : 'stable'}">${lab}: <b>${n0(cT)} cuộc gọi</b> (${deltaTxt(cT, cP)}), <b>${n0(mT)} meeting</b> (${deltaTxt(mT, mP)}) ${vsTxt}.${cTg || mTg ? ` Chỉ tiêu kỳ: ${n0(Math.round(cTg))} cuộc gọi, ${nf(mTg, 1)} meeting.` : ' Kỳ này chưa có chỉ tiêu.'}</li>`);
+  bul.push(`<li class="${pT ? 'stable' : 'watch'}">Ký phụ lục trong kỳ: <b>${n0(pT)}</b> — <b>${n0(pTm)} ký mới</b> (khách mới) · <b>${n0(pTl)} PL HĐ Mai Linh</b> (khách ML chuyển đổi). Lũy kế: ${n0(pAm)} ký mới · ${n0(pAl)} PL HĐ ML.</li>`);
   bul.push(`<li class="${xT || fT ? 'stable' : 'watch'}">${n0(kT)} khách được liên hệ · khởi tạo XPAY trong kỳ: <b>${n0(xT)}</b> · khách có doanh thu đầu trong kỳ: <b>${n0(fT)}</b>.</li>`);
   const g1 = R.filter(r => r.grp === 1), nocall2 = R.filter(r => r.grp === 2 && r.todo.nocall), due = R.filter(r => r.todo.due), nopic = R.filter(r => (r.grp <= 2) && !r.pic);
   if (g1.length) bul.push(`<li class="critical"><b>${n0(g1.length)} khách đã ký phụ lục chưa khởi tạo XPAY</b>: báo Ops khởi tạo, phát thẻ.</li>`);
@@ -1539,6 +1545,7 @@ function crmDash(ALL, f, t) {
     tile('Cuộc gọi', n0(cT), sgnCls(cT, cP), `${deltaTxt(cT, cP)} ${vsTxt}`, cTg ? `Chỉ tiêu ${n0(Math.round(cTg))} · đạt <b>${pct(cT / cTg)}</b>` : 'chưa có chỉ tiêu trong kỳ', cTg ? cT / cTg : null),
     tile('Meeting', n0(mT), sgnCls(mT, mP), `${deltaTxt(mT, mP)} ${vsTxt}`, mTg ? `Chỉ tiêu ${nf(mTg, 1)} · đạt <b>${pct(mT / mTg)}</b>` : 'chưa có chỉ tiêu trong kỳ', mTg ? mT / mTg : null),
     tile('Khách được liên hệ', n0(kT), sgnCls(kT, kP), `${deltaTxt(kT, kP)} ${vsTxt}`, `trên ${n0(R.length)} khách phụ trách`),
+    tile('Ký phụ lục trong kỳ', n0(pT), sgnCls(pT, pP), `<b>${n0(pTm)}</b> ký mới · <b>${n0(pTl)}</b> PL HĐ Mai Linh`, `lũy kế ${n0(pAm)} ký mới · ${n0(pAl)} PL HĐ ML · ${deltaTxt(pT, pP)} ${vsTxt}`),
     tile('Khởi tạo XPAY trong kỳ', n0(xT), sgnCls(xT, xP), `${deltaTxt(xT, xP)} ${vsTxt}`, `lũy kế ${n0(R.filter(r => done(r.xp)).length)} khách`),
     tile('Khách có doanh thu đầu', n0(fT), sgnCls(fT, fP), `${deltaTxt(fT, fP)} ${vsTxt}`, `lũy kế ${n0(R.filter(r => r.first).length)} khách có doanh thu`),
     (() => { const inK = R.filter(r => r.tact && r.tact >= f && r.tact <= t), ok = inK.filter(r => r.tactSt === 'dat').length, late = inK.filter(r => r.tactSt === 'datTre').length, miss = inK.filter(r => r.tactSt === 'tre').length, wait = inK.filter(r => r.tactSt === 'sap' || r.tactSt === 'cho').length;
@@ -1556,8 +1563,9 @@ function crmDash(ALL, f, t) {
         <td>${kp == null ? '<span class="lbl">—</span>' : `<span class="pill p-${status(kp)}">${pct(kp)}</span>`}</td><td>${n0(my.filter(r => r.todo.nocall).length)}</td><td>${n0(my.filter(r => r.todo.nomeet && r.grp <= 2).length)}</td><td>${n0(my.filter(r => r.todo.unused).length)}</td><td>${n0(my.filter(r => r.first).length)}</td>
         ${(() => { const inK = my.filter(r => r.tact && r.tact >= f && r.tact <= t), ok = inK.filter(r => r.tactSt === 'dat').length, over = my.filter(r => r.tactSt === 'tre').length, nxt = my.filter(r => r.tact && r.tact > t && !r.tactAch).length;
           return `<td>${inK.length ? `<b>${n0(ok)}/${n0(inK.length)}</b> <span class="pill p-${status(ok / inK.length)}">${pct(ok / inK.length)}</span>` : '<span class="lbl">—</span>'}</td><td class="${over ? 'dn' : ''}">${over ? n0(over) : '0'}</td><td>${n0(nxt)}</td>`; })()}
+        <td><b>${n0(plIn(f, t, 'moi', my))}</b> · ${n0(plIn(f, t, 'ml', my))}<span class="def">lũy kế ${n0(my.filter(r => r.plType === 'moi').length)} · ${n0(my.filter(r => r.plType === 'ml').length)}</span></td>
         <td>${money(my.reduce((a, r) => a + r.gmv, 0))}</td></tr>`; });
-    h += card('KPI từng người', `Kết quả ${lab} so với kỳ trước và chỉ tiêu`, `bấm dòng để xem riêng người đó · xanh = tăng, đỏ = giảm · tiền: ${unitLabel()}`, `<div class="tw"><table><thead><tr><th class="l">Người</th><th>Khách</th><th>Đã gọi</th><th>Cuộc gọi trong kỳ</th><th>Chỉ tiêu gọi</th><th>Meeting trong kỳ</th><th>Chỉ tiêu meeting</th><th>Đạt KPI kỳ</th><th>Chưa gọi</th><th>Top 200 chưa meeting</th><th>Có thẻ chưa dùng 30N</th><th>Có doanh thu</th><th title="Khách có ngày mục tiêu active nằm trong kỳ: đạt đúng hạn / tổng">MT active trong kỳ · đạt</th><th title="Đã qua ngày mục tiêu, chưa có giao dịch">Quá hạn MT active</th><th title="Ngày mục tiêu sau kỳ đang xem">Hẹn active sắp tới</th><th>GMV lũy kế</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>
+    h += card('KPI từng người', `Kết quả ${lab} so với kỳ trước và chỉ tiêu`, `bấm dòng để xem riêng người đó · xanh = tăng, đỏ = giảm · tiền: ${unitLabel()}`, `<div class="tw"><table><thead><tr><th class="l">Người</th><th>Khách</th><th>Đã gọi</th><th>Cuộc gọi trong kỳ</th><th>Chỉ tiêu gọi</th><th>Meeting trong kỳ</th><th>Chỉ tiêu meeting</th><th>Đạt KPI kỳ</th><th>Chưa gọi</th><th>Top 200 chưa meeting</th><th>Có thẻ chưa dùng 30N</th><th>Có doanh thu</th><th title="Khách có ngày mục tiêu active nằm trong kỳ: đạt đúng hạn / tổng">MT active trong kỳ · đạt</th><th title="Đã qua ngày mục tiêu, chưa có giao dịch">Quá hạn MT active</th><th title="Ngày mục tiêu sau kỳ đang xem">Hẹn active sắp tới</th><th title="Ký phụ lục trong kỳ: ký mới (khách mới) · PL HĐ Mai Linh (khách ML chuyển đổi)">Ký PL trong kỳ<span class="def">mới · ML</span></th><th>GMV lũy kế</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>
       <div class="hint">Cuộc gọi, meeting tính theo người thực hiện và ngày ghi trong mỗi lần cập nhật. Kỳ trước = cùng số ngày ngay trước kỳ đang xem. Chỉ tiêu theo file KPI Sales và AE: AE tính meeting/tuần, SDR (Nguyệt, Hiền) tính 75 cuộc gọi/tuần. Chỉ tiêu ngày = tuần ÷ 5 ngày làm việc, cộng dồn theo số ngày làm việc trong kỳ. Lộ trình bắt đầu W1 ${dmy(W1)}. <b>Mục tiêu active</b>: PIC nhập ở Tiến độ & các mốc; đạt = khách có giao dịch đúng hoặc trước ngày mục tiêu (khách đã từng dùng thì cần giao dịch mới kể từ ngày đặt mục tiêu).</div>`);
   }
   const G = [1, 2, 3, 4, 5], SC = ['#d9d9db', '#b9e9e2', '#5ed6c8', '#00a693', '#006e61'];
@@ -1617,8 +1625,10 @@ function crmAction(R, d) {
 }
 let CMORE = {}, COPEN = {};
 /* lọc theo mốc tiến độ: '' tất cả · 'y' đã có · 'n' chưa có */
+const PLT = {moi: 'Ký mới', ml: 'PL HĐ Mai Linh'};
 const MSF = [['pl', 'Ký phụ lục'], ['xp', 'Khởi tạo XPAY'], ['call', 'Gọi khách'], ['meet', 'Meeting'], ['first', 'Doanh thu đầu']];
 const msDone = (r, k) => k === 'first' ? !!r.first : done(r[k]);
+const msMatch = (r, k, v) => k === 'pl' && (v === 'moi' || v === 'ml') ? r.plType === v : msDone(r, k) === (v === 'y');
 /* danh sách khách theo mọi bộ lọc đang chọn ở Nhập liệu — dùng chung cho bảng và file xuất */
 function crmFilter(ALL, d) {
   let R = crmScope(ALL);
@@ -1626,7 +1636,7 @@ function crmFilter(ALL, d) {
   if (CR.todo) R = R.filter(r => r.todo[CR.todo]);
   if (CR.res) R = R.filter(r => r.acts.some(a => (a.res || 'Khác') === CR.res && a.d >= addD(d, -29)));
   const q = fold(CR.q); if (q) R = R.filter(r => fold(r.name).includes(q) || r.key.includes(q) || fold(r.gname).includes(q));
-  for (const [k] of MSF) { const v = (CR.ms || {})[k]; if (v) R = R.filter(r => msDone(r, k) === (v === 'y')); }
+  for (const [k] of MSF) { const v = (CR.ms || {})[k]; if (v) R = R.filter(r => msMatch(r, k, v)); }
   return R;
 }
 /* mô tả các bộ lọc đang bật (ghi vào file xuất) */
@@ -1636,7 +1646,7 @@ function crmFilterTxt() {
   if (CR.todo) t.push('Việc: ' + (Object.fromEntries(ACTK.map(([k, l]) => [k, l]))[CR.todo] || {nocall: 'Chưa gọi', nomeet: 'Chưa meeting', unused: 'Có thẻ chưa dùng 30 ngày', due: 'Hẹn gọi lại đến hạn', nopic: 'Chưa phân công'}[CR.todo] || CR.todo));
   if (CR.res) t.push('Kết quả: ' + CR.res);
   if (CR.q) t.push('Tìm: “' + CR.q + '”');
-  for (const [k, l] of MSF) { const v = (CR.ms || {})[k]; if (v) t.push(`${l}: ${v === 'y' ? 'đã có' : 'chưa có'}`); }
+  for (const [k, l] of MSF) { const v = (CR.ms || {})[k]; if (v) t.push(`${l}: ${v === 'y' ? 'đã có' : v === 'n' ? 'chưa có' : PLT[v]}`); }
   return t.join(' · ');
 }
 /* ---- Thêm khách hàng mới (lưu vào dữ liệu nhập, ai mở dashboard cũng thấy) ---- */
@@ -1686,7 +1696,7 @@ function crmInput(ALL, d) {
     <div class="crbar-flt"><span class="lbl">Lọc</span>
       <select id="crtodo" style="${sel(CR.todo)}">${todoOpts.map(([k, l]) => `<option value="${k}" ${CR.todo === k ? 'selected' : ''}>${k ? 'Việc: ' + l : 'Việc: tất cả'}</option>`).join('')}</select>
       <select id="crgrp" style="${sel(CR.grp)}"><option value="">Nhóm: tất cả</option>${[1, 2, 3, 4, 5, 9].map(g => `<option value="${g}" ${CR.grp === String(g) ? 'selected' : ''}>${g === 9 ? '' : g + '. '}${GRP[g]}</option>`).join('')}${CR.grp.includes('|') ? `<option value="${CR.grp}" selected>${GRP[CR.grp.split('|')[0]]} · ${stageTxt[CR.grp.split('|')[1]]}</option>` : ''}</select>
-      ${MSF.map(([k, l]) => { const v = (CR.ms || {})[k] || ''; return `<select data-crms="${k}" style="${sel(v)}"><option value="" ${!v ? 'selected' : ''}>${l}: tất cả</option><option value="y" ${v === 'y' ? 'selected' : ''}>${l}: đã có</option><option value="n" ${v === 'n' ? 'selected' : ''}>${l}: chưa có</option></select>`; }).join('')}
+      ${MSF.map(([k, l]) => { const v = (CR.ms || {})[k] || ''; return `<select data-crms="${k}" style="${sel(v)}"><option value="" ${!v ? 'selected' : ''}>${l}: tất cả</option><option value="y" ${v === 'y' ? 'selected' : ''}>${l}: đã có</option>${k === 'pl' ? `<option value="moi" ${v === 'moi' ? 'selected' : ''}>Ký phụ lục: ký mới</option><option value="ml" ${v === 'ml' ? 'selected' : ''}>Ký phụ lục: PL HĐ Mai Linh</option>` : ''}<option value="n" ${v === 'n' ? 'selected' : ''}>${l}: chưa có</option></select>`; }).join('')}
       ${CR.res ? `<span class="pill p-mute">Kết quả: ${esc(CR.res)} <a id="crresx" style="cursor:pointer;font-weight:700">×</a></span>` : ''}
       ${flt ? '<a id="crclr" class="crbar-clr">Xoá lọc</a>' : ''}
     </div></div>` + picPanel();
@@ -1706,7 +1716,7 @@ function crmInput(ALL, d) {
       <div style="display:flex;gap:8px;justify-content:space-between;margin-top:12px"><button class="btn" id="tm_add">+ Thêm người</button><span style="display:flex;gap:8px"><button class="btn" id="tm_x">Huỷ</button><button class="btn pri" id="tm_ok">Lưu danh sách</button></span></div>
     </div></div>`; }
   const row = r => `<tr class="hit" data-cropen="${esc(r.key)}" style="cursor:pointer"><td class="l name" style="min-width:240px;padding-left:34px;color:var(--accent)">${esc(r.name)}${r.isNew ? ' <span class="pill p-stable" style="font-size:10.5px">mới thêm</span>' : ''}<span class="def">HĐ ${esc(r.key)}${r.gname ? ' · ' + esc(r.gname) + (r.grank ? ' #' + r.grank : '') : ''}</span></td><td class="l">${r.pic ? esc(r.pic) : '<b style="color:var(--critical)">Chưa phân công</b>'}</td>
-    ${['pl', 'xp', 'call', 'meet'].map(f => `<td class="l">${done(r[f]) ? `<span class="c-stable">✓</span> ${isoOk(r[f]) ? dm(r[f]) : ''}${f === 'call' && r.calls.length > 1 ? `<span class="def">${r.calls.length} lần</span>` : ''}` : '<span class="lbl">—</span>'}</td>`).join('')}
+    ${['pl', 'xp', 'call', 'meet'].map(f => `<td class="l">${done(r[f]) ? `<span class="c-stable">✓</span> ${isoOk(r[f]) ? dm(r[f]) : ''}${f === 'pl' && r.plType ? `<span class="def" style="color:${r.plType === 'moi' ? 'var(--accent)' : 'var(--ink-2)'}">${PLT[r.plType]}${r.plTypeM ? '' : ' · tự xếp'}</span>` : ''}${f === 'call' && r.calls.length > 1 ? `<span class="def">${r.calls.length} lần</span>` : ''}` : '<span class="lbl">—</span>'}</td>`).join('')}
     <td class="l">${r.first ? dmy(r.first) : '<span class="lbl">chưa</span>'}</td><td>${r.gmv ? money(r.gmv) : '—'}<span class="def">${r.gmv30 ? '30N ' + nf(r.gmv30 / UNIT.div, UNIT.dec) : r.gmv ? 'ngừng 30N' : ''}</span></td><td class="l" style="white-space:normal;min-width:170px;font-size:12px">${PS[r.key] ? `${esc(PS[r.key].route)} <span class="lbl">(${PS[r.key].rn}/${PS[r.key].n} chuyến)</span><span class="def">${esc(PS[r.key].p)} · ${PS[r.key].band}${PS[r.key].short ? ' · <b style="color:var(--critical)">thiếu xe</b>' : ''}</span>` : (((S.cs || {})[r.key] || {}).custom || []).length ? '<span class="pill p-mute">CS đã khai báo</span>' : '<span class="lbl">—</span>'}</td>
     <td class="l" style="white-space:normal;max-width:160px">${r.lastRes ? esc(r.lastRes) : '<span class="lbl">—</span>'}${r.st ? `<span class="def" style="color:var(--critical)">${esc(r.st)}</span>` : ''}</td><td class="l" style="white-space:normal;min-width:220px;font-size:12px">${esc(r.sug[0])}</td></tr>`;
   const NC = 11; let body = '';
@@ -1803,7 +1813,8 @@ function crmDrawer(r, d) {
       const mk = f => done(r[f]) ? (isoOk(r[f]) ? dm(r[f]) : '✓') : '—', tr = S.tx.filter(t => t[2] === r.key && t.length > 9).map(mkTrip), ps = patSummary(d)[r.key], cs = CARDS[r.key] || {};
       const A = r.acts[0], sec = (k, title, sum, body) => `<details class="card crsec" data-sec="${k}" style="margin-top:10px;padding:14px 20px" ${secOn(k) ? 'open' : ''}><summary style="cursor:pointer;list-style:none;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap"><b style="font-size:14px">${secOn(k) ? '▾' : '▸'} ${title}</b><span class="lbl" style="font-size:12.5px">${sum}</span></summary><div style="margin-top:10px">${body}</div></details>`;
       return sec('ms', 'Tiến độ & các mốc', `${stageTxt[r.stage]} · ký PL ${mk('pl')} · XPAY ${mk('xp')} · gọi ${mk('call')} · meeting ${mk('meet')} · doanh thu đầu ${r.first ? dm(r.first) : '—'}${r.tact ? ` · mục tiêu active ${dm(r.tact)}` : ''}`, `
-      ${ms('pl', 'Ký phụ lục (vào tủ)')}${ms('xp', 'Khởi tạo XPAY')}${ms('call', 'Gọi khách', r.calls.length ? `${r.calls.length} lần · tự lấy ngày gọi gần nhất` : '')}${ms('meet', 'Meeting', r.meets.length ? `${r.meets.length} lần · tự lấy ngày gần nhất` : '')}
+      ${ms('pl', 'Ký phụ lục (vào tủ)')}
+      <div style="display:flex;gap:8px;align-items:center;padding:2px 0 8px 158px;flex-wrap:wrap"><span class="lbl">Loại ký</span>${['moi', 'ml'].map(v => `<button class="btn" data-pltype="${v}" ${dis} style="padding:3px 10px;${(r.plTypeM ? (DBX[r.key] || {}).plType : r.plTypeA) === v ? 'background:var(--color-surface-primary);border-color:var(--accent);color:var(--color-action-theme-primary-active);font-weight:700' : ''}">${v === 'moi' ? 'Ký mới (khách mới)' : 'Ký PL HĐ Mai Linh (khách ML chuyển đổi)'}</button>`).join('')}<span class="lbl">${r.plTypeM ? 'đã chọn' : 'tự xếp theo sổ Mai Linh — bấm để chọn'}</span></div>${ms('xp', 'Khởi tạo XPAY')}${ms('call', 'Gọi khách', r.calls.length ? `${r.calls.length} lần · tự lấy ngày gọi gần nhất` : '')}${ms('meet', 'Meeting', r.meets.length ? `${r.meets.length} lần · tự lấy ngày gần nhất` : '')}
       <div style="display:flex;gap:8px;align-items:center;padding:6px 0"><span style="width:150px;font-weight:600">Doanh thu đầu tiên</span>${r.firstAmt != null ? `<span>${dmy(r.first)} · ${n0(r.firstAmt)} đồng <span class="lbl">(tự động từ bảng kê)</span></span>` : `<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-ms="first" ${done(r.first) ? 'checked' : ''} ${dis}> đã có</label><input type="date" data-msd="first" value="${isoOk(r.first) ? r.first : ''}" ${dis} style="${inp}"><span class="lbl">chưa thấy trong bảng kê</span>`}</div>
       ${(() => { const T = {dat: ['stable', 'Đạt'], datTre: ['watch', 'Đạt trễ'], tre: ['critical', 'Quá hạn, chưa có giao dịch'], sap: ['high', 'Sắp đến hạn'], cho: ['mute', 'Chưa đến hạn']}[r.tactSt];
         return `<div style="display:flex;gap:8px;align-items:center;padding:8px 0;border-top:1px dashed var(--line);margin-top:4px;flex-wrap:wrap"><span style="width:150px;font-weight:600">Mục tiêu active</span>
@@ -1881,7 +1892,7 @@ async function crmSheets(wbk) {
       const ws = wbk.addWorksheet('Khach_hang', {views: [{state: 'frozen', ySplit: 4, xSplit: 3, showGridLines: false}]});
       K.title(ws, 'XPAY — TIẾN ĐỘ KHÁCH HÀNG (mỗi pháp nhân 1 dòng)', `${scopeTxt()}${crmFilterTxt() ? ' · lọc: ' + crmFilterTxt() : ''} · ${n0(R.length)} khách · số liệu đến ${dmy(d)} · xuất lúc ${xlStamp()}`);
       const cols = [['Nhóm', 34], ['Số hợp đồng', 13], ['Tên pháp nhân', 46], ['PIC', 11], ['PIC cũ (sổ khách)', 13], ['Cách xếp nhóm', 11], ['Phân loại Mai Linh', 26], ['Nhóm client', 24], ['Hạng nhóm client', 9], ['Hạng Top 200', 13], ['Tình trạng đặc biệt', 12], ['Tiến độ', 16],
-        ['Ký phụ lục (vào tủ)', 13], ['Khởi tạo XPAY', 13], ['Gọi khách gần nhất', 13], ['Số lần gọi', 8], ['Meeting gần nhất', 13], ['Số meeting', 8], ['Hẹn gọi lại', 12], ['Liên hệ gần nhất', 12], ['Kết quả gần nhất', 22],
+        ['Ký phụ lục (vào tủ)', 13], ['Loại ký', 16], ['Khởi tạo XPAY', 13], ['Gọi khách gần nhất', 13], ['Số lần gọi', 8], ['Meeting gần nhất', 13], ['Số meeting', 8], ['Hẹn gọi lại', 12], ['Liên hệ gần nhất', 12], ['Kết quả gần nhất', 22],
         ['Ngày doanh thu đầu tiên', 13], ['Giao dịch đầu tiên (VND)', 14], ['GMV lũy kế (VND)', 15], ['GMV 30 ngày (VND)', 15], ['Số chuyến', 9], ['Giao dịch gần nhất', 13], ['Tiềm năng (triệu/tháng)', 11], ['Giao dịch Mai Linh T6–T9 (VND)', 15],
         ['Tuyến chính 30 ngày', 34], ['Mục đích chính 30 ngày', 18], ['Khung giờ 30 ngày', 16], ['Chuyến thiếu xe 30 ngày', 10], ['Gợi ý xử lý', 70], ['Ghi chú', 40], ['MST', 14], ['Địa chỉ', 50], ['Email doanh nghiệp', 28], ['Số thẻ XPAY', 9], ['Tổng hạn mức tháng (VND)', 15], ['Tổng số dư thẻ (VND)', 15], ['Ngày số dư', 12]];
       if (CARDST === 'loading' || CARDST === 'off') await cardsLoad();
@@ -1890,7 +1901,7 @@ async function crmSheets(wbk) {
       let row = 5;
       for (const G of GS) { xlSec(K, ws, row++, cols.length, grpHead(G)); for (const X of G.subs) { if (X.sb) xlSec(K, ws, row++, cols.length, `${X.sb} · ${n0(X.rows.length)} khách`, 1); X.rows.forEach(r => { const ps = PS[r.key], i = row++ - 5;
         K.put(ws, 5 + i, [G.label, r.key, r.name, r.pic || 'Chưa phân công', r.picOld, r.liq ? 'Tự động' : r.grpM ? 'Chọn tay' : 'Tự động', r.sub, r.gname, r.grank || '', r.rank, r.st, stageTxt[r.stage],
-          msDate(r.pl), msDate(r.xp), msDate(r.call), r.calls.length, msDate(r.meet), r.meets.length, msDate(r.nx), r.acts[0] && isoOk(r.acts[0].d) ? new Date(r.acts[0].d + 'T00:00:00Z') : '', r.lastRes,
+          msDate(r.pl), r.plType ? PLT[r.plType] + (r.plTypeM ? '' : ' (tự xếp)') : '', msDate(r.xp), msDate(r.call), r.calls.length, msDate(r.meet), r.meets.length, msDate(r.nx), r.acts[0] && isoOk(r.acts[0].d) ? new Date(r.acts[0].d + 'T00:00:00Z') : '', r.lastRes,
           msDate(r.first), r.firstAmt, r.gmv, r.gmv30, r.trips, r.lastTx ? new Date(r.lastTx + 'T00:00:00Z') : '', r.pot || '', r.ml69 || '',
           ps ? `${ps.route} (${ps.rn}/${ps.n} chuyến)` : '', ps ? ps.p : '', ps ? ps.band : '', ps ? ps.short : '', r.sug.join(' · '), r.note, ...(cs => [cs.mst, cs.address, cs.email, cs.n || '', cs.n ? cs.limit : '', cs.n ? cs.bal : '', cs.balDate ? new Date(cs.balDate + 'T00:00:00Z') : ''])(CARDS[r.key] || {})], fm);
         ws.getCell(5 + i, 2).numFmt = '@'; }); } }
@@ -2232,6 +2243,8 @@ function bindDrawer() {
   if (CARDST === 'ok' && CR.ptab === 'profile' && !CARDD[k]) { CARDD[k] = {loading: true}; cardDetail(k, CANWRITE).catch(e => { CARDD[k] = {err: 'Chưa tải được: ' + (e.message || e)}; }).then(() => { if (CR.open === k) keep(() => {}); }); }
   if ($('cdfull')) $('cdfull').onclick = () => keep(() => { CR.tok = !CR.tok; });
   if ($('cdadd')) $('cdadd').onclick = () => keep(() => { CR.cform = {key: k}; });
+  document.querySelectorAll('[data-pltype]').forEach(b => b.onclick = async () => { const v = b.dataset.pltype;
+    try { await crmWrite(k, {plType: v}); DBX[k] = Object.assign({}, DBX[k] || {}, {plType: v}); CRM_ = null; AUTOC_ = null; keep(() => {}); } catch (e) { alert('Chưa lưu được: ' + (e.message || e)); } });
   document.querySelectorAll('[data-cdedit]').forEach(b => b.onclick = () => keep(() => { const x = (CARDD[k].cards || []).find(c => c.uid === b.dataset.cdedit) || {};
     CR.cform = {key: k, edit: 1, uid: x.uid, company_on_card: x.company_on_card, holder: x.holder, expiry: x.expiry, monthly_limit: x.monthly_limit, balance: x.balance}; }));
   const cardsReload = async () => { CARDD[k] = null; await cardsLoad(); await cardDetail(k, CANWRITE); };
