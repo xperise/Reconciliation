@@ -1384,7 +1384,7 @@ function crmRows(d) {
   CRM_ = [...keys].map(k => { const b = BOOK[k] || {}, c = C0.rows[k] || [], e = DBX[k] || {}, ms = e.ms || {}, f = first[k], g = gm[k] || {g: 0, n: 0, g30: 0, last: ''};
     const acts = [...(SEEDACT[k] || []), ...Object.entries(e.acts || {}).filter(([, a]) => a).map(([id, a]) => Object.assign({id}, a))].filter(a => a.d <= d || !isoOk(a.d)).sort((x, y) => (y.d || '').localeCompare(x.d || '') || (y.ts || 0) - (x.ts || 0));
     const calls = acts.filter(a => a.t === 'call'), meets = acts.filter(a => a.t === 'meet');
-    const r = {key: k, name: cname(k), b, pl: val(ms.pl, c[0] || (b.fpl === 'Y' ? 'Y' : '')), xp: val(ms.xp, c[1] || (b.xp || f ? 'Y' : '')),
+    const r = {key: k, name: cname(k), b, pl: val(ms.pl, c[0] || (b.fpl === 'Y' ? 'Y' : '')), xp: val(ms.xp, c[1] || (b.xp || f || hasCard(k) ? 'Y' : '')),
       call: val(ms.call, calls[0] ? calls[0].d : ''), meet: val(ms.meet, meets[0] ? meets[0].d : ''), first: f ? f[0] : val(ms.first, ''), firstAmt: f ? f[4] : null,
       gmv: g.g, gmv30: g.g30, trips: g.n, lastTx: g.last, pic: e.pic != null ? e.pic : (c[2] || ''), picOld: b.pic || '', rank: c[3] || '', gname: e.gname || c[4] || '', grank: c[5] || 0,
       pot: e.pot != null && e.pot !== '' ? +e.pot || 0 : c[6] || 0, isNew: !!e.created, ml69: c[7] || 0, acts, calls, meets, note: e.note || '', nx: e.nx || '', st: e.st != null ? e.st : (b.tl ? 'Thanh lý' : ''), grpM: e.grp || ''};
@@ -1459,7 +1459,7 @@ let CARDS = {}, CARDST = 'off', CARDMSG = '', CARDD = {};
 async function cardsLoad() {
   const c = window.claude ? await claude.use('cards') : null; if (!c) { CARDST = 'off'; return; }
   CARDST = 'loading';
-  try { const r = await c.summary(); CARDS = r.sum || {}; CARDST = 'ok'; AUTOC_ = null; CARDMSG = r.keyOk ? '' : 'Chưa cấu hình khoá mã hoá MOB_CARD_KEY nên chưa lưu được số thẻ.'; }
+  try { const r = await c.summary(); CARDS = r.sum || {}; CARDST = 'ok'; AUTOC_ = null; CRM_ = null; CARDMSG = r.keyOk ? '' : 'Chưa cấu hình khoá mã hoá MOB_CARD_KEY nên chưa lưu được số thẻ.'; }
   catch (e) { CARDST = 'err'; CARDMSG = e.message || String(e); }
   // số Thẻ đã phát hành đếm theo thẻ: tính lại số thực tế khi dữ liệu thẻ tải xong (lần tính đầu chạy trước khi có dữ liệu thẻ)
   if (CARDST === 'ok' && MMODE('cards_issued') === 'auto') { AUTOC_ = null; computeActuals(); }
@@ -1648,6 +1648,8 @@ function crmAction(R, d) {
 }
 let CMORE = {}, COPEN = {};
 /* lọc theo mốc tiến độ: '' tất cả · 'y' đã có · 'n' chưa có */
+/* khách đã có thẻ XPAY trên hệ thống (Hồ sơ doanh nghiệp → Thẻ XPAY) = đã khởi tạo XPAY */
+const hasCard = k => typeof CARDS === 'object' && CARDS && !!((CARDS[k] || {}).n);
 const MSF = [['pl', 'Ký phụ lục'], ['hd', 'Ký HĐ mới'], ['xp', 'Khởi tạo XPAY'], ['call', 'Gọi khách'], ['meet', 'Meeting'], ['first', 'Doanh thu đầu']];
 const msDone = (r, k) => k === 'first' ? !!r.first : done(r[k]);
 const msMatch = (r, k, v) => msDone(r, k) === (v === 'y');
@@ -1995,6 +1997,21 @@ function picTemplate() {
             ws.getCell(row, 3).value = String(r.key); ws.getCell(row, 12).fill = K.fill('FFFFF7D6');
             ws.getCell(row, 12).dataValidation = {type: 'list', allowBlank: true, showErrorMessage: true, errorTitle: 'PIC không hợp lệ', error: 'Chọn người phụ trách trong danh sách (sheet DS_PIC).', formulae: [vf]};
             row++; }); } }
+      // ---- Mốc ký: Ký phụ lục / Ký hợp đồng mới (1 trong 2) ----
+      { const wm = wbk.addWorksheet('Moc_ky', {views: [{state: 'frozen', ySplit: 5, xSplit: 4, showGridLines: false}]});
+        K.title(wm, 'MỐC KÝ — Ký phụ lục (khách Mai Linh) hoặc Ký hợp đồng mới (khách mới)', `${scopeTxt()} · ${dmy(d)} · tạo lúc ${xlStamp()}`);
+        wm.getCell('A3').value = 'Mỗi khách điền 1 trong 2 cột màu vàng: ngày ký (dd/mm/yyyy) hoặc "x" nếu đã ký nhưng chưa rõ ngày. Điền cột này thì cột kia được bỏ. Gõ "xoá" để bỏ mốc. Để trống = giữ nguyên. Có thể upload riêng sheet này.';
+        wm.getCell('A3').font = {name: 'Arial', size: 10, bold: true, color: {argb: 'FFB45309'}};
+        const mc = [['Nhóm', 34], ['Số hợp đồng', 13], ['Tên pháp nhân', 46], ['PIC', 12], ['Số thẻ XPAY', 9], ['Khởi tạo XPAY', 13], ['Ký phụ lục (hiện tại)', 14], ['Ký HĐ mới (hiện tại)', 14], ['Ký phụ lục (mới)', 15], ['Ký HĐ mới (mới)', 15]];
+        K.head(wm, 5, mc); [9, 10].forEach(c => wm.getCell(5, c).fill = K.fill('FFB45309')); [9, 10].forEach(c => wm.getColumn(c).numFmt = 'dd/mm/yyyy');
+        const msv = v => isoOk(v) ? new Date(v + 'T00:00:00Z') : done(v) ? 'x' : '';
+        // khách đã có XPAY mà chưa có mốc ký xếp lên đầu
+        const MR = [...R].sort((a, b) => ((done(b.xp) && !b.signed) - (done(a.xp) && !a.signed)) || a.grp - b.grp || a.name.localeCompare(b.name, 'vi'));
+        let rm = 6, lastSec = null;
+        for (const r of MR) { const sec = done(r.xp) && !r.signed ? 'Đã có XPAY (có thẻ / đã khởi tạo) · chưa có ngày ký — cần cập nhật' : 'Các khách còn lại';
+          if (sec !== lastSec) { xlSec(K, wm, rm++, mc.length, sec); lastSec = sec; }
+          K.put(wm, rm, [(r.grp === 9 ? '' : r.grp + '. ') + GRP[r.grp], r.key, r.name, r.pic || '', (CARDS[r.key] || {}).n || '', msv(r.xp), msv(r.pl), msv(r.hd), '', ''], [null, '@', null, null, '#,##0', 'dd/mm/yyyy', 'dd/mm/yyyy', 'dd/mm/yyyy']);
+          wm.getCell(rm, 2).value = String(r.key); [9, 10].forEach(c => wm.getCell(rm, c).fill = K.fill('FFFFF7D6')); rm++; } }
       if (CANWRITE && CARDST === 'ok') {
         const GS = crmGroups(R), {items, co} = await cardsGrouped(GS);
         const wd = wbk.addWorksheet('Thong_tin_DN', {views: [{state: 'frozen', ySplit: 5, xSplit: 4, showGridLines: false}]});
@@ -2091,7 +2108,8 @@ async function updParse(file) {
   const I = {file: file.name, pic: null, errors: [], payload: null, srv: null, roles: {}};
   CR.picFile = file;
   if (SH.DS_PIC) sheetRows(SH.DS_PIC).forEach(r => { const n = cellTxt(r[0]), ro = cellTxt(r[1]); if (n && ro && !/người phụ trách/i.test(n)) I.roles[n] = ro; });
-  if (SH.Phan_cong_PIC || (!SH.Thong_tin_DN && !SH.The_XPAY)) { try { I.pic = picRows(sheetRows(SH.Phan_cong_PIC || SH[wb.SheetNames[0]])); } catch (e) { if (SH.Phan_cong_PIC || !(SH.Thong_tin_DN || SH.The_XPAY)) I.errors.push(e.message); } }
+  if (SH.Moc_ky) { try { I.ms = msRows(sheetRows(SH.Moc_ky)); } catch (e) { I.errors.push(e.message); } }
+  if (SH.Phan_cong_PIC || (!SH.Thong_tin_DN && !SH.The_XPAY && !SH.Moc_ky)) { try { I.pic = picRows(sheetRows(SH.Phan_cong_PIC || SH[wb.SheetNames[0]])); } catch (e) { if (SH.Phan_cong_PIC || !(SH.Thong_tin_DN || SH.The_XPAY)) I.errors.push(e.message); } }
   if ((SH.Thong_tin_DN || SH.The_XPAY) && !CANWRITE) I.errors.push('Bạn không có quyền cập nhật thông tin doanh nghiệp / thẻ, bỏ qua 2 sheet này.');
   else if (SH.Thong_tin_DN || SH.The_XPAY) {
     const dn = SH.Thong_tin_DN ? dnRows(sheetRows(SH.Thong_tin_DN), byKey) : {companies: [], errors: []}, cd = SH.The_XPAY ? cardRows(sheetRows(SH.The_XPAY), byKey) : {cards: [], deletes: [], errors: []};
@@ -2101,7 +2119,7 @@ async function updParse(file) {
   }
   return I;
 }
-const updCount = I => (I.pic ? I.pic.changes.length : 0) + (I.srv ? I.srv.companies.length + I.srv.added.length + I.srv.changed.length + I.srv.deleted.length : 0);
+const updCount = I => (I.pic ? I.pic.changes.length : 0) + (I.ms ? I.ms.changes.length : 0) + (I.srv ? I.srv.companies.length + I.srv.added.length + I.srv.changed.length + I.srv.deleted.length : 0);
 /* Ghi PIC: gom theo nhóm tài liệu crm/bXX, mỗi nhóm 1 lần ghi */
 async function picApply(changes, prog) {
   const db = await claude.use('db'); if (!db) throw {code: 'not_granted'};
@@ -2113,14 +2131,55 @@ async function picApply(changes, prog) {
       prog(++i, B.length); } };
   DBQ = DBQ.then(run, run); await DBQ;
 }
+/* sheet Moc_ky: Ký phụ lục / Ký HĐ mới (1 trong 2) */
+function msRows(A) {
+  const hi = headAt(A, ['Số hợp đồng', 'Ký phụ lục (mới)']);
+  if (hi < 0) throw new Error('Sheet Moc_ky: không thấy cột "Số hợp đồng" và "Ký phụ lục (mới)". Hãy dùng file tải từ nút "Tải template cập nhật".');
+  const H = A[hi].map(c => fold(c)), ck = H.indexOf(fold('Số hợp đồng')), cp = H.indexOf(fold('Ký phụ lục (mới)')), ch = H.indexOf(fold('Ký HĐ mới (mới)')), cn = H.indexOf(fold('Tên pháp nhân'));
+  const byKey = {}; crmRows(CR.day).forEach(r => byKey[r.key] = r);
+  const val = v => { if (v == null || v === '') return undefined; if (v instanceof Date) return isNaN(v) ? null : isoOf(v); const x = String(v).trim(); if (!x) return undefined;
+    if (/^(x|có|co|yes|y|✓|v)$/i.test(x)) return 'Y'; if (/^(xo[aá]|xóa|bỏ|bo|clear|-)$/i.test(x)) return '';
+    let m = x.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/); if (m) { const d = `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`; return isNaN(new Date(d + 'T00:00:00Z')) ? null : d; }
+    m = x.match(/^(\d{4})-(\d{2})-(\d{2})$/); if (m) return x; return null; };
+  const changes = [], errors = []; let same = 0;
+  for (let i = hi + 1; i < A.length; i++) { const raw = A[i], k0 = String(raw[ck] == null ? '' : raw[ck]).trim(); if (!k0) continue;
+    const vp = val(raw[cp]), vh = ch >= 0 ? val(raw[ch]) : undefined; if (vp === undefined && vh === undefined) continue;
+    const line = i + 1, k = MERGE[k0] || k0, r = byKey[k], nm = cn >= 0 ? String(raw[cn] || '') : '';
+    if (!r) { errors.push(`Moc_ky dòng ${line}: không có số hợp đồng "${k0}"${nm ? ' (' + nm + ')' : ''}`); continue; }
+    if (vp === null || vh === null) { errors.push(`Moc_ky dòng ${line}: ngày không hợp lệ (${r.name}) — ghi dd/mm/yyyy hoặc "x"`); continue; }
+    if (vp && vh) { errors.push(`Moc_ky dòng ${line}: ${r.name} điền cả 2 cột, chỉ được chọn 1 (Ký phụ lục hoặc Ký HĐ mới)`); continue; }
+    // điền 1 cột thì bỏ cột kia; "xoá" chỉ bỏ cột được ghi
+    const to = {pl: r.pl || '', hd: r.hd || ''};
+    if (vp !== undefined) { to.pl = vp; if (vp) to.hd = ''; }
+    if (vh !== undefined) { to.hd = vh; if (vh) to.pl = ''; }
+    const norm = v => done(v) ? v : '';
+    if (norm(to.pl) === norm(r.pl) && norm(to.hd) === norm(r.hd)) { same++; continue; }
+    changes.push({key: k, name: r.name, xp: r.xp, from: {pl: r.pl, hd: r.hd}, to}); }
+  return {changes, errors, same};
+}
+async function msApply(changes, prog) {
+  const db = await claude.use('db'); if (!db) throw {code: 'not_granted'};
+  const by = {}, ts = Date.now();
+  // mốc ký trong sổ khách Mai Linh (c[0]) là số mặc định: muốn bỏ thì ghi 'N' để ghi đè
+  changes.forEach(c => { const base = (C0.rows[c.key] || [])[0] || ''; const msP = {pl: c.to.pl || (done(base) ? 'N' : null), hd: c.to.hd || null};
+    (by[bucketOf(c.key)] = by[bucketOf(c.key)] || {})[c.key] = {ms: msP, mts: ts}; });
+  const B = Object.entries(by); let i = 0;
+  const run = async () => { for (const [b, patch] of B) { const ref = db.doc('crm/' + b), s = await ref.get();
+      if (!s.exists) await ref.set(patch); else await ref.update(patch);
+      for (const [k, v] of Object.entries(patch)) { const e = DBX[k] = Object.assign({}, DBX[k] || {}); e.ms = Object.assign({}, e.ms || {}); for (const [f, x] of Object.entries(v.ms)) { if (x == null) delete e.ms[f]; else e.ms[f] = x; } e.mts = ts; }
+      prog(++i, B.length); } };
+  DBQ = DBQ.then(run, run); await DBQ;
+}
 function picPanel() {
   const I = CR.picImp; if (!I) return '';
-  const lab = p => p ? esc(p) : '<span class="lbl">Chưa phân công</span>', P = I.pic, V = I.srv, total = updCount(I), errs = [...I.errors, ...(P ? P.errors : []), ...(V ? V.errors : [])];
+  const lab = p => p ? esc(p) : '<span class="lbl">Chưa phân công</span>', P = I.pic, V = I.srv, M = I.ms, total = updCount(I), errs = [...I.errors, ...(P ? P.errors : []), ...(M ? M.errors : []), ...(V ? V.errors : [])];
   const fv = v => v == null || v === '' ? '<span class="lbl">trống</span>' : typeof v === 'number' ? n0(v) + ' đ' : esc(v);
   const sec = (t, body) => `<h3 style="margin:14px 0 6px;font-size:14px">${t}</h3>${body}`, tbl = (head, rows) => `<div class="tw" style="max-height:300px;overflow:auto"><table><thead><tr>${head.map(x => `<th class="l">${x}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
   const parts = [];
   if (P) { const cnt = {}; P.changes.forEach(c => { const t = c.to || PIC_CLEAR; cnt[t] = (cnt[t] || 0) + 1; });
     parts.push(sec(`Phân công PIC · ${n0(P.changes.length)} khách đổi · ${n0(P.same)} giữ nguyên`, P.changes.length ? `<div class="lbl" style="margin-bottom:6px">Sau khi áp dụng: ${Object.entries(cnt).map(([p, n]) => `<b>${esc(p)}</b> nhận ${n0(n)}`).join(' · ')}</div>` + tbl(['Doanh nghiệp', 'Nhóm', 'PIC hiện tại', 'PIC mới'], P.changes.map(c => `<tr><td class="l name">${esc(c.name)}<span class="def">HĐ ${esc(c.key)}</span></td><td class="l">${c.grp === 9 ? '' : c.grp + '. '}${esc(GRP[c.grp])}</td><td class="l">${lab(c.from)}</td><td class="l"><b>${lab(c.to)}</b></td></tr>`).join('')) : `<div class="hint">${P.filled ? 'Không có khách nào đổi PIC.' : 'Chưa điền cột "PIC mới" ở dòng nào.'}</div>`)); }
+  if (M) { const mv = v => isoOk(v) ? dmy(v) : done(v) ? 'đã ký (không rõ ngày)' : '<span class="lbl">—</span>';
+    parts.push(sec(`Mốc ký · ${n0(M.changes.length)} khách thay đổi · ${n0(M.changes.filter(c => done(c.to.pl)).length)} ký phụ lục · ${n0(M.changes.filter(c => done(c.to.hd)).length)} ký HĐ mới · ${n0(M.same)} giữ nguyên`, M.changes.length ? tbl(['Doanh nghiệp', 'Khởi tạo XPAY', 'Ký phụ lục', 'Ký HĐ mới'], M.changes.map(c => `<tr><td class="l name">${esc(c.name)}<span class="def">HĐ ${esc(c.key)}</span></td><td class="l">${mv(c.xp)}</td><td class="l">${mv(c.from.pl)} → <b>${mv(c.to.pl)}</b></td><td class="l">${mv(c.from.hd)} → <b>${mv(c.to.hd)}</b></td></tr>`).join('')) : '<div class="hint">Không có thay đổi mốc ký.</div>')); }
   if (V) {
     parts.push(sec(`Thông tin doanh nghiệp · ${n0(V.companies.length)} khách thay đổi`, V.companies.length ? tbl(['Doanh nghiệp', 'Thông tin', 'Hiện tại', 'Mới'], V.companies.map(c => c.diffs.map((d, j) => `<tr><td class="l name">${j ? '' : esc(cname(c.key)) + `<span class="def">HĐ ${esc(c.key)}</span>`}</td><td class="l">${esc(d.f)}</td><td class="l">${fv(d.from)}</td><td class="l"><b>${fv(d.to)}</b></td></tr>`).join('')).join('')) : '<div class="hint">Không có thay đổi.</div>'));
     const cr = [...V.added.map(c => `<tr><td class="l name">${esc(cname(c.key))}<span class="def">HĐ ${esc(c.key)}</span></td><td class="l">${esc(c.holder || '')}<span class="def">UID ${esc(c.uid)}</span></td><td class="l"><span class="pill p-stable">Thẻ mới</span></td><td class="l" colspan="2">${esc(c.pan || '')}</td></tr>`),
@@ -2223,6 +2282,7 @@ function bindJourney() {
     if (!window.confirm(`Áp dụng ${n} thay đổi theo file "${I.file}"?`)) return;
     I.busy = true; I.msg = ''; keep(() => {}); const done_ = [];
     try {
+      if (I.ms && I.ms.changes.length) { await msApply(I.ms.changes, (i, m) => { const b = $('crpicok'); if (b) b.textContent = `Đang lưu mốc ký ${i}/${m}…`; }); done_.push(`${I.ms.changes.length} khách cập nhật mốc ký`); I.ms.changes = []; CRM_ = null; AUTOC_ = null; }
       if (I.pic && I.pic.changes.length) { await picApply(I.pic.changes, (i, m) => { const b = $('crpicok'); if (b) b.textContent = `Đang lưu PIC ${i}/${m}…`; }); done_.push(`${I.pic.changes.length} khách đổi PIC`); I.pic.changes = []; }
       if (I.srv && (I.srv.companies.length + I.srv.added.length + I.srv.changed.length + I.srv.deleted.length)) { const b = $('crpicok'); if (b) b.textContent = 'Đang lưu thẻ…';
         const r = await (await claude.use('cards')).save(Object.assign({dry: false}, I.payload)); done_.push(`${r.companies.length} doanh nghiệp, ${r.added.length} thẻ mới, ${r.changed.length} thẻ sửa, ${r.deleted.length} thẻ gỡ`); CARDD = {}; await cardsLoad(); }
