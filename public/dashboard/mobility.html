@@ -224,6 +224,10 @@ function manualLast(d, k) { let best = ''; for (const [dd, o] of Object.entries(
 /* Phụ lục đã ký / DN đã khởi tạo XPAY: lấy số của tab Tiến độ khách hàng; số nhập tay chỉ dùng khi được nhập sau lần cập nhật gần nhất của tab đó */
 function countSrc(d, k) {
   const ml = manualLast(d, k), au = LASTDAY ? autoCounts()[k] : null;
+  if (k === 'cards_issued') {   // 2 cách: nhập tay · đếm theo thẻ XPAY đã có trên hệ thống
+    if (MMODE(k) === 'auto' && au != null) return {v: au, src: 'cards'};
+    return ml ? {v: ml.v, src: 'manual', d: ml.d} : {v: null, src: ''};
+  }
   if (au == null) return ml ? {v: ml.v, src: 'manual', d: ml.d} : {v: null, src: ''};
   const md = MMODE(k);
   if (md === 'auto') return {v: au, src: 'crm'};
@@ -231,8 +235,15 @@ function countSrc(d, k) {
   return {v: au, src: 'crm'};
 }
 let AUTOC_ = null;
-function autoCounts(fresh) { if (AUTOC_ && !fresh) return AUTOC_; const R = crmRows(LASTDAY || '9999').filter(r => !r.liq); AUTOC_ = {appendix: R.filter(r => done(r.pl)).length, onboard: R.filter(r => done(r.xp)).length}; return AUTOC_; }
-function manualAt(d, k) { if ((k === 'appendix' || k === 'onboard') && LASTDAY && d >= LASTDAY) return countSrc(d, k).v;
+function autoCounts(fresh) { if (AUTOC_ && !fresh) return AUTOC_; const R = crmRows(LASTDAY || '9999').filter(r => !r.liq); AUTOC_ = {appendix: R.filter(r => done(r.pl)).length, onboard: R.filter(r => done(r.xp)).length, cards_issued: cardsCount()}; return AUTOC_; }
+/* số thẻ XPAY đang có trên hệ thống (Hồ sơ doanh nghiệp → Thẻ XPAY), không tính thẻ của doanh nghiệp thanh lý */
+function cardsCount() {
+  if (typeof CARDST === 'undefined' || CARDST !== 'ok') return null;
+  const liq = new Set([...(typeof LIQ !== 'undefined' ? LIQ : []), ...crmRows(LASTDAY || '9999').filter(r => r.liq).map(r => r.key)]); let n = 0, nl = 0;
+  for (const [k, v] of Object.entries(CARDS || {})) { const kk = MERGE[k] || k; if (liq.has(kk)) nl += v.n || 0; else n += v.n || 0; }
+  cardsCount.liq = nl; return n;
+}
+function manualAt(d, k) { if ((k === 'appendix' || k === 'onboard' || k === 'cards_issued') && LASTDAY && d >= LASTDAY) return countSrc(d, k).v;
   let v = null, best = ''; for (const [dd, o] of Object.entries(S.manual)) if (dd <= d && dd >= best && o[k] != null) { best = dd; v = o[k]; } return v; }
 function supplyAt(d) {
   const D = S.drv.dates; let units = 0, init = 0, act = 0, ok = 0, any = false;
@@ -582,7 +593,7 @@ function renderOverview(d, C, A, p) {
     return `${dl > 0 ? `<span class="up"><b>▲ ${F(dl)}</b>` : dl < 0 ? `<span class="dn"><b>▼ ${F(-dl)}</b>` : '<span><b>= 0</b>'}${y ? ' (' + pctCh(t, y) + ')' : ''}</span> so với hôm qua (${F(y)})`; };
   const of = v => `<span style="font-size:14px;font-weight:600;color:var(--ink-2)"> / ${v}</span>`;
   const plC = countSrc(d, 'appendix'), obC = countSrc(d, 'onboard');
-  const srcTxt = c => c.src === 'manual' ? `Số nhập tay ngày ${dmy(c.d)}` : c.src === 'crm' ? 'Lấy từ tab Tiến độ khách hàng' : 'Chưa có số';
+  const srcTxt = c => c.src === 'manual' ? `Số nhập tay ngày ${dmy(c.d)}` : c.src === 'crm' ? 'Lấy từ tab Tiến độ khách hàng' : c.src === 'cards' ? 'Đếm theo thẻ trên hệ thống' : 'Chưa có số';
   const CRR = crmRows(d).filter(r => !r.liq), wsd = wkStart(d);
   const cT = actsOn(CRR, 'call', d), mT = actsOn(CRR, 'meet', d), cW = actsBetween(CRR, 'call', wsd, d), mW = actsBetween(CRR, 'meet', wsd, d);
   const tsum = f => PICS.reduce((s, p) => s + f(p), 0);
@@ -746,7 +757,11 @@ function renderUpload() {
             <option value="auto" ${md === 'auto' ? 'selected' : ''}>Tự động — tab Tiến độ khách hàng (${n0(ac)})</option>
             <option value="manual" ${md === 'manual' ? 'selected' : ''}>Nhập tay${ml ? ` (${n0(ml.v)} · ngày ${dmy(ml.d)})` : ''}</option></select>
           <input type="number" id="${id}" value="${cs.v == null ? '' : cs.v}" ${md === 'auto' ? 'disabled' : ''}><span class="lbl">Đang dùng: <b>${cs.src === 'manual' ? `số nhập tay ngày ${dmy(cs.d)}` : `số tự động từ tab Tiến độ khách hàng`}</b>. "Theo số cập nhật gần nhất": số nhập tay được dùng cho tới khi tab Tiến độ khách hàng có cập nhật ${d} mới hơn.</span></div>`; }).join('')}
-      <div style="display:flex;gap:8px;align-items:center;margin:8px 0"><span class="lbl" style="width:120px">Thẻ đã phát hành</span> <input type="number" id="mk" value="${manualAt(LASTDAY, 'cards_issued') || ''}"><span class="lbl">nhập tay</span></div></div>
+      ${(() => { const md = MMODE('cards_issued') === 'auto' ? 'auto' : 'manual', ac = cardsCount(), ml = manualLast(LASTDAY || '9999', 'cards_issued'), cs = LASTDAY ? countSrc(LASTDAY, 'cards_issued') : {v: null};
+        return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0"><span class="lbl" style="width:120px">Thẻ đã phát hành</span><select id="mkm" data-auto="${ac == null ? '' : ac}" data-man="${ml ? ml.v : ''}" data-for="mk">
+            <option value="manual" ${md === 'manual' ? 'selected' : ''}>Nhập tay${ml ? ` (${n0(ml.v)} · ngày ${dmy(ml.d)})` : ''}</option>
+            <option value="auto" ${md === 'auto' ? 'selected' : ''} ${ac == null ? 'disabled' : ''}>Đếm theo thẻ trên hệ thống${ac == null ? ' (chưa tải được dữ liệu thẻ)' : ` (${n0(ac)} thẻ)`}</option></select>
+          <input type="number" id="mk" value="${cs.v == null ? '' : cs.v}" ${md === 'auto' ? 'disabled' : ''}><span class="lbl">Đang dùng: <b>${cs.src === 'cards' ? 'đếm thẻ trên hệ thống' : cs.src === 'manual' ? `số nhập tay ngày ${dmy(cs.d)}` : 'chưa có số'}</b>. Đếm theo thẻ = tổng thẻ XPAY trong Hồ sơ doanh nghiệp của mọi khách, <b>không tính thẻ của doanh nghiệp thanh lý</b>${cardsCount.liq ? ` (đang loại ${n0(cardsCount.liq)} thẻ)` : ''}; số tự cập nhật khi thêm / gỡ thẻ.</span></div>`; })()}</div>
     <div style="display:flex;gap:10px;margin-top:14px"><button class="btn" id="bprev">Kiểm tra file</button><button class="btn pri" id="bsave" ${PENDING ? '' : 'disabled'}>Lưu & cập nhật dashboard</button></div>
     <div class="log" id="ulog" style="margin-top:12px">${PENDING ? esc(PENDING.log) : 'Chọn file rồi bấm "Kiểm tra file".'}</div><div id="unkp">${unkPanel()}</div></div>`;
   h += mergeCard();
@@ -766,10 +781,11 @@ const isoOf = v => {
 async function preview() {
   const log = [], fx = $('ftx').files, fd = $('fdrv').files[0];
   const mVals = {appendix: Number($('mct').value) || null, onboard: Number($('mob').value) || null, cards_issued: Number($('mk').value) || null};
-  const MDL = {latest: 'theo số cập nhật gần nhất', auto: 'tự động từ tab Tiến độ khách hàng', manual: 'số nhập tay'}, LB = {appendix: 'Phụ lục đã ký', onboard: 'DN đã khởi tạo XPAY', cards_issued: 'Thẻ đã phát hành'}, SID = {appendix: 'mctm', onboard: 'mobm'};
-  const modes = ['appendix', 'onboard'].filter(k => $(SID[k]).value !== MMODE(k)).map(k => `${LB[k]}: tính ${MDL[$(SID[k]).value]}`);
+  const MDL = {latest: 'theo số cập nhật gần nhất', auto: 'tự động từ tab Tiến độ khách hàng', manual: 'số nhập tay'}, LB = {appendix: 'Phụ lục đã ký', onboard: 'DN đã khởi tạo XPAY', cards_issued: 'Thẻ đã phát hành'}, SID = {appendix: 'mctm', onboard: 'mobm', cards_issued: 'mkm'};
+  const MDL2 = Object.assign({}, MDL, {cards_issued_auto: 'đếm theo thẻ trên hệ thống'});
+  const modes = ['appendix', 'onboard', 'cards_issued'].filter(k => $(SID[k]) && $(SID[k]).value !== (k === 'cards_issued' && MMODE(k) !== 'auto' ? 'manual' : MMODE(k))).map(k => `${LB[k]}: ${k === 'cards_issued' && $(SID[k]).value === 'auto' ? MDL2.cards_issued_auto : 'tính ' + MDL[$(SID[k]).value]}`);
   const modeChg = modes.length > 0;
-  const mChg = Object.entries(mVals).filter(([k, v]) => v != null && !(SID[k] && $(SID[k]).value === 'auto') && v !== (SID[k] ? (manualLast(LASTDAY, k) || {}).v : manualAt(LASTDAY, k)) && !(SID[k] && $(SID[k]).value === 'latest' && v === manualAt(LASTDAY, k)));
+  const mChg = Object.entries(mVals).filter(([k, v]) => v != null && !(SID[k] && $(SID[k]).value === 'auto') && v !== (manualLast(LASTDAY, k) || {}).v && !(SID[k] && $(SID[k]).value === 'latest' && v === manualAt(LASTDAY, k)));
   const mTxt = [...modes, ...mChg.map(([k, v]) => `${LB[k]} nhập tay ${n0(v)}`)].join('; ');
   if (!fx.length && !fd) {
     if (!mChg.length && !modeChg) { $('ulog').textContent = 'Chưa chọn file nào và số nhập tay / cách tính không thay đổi.'; return; }
@@ -847,8 +863,8 @@ async function save() {
   if (PENDING.drv) S.drv = PENDING.drv;
   const IDX_ = {}; S.tx.forEach(t => IDX_[t[1]] = t); (PENDING.fill || []).forEach(([id, a, b2, km, ts]) => { const t = IDX_[id]; if (!t) return; while (t.length < 9) t.push(''); if (!t[8] && ts) t[8] = ts; t[9] = a; t[10] = b2; t[11] = km; });
   (PENDING.fillH || []).forEach(([id, h]) => { const t = IDX_[id]; if (!t) return; while (t.length < 12) t.push(''); t[12] = h; });
-  S.cmode = {appendix: $('mctm').value, onboard: $('mobm').value};
-  const last = S.tx[S.tx.length - 1][0], k = Number($('mk').value), ob = S.cmode.onboard === 'auto' ? 0 : Number($('mob').value), ct = S.cmode.appendix === 'auto' ? 0 : Number($('mct').value);
+  S.cmode = {appendix: $('mctm').value, onboard: $('mobm').value, cards_issued: $('mkm') ? $('mkm').value : 'manual'};
+  const last = S.tx[S.tx.length - 1][0], k = S.cmode.cards_issued === 'auto' ? 0 : Number($('mk').value), ob = S.cmode.onboard === 'auto' ? 0 : Number($('mob').value), ct = S.cmode.appendix === 'auto' ? 0 : Number($('mct').value);
   const curOb = manualAt(last, 'onboard'), curCt = manualAt(last, 'appendix'), nowTs = Date.now();
   S.manual[last] = Object.assign({}, S.manual[last] || {}, ob && ob !== curOb ? {onboard: ob, onboard_ts: nowTs} : {}, k ? {cards_issued: k} : {}, ct && ct !== curCt ? {appendix: ct, appendix_ts: nowTs} : {});
   const now = new Date(); S.meta.updated = now.toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'});
@@ -1443,9 +1459,9 @@ let CARDS = {}, CARDST = 'off', CARDMSG = '', CARDD = {};
 async function cardsLoad() {
   const c = window.claude ? await claude.use('cards') : null; if (!c) { CARDST = 'off'; return; }
   CARDST = 'loading';
-  try { const r = await c.summary(); CARDS = r.sum || {}; CARDST = 'ok'; CARDMSG = r.keyOk ? '' : 'Chưa cấu hình khoá mã hoá MOB_CARD_KEY nên chưa lưu được số thẻ.'; }
+  try { const r = await c.summary(); CARDS = r.sum || {}; CARDST = 'ok'; AUTOC_ = null; CARDMSG = r.keyOk ? '' : 'Chưa cấu hình khoá mã hoá MOB_CARD_KEY nên chưa lưu được số thẻ.'; }
   catch (e) { CARDST = 'err'; CARDMSG = e.message || String(e); }
-  if (TAB === 'jr') crmRerender();
+  if (TAB === 'jr') crmRerender(); else if ((TAB === 'up' || TAB === 'ov') && MMODE('cards_issued') === 'auto') render();
 }
 async function cardDetail(k, full) {
   const c = await claude.use('cards'); const r = await c.get(k, full);
@@ -2324,7 +2340,7 @@ function bind() {
   document.querySelectorAll('[data-mgsplit]').forEach(b => b.onclick = () => { const nm = b.dataset.mgsplit, from = b.dataset.mgfrom;
     mgSave(() => { S.nomerge[canon(nm)] = 1; delete S.merge[from]; delete S.mergeLog[from]; if (S.alias[nm]) delete S.alias[nm]; S.tx.forEach(t => { if (canon(t[7]) === canon(nm)) t[2] = xpayKeyOf(t[7]); }); },
       `Tách "${nm}" ra khỏi ${cname(MERGE[from] || from)}?\nGiao dịch của tên này quay về mã riêng.`); });
-  ['mctm', 'mobm'].forEach(id => { if ($(id)) $(id).onchange = e => { const s = e.target, i = $(s.dataset.for); i.disabled = s.value === 'auto';
+  ['mctm', 'mobm', 'mkm'].forEach(id => { if ($(id)) $(id).onchange = e => { const s = e.target, i = $(s.dataset.for); i.disabled = s.value === 'auto';
     if (s.value === 'auto') i.value = s.dataset.auto; else if (s.value === 'manual' && s.dataset.man) i.value = s.dataset.man; }; });
   bindPattern();
   bindJourney();
