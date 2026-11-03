@@ -1461,7 +1461,9 @@ async function cardsLoad() {
   CARDST = 'loading';
   try { const r = await c.summary(); CARDS = r.sum || {}; CARDST = 'ok'; AUTOC_ = null; CARDMSG = r.keyOk ? '' : 'Chưa cấu hình khoá mã hoá MOB_CARD_KEY nên chưa lưu được số thẻ.'; }
   catch (e) { CARDST = 'err'; CARDMSG = e.message || String(e); }
-  if (TAB === 'jr') crmRerender(); else if (TAB === 'ov' && MMODE('cards_issued') === 'auto') render();
+  // số Thẻ đã phát hành đếm theo thẻ: tính lại số thực tế khi dữ liệu thẻ tải xong (lần tính đầu chạy trước khi có dữ liệu thẻ)
+  if (CARDST === 'ok' && MMODE('cards_issued') === 'auto') { AUTOC_ = null; computeActuals(); }
+  if (TAB === 'jr') crmRerender(); else if ((TAB === 'ov' || TAB === 'zoom') && MMODE('cards_issued') === 'auto') render();
   else if ($('mkm')) {   // tab Cập nhật số liệu: chỉ cập nhật ô chọn, không vẽ lại (giữ file đã chọn)
     const o = $('mkm').querySelector('option[value="auto"]'), n = cardsCount();
     if (o) { o.disabled = n == null; o.textContent = 'Đếm theo thẻ trên hệ thống' + (n == null ? ` (${CARDST === 'err' ? 'lỗi: ' + CARDMSG : 'chưa tải được dữ liệu thẻ'})` : ` (${n0(n)} thẻ${cardsCount.liq ? `, đã loại ${n0(cardsCount.liq)} thẻ DN thanh lý` : ''})`); }
