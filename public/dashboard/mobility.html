@@ -2193,7 +2193,7 @@ function cardRows(A, byKey) {
 }
 /* ---- file danh sách calling (Tên khách hàng · PIC calling · Status · Kết quả calling · Lịch hẹn · Meeting · Ngày liên hệ · PIC):
    mỗi dòng có Status (trừ "Chưa có số liên hệ") = 1 cuộc gọi; Lịch hẹn = đặt lịch meeting; Meeting "Hoàn thành" = meeting đã đi.
-   Cuộc gọi ghi cho PIC khách (cột PIC); meeting ghi cho người dự đầu tiên có trong danh sách PIC. Mã action cố định theo khách + loại + ngày → upload lại không nhân đôi. */
+   Cuộc gọi, đặt lịch ghi cho người gọi (cột PIC calling; thiếu thì PIC khách); meeting đã đi ghi cho người dự đầu tiên có trong danh sách PIC. Mã action cố định theo khách + loại + ngày → upload lại không nhân đôi. */
 const CALL_HEAD = ['Tên khách hàng', 'Status'];
 const callSheetOf = wb => { for (const n of wb.SheetNames) { const A = sheetRows(wb.Sheets[n]), hi = headAt(A, CALL_HEAD); if (hi >= 0 && A[hi].some(c => /kết quả calling/i.test(String(c)))) return {n, A, hi}; } return null; };
 const CALL_RES = {'knm/ mb': 'Không liên lạc được', 'knm/mb': 'Không liên lạc được', 'thanh ly': 'Yêu cầu thanh lý'};
@@ -2218,7 +2218,8 @@ function callRows(A, hi, day) {
     if (!r) { miss.push({line: i + 1, name, why: c.length > 1 ? `trùng tên ${c.length} khách` : 'không thấy trong danh sách khách'}); continue; }
     rows++;
     const dRaw = cD >= 0 ? raw[cD] : '', d = dRaw instanceof Date ? isoOf(dRaw) : isoOf(dRaw) || day;
-    const pv = v(raw, cP), pic = PICS.find(p => fold(p) === fold(pv)) || pv || r.pic || '', caller = v(raw, cC);
+    // cuộc gọi, đặt lịch tính cho người gọi (cột PIC calling); thiếu thì lấy PIC khách
+    const caller = v(raw, cC), pv = caller || v(raw, cP), pic = PICS.find(p => fold(p) === fold(pv)) || pv || r.pic || '';
     if (pv && !PICS.some(p => fold(p) === fold(pv))) unknown[pv] = (unknown[pv] || 0) + 1;
     const res = CALL_RES[fold(st)] || st.replace(/\s+$/, ''), kq = v(raw, cR), lh = v(raw, cL), mp = v(raw, cMP), mt = fold(v(raw, cM));
     const ex = (DBX[r.key] || {}).acts || {};
@@ -2226,7 +2227,8 @@ function callRows(A, hi, day) {
       if (old && old.t === o.t && old.d === o.d && old.res === o.res && (old.det || '') === (o.det || '') && (old.md || '') === (o.md || '') && old.who === o.who) { same++; return; }
       acts.push({key: r.key, name: r.name, id, a: Object.assign({ts: Date.now(), imp: 1}, o), upd: !!old}); };
     add({t: 'call', d, who: pic, res, det: [kq, caller ? `Người gọi: ${caller}` : ''].filter(Boolean).join(' · ')});
-    if (lh) { const md = meetDay(lh, d); if (!md) noMd.push(`${r.name}: “${lh.slice(0, 60)}”`);
+    const lhOk = lh && fold(st) === fold('Đồng ý meeting');   // chỉ tính đặt lịch khi khách đồng ý meeting
+    if (lhOk) { const md = meetDay(lh, d); if (!md) noMd.push(`${r.name}: “${lh.slice(0, 60)}”`);
       add(Object.assign({t: 'mset', d, who: pic, res: 'Đồng ý meeting', det: [lh, mp ? `Tham gia: ${mp}` : ''].filter(Boolean).join(' · ')}, md ? {md} : {}));
       if (mt === fold('Hoàn thành')) { const att = mp.split(/[+&,/]| và /).map(x => fold(x).replace(/^(anh|chi|a|c|ms|mr|mrs)\.?\s+/, '').trim()), who = PICS.find(p => att.includes(fold(p))) || pic;
         add({t: 'meet', d: md && md <= TODAY ? md : d, who, res, det: [mp ? `Tham gia: ${mp}` : '', lh].filter(Boolean).join(' · ')}); } }
