@@ -2191,6 +2191,60 @@ function cardRows(A, byKey) {
     cards.push(o); }
   return {cards, deletes, errors};
 }
+/* ---- file danh sách calling (Tên khách hàng · PIC calling · Status · Kết quả calling · Lịch hẹn · Meeting · Ngày liên hệ · PIC):
+   mỗi dòng có Status (trừ "Chưa có số liên hệ") = 1 cuộc gọi; Lịch hẹn = đặt lịch meeting; Meeting "Hoàn thành" = meeting đã đi.
+   Cuộc gọi ghi cho PIC khách (cột PIC); meeting ghi cho người dự đầu tiên có trong danh sách PIC. Mã action cố định theo khách + loại + ngày → upload lại không nhân đôi. */
+const CALL_HEAD = ['Tên khách hàng', 'Status'];
+const callSheetOf = wb => { for (const n of wb.SheetNames) { const A = sheetRows(wb.Sheets[n]), hi = headAt(A, CALL_HEAD); if (hi >= 0 && A[hi].some(c => /kết quả calling/i.test(String(c)))) return {n, A, hi}; } return null; };
+const CALL_RES = {'knm/ mb': 'Không liên lạc được', 'knm/mb': 'Không liên lạc được', 'thanh ly': 'Yêu cầu thanh lý'};
+const hashId = x => { let h = 2166136261; for (const c of x) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0; return h.toString(36); };
+function meetDay(txt, d) {
+  const t = String(txt || ''), m = t.match(/(\d{1,2})\s*\/\s*(\d{1,2})(?:\s*\/\s*(\d{4}))?/);
+  if (m) { const x = `${m[3] || d.slice(0, 4)}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`; if (isoOk(x) && !isNaN(Date.parse(x))) return x; }
+  const w = fold(t).match(/thu\s*([2-7])|chu nhat|\bcn\b/);
+  if (w) { const k = w[1] ? +w[1] - 2 : 6, mon = wkStart(d), next = /tuan sau|tuan toi/.test(fold(t)); let x = addD(mon, k + (next ? 7 : 0)); if (!next && x < d) x = addD(x, 7); return x; }
+  return '';
+}
+function callRows(A, hi, day) {
+  const H = A[hi].map(c => fold(c)), col = n => H.indexOf(fold(n));
+  const cN = col('Tên khách hàng'), cS = col('Status'), cR = col('Kết quả calling/ next step'), cL = col('Lịch hẹn'), cMP = col('Nội dung meeting/ PIC'), cM = col('Meeting'), cD = col('Ngày liên hệ'), cP = col('PIC'), cC = col('PIC calling'), cK = col('Mã HĐ cũ (hệ thống)');
+  const v = (r, c) => c < 0 ? '' : cellTxt(r[c]);
+  const R = crmRows(CR.day), byKey = {}, byCan = {}; R.forEach(r => { byKey[r.key] = r; const c = canon(r.name); (byCan[c] = byCan[c] || []).push(r); });
+  const acts = [], errors = [], miss = [], noMd = [], unknown = {}; let skip = 0, same = 0, rows = 0;
+  for (let i = hi + 1; i < A.length; i++) {
+    const raw = A[i], name = v(raw, cN), st = v(raw, cS); if (!name) continue;
+    if (!st || fold(st) === fold('Chưa có số liên hệ')) { skip++; continue; }
+    const k0 = v(raw, cK), c = byCan[canon(name)] || [], r = byKey[k0] || (c.length === 1 ? c[0] : null);
+    if (!r) { miss.push({line: i + 1, name, why: c.length > 1 ? `trùng tên ${c.length} khách` : 'không thấy trong danh sách khách'}); continue; }
+    rows++;
+    const dRaw = cD >= 0 ? raw[cD] : '', d = dRaw instanceof Date ? isoOf(dRaw) : isoOf(dRaw) || day;
+    const pv = v(raw, cP), pic = PICS.find(p => fold(p) === fold(pv)) || pv || r.pic || '', caller = v(raw, cC);
+    if (pv && !PICS.some(p => fold(p) === fold(pv))) unknown[pv] = (unknown[pv] || 0) + 1;
+    const res = CALL_RES[fold(st)] || st.replace(/\s+$/, ''), kq = v(raw, cR), lh = v(raw, cL), mp = v(raw, cMP), mt = fold(v(raw, cM));
+    const ex = (DBX[r.key] || {}).acts || {};
+    const add = o => { const id = 'im' + hashId(r.key + '|' + o.t + '|' + o.d); const old = ex[id];
+      if (old && old.t === o.t && old.d === o.d && old.res === o.res && (old.det || '') === (o.det || '') && (old.md || '') === (o.md || '') && old.who === o.who) { same++; return; }
+      acts.push({key: r.key, name: r.name, id, a: Object.assign({ts: Date.now(), imp: 1}, o), upd: !!old}); };
+    add({t: 'call', d, who: pic, res, det: [kq, caller ? `Người gọi: ${caller}` : ''].filter(Boolean).join(' · ')});
+    if (lh) { const md = meetDay(lh, d); if (!md) noMd.push(`${r.name}: “${lh.slice(0, 60)}”`);
+      add(Object.assign({t: 'mset', d, who: pic, res: 'Đồng ý meeting', det: [lh, mp ? `Tham gia: ${mp}` : ''].filter(Boolean).join(' · ')}, md ? {md} : {}));
+      if (mt === fold('Hoàn thành')) { const att = mp.split(/[+&,/]| và /).map(x => fold(x).replace(/^(anh|chi|a|c|ms|mr|mrs)\.?\s+/, '').trim()), who = PICS.find(p => att.includes(fold(p))) || pic;
+        add({t: 'meet', d: md && md <= TODAY ? md : d, who, res, det: [mp ? `Tham gia: ${mp}` : '', lh].filter(Boolean).join(' · ')}); } }
+  }
+  miss.forEach(m => errors.push(`Dòng ${m.line}: ${m.name} — ${m.why}, bỏ qua`));
+  noMd.forEach(x => errors.push(`Không đọc được ngày meeting, vẫn ghi đặt lịch (không có ngày hẹn): ${x}`));
+  return {acts, errors, skip, same, rows, day, miss: miss.length, unknown};
+}
+async function callApply(list, prog) {
+  const db = await claude.use('db'); if (!db) throw {code: 'not_granted'};
+  const by = {}; list.forEach(x => { const b = (by[bucketOf(x.key)] = by[bucketOf(x.key)] || {}); ((b[x.key] = b[x.key] || {acts: {}}).acts)[x.id] = x.a; });
+  const B = Object.entries(by); let i = 0;
+  const run = async () => { for (const [b, patch] of B) { const ref = db.doc('crm/' + b), s = await ref.get();
+      if (!s.exists) await ref.set(patch); else await ref.update(patch);
+      for (const [k, v] of Object.entries(patch)) { const e = DBX[k] = Object.assign({}, DBX[k] || {}); e.acts = Object.assign({}, e.acts || {}, v.acts); }
+      prog(++i, B.length); } };
+  DBQ = DBQ.then(run, run); await DBQ;
+}
 async function updParse(file) {
   await loadScript(XLSX_URL);
   const wb = XLSX.read(await file.arrayBuffer(), {type: 'array', cellDates: true}), SH = wb.Sheets;
@@ -2199,7 +2253,9 @@ async function updParse(file) {
   CR.picFile = file;
   if (SH.DS_PIC) sheetRows(SH.DS_PIC).forEach(r => { const n = cellTxt(r[0]), ro = cellTxt(r[1]); if (n && ro && !/người phụ trách/i.test(n)) I.roles[n] = ro; });
   if (SH.Moc_ky) { try { I.ms = msRows(sheetRows(SH.Moc_ky)); } catch (e) { I.errors.push(e.message); } }
-  if (SH.Phan_cong_PIC || (!SH.Thong_tin_DN && !SH.The_XPAY && !SH.Moc_ky)) { try { I.pic = picRows(sheetRows(SH.Phan_cong_PIC || SH[wb.SheetNames[0]])); } catch (e) { if (SH.Phan_cong_PIC || !(SH.Thong_tin_DN || SH.The_XPAY)) I.errors.push(e.message); } }
+  const CS = !SH.Phan_cong_PIC && callSheetOf(wb);
+  if (CS) { I.callSrc = CS; I.call = callRows(CS.A, CS.hi, TODAY); }
+  if (SH.Phan_cong_PIC || (!CS && !SH.Thong_tin_DN && !SH.The_XPAY && !SH.Moc_ky)) { try { I.pic = picRows(sheetRows(SH.Phan_cong_PIC || SH[wb.SheetNames[0]])); } catch (e) { if (SH.Phan_cong_PIC || !(SH.Thong_tin_DN || SH.The_XPAY)) I.errors.push(e.message); } }
   if ((SH.Thong_tin_DN || SH.The_XPAY) && !CANWRITE) I.errors.push('Bạn không có quyền cập nhật thông tin doanh nghiệp / thẻ, bỏ qua 2 sheet này.');
   else if (SH.Thong_tin_DN || SH.The_XPAY) {
     const dn = SH.Thong_tin_DN ? dnRows(sheetRows(SH.Thong_tin_DN), byKey) : {companies: [], errors: []}, cd = SH.The_XPAY ? cardRows(sheetRows(SH.The_XPAY), byKey) : {cards: [], deletes: [], errors: []};
@@ -2209,7 +2265,7 @@ async function updParse(file) {
   }
   return I;
 }
-const updCount = I => (I.pic ? I.pic.changes.length : 0) + (I.ms ? I.ms.changes.length : 0) + (I.srv ? I.srv.companies.length + I.srv.added.length + I.srv.changed.length + I.srv.deleted.length : 0);
+const updCount = I => (I.call ? I.call.acts.length : 0) + (I.pic ? I.pic.changes.length : 0) + (I.ms ? I.ms.changes.length : 0) + (I.srv ? I.srv.companies.length + I.srv.added.length + I.srv.changed.length + I.srv.deleted.length : 0);
 /* Ghi PIC: gom theo nhóm tài liệu crm/bXX, mỗi nhóm 1 lần ghi */
 async function picApply(changes, prog) {
   const db = await claude.use('db'); if (!db) throw {code: 'not_granted'};
@@ -2262,10 +2318,15 @@ async function msApply(changes, prog) {
 }
 function picPanel() {
   const I = CR.picImp; if (!I) return '';
-  const lab = p => p ? esc(p) : '<span class="lbl">Chưa phân công</span>', P = I.pic, V = I.srv, M = I.ms, total = updCount(I), errs = [...I.errors, ...(P ? P.errors : []), ...(M ? M.errors : []), ...(V ? V.errors : [])];
+  const lab = p => p ? esc(p) : '<span class="lbl">Chưa phân công</span>', P = I.pic, V = I.srv, M = I.ms, total = updCount(I), errs = [...I.errors, ...(I.call ? I.call.errors : []), ...(P ? P.errors : []), ...(M ? M.errors : []), ...(V ? V.errors : [])];
   const fv = v => v == null || v === '' ? '<span class="lbl">trống</span>' : typeof v === 'number' ? n0(v) + ' đ' : esc(v);
   const sec = (t, body) => `<h3 style="margin:14px 0 6px;font-size:14px">${t}</h3>${body}`, tbl = (head, rows) => `<div class="tw" style="max-height:300px;overflow:auto"><table><thead><tr>${head.map(x => `<th class="l">${x}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
-  const parts = [];
+  const parts = [], CL = I.call;
+  if (CL) { const T = {call: 0, mset: 0, meet: 0}; CL.acts.forEach(x => T[x.a.t]++); const byP = {}; CL.acts.forEach(x => { const o = byP[x.a.who || 'Chưa phân công'] = byP[x.a.who || 'Chưa phân công'] || {call: 0, mset: 0, meet: 0}; o[x.a.t]++; });
+    parts.push(sec(`Liên hệ từ file calling (sheet “${esc(I.callSrc.n)}”) · ${n0(T.call)} cuộc gọi · ${n0(T.mset)} đặt lịch meeting · ${n0(T.meet)} meeting đã đi${CL.same ? ` · ${n0(CL.same)} đã có, giữ nguyên` : ''}`,
+      `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><span class="lbl">Ngày liên hệ cho các dòng file để trống</span><input type="date" id="crcallday" value="${CL.day}" style="font:13px var(--font-family-sans-serif);padding:5px 8px;border:1px solid var(--line);border-radius:8px"><span class="lbl">· ${n0(CL.rows)} khách có kết quả · ${n0(CL.skip)} dòng chưa gọi / chưa có số bỏ qua${CL.miss ? ` · <b style="color:var(--critical)">${n0(CL.miss)} khách không khớp</b>` : ''}</span></div>
+      <div class="lbl" style="margin-bottom:6px">Theo người: ${Object.entries(byP).map(([p, o]) => `<b>${esc(p)}</b> ${n0(o.call)} gọi · ${n0(o.mset)} đặt lịch · ${n0(o.meet)} meeting`).join(' &nbsp;|&nbsp; ')}</div>`
+      + (CL.acts.length ? tbl(['Doanh nghiệp', 'Ngày', 'Loại', 'Người', 'Kết quả', 'Chi tiết'], CL.acts.map(x => `<tr><td class="l name">${esc(x.name)}<span class="def">HĐ ${esc(x.key)}${x.upd ? ' · sửa dòng đã nhập' : ''}</span></td><td class="l">${dmy(x.a.d)}</td><td class="l">${actLab(x.a.t)}${x.a.md ? `<span class="def">hẹn ${wd(x.a.md)} ${dmy(x.a.md)}</span>` : x.a.t === 'mset' ? '<span class="def" style="color:var(--critical)">chưa rõ ngày</span>' : ''}</td><td class="l">${esc(x.a.who || '—')}</td><td class="l">${esc(x.a.res)}</td><td class="l" style="white-space:normal;min-width:240px;font-size:12px">${esc(x.a.det || '')}</td></tr>`).join('')) : '<div class="hint">Không có liên hệ mới.</div>'))); }
   if (P) { const cnt = {}; P.changes.forEach(c => { const t = c.to || PIC_CLEAR; cnt[t] = (cnt[t] || 0) + 1; });
     parts.push(sec(`Phân công PIC · ${n0(P.changes.length)} khách đổi · ${n0(P.same)} giữ nguyên`, P.changes.length ? `<div class="lbl" style="margin-bottom:6px">Sau khi áp dụng: ${Object.entries(cnt).map(([p, n]) => `<b>${esc(p)}</b> nhận ${n0(n)}`).join(' · ')}</div>` + tbl(['Doanh nghiệp', 'Nhóm', 'PIC hiện tại', 'PIC mới'], P.changes.map(c => `<tr><td class="l name">${esc(c.name)}<span class="def">HĐ ${esc(c.key)}</span></td><td class="l">${c.grp === 9 ? '' : c.grp + '. '}${esc(GRP[c.grp])}</td><td class="l">${lab(c.from)}</td><td class="l"><b>${lab(c.to)}</b></td></tr>`).join('')) : `<div class="hint">${P.filled ? 'Không có khách nào đổi PIC.' : 'Chưa điền cột "PIC mới" ở dòng nào.'}</div>`)); }
   if (M) { const mv = v => isoOk(v) ? dmy(v) : done(v) ? 'đã ký (không rõ ngày)' : '<span class="lbl">—</span>';
@@ -2277,7 +2338,7 @@ function picPanel() {
       ...V.deleted.map(c => `<tr><td class="l name">${esc(cname(c.key))}<span class="def">HĐ ${esc(c.key)}</span></td><td class="l">${esc(c.holder || '')}<span class="def">UID ${esc(c.uid)}</span></td><td class="l"><span class="pill p-critical">Gỡ thẻ</span></td><td colspan="2"></td></tr>`)];
     parts.push(sec(`Thẻ XPAY · ${n0(V.added.length)} thẻ mới · ${n0(V.changed.length)} thẻ sửa · ${n0(V.deleted.length)} thẻ gỡ · ${n0(V.same)} giữ nguyên`, cr.length ? tbl(['Doanh nghiệp', 'Chủ thẻ', 'Thông tin', 'Hiện tại', 'Mới'], cr.join('')) : '<div class="hint">Không có thay đổi.</div>'));
   }
-  const unk = P && P.unknown ? Object.entries(P.unknown) : [];
+  const unk = Object.entries(Object.assign({}, P && P.unknown || {}, I.call && I.call.unknown || {}));
   if (unk.length) parts.unshift(`<div class="banner" style="margin:8px 0;border-color:var(--critical)"><b>${n0(unk.reduce((a, [, n]) => a + n, 0))} dòng ghi người phụ trách chưa có trong danh sách PIC:</b> ${unk.map(([n, c]) => `<b>${esc(n)}</b> (${n0(c)} khách${I.roles[n] ? ' · ' + esc(I.roles[n]) : ''})`).join(' · ')}.
     ${CANWRITE ? `<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn pri" id="crpicadd">Thêm ${unk.map(([n]) => esc(n)).join(', ')} vào danh sách PIC rồi kiểm tra lại</button><span class="lbl">Vai trò lấy theo sheet DS_PIC của file (thiếu thì là AE hạng 201–300); sửa sau ở “Danh sách người phụ trách”.</span></div>` : '<div class="lbl">Nhờ Quản trị / Kế toán thêm người này vào danh sách PIC.</div>'}</div>`);
   return `<div class="card" id="crpicp" style="border:1px solid var(--accent)"><div class="hd"><div><div class="eyebrow">Upload file cập nhật · ${esc(I.file)}</div><h2 class="card-title">${n0(total)} thay đổi · ${n0(errs.length)} lỗi</h2></div>
@@ -2348,7 +2409,7 @@ function bindJourney() {
     keep(() => {}); if ($('crpicp')) $('crpicp').scrollIntoView({behavior: 'smooth', block: 'start'}); };
   if ($('crpicx')) $('crpicx').onclick = () => keep(() => { CR.picImp = null; });
   if ($('crpicadd')) $('crpicadd').onclick = async () => { const I = CR.picImp, b = $('crpicadd'); b.disabled = true; b.textContent = 'Đang thêm…';
-    try { const add = Object.keys(I.pic.unknown).map(n => [n, ROLES.includes(I.roles[n]) ? I.roles[n] : ROLES.find(r => fold(r) === fold(I.roles[n] || '')) || 'AE hạng 201–300']);
+    try { const add = Object.keys(Object.assign({}, I.pic && I.pic.unknown || {}, I.call && I.call.unknown || {})).map(n => [n, ROLES.includes(I.roles[n]) ? I.roles[n] : ROLES.find(r => fold(r) === fold(I.roles[n] || '')) || 'AE hạng 201–300']);
       await saveTeam([...PICS.map(p => [p, ROLE[p]]), ...add]);
       CR.picImp = await updParse(CR.picFile); keep(() => {}); }
     catch (e) { b.disabled = false; b.textContent = 'Thử lại'; alert('Chưa thêm được: ' + (e.message || e)); } };
@@ -2394,10 +2455,12 @@ function bindJourney() {
       if (dup) { alert(`Tên "${dup[0]}" bị trùng.`); return; } if (!T.length) { alert('Cần ít nhất 1 người.'); return; }
       try { await saveTeam(T); keep(() => { CR.team = null; }); } catch (e) { alert('Chưa lưu được: ' + (e.message || e)); } };
   }
+  if ($('crcallday')) $('crcallday').onchange = e => { const I = CR.picImp, v = e.target.value; if (!I || !I.callSrc || !isoOk(v)) return; I.call = callRows(I.callSrc.A, I.callSrc.hi, v); keep(() => {}); };
   if ($('crpicok')) $('crpicok').onclick = async () => { const I = CR.picImp, n = I ? updCount(I) : 0; if (!I || I.busy || !n) return;
     if (!window.confirm(`Áp dụng ${n} thay đổi theo file "${I.file}"?`)) return;
     I.busy = true; I.msg = ''; keep(() => {}); const done_ = [];
     try {
+      if (I.call && I.call.acts.length) { const L = I.call.acts; await callApply(L, (i, m) => { const b = $('crpicok'); if (b) b.textContent = `Đang lưu liên hệ ${i}/${m}…`; }); done_.push(`${L.length} lần liên hệ (gọi / đặt lịch / meeting)`); I.call.acts = []; CRM_ = null; }
       if (I.ms && I.ms.changes.length) { await msApply(I.ms.changes, (i, m) => { const b = $('crpicok'); if (b) b.textContent = `Đang lưu mốc ký ${i}/${m}…`; }); done_.push(`${I.ms.changes.length} khách cập nhật mốc ký`); I.ms.changes = []; CRM_ = null; AUTOC_ = null; }
       if (I.pic && I.pic.changes.length) { await picApply(I.pic.changes, (i, m) => { const b = $('crpicok'); if (b) b.textContent = `Đang lưu PIC ${i}/${m}…`; }); done_.push(`${I.pic.changes.length} khách đổi PIC`); I.pic.changes = []; }
       if (I.srv && (I.srv.companies.length + I.srv.added.length + I.srv.changed.length + I.srv.deleted.length)) { const b = $('crpicok'); if (b) b.textContent = 'Đang lưu thẻ…';
