@@ -561,14 +561,20 @@ let SEL = null, TAB = 'ov', CH = {log: false, full: false}, CANWRITE = false, PE
 function render() {
   try { renderInner(); } finally { if (typeof postRoute === 'function') postRoute(); }
 }
+/* Lộ trình ký hợp đồng 26/10 – 31/12 (file của anh Khải, public/dashboard/lo-trinh-ky-hop-dong.html) — đổi KYHD_V khi thay file */
+const KYHD_V = '20261104a';
+function renderKyHd() {
+  return `<div class="card" style="padding:0;overflow:hidden"><iframe src="/dashboard/lo-trinh-ky-hop-dong.html?v=${KYHD_V}" title="Lộ trình ký hợp đồng" style="display:block;width:100%;height:calc(100vh - 120px);min-height:560px;border:0;background:#f6f5f2"></iframe></div>
+    <div class="hint" style="margin-top:8px">Bảng lộ trình ký hợp đồng 1.000 khách (Optimal / Realistic, trần nhân sự). Các ô nhập chỉ đổi trên máy bạn, tải lại trang sẽ về số gốc. <a href="/dashboard/lo-trinh-ky-hop-dong.html?v=${KYHD_V}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">Mở toàn màn hình ↗</a></div>`;
+}
 function renderInner() {
   if (TAB === 'ov') SEL = ovDay();
   const d = SEL, dy = addD(d, -1), A = ACT[d], C = tableCalc(d), p = PLAN[d];
   const dates = Object.keys(ACT).filter(x => x >= P.start).sort().reverse();
   const top = `<div class="top">
     <div class="brand" style="display:flex;align-items:center;gap:10px"><img src="data:image/png;base64,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" alt="xpay" style="height:28px;width:auto;display:block"><span>CEO Dashboard</span></div>
-    <div class="tabs">${[['ov','Tổng quan'],['zoom','Lộ trình 60 tỷ'],['jr','Tiến độ khách hàng'],['up','Cập nhật số liệu']].map(([k, l]) => `<button class="tab ${TAB === k ? 'on' : ''}" data-tab="${k}">${l}</button>`).join('')}</div>
-    <div class="ctl">${TAB === 'ov' ? `<span class="lbl">Thời gian</span>${rangePicker(OV)}${unitFilter()}` : TAB === 'jr' ? '' : `<span class="lbl">Ngày xem</span><select id="dsel">${dates.map(x => `<option value="${x}" ${x === d ? 'selected' : ''}>${wd(x)} ${dmy(x)}</option>`).join('')}</select>`}
+    <div class="tabs">${[['ov','Tổng quan'],['zoom','Lộ trình 60 tỷ'],['kyhd','Lộ trình ký HĐ'],['jr','Tiến độ khách hàng'],['up','Cập nhật số liệu']].map(([k, l]) => `<button class="tab ${TAB === k ? 'on' : ''}" data-tab="${k}">${l}</button>`).join('')}</div>
+    <div class="ctl">${TAB === 'ov' ? `<span class="lbl">Thời gian</span>${rangePicker(OV)}${unitFilter()}` : TAB === 'jr' || TAB === 'kyhd' ? '' : `<span class="lbl">Ngày xem</span><select id="dsel">${dates.map(x => `<option value="${x}" ${x === d ? 'selected' : ''}>${wd(x)} ${dmy(x)}</option>`).join('')}</select>`}
       <span class="lbl">Đơn vị tiền</span><select id="usel">${Object.entries(UNITS).map(([k, u]) => `<option value="${k}" ${u === UNIT ? 'selected' : ''}>${u.label}</option>`).join('')}</select>
       <button class="btn pri" id="bxls" title="Một file đầy đủ: CEO, lộ trình, daily, KPI khách, khách hàng, lịch sử liên hệ, thẻ, giao dịch — đang lọc ở Nhập liệu thì các sheet khách / giao dịch chỉ gồm khách đã lọc">Xuất Excel${crmFilterTxt() ? ' (đang lọc)' : ''}</button></div></div>`;
   let body = '';
@@ -576,6 +582,7 @@ function renderInner() {
   else if (TAB === 'zoom') body = renderZoom(d, C, A);
   else if (TAB === 'pat') body = renderPattern(d);
   else if (TAB === 'jr') body = renderJourney();
+  else if (TAB === 'kyhd') body = renderKyHd();
   else body = renderUpload();
   const prof = CR.open ? crmDrawer(crmRows(CR.day).find(r => r.key === CR.open), CR.day) : '';
   $('app').innerHTML = top + `<div class="page">${body}</div><div class="tt" id="tt"></div>` + prof;
@@ -1374,6 +1381,9 @@ const W1 = '2026-10-19';
 const GRP = {1: 'Đã ký phụ lục / HĐ mới, chưa khởi tạo XPAY', 2: 'Top 200', 3: 'Đã khởi tạo XPAY, chưa có giao dịch 30 ngày', 4: 'Chưa ký phụ lục, có giao dịch Mai Linh T6–T9', 5: 'Các khách còn lại', 9: 'Đã thanh lý'};
 const SPECIAL = ['', 'Vướng mắc', 'Tạm dừng', 'Thanh lý'];
 const CAT0 = ['Đồng ý meeting', 'Hẹn gọi lại', 'Không liên lạc được', 'Sử dụng bình thường', 'Sử dụng tốt', 'Chưa có nhu cầu', 'Quản trị thẻ', 'Đặt xe + tài xế', 'Hợp đồng', 'Đối soát và hóa đơn', 'Yêu cầu thanh lý', 'Khác'];
+/* loại hoạt động của PIC: gọi, email, Zalo, meeting đã gặp, đặt lịch meeting (có ngày hẹn) */
+const ACT_T = [['call', 'Gọi khách'], ['email', 'Email'], ['zalo', 'Zalo / tin nhắn'], ['meet', 'Meeting (đã gặp)'], ['mset', 'Đặt lịch meeting']];
+const actLab = t => (ACT_T.find(x => x[0] === t) || [null, 'Gọi khách'])[1];
 const CATMAP = {'Sử dụng bth': 'Sử dụng bình thường', 'Nhu Cầu': 'Chưa có nhu cầu', 'Đặt Xe + Tài Xế': 'Đặt xe + tài xế', 'Đối soát và Hóa đơn': 'Đối soát và hóa đơn'};
 const TODAY = (() => { const x = new Date(Date.now() + 7 * 3600e3); return x.toISOString().slice(0, 10); })();
 const isoOk = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
@@ -1399,14 +1409,16 @@ function crmRows(d) {
   const val = (v, def) => v == null ? def : v;
   CRM_ = [...keys].map(k => { const b = BOOK[k] || {}, c = C0.rows[k] || [], e = DBX[k] || {}, ms = e.ms || {}, f = first[k], g = gm[k] || {g: 0, n: 0, g30: 0, last: ''};
     const acts = [...(SEEDACT[k] || []), ...Object.entries(e.acts || {}).filter(([, a]) => a).map(([id, a]) => Object.assign({id}, a))].filter(a => a.d <= d || !isoOk(a.d)).sort((x, y) => (y.d || '').localeCompare(x.d || '') || (y.ts || 0) - (x.ts || 0));
-    const calls = acts.filter(a => a.t === 'call'), meets = acts.filter(a => a.t === 'meet');
+    const calls = acts.filter(a => a.t === 'call'), meets = acts.filter(a => a.t === 'meet'), msets = acts.filter(a => a.t === 'mset');
     const r = {key: k, name: cname(k), b, pl: val(ms.pl, c[0] || (b.fpl === 'Y' ? 'Y' : '')), xp: val(ms.xp, c[1] || (b.xp || f || hasCard(k) ? 'Y' : '')),
       call: val(ms.call, calls[0] ? calls[0].d : ''), meet: val(ms.meet, meets[0] ? meets[0].d : ''), first: f ? f[0] : val(ms.first, ''), firstAmt: f ? f[4] : null,
       gmv: g.g, gmv30: g.g30, trips: g.n, lastTx: g.last, pic: e.pic != null ? e.pic : (c[2] || ''), picOld: b.pic || '', rank: c[3] || '', gname: e.gname || c[4] || '', grank: c[5] || 0,
-      pot: e.pot != null && e.pot !== '' ? +e.pot || 0 : c[6] || 0, isNew: !!e.created, ml69: c[7] || 0, acts, calls, meets, note: e.note || '', nx: e.nx || '', st: e.st != null ? e.st : (b.tl ? 'Thanh lý' : ''), grpM: e.grp || ''};
+      pot: e.pot != null && e.pot !== '' ? +e.pot || 0 : c[6] || 0, isNew: !!e.created, ml69: c[7] || 0, acts, calls, meets, msets, note: e.note || '', nx: e.nx || '', st: e.st != null ? e.st : (b.tl ? 'Thanh lý' : ''), grpM: e.grp || ''};
     r.liq = r.st === 'Thanh lý' && !f;
     // 2 mốc ký riêng: Ký phụ lục (khách Mai Linh chuyển đổi) · Ký hợp đồng mới (khách mới)
     r.hd = ms.hd == null ? '' : ms.hd; r.signed = done(r.pl) || done(r.hd);
+    r.vc = ms.vc == null ? '' : ms.vc;   // khách đồng ý ký bằng lời (verbal confirm), chưa ký xong
+    r.mnext = msets.map(a => a.md).filter(x => isoOk(x) && x >= d).sort()[0] || '';   // lịch meeting sắp tới
     r.grpA = r.liq ? 9 : r.signed && !done(r.xp) ? 1 : /Top 1–100|Top 101–200/.test(r.rank) ? 2 : done(r.xp) && !r.gmv30 ? 3 : !r.signed && r.ml69 > 0 ? 4 : 5;
     r.grp = r.liq ? 9 : +(r.grpM || r.grpA);
     r.sub = g2Of(k);
@@ -1419,6 +1431,7 @@ function crmRows(d) {
       const dts = (kd[k] || []).filter(x => x >= from).sort(); r.tactAch = dts[0] || '';
       r.tactSt = r.tactAch ? (r.tactAch <= r.tact ? 'dat' : 'datTre') : r.tact < d ? 'tre' : diffD(r.tact, d) <= 7 ? 'sap' : 'cho'; }
     r.todo.tactlate = r.tactSt === 'tre'; r.todo.tactsoon = r.tactSt === 'sap';
+    r.todo.vcwait = done(r.vc) && !r.signed && !r.liq;
     r.sug = crmSuggest(r, d);
     return r; });
   CRMD_ = d; return CRM_;
@@ -1429,6 +1442,8 @@ function crmSuggest(r, d) {
   if (r.todo.due) s.push(`Hẹn gọi lại đến hạn (${dmy(r.nx)}): gọi lại theo hẹn`);
   if (r.tactSt === 'tre') s.push(`Quá ngày mục tiêu active (${dmy(r.tact)}) mà chưa có giao dịch: liên hệ khách, đặt lại ngày mục tiêu`);
   else if (r.tactSt === 'sap') s.push(`Còn ${diffD(r.tact, d)} ngày tới mục tiêu active (${dmy(r.tact)}): nhắc khách đặt chuyến đầu`);
+  if (r.todo.vcwait) s.push(`Khách đã đồng ý ký (verbal${isoOk(r.vc) ? ' ' + dmy(r.vc) : ''}), chưa ký: gửi phụ lục / hợp đồng, chốt ngày ký`);
+  if (r.mnext) s.push(`Có lịch meeting ${dmy(r.mnext)}: chuẩn bị nội dung, xác nhận lại với khách trước 1 ngày`);
   if (r.grp === 1) s.push('Đã ký phụ lục / hợp đồng mới, chưa có XPAY: báo Ops khởi tạo tài khoản, phát thẻ; xác nhận người nhận thẻ');
   if (!r.pic) s.push('Chưa có người phụ trách: quản lý phân công');
   if (!done(r.call)) s.push(done(r.xp) ? 'Chưa gọi: gọi xác nhận đã nhận thẻ, đã phát thẻ cho nhân viên, hướng dẫn quản trị thẻ' : 'Chưa gọi: gọi giới thiệu XPAY, mời ký phụ lục');
@@ -1579,6 +1594,7 @@ function crmDash(ALL, f, t) {
   if (due.length) bul.push(`<li class="watch"><b>${n0(due.length)} khách hẹn gọi lại đã đến hạn</b>.</li>`);
   if (nopic.length && !who) bul.push(`<li class="critical"><b>${n0(nopic.length)} khách nhóm 1–2 chưa có người phụ trách</b>: cần phân công.</li>`);
   let h = `<div class="banner"><b>Tóm tắt${who ? ' · ' + who : CR.who === '_none' ? ' · chưa phân công' : ' · toàn đội'} · ${lab}</b><ul>${bul.join('')}</ul></div>`;
+  if (CR.who !== '_none') h += crmDaily(ALL, f, t);
   const tile = (k, v, cls, s1, s2, r) => `<div class="kpi"><div class="k">${k}</div><div class="v ${cls || ''}">${v}</div><div class="s">${s1}</div>${s2 ? `<div class="s">${s2}</div>` : ''}${r != null ? `<div class="meter"><i style="width:${Math.min(100, r * 100)}%;background:var(--${status(r) === 'mute' ? 'ink-3' : status(r)})"></i></div>` : ''}</div>`;
   h += `<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr))">${[
     tile('Cuộc gọi', n0(cT), sgnCls(cT, cP), `${deltaTxt(cT, cP)} ${vsTxt}`, cTg ? `Chỉ tiêu ${n0(Math.round(cTg))} · đạt <b>${pct(cT / cTg)}</b>` : 'chưa có chỉ tiêu trong kỳ', cTg ? cT / cTg : null),
@@ -1621,10 +1637,10 @@ function crmDash(ALL, f, t) {
   R.forEach(r => r.acts.forEach(a => { if (a.d >= f && a.d <= t && (!who || a.who === who)) { const k = a.res || 'Khác'; const o = RC[k] = RC[k] || {call: 0, meet: 0}; o[a.t === 'meet' ? 'meet' : 'call']++; } }));
   const re = Object.entries(RC).sort((a, b) => (b[1].call + b[1].meet) - (a[1].call + a[1].meet));
   let s2 = '';
-  if (!re.length) s2 = `<div class="hint">Chưa có cuộc gọi / meeting nào trong ${lab}.</div>`;
+  if (!re.length) s2 = `<div class="hint">Chưa có lần liên hệ nào trong ${lab}.</div>`;
   else { const mx = Math.max(...re.map(e => e[1].call + e[1].meet)), W2 = 640, L2 = 190;
     s2 = `<svg viewBox="0 0 ${W2} ${re.length * 26 + 6}" width="100%" style="max-width:${W2}px;display:block">` + re.map(([k, v], i) => { const y = 3 + i * 26, w1 = (W2 - L2 - 70) * v.call / mx, w2 = (W2 - L2 - 70) * v.meet / mx;
-      return `<g class="hit" data-crres="${esc(k)}" style="cursor:pointer"><rect x="0" y="${y}" width="${W2}" height="24" fill="transparent"/><text x="${L2 - 8}" y="${y + 16}" text-anchor="end" font-size="12" fill="var(--ink)">${esc(k)}</text><rect x="${L2}" y="${y + 5}" width="${Math.max(w1, 0)}" height="15" fill="var(--color-display-cyan-default)"/><rect x="${L2 + w1}" y="${y + 5}" width="${w2}" height="15" fill="var(--color-display-purple-default)"/><text x="${L2 + w1 + w2 + 6}" y="${y + 16}" font-size="11.5" fill="var(--ink-2)">${v.call + v.meet}</text></g>`; }).join('') + `</svg><div class="legend" style="margin-top:6px"><span><i style="background:var(--color-display-cyan-default)"></i>Cuộc gọi</span><span><i style="background:var(--color-display-purple-default)"></i>Meeting</span></div>`; }
+      return `<g class="hit" data-crres="${esc(k)}" style="cursor:pointer"><rect x="0" y="${y}" width="${W2}" height="24" fill="transparent"/><text x="${L2 - 8}" y="${y + 16}" text-anchor="end" font-size="12" fill="var(--ink)">${esc(k)}</text><rect x="${L2}" y="${y + 5}" width="${Math.max(w1, 0)}" height="15" fill="var(--color-display-cyan-default)"/><rect x="${L2 + w1}" y="${y + 5}" width="${w2}" height="15" fill="var(--color-display-purple-default)"/><text x="${L2 + w1 + w2 + 6}" y="${y + 16}" font-size="11.5" fill="var(--ink-2)">${v.call + v.meet}</text></g>`; }).join('') + `</svg><div class="legend" style="margin-top:6px"><span><i style="background:var(--color-display-cyan-default)"></i>Gọi / email / Zalo / đặt lịch</span><span><i style="background:var(--color-display-purple-default)"></i>Meeting đã gặp</span></div>`; }
   // xu hướng: theo ngày (tối đa 45 ngày, kỳ ngắn hơn 14 ngày thì hiện 14 ngày gần nhất), dài hơn thì theo tuần
   let span = []; if (len < 14) for (let i = 13; i >= 0; i--) span.push(addD(t, -i)); else for (let x = f; x <= t; x = addD(x, 1)) span.push(x);
   const weekly = span.length > 45, B = [];
@@ -1642,10 +1658,54 @@ function crmDash(ALL, f, t) {
   h += `<div class="g2">${card('Kết quả', `Khách phản hồi gì · ${lab}`, 'bấm thanh để xem các khách', s2)}${card('Xu hướng', `Cuộc gọi và meeting ${weekly ? 'theo tuần' : 'theo ngày'}`, '', s3)}</div>`;
   return h;
 }
+/* ---- hoạt động từng PIC theo ngày: tổng action (gọi, email, Zalo, meeting), meeting đã đi / được set, verbal confirm, ký ---- */
+const DAYK = [['all', 'Tổng action', 'gọi + email + Zalo + meeting + đặt lịch'], ['call', 'Cuộc gọi', ''], ['email', 'Email', ''], ['zalo', 'Zalo / tin nhắn', ''], ['meet', 'Meeting đã đi', 'đã gặp khách'], ['mset', 'Meeting được set', 'đặt lịch trong ngày'], ['mon', 'Meeting theo lịch', 'lịch hẹn rơi vào ngày này'], ['vc', 'Verbal confirm', 'khách đồng ý ký bằng lời'], ['sign', 'Ký PL / HĐ mới', 'ngày ký trong kỳ']];
+function dayStats(ALL, a, b, who) {
+  const o = {all: 0, call: 0, email: 0, zalo: 0, meet: 0, mset: 0, mon: 0, vc: 0, sign: 0};
+  ALL.forEach(r => { r.acts.forEach(x => { if (who && x.who !== who) return;
+      if (x.d >= a && x.d <= b) { o.all++; if (x.t in o && x.t !== 'all') o[x.t]++; }
+      if (x.t === 'mset' && isoOk(x.md) && x.md >= a && x.md <= b) o.mon++; });
+    if (r.liq || (who && r.pic !== who)) return;
+    if (isoOk(r.vc) && r.vc >= a && r.vc <= b) o.vc++;
+    if (isoOk(r.pl) && r.pl >= a && r.pl <= b) o.sign++;
+    if (isoOk(r.hd) && r.hd >= a && r.hd <= b) o.sign++; });
+  return o;
+}
+function crmDaily(ALL, f, t) {
+  const who = PICS.includes(CR.who) ? CR.who : '', len = diffD(t, f) + 1, pt = addD(f, -1), pf = addD(f, -len), lab = rngLabel(f, t);
+  const cur = dayStats(ALL, f, t, who), prv = dayStats(ALL, pf, pt, who), vs = len === 1 ? 'so với ngày trước' : `so với ${len} ngày trước đó`;
+  const nxt7 = []; ALL.forEach(r => r.acts.forEach(x => { if (x.t === 'mset' && (!who || x.who === who) && isoOk(x.md) && x.md > t && x.md <= addD(t, 7)) nxt7.push(x); }));
+  const tiles = DAYK.map(([k, l, def]) => `<div class="kpi"><div class="k">${l}</div><div class="v ${k === 'all' ? '' : 'c-' + (cur[k] ? 'stable' : 'mute')}" ${k === 'all' ? 'style="color:var(--accent)"' : ''}>${n0(cur[k])}</div><div class="s">${deltaTxt(cur[k], prv[k])} ${vs}</div>${def ? `<div class="s">${def}</div>` : ''}</div>`).join('');
+  const head = `<tr><th class="l">${who ? 'Ngày' : 'Người'}</th>${DAYK.map(([k, l]) => `<th>${l}</th>`).join('')}</tr>`;
+  const line = (lb, o, attr, strong) => `<tr ${attr || ''}><td class="l name">${lb}</td>${DAYK.map(([k]) => `<td>${o[k] ? (strong || k === 'all' ? `<b>${n0(o[k])}</b>` : n0(o[k])) : '<span class="lbl">0</span>'}</td>`).join('')}</tr>`;
+  let tb = '';
+  if (!who) {
+    const rows = PICS.map(p => [p, dayStats(ALL, f, t, p)]), tot = dayStats(ALL, f, t, '');
+    tb = rows.sort((a, b) => b[1].all - a[1].all).map(([p, o]) => line(`${esc(p)}<span class="def">${esc(ROLE[p] || '')}</span>`, o, `class="hit" data-crwho="${esc(p)}" style="cursor:pointer"`)).join('') + line('<b>Toàn đội</b>', tot, 'style="background:var(--color-surface-primary)"', 1);
+  } else {
+    const days = []; if (len === 1) for (let i = 6; i >= 0; i--) days.push(addD(t, -i)); else for (let x = (len > 31 ? addD(t, -30) : f); x <= t; x = addD(x, 1)) days.push(x);
+    tb = days.reverse().map(x => line(`${wd(x)} ${dmy(x)}${x === TODAY ? ' <span class="pill p-stable" style="font-size:10.5px">hôm nay</span>' : ''}`, dayStats(ALL, x, x, who), isWd(x) ? '' : 'style="color:var(--ink-3)"')).join('');
+  }
+  // chi tiết từng action trong kỳ (người đang xem) + lịch meeting sắp tới
+  let det = '';
+  if (who) {
+    const L = []; ALL.forEach(r => r.acts.forEach(x => { if (x.who === who && x.d >= f && x.d <= t) L.push([r, x]); }));
+    L.sort((a, b) => (b[1].d || '').localeCompare(a[1].d || '') || (b[1].ts || 0) - (a[1].ts || 0));
+    const U = nxt7.map(x => [ALL.find(r => r.acts.includes(x)), x]).sort((a, b) => a[1].md.localeCompare(b[1].md));
+    const tr = ([r, x]) => `<tr class="hit" data-cropen="${esc(r.key)}" style="cursor:pointer"><td class="l">${dmy(x.d)}</td><td class="l name" style="color:var(--accent)">${esc(r.name)}<span class="def">HĐ ${esc(r.key)}</span></td><td class="l">${actLab(x.t)}${x.t === 'mset' && isoOk(x.md) ? `<span class="def">hẹn ${wd(x.md)} ${dmy(x.md)}</span>` : ''}</td><td class="l">${esc(x.res || '')}</td><td class="l" style="white-space:normal;min-width:220px;font-size:12px">${esc(x.det || '')}</td></tr>`;
+    det = `<div class="g2" style="margin-top:12px"><div><div class="eyebrow" style="margin-bottom:6px">Chi tiết action · ${lab} · ${n0(L.length)}</div>${L.length ? `<div class="tw" style="max-height:340px;overflow:auto"><table><thead><tr><th class="l">Ngày</th><th class="l">Khách</th><th class="l">Loại</th><th class="l">Kết quả</th><th class="l">Chi tiết</th></tr></thead><tbody>${L.slice(0, 200).map(tr).join('')}</tbody></table></div>` : '<div class="hint">Chưa ghi action nào trong kỳ này.</div>'}</div>
+      <div><div class="eyebrow" style="margin-bottom:6px">Lịch meeting 7 ngày tới · ${n0(U.length)}</div>${U.length ? `<div class="tw" style="max-height:340px;overflow:auto"><table><thead><tr><th class="l">Ngày đặt</th><th class="l">Khách</th><th class="l">Loại</th><th class="l">Kết quả</th><th class="l">Chi tiết</th></tr></thead><tbody>${U.map(tr).join('')}</tbody></table></div>` : '<div class="hint">Chưa có meeting nào được hẹn trong 7 ngày tới.</div>'}</div></div>`;
+  }
+  return `<div class="card"><div class="hd"><div><div class="eyebrow">Hoạt động PIC</div><h2 class="card-title">${who ? esc(who) + ' · ' + esc(ROLE[who] || '') : 'Toàn đội'} · ${lab}</h2></div><div class="card-note">${who ? 'tính theo người thực hiện từng lần liên hệ · verbal / ký tính theo khách PIC đang phụ trách' : 'bấm dòng để xem chi tiết từng người'}${nxt7.length && !who ? ` · ${n0(nxt7.length)} meeting đã hẹn trong 7 ngày tới` : ''}</div></div>
+    <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">${tiles}</div>
+    <div class="tw" style="margin-top:12px"><table><thead>${head}</thead><tbody>${tb}</tbody></table></div>${det}
+    <div class="hint">Mỗi lần ghi ở “Liên hệ: gọi, email, Zalo, meeting” của khách là 1 action. <b>Meeting được set</b> = chọn loại “Đặt lịch meeting” (ghi kèm ngày hẹn); <b>Meeting theo lịch</b> = số meeting đã hẹn rơi vào ngày đang xem; <b>Meeting đã đi</b> = ghi loại “Meeting (đã gặp)”. <b>Verbal confirm</b> lấy ngày ở mốc “Đồng ý ký (verbal)”.</div></div>`;
+}
 /* ---- việc cần ưu tiên (đầu phần Nhập liệu) ---- */
 const ACTK = [
   ['due', 'Hẹn gọi lại đến hạn', 'critical', 'Gọi lại đúng hẹn trong hôm nay'],
   ['g1', 'Đã ký (phụ lục / HĐ mới), chưa khởi tạo XPAY', 'critical', 'Báo Ops khởi tạo tài khoản, phát thẻ'],
+  ['vcwait', 'Đã đồng ý ký (verbal), chưa ký', 'high', 'Gửi phụ lục / hợp đồng, chốt ngày ký'],
   ['topnc', 'Top 200 chưa gọi', 'high', 'Gọi giới thiệu XPAY / xác nhận đã nhận thẻ'],
   ['stopped', 'Đã dùng, ngừng 30 ngày', 'high', 'Hỏi lý do ngừng, xử lý vướng mắc'],
   ['topnm', 'Top 200 đã gọi, chưa meeting', 'watch', 'Đặt lịch gặp trực tiếp'],
@@ -1654,7 +1714,7 @@ const ACTK = [
   ['tactlate', 'Quá hạn mục tiêu active', 'critical', 'Đã qua ngày PIC cam kết mà khách chưa có giao dịch'],
   ['tactsoon', 'Sắp đến mục tiêu active', 'high', 'Còn ≤ 7 ngày: nhắc khách đặt chuyến đầu'],
 ];
-const prioScore = r => (r.todo.due ? 1000 : 0) + (r.todo.tactlate ? 900 : 0) + (r.todo.tactsoon ? 450 : 0) + (r.grp === 1 ? 800 : 0) + (r.todo.topnc ? 600 : 0) + (r.todo.stopped ? 500 : 0) + (r.todo.topnm ? 400 : 0) + (r.todo.never ? 200 : 0) + Math.min(300, (r.pot || 0) * 3) + (r.grp === 2 ? Math.max(0, 100 - (r.grank || 200) / 2) : 0) + Math.min(100, (r.ml69 || 0) / 1e6);
+const prioScore = r => (r.todo.due ? 1000 : 0) + (r.todo.vcwait ? 700 : 0) + (r.todo.tactlate ? 900 : 0) + (r.todo.tactsoon ? 450 : 0) + (r.grp === 1 ? 800 : 0) + (r.todo.topnc ? 600 : 0) + (r.todo.stopped ? 500 : 0) + (r.todo.topnm ? 400 : 0) + (r.todo.never ? 200 : 0) + Math.min(300, (r.pot || 0) * 3) + (r.grp === 2 ? Math.max(0, 100 - (r.grank || 200) / 2) : 0) + Math.min(100, (r.ml69 || 0) / 1e6);
 function crmAction(R, d) {
   const A = R.filter(r => !r.liq && r.st !== 'Tạm dừng'), pot = L => L.reduce((a, r) => a + (r.pot || 0), 0);
   const tiles = ACTK.map(([k, l, c, act]) => { const L = A.filter(r => r.todo[k]);
@@ -1667,7 +1727,7 @@ let CMORE = {}, COPEN = {};
 /* lọc theo mốc tiến độ: '' tất cả · 'y' đã có · 'n' chưa có */
 /* khách đã có thẻ XPAY trên hệ thống (Hồ sơ doanh nghiệp → Thẻ XPAY) = đã khởi tạo XPAY */
 const hasCard = k => typeof CARDS === 'object' && CARDS && !!((CARDS[k] || {}).n);
-const MSF = [['pl', 'Ký phụ lục'], ['hd', 'Ký HĐ mới'], ['xp', 'Khởi tạo XPAY'], ['call', 'Gọi khách'], ['meet', 'Meeting'], ['first', 'Doanh thu đầu']];
+const MSF = [['vc', 'Đồng ý ký (verbal)'], ['pl', 'Ký phụ lục'], ['hd', 'Ký HĐ mới'], ['xp', 'Khởi tạo XPAY'], ['call', 'Gọi khách'], ['meet', 'Meeting'], ['first', 'Doanh thu đầu']];
 const msDone = (r, k) => k === 'first' ? !!r.first : done(r[k]);
 const msMatch = (r, k, v) => msDone(r, k) === (v === 'y');
 /* danh sách khách theo mọi bộ lọc đang chọn ở Nhập liệu — dùng chung cho bảng và file xuất */
@@ -1721,7 +1781,7 @@ function crmInput(ALL, d) {
   const ACTL = Object.fromEntries(ACTK.map(([k, l]) => [k, l])), PS = patSummary(d);
   const flt = crmFilterTxt(), nDel = Object.values(DBX).filter(e => e && e.deleted).length, sel = on => on ? 'border-color:var(--accent);color:var(--color-action-theme-primary-active);font-weight:600;background:var(--color-surface-primary)' : '';
   const todoOpts = [...Object.entries(TD), ...ACTK.filter(([k]) => !(k in TD)).map(([k, l]) => [k, l])];
-  let h = crmAction(crmScope(ALL), d) + `<div class="card crbar" id="crlist">
+  let h = (CR.who !== '_none' ? crmDaily(ALL, CR.from, CR.to) : '') + crmAction(crmScope(ALL), d) + `<div class="card crbar" id="crlist">
     <div class="crbar-top">
       <div class="crbar-search"><input id="crq" placeholder="Tìm tên, số hợp đồng, nhóm client…" value="${esc(CR.q)}"><span class="lbl"><b>${n0(R.length)}</b> khách${flt ? ' đang lọc' : ''}</span></div>
       <div class="crbar-act">
@@ -1769,10 +1829,10 @@ function crmInput(ALL, d) {
       <div style="display:flex;gap:8px;justify-content:space-between;margin-top:12px"><button class="btn" id="tm_add">+ Thêm người</button><span style="display:flex;gap:8px"><button class="btn" id="tm_x">Huỷ</button><button class="btn pri" id="tm_ok">Lưu danh sách</button></span></div>
     </div></div>`; }
   const row = r => `<tr class="hit" data-cropen="${esc(r.key)}" style="cursor:pointer${SEL.has(r.key) ? ';background:var(--color-surface-primary)' : ''}"><td class="l name" style="min-width:240px;padding-left:34px;color:var(--accent);position:relative">${ed && CANWRITE ? `<input type="checkbox" class="crsel" data-sel="${esc(r.key)}" ${SEL.has(r.key) ? 'checked' : ''} title="Chọn để gộp" style="position:absolute;left:10px;top:12px;cursor:pointer">` : ''}${esc(r.name)}${r.isNew ? ' <span class="pill p-stable" style="font-size:10.5px">mới thêm</span>' : ''}<span class="def">HĐ ${esc(r.key)}${r.gname ? ' · ' + esc(r.gname) + (r.grank ? ' #' + r.grank : '') : ''}</span></td><td class="l">${r.pic ? esc(r.pic) : '<b style="color:var(--critical)">Chưa phân công</b>'}</td>
-    ${['pl', 'hd', 'xp', 'call', 'meet'].map(f => `<td class="l">${done(r[f]) ? `<span class="c-stable">✓</span> ${isoOk(r[f]) ? dm(r[f]) : ''}${f === 'call' && r.calls.length > 1 ? `<span class="def">${r.calls.length} lần</span>` : ''}` : '<span class="lbl">—</span>'}</td>`).join('')}
+    ${['vc', 'pl', 'hd', 'xp', 'call', 'meet'].map(f => `<td class="l">${done(r[f]) ? `<span class="c-stable">✓</span> ${isoOk(r[f]) ? dm(r[f]) : ''}${f === 'call' && r.calls.length > 1 ? `<span class="def">${r.calls.length} lần</span>` : ''}` : '<span class="lbl">—</span>'}</td>`).join('')}
     <td class="l">${r.first ? dmy(r.first) : '<span class="lbl">chưa</span>'}</td><td>${r.gmv ? money(r.gmv) : '—'}<span class="def">${r.gmv30 ? '30N ' + nf(r.gmv30 / UNIT.div, UNIT.dec) : r.gmv ? 'ngừng 30N' : ''}</span></td><td class="l" style="white-space:normal;min-width:170px;font-size:12px">${PS[r.key] ? `${esc(PS[r.key].route)} <span class="lbl">(${PS[r.key].rn}/${PS[r.key].n} chuyến)</span><span class="def">${esc(PS[r.key].p)} · ${PS[r.key].band}${PS[r.key].short ? ' · <b style="color:var(--critical)">thiếu xe</b>' : ''}</span>` : (((S.cs || {})[r.key] || {}).custom || []).length ? '<span class="pill p-mute">CS đã khai báo</span>' : '<span class="lbl">—</span>'}</td>
     <td class="l" style="white-space:normal;max-width:160px">${r.lastRes ? esc(r.lastRes) : '<span class="lbl">—</span>'}${r.st ? `<span class="def" style="color:var(--critical)">${esc(r.st)}</span>` : ''}</td><td class="l" style="white-space:normal;min-width:220px;font-size:12px">${esc(r.sug[0])}</td></tr>`;
-  const NC = 12; let body = '';
+  const NC = 13; let body = '';
   if (q || CR.res || CR.todo || CR.grp.includes('|')) body = R.sort((a, b) => a.grp - b.grp || b.gmv - a.gmv || b.pot - a.pot).slice(0, 300).map(row).join('') + (R.length > 300 ? `<tr><td colspan="${NC}" class="l lbl">Hiện 300 / ${n0(R.length)} khách, lọc thêm để thu hẹp.</td></tr>` : '');
   else for (const g of [1, 2, 3, 4, 5, 9]) { const A = R.filter(r => r.grp === g); if (!A.length) continue;
     const sorter = g === 2 ? (a, b) => (a.grank || 999) - (b.grank || 999) || b.pot - a.pot : g === 3 ? (a, b) => b.pot - a.pot || b.b.peak - a.b.peak : (a, b) => b.gmv - a.gmv || b.ml69 - a.ml69 || (b.b.peak || 0) - (a.b.peak || 0);
@@ -1785,7 +1845,7 @@ function crmInput(ALL, d) {
       body += B.slice(0, mx).map(row).join('');
       if (B.length > mx) body += `<tr><td colspan="${NC}" class="l"><button class="btn crmore" data-crg="${esc(sid)}" style="padding:4px 10px">Xem thêm 50 / còn ${n0(B.length - mx)} khách</button></td></tr>`; } }
   h += `<div class="card"><div class="hd"><div><div class="eyebrow">Nhập liệu</div><h2 class="card-title">Tiến độ từng pháp nhân</h2></div><div class="card-note">bấm khách để cập nhật mốc, ghi cuộc gọi / meeting · ${ed ? 'lưu trực tiếp, ai mở dashboard cũng thấy ngay' : 'chế độ chỉ xem'}</div></div>
-    <div class="tw"><table><thead><tr><th class="l">Doanh nghiệp</th><th class="l">PIC</th><th class="l">Ký phụ lục</th><th class="l">Ký HĐ mới</th><th class="l">Khởi tạo XPAY</th><th class="l">Gọi khách</th><th class="l">Meeting</th><th class="l">Doanh thu đầu</th><th>GMV lũy kế</th><th class="l">Pattern di chuyển 30 ngày</th><th class="l">Kết quả gần nhất</th><th class="l">Gợi ý tiếp theo</th></tr></thead><tbody>${body || `<tr><td colspan="${NC}" class="l lbl">Không có khách phù hợp.</td></tr>`}</tbody></table></div>
+    <div class="tw"><table><thead><tr><th class="l">Doanh nghiệp</th><th class="l">PIC</th><th class="l" title="Khách đồng ý ký bằng lời, chưa ký xong">Đồng ý ký (verbal)</th><th class="l">Ký phụ lục</th><th class="l">Ký HĐ mới</th><th class="l">Khởi tạo XPAY</th><th class="l">Gọi khách</th><th class="l">Meeting</th><th class="l">Doanh thu đầu</th><th>GMV lũy kế</th><th class="l">Pattern di chuyển 30 ngày</th><th class="l">Kết quả gần nhất</th><th class="l">Gợi ý tiếp theo</th></tr></thead><tbody>${body || `<tr><td colspan="${NC}" class="l lbl">Không có khách phù hợp.</td></tr>`}</tbody></table></div>
     <div class="hint">Nhóm tự xếp theo thứ tự: 1) đã ký phụ lục (ngày vào tủ) hoặc ký hợp đồng mới, chưa khởi tạo XPAY; 2) Top 200 (mọi pháp nhân của nhóm client); 3) đã khởi tạo XPAY, 30 ngày chưa có giao dịch, xếp theo tiềm năng; 4) chưa ký phụ lục nhưng có giao dịch Mai Linh T6–T9; 5) còn lại, chia theo phân loại Mai Linh. Đổi nhóm, người phụ trách trong cửa sổ cập nhật. Doanh thu đầu và GMV lấy tự động từ bảng kê.</div></div>`;
   return h;
 }
@@ -1865,7 +1925,8 @@ function crmDrawer(r, d) {
     ${(() => {
       const mk = f => done(r[f]) ? (isoOk(r[f]) ? dm(r[f]) : '✓') : '—', tr = S.tx.filter(t => t[2] === r.key && t.length > 9).map(mkTrip), ps = patSummary(d)[r.key], cs = CARDS[r.key] || {};
       const A = r.acts[0], sec = (k, title, sum, body) => `<details class="card crsec" data-sec="${k}" style="margin-top:10px;padding:14px 20px" ${secOn(k) ? 'open' : ''}><summary style="cursor:pointer;list-style:none;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap"><b style="font-size:14px">${secOn(k) ? '▾' : '▸'} ${title}</b><span class="lbl" style="font-size:12.5px">${sum}</span></summary><div style="margin-top:10px">${body}</div></details>`;
-      return sec('ms', 'Tiến độ & các mốc', `${stageTxt[r.stage]} · ký PL ${mk('pl')} · ký HĐ mới ${mk('hd')} · XPAY ${mk('xp')} · gọi ${mk('call')} · meeting ${mk('meet')} · doanh thu đầu ${r.first ? dm(r.first) : '—'}${r.tact ? ` · mục tiêu active ${dm(r.tact)}` : ''}`, `
+      return sec('ms', 'Tiến độ & các mốc', `${stageTxt[r.stage]} · verbal ${mk('vc')} · ký PL ${mk('pl')} · ký HĐ mới ${mk('hd')} · XPAY ${mk('xp')} · gọi ${mk('call')} · meeting ${mk('meet')} · doanh thu đầu ${r.first ? dm(r.first) : '—'}${r.tact ? ` · mục tiêu active ${dm(r.tact)}` : ''}`, `
+      ${ms('vc', 'Đồng ý ký (verbal)', r.signed && done(r.vc) ? 'đã ký xong' : 'khách đồng ý ký bằng lời, chưa ký xong')}
       ${ms('pl', 'Ký phụ lục (vào tủ)', 'khách Mai Linh ký phụ lục')}
 ${ms('hd', 'Ký hợp đồng mới', 'khách mới ký hợp đồng XPAY')}${ms('xp', 'Khởi tạo XPAY')}${ms('call', 'Gọi khách', r.calls.length ? `${r.calls.length} lần · tự lấy ngày gọi gần nhất` : '')}${ms('meet', 'Meeting', r.meets.length ? `${r.meets.length} lần · tự lấy ngày gần nhất` : '')}
       <div style="display:flex;gap:8px;align-items:center;padding:6px 0"><span style="width:150px;font-weight:600">Doanh thu đầu tiên</span>${r.firstAmt != null ? `<span>${dmy(r.first)} · ${n0(r.firstAmt)} đồng <span class="lbl">(tự động từ bảng kê)</span></span>` : `<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-ms="first" ${done(r.first) ? 'checked' : ''} ${dis}> đã có</label><input type="date" data-msd="first" value="${isoOk(r.first) ? r.first : ''}" ${dis} style="${inp}"><span class="lbl">chưa thấy trong bảng kê</span>`}</div>
@@ -1875,17 +1936,17 @@ ${ms('hd', 'Ký hợp đồng mới', 'khách mới ký hợp đồng XPAY')}${m
           ${T ? `<span class="pill p-${T[0]}">${T[1]}</span>` : ''}
           <span class="lbl">${r.tact ? (r.tactAch ? `giao dịch ${dmy(r.tactAch)}${r.tactSt === 'datTre' ? ` · trễ ${diffD(r.tactAch, r.tact)} ngày` : ''}` : r.tactSt === 'tre' ? `quá ${diffD(d, r.tact)} ngày` : `còn ${diffD(r.tact, d)} ngày`) + (r.tactSet ? ` · đặt ngày ${dmy(r.tactSet)}` : '') : 'ngày PIC cam kết khách có giao dịch đầu tiên (hoặc giao dịch lại)'}</span></div>`; })()}
       <div style="margin-top:10px"><button class="btn pri crf-save" ${dis}>Lưu mốc và phân công</button></div>`)
-      + sec('act', 'Cuộc gọi / meeting', r.acts.length ? `${n0(r.calls.length)} lần gọi · ${n0(r.meets.length)} meeting · gần nhất ${isoOk(A.d) ? dmy(A.d) : esc(A.d)}${A.res ? ' · ' + esc(A.res) : ''}${isoOk(r.nx) ? ` · hẹn lại ${dmy(r.nx)}` : ''}` : 'chưa liên hệ · bấm để ghi lần liên hệ đầu tiên', `
+      + sec('act', 'Liên hệ: gọi, email, Zalo, meeting', r.acts.length ? `${ACT_T.map(([t, l]) => [l, r.acts.filter(a => a.t === t).length]).filter(x => x[1]).map(([l, n]) => `${n0(n)} ${l.toLowerCase()}`).join(' · ')}${r.mnext ? ` · lịch meeting ${dmy(r.mnext)}` : ''} · gần nhất ${isoOk(A.d) ? dmy(A.d) : esc(A.d)}${A.res ? ' · ' + esc(A.res) : ''}${isoOk(r.nx) ? ` · hẹn lại ${dmy(r.nx)}` : ''}` : 'chưa liên hệ · bấm để ghi lần liên hệ đầu tiên', `
 
       <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">
-        <label class="lbl">Loại<select id="cat_t" ${dis} style="width:100%"><option value="call">Gọi khách</option><option value="meet">Meeting</option></select></label>
+        <label class="lbl">Loại<select id="cat_t" ${dis} style="width:100%">${ACT_T.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label>
         <label class="lbl">Ngày<input type="date" id="cat_d" value="${TODAY}" ${dis} style="${inp};width:100%"></label>
         <label class="lbl">Người thực hiện<select id="cat_w" ${dis} style="width:100%">${people.map(p => `<option ${p === (PICS.includes(CR.who) ? CR.who : r.pic) ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></label>
         <label class="lbl">Kết quả<select id="cat_r" ${dis} style="width:100%">${cats().map(c => `<option>${esc(c)}</option>`).join('')}<option value="__new">+ Thêm loại mới…</option></select></label></div>
       <input id="cat_new" placeholder="Tên loại kết quả mới" style="${inp};width:100%;margin-top:8px;display:none">
       <textarea id="cat_x" placeholder="Feedback chi tiết" ${dis} style="${inp};width:100%;margin-top:8px;min-height:60px"></textarea>
-      <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><span class="lbl">Hẹn lại ngày</span><input type="date" id="cat_nx" value="${isoOk(r.nx) ? r.nx : ''}" ${dis} style="${inp}"><button class="btn pri" id="cat_add" ${dis}>Lưu lần ${'liên hệ'}</button></div>
-      ${r.acts.length ? `<div class="tw" style="margin-top:10px"><table><thead><tr><th class="l">Ngày</th><th class="l">Loại</th><th class="l">Người</th><th class="l">Kết quả</th><th class="l">Chi tiết</th><th></th></tr></thead><tbody>${r.acts.map(a => `<tr><td class="l">${isoOk(a.d) ? dmy(a.d) : esc(a.d)}</td><td class="l">${a.t === 'meet' ? 'Meeting' : 'Gọi'}</td><td class="l">${esc(a.who || '')}</td><td class="l">${esc(a.res || '')}</td><td class="l" style="white-space:normal;min-width:220px">${esc(a.det || '')}</td><td>${a.seed ? '<span class="lbl">file giao thẻ</span>' : ed ? `<a data-cadel="${esc(a.id)}" style="cursor:pointer;color:var(--critical)">xóa</a>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="hint">Chưa có lần liên hệ nào.</div>'}`)
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap"><span id="cat_mdw" style="display:none;gap:8px;align-items:center"><span class="lbl"><b>Ngày meeting</b></span><input type="date" id="cat_md" ${dis} style="${inp}"></span><span class="lbl">Hẹn lại ngày</span><input type="date" id="cat_nx" value="${isoOk(r.nx) ? r.nx : ''}" ${dis} style="${inp}"><button class="btn pri" id="cat_add" ${dis}>Lưu lần ${'liên hệ'}</button></div>
+      ${r.acts.length ? `<div class="tw" style="margin-top:10px"><table><thead><tr><th class="l">Ngày</th><th class="l">Loại</th><th class="l">Người</th><th class="l">Kết quả</th><th class="l">Chi tiết</th><th></th></tr></thead><tbody>${r.acts.map(a => `<tr><td class="l">${isoOk(a.d) ? dmy(a.d) : esc(a.d)}</td><td class="l">${actLab(a.t)}${a.t === 'mset' && isoOk(a.md) ? `<span class="def">hẹn ${dmy(a.md)}</span>` : ''}</td><td class="l">${esc(a.who || '')}</td><td class="l">${esc(a.res || '')}</td><td class="l" style="white-space:normal;min-width:220px">${esc(a.det || '')}</td><td>${a.seed ? '<span class="lbl">file giao thẻ</span>' : ed ? `<a data-cadel="${esc(a.id)}" style="cursor:pointer;color:var(--critical)">xóa</a>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="hint">Chưa có lần liên hệ nào.</div>'}`)
       + sec('pat', 'Pattern di chuyển', tr.length ? `${n0(tr.length)} chuyến toàn bộ${ps ? ` · 30 ngày: ${esc(ps.route)} (${ps.rn} chuyến), ${esc(ps.p)}, ${ps.band}` : ''}` : 'chưa có chuyến XPAY', secOn('pat') ? (tr.length ? kpiRow(tr) : '') + custPatterns(r.key, tr) : '')
       + sec('asg', 'Phân công, phân loại', `PIC ${r.pic ? esc(r.pic) : '<b style="color:var(--critical)">chưa phân công</b>'} · nhóm ${r.grp === 9 ? 'Đã thanh lý' : r.grp}${r.grpM ? ' (chọn tay)' : ' (tự động)'}${r.st ? ' · ' + esc(r.st) : ''}${r.note ? ' · có ghi chú' : ''}`, `
 
@@ -1945,26 +2006,26 @@ async function crmSheets(wbk) {
       const ws = wbk.addWorksheet('Khach_hang', {views: [{state: 'frozen', ySplit: 4, xSplit: 3, showGridLines: false}]});
       K.title(ws, 'XPAY — TIẾN ĐỘ KHÁCH HÀNG (mỗi pháp nhân 1 dòng)', `${scopeTxt()}${crmFilterTxt() ? ' · lọc: ' + crmFilterTxt() : ''} · ${n0(R.length)} khách · số liệu đến ${dmy(d)} · xuất lúc ${xlStamp()}`);
       const cols = [['Nhóm', 34], ['Số hợp đồng', 13], ['Tên pháp nhân', 46], ['PIC', 11], ['PIC cũ (sổ khách)', 13], ['Cách xếp nhóm', 11], ['Phân loại Mai Linh', 26], ['Nhóm client', 24], ['Hạng nhóm client', 9], ['Hạng Top 200', 13], ['Tình trạng đặc biệt', 12], ['Tiến độ', 16],
-        ['Ký phụ lục (vào tủ)', 13], ['Ký hợp đồng mới', 13], ['Khởi tạo XPAY', 13], ['Gọi khách gần nhất', 13], ['Số lần gọi', 8], ['Meeting gần nhất', 13], ['Số meeting', 8], ['Hẹn gọi lại', 12], ['Liên hệ gần nhất', 12], ['Kết quả gần nhất', 22],
+        ['Ký phụ lục (vào tủ)', 13], ['Ký hợp đồng mới', 13], ['Đồng ý ký (verbal)', 13], ['Khởi tạo XPAY', 13], ['Gọi khách gần nhất', 13], ['Số lần gọi', 8], ['Meeting gần nhất', 13], ['Số meeting', 8], ['Hẹn gọi lại', 12], ['Liên hệ gần nhất', 12], ['Kết quả gần nhất', 22],
         ['Ngày doanh thu đầu tiên', 13], ['Giao dịch đầu tiên (VND)', 14], ['GMV lũy kế (VND)', 15], ['GMV 30 ngày (VND)', 15], ['Số chuyến', 9], ['Giao dịch gần nhất', 13], ['Tiềm năng (triệu/tháng)', 11], ['Giao dịch Mai Linh T6–T9 (VND)', 15],
         ['Tuyến chính 30 ngày', 34], ['Mục đích chính 30 ngày', 18], ['Khung giờ 30 ngày', 16], ['Chuyến thiếu xe 30 ngày', 10], ['Gợi ý xử lý', 70], ['Ghi chú', 40], ['MST', 14], ['Địa chỉ', 50], ['Email doanh nghiệp', 28], ['Số thẻ XPAY', 9], ['Tổng hạn mức tháng (VND)', 15], ['Tổng số dư thẻ (VND)', 15], ['Ngày số dư', 12]];
       if (CARDST === 'loading' || CARDST === 'off') await cardsLoad();
       K.head(ws, 4, cols);
-      const fm = [null, null, null, null, null, null, null, null, null, null, null, null, DT, DT, DT, null, DT, null, DT, DT, null, DT, VN, VN, VN, '#,##0', DT, N1, VN, null, null, null, '#,##0', null, null, '@', null, null, '#,##0', VN, VN, DT];
+      const fm = [null, null, null, null, null, null, null, null, null, null, null, null, DT, DT, DT, DT, null, DT, null, DT, DT, null, DT, VN, VN, VN, '#,##0', DT, N1, VN, null, null, null, '#,##0', null, null, '@', null, null, '#,##0', VN, VN, DT];
       let row = 5;
       for (const G of GS) { xlSec(K, ws, row++, cols.length, grpHead(G)); for (const X of G.subs) { if (X.sb) xlSec(K, ws, row++, cols.length, `${X.sb} · ${n0(X.rows.length)} khách`, 1); X.rows.forEach(r => { const ps = PS[r.key], i = row++ - 5;
         K.put(ws, 5 + i, [G.label, r.key, r.name, r.pic || 'Chưa phân công', r.picOld, r.liq ? 'Tự động' : r.grpM ? 'Chọn tay' : 'Tự động', r.sub, r.gname, r.grank || '', r.rank, r.st, stageTxt[r.stage],
-          msDate(r.pl), msDate(r.hd), msDate(r.xp), msDate(r.call), r.calls.length, msDate(r.meet), r.meets.length, msDate(r.nx), r.acts[0] && isoOk(r.acts[0].d) ? new Date(r.acts[0].d + 'T00:00:00Z') : '', r.lastRes,
+          msDate(r.pl), msDate(r.hd), msDate(r.vc), msDate(r.xp), msDate(r.call), r.calls.length, msDate(r.meet), r.meets.length, msDate(r.nx), r.acts[0] && isoOk(r.acts[0].d) ? new Date(r.acts[0].d + 'T00:00:00Z') : '', r.lastRes,
           msDate(r.first), r.firstAmt, r.gmv, r.gmv30, r.trips, r.lastTx ? new Date(r.lastTx + 'T00:00:00Z') : '', r.pot || '', r.ml69 || '',
           ps ? `${ps.route} (${ps.rn}/${ps.n} chuyến)` : '', ps ? ps.p : '', ps ? ps.band : '', ps ? ps.short : '', r.sug.join(' · '), r.note, ...(cs => [cs.mst, cs.address, cs.email, cs.n || '', cs.n ? cs.limit : '', cs.n ? cs.bal : '', cs.balDate ? new Date(cs.balDate + 'T00:00:00Z') : ''])(CARDS[r.key] || {})], fm);
         ws.getCell(5 + i, 2).numFmt = '@'; }); } }
       ws.autoFilter = {from: {row: 4, column: 1}, to: {row: row - 1, column: cols.length}};
       // lịch sử liên hệ
       const wa = wbk.addWorksheet('Lich_su_lien_he', {views: [{state: 'frozen', ySplit: 4, showGridLines: false}]});
-      K.title(wa, 'LỊCH SỬ GỌI KHÁCH / MEETING', `${scopeTxt()} · đến ${dmy(d)}`);
-      K.head(wa, 4, [['Nhóm', 30], ['Số hợp đồng', 13], ['Tên pháp nhân', 46], ['PIC', 11], ['Ngày', 12], ['Loại', 10], ['Người thực hiện', 14], ['Kết quả', 22], ['Chi tiết', 70], ['Nguồn', 14]]);
-      let n = 5; R.forEach(r => r.acts.forEach(a => { K.put(wa, n, [(r.grp === 9 ? '' : r.grp + '. ') + GRP[r.grp], r.key, r.name, r.pic, isoOk(a.d) ? new Date(a.d + 'T00:00:00Z') : a.d, a.t === 'meet' ? 'Meeting' : 'Gọi khách', a.who, a.res, a.det, a.seed ? 'File giao thẻ' : 'Nhập liệu'], [null, null, null, null, DT]); wa.getCell(n, 2).numFmt = '@'; n++; }));
-      wa.autoFilter = {from: {row: 4, column: 1}, to: {row: Math.max(4, n - 1), column: 10}};
+      K.title(wa, 'LỊCH SỬ LIÊN HỆ: GỌI, EMAIL, ZALO, MEETING', `${scopeTxt()} · đến ${dmy(d)}`);
+      K.head(wa, 4, [['Nhóm', 30], ['Số hợp đồng', 13], ['Tên pháp nhân', 46], ['PIC', 11], ['Ngày', 12], ['Loại', 10], ['Người thực hiện', 14], ['Kết quả', 22], ['Chi tiết', 70], ['Nguồn', 14], ['Ngày hẹn meeting', 13]]);
+      let n = 5; R.forEach(r => r.acts.forEach(a => { K.put(wa, n, [(r.grp === 9 ? '' : r.grp + '. ') + GRP[r.grp], r.key, r.name, r.pic, isoOk(a.d) ? new Date(a.d + 'T00:00:00Z') : a.d, actLab(a.t), a.who, a.res, a.det, a.seed ? 'File giao thẻ' : 'Nhập liệu', isoOk(a.md) ? new Date(a.md + 'T00:00:00Z') : ''], [null, null, null, null, DT, null, null, null, null, null, DT]); wa.getCell(n, 2).numFmt = '@'; n++; }));
+      wa.autoFilter = {from: {row: 4, column: 1}, to: {row: Math.max(4, n - 1), column: 11}};
       if (CANWRITE && CARDST === 'ok') { const {items} = await cardsGrouped(GS); if (items.length) cardsSheet(K, wbk, items, false); }
     }
   }
@@ -2409,13 +2470,16 @@ function bindDrawer() {
     catch (e) { alert('Chưa xoá được: ' + (e.message || e)); } };
   if ($('cdxls')) $('cdxls').onclick = async () => { try { const D = CARDD[k].full ? CARDD[k] : await cardDetail(k, true); await cardsXlsx([{key: k, name: cname(k), label: '', company: D.company, cards: D.cards}], `XPAY_The_${k}_${TODAY.replace(/-/g, '')}.xlsx`, cname(k)); keep(() => {}); } catch (e) { alert('Không xuất được: ' + (e.message || e)); } };
   const fail = e => msg(e && e.code === 'invalid_argument' ? 'Bạn không có quyền lưu dữ liệu.' : 'Chưa lưu được: ' + ((e && (e.message || e.code)) || e));
+  if ($('cat_t')) $('cat_t').onchange = e => { const on = e.target.value === 'mset'; $('cat_mdw').style.display = on ? 'inline-flex' : 'none'; if (on && $('cat_r').value !== '__new') $('cat_r').value = 'Đồng ý meeting'; };
   if ($('cat_r')) $('cat_r').onchange = e => { $('cat_new').style.display = e.target.value === '__new' ? '' : 'none'; };
   if ($('cat_add')) $('cat_add').onclick = async () => {
     let res = $('cat_r').value; const nw = $('cat_new').value.trim();
     if (res === '__new') { if (!nw) { msg('Nhập tên loại kết quả mới.'); return; } res = nw; }
     const d = $('cat_d').value; if (!isoOk(d)) { msg('Chọn ngày.'); return; }
     const id = 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    const patch = {acts: {[id]: {t: $('cat_t').value, d, who: $('cat_w').value, res, det: $('cat_x').value.trim(), ts: Date.now()}}};
+    const at = $('cat_t').value, md = $('cat_md') ? $('cat_md').value : '';
+    if (at === 'mset' && !isoOk(md)) { msg('Chọn ngày meeting đã hẹn với khách.'); return; }
+    const patch = {acts: {[id]: Object.assign({t: at, d, who: $('cat_w').value, res, det: $('cat_x').value.trim(), ts: Date.now()}, at === 'mset' ? {md} : {})}};
     const nx = $('cat_nx').value; patch.nx = isoOk(nx) ? nx : null;
     if (!PICS.includes(res) && !cats().includes(res)) { try { const db = await claude.use('db'); const c = [...new Set([...(CFG.cats || []), res])]; await db.doc('cfg/main').set(Object.assign({}, CFG || {}, {cats: c})); } catch (e) {} }
     $('cat_add').disabled = true; msg('Đang lưu…');
@@ -2424,9 +2488,9 @@ function bindDrawer() {
   document.querySelectorAll('[data-cadel]').forEach(el => el.onclick = async () => { msg('Đang xóa…'); try { await crmWrite(k, {acts: {[el.dataset.cadel]: null}}); CRM_ = null; const y = window.scrollY; render(); window.scrollTo(0, y); } catch (e) { fail(e); } });
   const saveMs = async btn => {
     const r = crmRows(CR.day).find(x => x.key === k), b = BOOK[k] || {}, c = C0.rows[k] || [];
-    const auto = {pl: c[0] || (b.fpl === 'Y' ? 'Y' : ''), hd: '', xp: c[1] || (b.xp ? 'Y' : ''), call: r.calls[0] ? r.calls[0].d : '', meet: r.meets[0] ? r.meets[0].d : '', first: ''};
+    const auto = {vc: '', pl: c[0] || (b.fpl === 'Y' ? 'Y' : ''), hd: '', xp: c[1] || (b.xp ? 'Y' : ''), call: r.calls[0] ? r.calls[0].d : '', meet: r.meets[0] ? r.meets[0].d : '', first: ''};
     const ms = {};
-    ['pl', 'hd', 'xp', 'call', 'meet', 'first'].forEach(f => { const cb = document.querySelector(`[data-ms="${f}"]`), dt = document.querySelector(`[data-msd="${f}"]`); if (!cb) return;
+    ['vc', 'pl', 'hd', 'xp', 'call', 'meet', 'first'].forEach(f => { const cb = document.querySelector(`[data-ms="${f}"]`), dt = document.querySelector(`[data-msd="${f}"]`); if (!cb) return;
       const v = dt && dt.value ? dt.value : cb.checked ? (isoOk(r[f]) ? r[f] : 'Y') : (done(auto[f]) ? 'N' : '');
       ms[f] = v === auto[f] ? null : v; });
     const st = $('crf_st').value, stAuto = b.tl ? 'Thanh lý' : '';
@@ -2490,7 +2554,7 @@ ovInit();
 try { const t = localStorage.getItem('xpay_tab'); if (t) TAB = t; } catch (e) {}
 if (TAB === 'pat') { TAB = 'jr'; CR.view = 'pat'; }
 /* ---- Đường dẫn riêng cho từng tab: /dashboard/mobility/overall · roadmap · progress/{dashboard|pattern|input} · update (?kh=<mã khách> mở hồ sơ) ---- */
-const ROUTE_TAB = {overall: 'ov', 'tong-quan': 'ov', roadmap: 'zoom', 'lo-trinh': 'zoom', progress: 'jr', 'tien-do': 'jr', update: 'up', 'cap-nhat': 'up'};
+const ROUTE_TAB = {overall: 'ov', 'tong-quan': 'ov', roadmap: 'zoom', 'lo-trinh': 'zoom', signing: 'kyhd', 'ky-hop-dong': 'kyhd', progress: 'jr', 'tien-do': 'jr', update: 'up', 'cap-nhat': 'up'};
 const ROUTE_VIEW = {dashboard: 'dash', pattern: 'pat', input: 'input', 'nhap-lieu': 'input'};
 function applyRoute(path, kh) {
   const [a, b] = String(path || '').split('/').filter(Boolean);
@@ -2498,7 +2562,7 @@ function applyRoute(path, kh) {
   if (TAB === 'jr') CR.view = ROUTE_VIEW[b] || (kh ? 'input' : CR.view || 'dash');
   if (kh) { CR.open = kh; if (TAB !== 'jr') { TAB = 'jr'; CR.view = 'input'; } } else if (kh === '') CR.open = null;
 }
-const routeOf = () => { const t = {ov: 'overall', zoom: 'roadmap', jr: 'progress', up: 'update'}[TAB] || 'overall';
+const routeOf = () => { const t = {ov: 'overall', zoom: 'roadmap', kyhd: 'signing', jr: 'progress', up: 'update'}[TAB] || 'overall';
   return t === 'progress' ? t + '/' + ({dash: 'dashboard', pat: 'pattern', input: 'input'}[CR.view] || 'dashboard') : t; };
 var ROUTE_LAST = '';
 function postRoute() {

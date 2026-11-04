@@ -1,7 +1,7 @@
 // Đường dẫn riêng cho từng phần của tab Dashboard (mở thẳng, bookmark, gửi link đúng chỗ)
 //   /dashboard/overview/<tab>        Tổng quan: home · cash · kpi · alerts · data
 //   /dashboard/travel-saas/<tab>     Travel & SaaS: revenue · customers · ar · ap · opex · kpi · alerts
-//   /dashboard/mobility/<tab>[/...]  Mobility: overall · roadmap · progress/{dashboard|pattern|input} · update   (?kh=<mã khách> mở hồ sơ)
+//   /dashboard/mobility/<tab>[/...]  Mobility: overall · roadmap · signing · progress/{dashboard|pattern|input} · update   (?kh=<mã khách> mở hồ sơ)
 export type SecKey = 'all' | 'ts' | 'm';
 const SEC_SLUG: Record<SecKey, string> = { all: 'overview', ts: 'travel-saas', m: 'mobility' };
 const SLUG_SEC: Record<string, SecKey> = { overview: 'all', 'tong-quan': 'all', 'travel-saas': 'ts', travel: 'ts', mobility: 'm' };
