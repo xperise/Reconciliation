@@ -1967,7 +1967,7 @@ function profView(r) {
     ? `<div class="card"><h3 style="margin:0 0 10px;font-size:14px">Sửa thông tin doanh nghiệp</h3>
         <div style="display:grid;grid-template-columns:150px 1fr;gap:8px 12px;font-size:13px;align-items:center">
           <span class="lbl">Tên pháp nhân</span>${inp('coname', r.name, 'Tên đầy đủ như trên hợp đồng')}
-          <span class="lbl">Số hợp đồng</span><span>${esc(r.key)}</span>
+          <span class="lbl">Số hợp đồng</span>${CANWRITE ? `<span>${inp('cokey', r.key, 'Mã hợp đồng')}<span class="lbl" style="font-size:11.5px">Đổi mã: giao dịch, PIC, mốc, liên hệ, thẻ, MST… chuyển sang mã mới; mã mới đã có doanh nghiệp khác thì 2 bên được gộp</span></span>` : `<span>${esc(r.key)}</span>`}
           ${CARDST === 'ok' ? `<span class="lbl">MST</span>${inp('comst', co.mst || cs.mst, '10 số hoặc 10 số-3 số')}<span class="lbl">Địa chỉ</span>${inp('coaddr', co.address || cs.address)}<span class="lbl">Email doanh nghiệp</span>${inp('comail', co.email || cs.email, 'ketoan@congty.vn')}` : ''}
         </div>
         ${orig && orig !== r.name ? `<div class="hint" style="margin-top:8px">Tên gốc trong sổ / bảng kê: <b>${esc(orig)}</b>. Xoá trống ô tên rồi lưu để dùng lại tên gốc.</div>` : ''}
@@ -2664,6 +2664,28 @@ function bindDrawer() {
     const m = t => { if ($('comsg')) $('comsg').textContent = t; }, b = $('cosave'); b.disabled = true; m('Đang lưu…');
     const r0 = crmRows(CR.day).find(x => x.key === k) || {}, orig = (BOOK[k] || BYKEY[k] || {}).name || TXN[k] || '';
     const nm = $('coname').value.trim(), errs = [];
+    // đổi số hợp đồng: dùng cơ chế gộp mã (mã cũ → mã mới), lưu vào dashboard rồi tải lại
+    const nk = $('cokey') ? $('cokey').value.trim() : k;
+    if (nk && nk !== k) {
+      if (!/^[A-Za-z0-9._\-]{3,40}$/.test(nk)) { b.disabled = false; m('Số hợp đồng chỉ gồm chữ, số, dấu . _ - (3–40 ký tự).'); return; }
+      const other = crmRows(CR.day).find(x => x.key === nk);
+      if (!confirm(other ? `Mã ${nk} đang là của “${other.name}”.\nĐổi mã sẽ GỘP “${r0.name || k}” vào doanh nghiệp đó (dữ liệu chuyển hết sang ${nk}). Tiếp tục?` : `Đổi số hợp đồng ${k} → ${nk}?\nGiao dịch, PIC, mốc, liên hệ, thẻ, MST… chuyển sang mã mới.`)) { b.disabled = false; m(''); return; }
+      try {
+        const keepName = nm || r0.name || cname(k);
+        if (CARDST === 'ok') { const c = await claude.use('cards'); const fr = await c.get(k, true) || {}, to = await c.get(nk, true) || {}, tco = to.company || {}, fco = fr.company || {}, co = {key: nk};
+          for (const f of ['mst', 'address', 'email']) if (!tco[f] && fco[f]) co[f] = fco[f];
+          const cards = (fr.cards || []).map(x => ({uid: x.uid, key: nk}));
+          if (cards.length || Object.keys(co).length > 1) { m(`Đang chuyển ${cards.length} thẻ…`); const res = await c.save({companies: Object.keys(co).length > 1 ? [co] : [], cards, deletes: [], dry: false}); if ((res.errors || []).length) throw new Error('Thẻ: ' + res.errors.join('; ')); } }
+        if (!other && !BOOK[nk]) await crmWrite(nk, {name: keepName});   // mã mới chưa có trong sổ: giữ tên doanh nghiệp
+        S.merge = S.merge || {}; S.mergeLog = S.mergeLog || {}; S.nomerge = S.nomerge || {};
+        S.merge[k] = nk; S.mergeLog[k] = {to: nk, name: cname(k), auto: 0, at: TODAY, src: 'doi-ma'}; delete S.nomerge[canon(cname(k))];
+        S.alias[cname(k)] = nk; S.tx.forEach(t => { if (t[2] === k) t[2] = nk; }); for (const [a2, b2] of Object.entries(S.merge)) if (b2 === k) S.merge[a2] = nk;
+        const art = window.claude ? await claude.use('artifact') : null; if (!art) throw new Error('Chỉ đổi mã được trong web Reconciliation');
+        m('Đang lưu…'); CR.open = nk; S.meta.updated = new Date().toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'}); await art.publish(docHtml());
+        m('Đã đổi số hợp đồng. Dashboard đang tải lại…');
+      } catch (e) { b.disabled = false; m('Chưa đổi được số hợp đồng: ' + ((e && (e.message || e.code)) || e)); }
+      return;
+    }
     try {
       if (nm !== (r0.name || '')) { const v = !nm || nm === orig ? null : nm; await crmWrite(k, {name: v}); if (v) NAMEOVR[k] = v; else delete NAMEOVR[k]; DBX[k] = Object.assign({}, DBX[k] || {}); if (v) DBX[k].name = v; else delete DBX[k].name; CRM_ = null; }
       if (CARDST === 'ok' && $('comst')) {
