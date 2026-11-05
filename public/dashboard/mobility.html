@@ -553,6 +553,40 @@ function renderRange() {
     ${U ? '<li class="lbl">Đang lọc đơn vị: các số trên chỉ tính giao dịch của đơn vị đã chọn. Bảng CEO và lộ trình bên dưới vẫn tính trên toàn bộ.</li>' : ''}</ul></div>`;
   return h + `<div class="kpis">${tiles.join('')}</div>`;
 }
+/* ---- Tổng quan: meeting cho Sếp — theo ngày / tháng / năm (theo ngày meeting), sắp tới, đã hoàn thành ---- */
+function ovMeetings() {
+  if (DBST !== 'ok') return `<div class="card"><div class="eyebrow">Meeting</div><div class="hint">${DBST === 'loading' ? 'Đang tải dữ liệu meeting…' : 'Chưa kết nối được dữ liệu nhập, chưa hiện được meeting.'}</div></div>`;
+  const L = mtgList(crmRows(TODAY), ''), dt = L.filter(m => isoOk(m.md)), mo = TODAY.slice(0, 7), yr = TODAY.slice(0, 4), f = OV.from, t = OV.to;
+  const grp = A => ({n: A.length, done: A.filter(m => m.st === 'done').length, soon: A.filter(m => m.st === 'soon').length, late: A.filter(m => m.st === 'late').length});
+  const D = grp(dt.filter(m => m.md === TODAY)), M = grp(dt.filter(m => m.md.slice(0, 7) === mo)), Y = grp(dt.filter(m => m.md.slice(0, 4) === yr)), K = grp(dt.filter(m => m.md >= f && m.md <= t));
+  const soon = L.filter(m => m.st === 'soon'), done = L.filter(m => m.st === 'done'), late = L.filter(m => m.st === 'late'), nod = L.filter(m => m.st === 'nodate');
+  const sub = o => `<b class="c-stable">${n0(o.done)}</b> hoàn thành · <b class="c-high">${n0(o.soon)}</b> sắp tới${o.late ? ` · <b class="c-critical">${n0(o.late)}</b> quá hạn chưa cập nhật` : ''}`;
+  const tile = (k, v, s1, s2, cls) => `<div class="kpi"><div class="k">${k}</div><div class="v ${cls || ''}">${n0(v)}</div><div class="s">${s1}</div>${s2 ? `<div class="s">${s2}</div>` : ''}</div>`;
+  const wk = addD(TODAY, 7), s7 = soon.filter(m => m.md <= wk).length;
+  const tiles = [
+    tile(`Meeting hôm nay · ${dmy(TODAY)}`, D.n, sub(D)),
+    tile(`Meeting tháng ${+mo.slice(5)}/${yr}`, M.n, sub(M)),
+    tile(`Meeting năm ${yr}`, Y.n, sub(Y)),
+    tile('Tổng meeting sắp tới', soon.length, `${n0(s7)} trong 7 ngày tới`, nod.length ? `+ ${n0(nod.length)} khách đồng ý, chưa chốt ngày` : '', 'c-high'),
+    tile('Tổng meeting đã hoàn thành', done.length, `trên ${n0(L.length)} meeting đã set (${L.length ? pct(done.length / L.length) : '—'})`, late.length ? `<b class="c-critical">${n0(late.length)}</b> đã qua ngày hẹn, chưa cập nhật` : '', 'c-stable'),
+    ...(f === TODAY && t === TODAY ? [] : [tile(`Trong kỳ ${rngLabel(f, t)}`, K.n, sub(K))])].join('');
+  // biểu đồ theo ngày: 21 ngày trước → 14 ngày tới
+  const days = []; for (let i = -21; i <= 14; i++) days.push(addD(TODAY, i));
+  const cnt = x => ({d: dt.filter(m => m.md === x && m.st === 'done').length, s: dt.filter(m => m.md === x && m.st !== 'done').length});
+  const V = days.map(cnt), mx = Math.max(1, ...V.map(v => v.d + v.s)), W = 640, Hh = 190, bw = W / days.length;
+  let svg = `<svg viewBox="0 0 ${W} ${Hh + 34}" width="100%" style="display:block;max-width:${W}px">`;
+  days.forEach((x, i) => { const v = V[i], hd = (Hh - 14) * v.d / mx, hs = (Hh - 14) * v.s / mx, X = i * bw + 2, w = Math.max(2, bw - 4), td = x === TODAY;
+    svg += `<rect x="${X}" y="${Hh - hd}" width="${w}" height="${hd}" fill="var(--color-display-cyan-default)"><title>${wd(x)} ${dmy(x)}: ${v.d} hoàn thành</title></rect><rect x="${X}" y="${Hh - hd - hs}" width="${w}" height="${hs}" fill="var(--color-display-orange-default)"><title>${wd(x)} ${dmy(x)}: ${v.s} đã hẹn / chưa cập nhật</title></rect>`;
+    if (v.d + v.s) svg += `<text x="${X + w / 2}" y="${Hh - hd - hs - 3}" text-anchor="middle" font-size="10.5" fill="var(--ink-2)">${v.d + v.s}</text>`;
+    if (td || i % 3 === 0) svg += `<text x="${X + w / 2}" y="${Hh + 14}" text-anchor="middle" font-size="11" fill="${td ? 'var(--accent)' : 'var(--ink-3)'}" font-weight="${td ? 700 : 400}">${td ? 'Hôm nay' : dm(x)}</text>`; });
+  svg += `<line x1="${days.indexOf(TODAY) * bw}" x2="${days.indexOf(TODAY) * bw}" y1="0" y2="${Hh}" stroke="var(--accent)" stroke-dasharray="3 3"/></svg><div class="legend" style="margin-top:4px"><span><i style="background:var(--color-display-cyan-default)"></i>Hoàn thành</span><span><i style="background:var(--color-display-orange-default)"></i>Sắp tới / chưa cập nhật</span></div>`;
+  const nx = soon.filter(m => m.md <= wk).sort((a, b) => a.md.localeCompare(b.md)).slice(0, 10);
+  const list = nx.length ? `<div class="tw"><table><thead><tr><th class="l">Ngày</th><th class="l">Khách</th><th class="l">Người dự</th><th class="l">Lịch hẹn</th></tr></thead><tbody>${nx.map(m => `<tr class="hit" data-cropen="${esc(m.r.key)}" style="cursor:pointer"><td class="l" style="white-space:nowrap">${wd(m.md)} ${dmy(m.md)}</td><td class="l name" style="color:var(--accent)">${esc(m.r.name)}<span class="def">${m.setter ? 'set: ' + esc(m.setter) : ''}${m.r.pic ? ' · PIC ' + esc(m.r.pic) : ''}</span></td><td class="l">${m.att.length ? m.att.map(esc).join(', ') : '<span class="lbl">chưa phân người</span>'}</td><td class="l" style="white-space:normal;font-size:12px;min-width:200px">${esc(((m.set && m.set.det) || '').slice(0, 120))}</td></tr>`).join('')}</tbody></table></div>${s7 > nx.length ? `<div class="hint">… và ${n0(s7 - nx.length)} meeting nữa trong 7 ngày tới.</div>` : ''}` : '<div class="hint">Chưa có meeting nào hẹn trong 7 ngày tới.</div>';
+  return `<div class="card"><div class="hd"><div><div class="eyebrow">Meeting khách hàng</div><h2 class="card-title">Số meeting theo ngày · tháng · năm, sắp tới và đã hoàn thành</h2></div><div class="card-note"><a href="#" data-tab="jr" data-ovmtg="1" style="color:var(--accent);font-weight:600">Xem chi tiết ở Tiến độ khách hàng →</a></div></div>
+    <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr))">${tiles}</div>
+    <div class="g2" style="margin-top:14px"><div><div class="eyebrow" style="margin-bottom:6px">Meeting theo ngày · 3 tuần trước → 2 tuần tới</div>${svg}</div><div><div class="eyebrow" style="margin-bottom:6px">Meeting 7 ngày tới · bấm để mở hồ sơ khách</div>${list}</div></div>
+    <div class="hint">Đếm theo ngày meeting (đã gặp hoặc ngày hẹn). Hoàn thành = đã ghi “Meeting (đã gặp)” hoặc file calling ghi Meeting = Hoàn thành. Meeting chưa chốt ngày không tính vào ngày / tháng / năm.</div></div>`;
+}
 const ovSingle = () => OV.from === OV.to && !OV.units.length && OV.to <= LASTDAY && !!ACT[OV.to];
 const ovDay = () => { const ks = Object.keys(ACT).sort(), last = ks[ks.length - 1]; let d = OV.to > last ? last : OV.to; if (!ACT[d]) d = ks.filter(x => x <= OV.to).pop() || ks[0]; return d; };
 
@@ -634,6 +668,7 @@ function renderOverview(d, C, A, p) {
     tile('Tài xế active hôm nay', n0(A0.drivers || 0) + of(n0(A0.drivers30 || 0)), cmp(A0.drivers, av(x => x.drivers), n0), `Trên ${n0(A0.drivers30 || 0)} tài xế active 30 ngày`, bar(A0.drivers30 ? A0.drivers / A0.drivers30 : 0, 'var(--accent)')),
   ];
   if (single) h += `<div class="kpis">${tiles.join('')}</div>`;
+  h += ovMeetings();
   h += `<div class="card"><div class="hd"><div><div class="eyebrow">Bảng CEO · Demand & Supply${single ? '' : ` · tại ngày ${dmy(d)}${OV.units.length ? ' · toàn bộ đơn vị' : ''}`}</div><h2 class="card-title">Hôm nay vs trung bình 7 ngày vs lộ trình · kế hoạch ngày mai đã bù thâm hụt</h2></div><div class="card-note">Tiền: ${unitLabel()} · tại ${dmy(d)} · số liệu giao dịch đến ${dmy(LASTDAY)}</div></div>
     <div class="tw"><table><thead><tr><th class="l">Chỉ số</th><th>Hôm qua</th><th>TB 7 ngày gần nhất</th><th>Hôm nay</th><th title="(Hôm nay − TB 7 ngày) ÷ TB 7 ngày">Tăng so TB 7 ngày</th><th title="Theo lộ trình: (KH hôm nay − TB KH 7 ngày) ÷ TB KH 7 ngày">Mục tiêu tăng so TB 7 ngày</th><th>KH hôm nay</th><th>% đạt</th><th>Thâm hụt phải bù</th><th>KH ngày mai (gốc)</th><th>KH ngày mai (đã bù)</th><th>KH tuần</th><th>Đích T12 / 31/12</th><th>Còn thiếu</th><th class="l">Quyết định</th></tr></thead><tbody>`;
   for (const r of ROWS) {
@@ -2725,7 +2760,7 @@ function bindDrawer() {
   document.querySelectorAll('.crf-save').forEach(b => b.onclick = () => saveMs(b));
 }
 function bind() {
-  document.querySelectorAll('[data-tab]').forEach(el => el.onclick = ev => { ev.preventDefault(); TAB = el.dataset.tab; try { localStorage.setItem('xpay_tab', TAB); } catch (e) {} render(); window.scrollTo(0, 0); });
+  document.querySelectorAll('[data-tab]').forEach(el => el.onclick = ev => { ev.preventDefault(); TAB = el.dataset.tab; if (el.dataset.ovmtg) { CR.view = 'dash'; CR.who = ''; } try { localStorage.setItem('xpay_tab', TAB); } catch (e) {} render(); window.scrollTo(0, 0); });
   if ($('dsel')) $('dsel').onchange = e => { SEL = e.target.value; render(); };
   $('usel').onchange = e => { UNIT = UNITS[e.target.value]; try { localStorage.setItem('xpay_unit', e.target.value); } catch (er) {} render(); };
   $('bxls').onclick = () => exportXlsx($('bxls'));
