@@ -98,6 +98,18 @@ details.mn>summary::-webkit-details-marker{display:none}
 
 /* dòng Tổng cố định cuối bảng đơn vị */
 .utot td{position:sticky;bottom:0;z-index:2;background:var(--surface-2);font-weight:700;border-top:2px solid var(--line)}
+
+/* bộ chọn thời gian trên điện thoại dọc: bảng nổi dưới đáy màn hình, 1 tháng, mốc nhanh dạng nút ngang */
+@media (max-width:640px){
+  #rpp.rpp{position:fixed!important;left:8px!important;right:8px;top:auto!important;bottom:8px;width:auto!important;max-width:none!important;max-height:86vh;overflow:auto;flex-direction:column;gap:10px!important;padding:12px!important;z-index:60!important}
+  .rpp-pre{flex-direction:row!important;flex-wrap:wrap;min-width:0!important;border-right:0!important;border-bottom:1px solid var(--line-soft);padding:0 0 8px!important;gap:6px!important}
+  .rpp-pre .tab{padding:6px 10px;border:1px solid var(--line);border-radius:999px;font-size:12.5px}
+  .rpp-m0{display:none}
+  .rpp-ms{display:block!important}
+  .rpp-grid{grid-template-columns:repeat(7,minmax(0,1fr))!important;font-size:14px!important}
+  .rpp-grid [data-rpd]{padding:10px 0!important}
+  #rpb{min-width:0!important;max-width:100%}
+}
 </style><div class="xd" id="app"><div class="page"><div class="card">Đang tải dashboard…</div></div></div><script id="state" type="application/json">{}</script><script id="main" type="text/plain">
 (function(){
 "use strict";
@@ -1571,7 +1583,7 @@ let RP = {open: false, a: null, b: null, m: null, pre: ''};
 function monthGrid(ym, a, b) {
   const w0 = new Date(ym + '-01T00:00:00Z').getUTCDay(), nd = new Date(Date.UTC(+ym.slice(0, 4), +ym.slice(5, 7), 0)).getUTCDate();
   const lo = a && b ? (a < b ? a : b) : a, hi = a && b ? (a < b ? b : a) : a;
-  let h = `<div><div style="text-align:center;font-weight:600;margin-bottom:6px">Tháng ${+ym.slice(5, 7)}/${ym.slice(0, 4)}</div><div style="display:grid;grid-template-columns:repeat(7,34px);gap:2px;font-size:12.5px;text-align:center">` + ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'].map(x => `<div class="lbl" style="padding:4px 0">${x}</div>`).join('');
+  let h = `<div><div style="text-align:center;font-weight:600;margin-bottom:6px">Tháng ${+ym.slice(5, 7)}/${ym.slice(0, 4)}</div><div class="rpp-grid" style="display:grid;grid-template-columns:repeat(7,34px);gap:2px;font-size:12.5px;text-align:center">` + ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'].map(x => `<div class="lbl" style="padding:4px 0">${x}</div>`).join('');
   for (let i = 0; i < w0; i++) h += '<div></div>';
   for (let dd = 1; dd <= nd; dd++) { const x = ym + '-' + String(dd).padStart(2, '0'), edge = x === lo || x === hi, inr = lo && hi && x > lo && x < hi, fut = x > TODAY;
     h += `<div data-rpd="${x}" style="padding:7px 0;border-radius:${edge ? '50%' : '6px'};cursor:${fut ? 'default' : 'pointer'};${edge ? 'background:var(--accent);color:#fff;font-weight:700;' : inr ? 'background:var(--color-surface-primary);' : ''}${fut ? 'color:var(--ink-3);' : ''}${x === TODAY && !edge ? 'box-shadow:inset 0 0 0 1px var(--accent);' : ''}">${dd}</div>`; }
@@ -1581,10 +1593,10 @@ function rangePicker(st = CR) {
   const lab = (PRESETS.find(p => p[0] === st.preset) || [0, ''])[1];
   let h = `<div style="position:relative"><button class="btn" id="rpb" style="min-width:250px;text-align:left">${lab ? '<b>' + lab + '</b> · ' : ''}${rngLabel(st.from, st.to)} ▾</button>`;
   if (RP.open) { const m = RP.m || st.to.slice(0, 7), m0 = ymAdd(m, -1), lo = RP.a && RP.b ? (RP.a < RP.b ? RP.a : RP.b) : RP.a, hi = RP.a && RP.b ? (RP.a < RP.b ? RP.b : RP.a) : null;
-    h += `<div id="rpp" style="position:absolute;top:calc(100% + 6px);left:0;width:max-content;max-width:calc(100vw - 32px);z-index:40;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px #00000026;padding:12px;display:flex;gap:14px;flex-wrap:wrap">
-      <div style="display:flex;flex-direction:column;gap:2px;min-width:140px;border-right:1px solid var(--line-soft);padding-right:10px">${PRESETS.map(([k, l]) => `<button class="tab ${RP.pre === k ? 'on' : ''}" data-rpp="${k}" style="text-align:left">${l}</button>`).join('')}</div>
+    h += `<div id="rpp" class="rpp" style="position:absolute;top:calc(100% + 6px);left:0;width:max-content;max-width:calc(100vw - 32px);z-index:40;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px #00000026;padding:12px;display:flex;gap:14px;flex-wrap:wrap">
+      <div class="rpp-pre" style="display:flex;flex-direction:column;gap:2px;min-width:140px;border-right:1px solid var(--line-soft);padding-right:10px">${PRESETS.map(([k, l]) => `<button class="tab ${RP.pre === k ? 'on' : ''}" data-rpp="${k}" style="text-align:left">${l}</button>`).join('')}</div>
       <div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><button class="btn" data-rpm="-1" style="padding:3px 10px">‹</button><span class="lbl">${lo ? (hi ? rngLabel(lo, hi) : dmy(lo) + ' – chọn ngày kết thúc') : 'Chọn ngày bắt đầu'}</span><button class="btn" data-rpm="1" style="padding:3px 10px">›</button></div>
-        <div style="display:flex;gap:18px;flex-wrap:wrap">${monthGrid(m0, RP.a, RP.b)}${monthGrid(m, RP.a, RP.b)}</div>
+        <div class="rpp-ms" style="display:flex;gap:18px;flex-wrap:wrap"><div class="rpp-m0">${monthGrid(m0, RP.a, RP.b)}</div>${monthGrid(m, RP.a, RP.b)}</div>
         <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px"><button class="btn" id="rpx">Hủy</button><button class="btn pri" id="rpok">Áp dụng</button></div></div></div>`; }
   return h + '</div>';
 }
