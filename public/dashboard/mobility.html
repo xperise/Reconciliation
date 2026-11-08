@@ -86,6 +86,15 @@ details.mn>summary::-webkit-details-marker{display:none}
 .mnp .btn:hover{background:var(--color-surface-primary)}
 
 #crpane #bcs{display:none}
+
+/* Bảng CEO: cố định dòng tiêu đề và cột Chỉ số khi cuộn ngang / dọc */
+.ceo-tw{max-height:calc(100vh - 150px);overflow:auto;overscroll-behavior:contain}
+.ceo thead th{position:sticky;top:0;z-index:3}
+.ceo th:first-child,.ceo td:first-child{position:sticky;left:0;z-index:2;background:var(--surface);box-shadow:1px 0 0 var(--line)}
+.ceo thead th:first-child{z-index:4;background:var(--surface-2)}
+.ceo tr.sec td{position:static;background:var(--color-surface-primary);box-shadow:none}
+.ceo .secl{position:sticky;left:12px}
+.ceo td:first-child{min-width:230px;max-width:260px}
 </style><div class="xd" id="app"><div class="page"><div class="card">Đang tải dashboard…</div></div></div><script id="state" type="application/json">{}</script><script id="main" type="text/plain">
 (function(){
 "use strict";
@@ -642,9 +651,9 @@ function renderOverview(d, C, A, p) {
   ];
   if (single) h += `<div class="kpis">${tiles.join('')}</div>`;
   h += `<div class="card"><div class="hd"><div><div class="eyebrow">Bảng CEO · Demand & Supply${single ? '' : ` · tại ngày ${dmy(d)}${OV.units.length ? ' · toàn bộ đơn vị' : ''}`}</div><h2 class="card-title">Hôm nay vs trung bình 7 ngày vs lộ trình · kế hoạch ngày mai đã bù thâm hụt</h2></div><div class="card-note">Tiền: ${unitLabel()} · tại ${dmy(d)} · số liệu giao dịch đến ${dmy(LASTDAY)}</div></div>
-    <div class="tw"><table><thead><tr><th class="l">Chỉ số</th><th>Hôm qua</th><th>TB 7 ngày gần nhất</th><th>Hôm nay</th><th title="(Hôm nay − TB 7 ngày) ÷ TB 7 ngày">Tăng so TB 7 ngày</th><th title="Theo lộ trình: (KH hôm nay − TB KH 7 ngày) ÷ TB KH 7 ngày">Mục tiêu tăng so TB 7 ngày</th><th>KH hôm nay</th><th>% đạt</th><th>Thâm hụt phải bù</th><th>KH ngày mai (gốc)</th><th>KH ngày mai (đã bù)</th><th>KH tuần</th><th>Đích T12 / 31/12</th><th>Còn thiếu</th><th class="l">Quyết định</th></tr></thead><tbody>`;
+    <div class="tw ceo-tw"><table class="ceo"><thead><tr><th class="l">Chỉ số</th><th>Hôm qua</th><th>TB 7 ngày gần nhất</th><th>Hôm nay</th><th title="(Hôm nay − TB 7 ngày) ÷ TB 7 ngày">Tăng so TB 7 ngày</th><th title="Theo lộ trình: (KH hôm nay − TB KH 7 ngày) ÷ TB KH 7 ngày">Mục tiêu tăng so TB 7 ngày</th><th>KH hôm nay</th><th>% đạt</th><th>Thâm hụt phải bù</th><th>KH ngày mai (gốc)</th><th>KH ngày mai (đã bù)</th><th>KH tuần</th><th>Đích T12 / 31/12</th><th>Còn thiếu</th><th class="l">Quyết định</th></tr></thead><tbody>`;
   for (const r of ROWS) {
-    if (typeof r === 'string') { h += `<tr class="sec"><td colspan="15">${r}</td></tr>`; continue; }
+    if (typeof r === 'string') { h += `<tr class="sec"><td colspan="15"><span class="secl">${r}</span></td></tr>`; continue; }
     const c = C[r.k], F = FMT[r.f], dl = (c.t != null && c.a7 != null) ? c.t - c.a7 : null, st = status(c.ratio);
     const dec = c.pl == null ? (r.p ? '<span class="pill p-mute">Cần chốt đích</span>' : '<span class="lbl">thực tế</span>') : c.ratio >= 1 ? '<span class="pill p-stable">Giữ</span>' : dl > 0 ? '<span class="pill p-high">Action · hơn TB 7N</span>' : '<span class="pill p-critical">Action</span>';
     h += `<tr><td class="l name">${r.zoom ? `<a href="#" data-tab="zoom" style="color:var(--accent)">${r.k}</a>` : r.k}<span class="def">${r.def}</span></td>
