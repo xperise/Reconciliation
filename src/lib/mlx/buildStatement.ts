@@ -25,7 +25,7 @@ const dateText = (d: Date) => { const s = `${p2(d.getUTCDate())}/${p2(d.getUTCMo
 const HEADER_ROW = 9;
 const FIRST_DATA_ROW = 10;
 const LAST_COL = COLUMNS.length; // 15 = cột O
-/** Khối tiêu đề (dòng 4–7) chỉ gộp B → M, không kéo sang cột Đơn vị phát sinh / Khoảng cách */
+/** Các dòng trên bảng chi tiết (1–7) chỉ gộp B → M, không kéo sang cột Đơn vị phát sinh / Khoảng cách */
 const HEAD_LAST_COL = 13; // cột M
 
 export interface BuildInput {
@@ -74,15 +74,15 @@ export async function buildStatement(
   ws.pageSetup.printTitlesRow = `${HEADER_ROW}:${HEADER_ROW}`;
   COLUMNS.forEach((c, i) => (ws.getColumn(i + 1).width = c.width));
 
-  // ---- Khối pháp nhân phát hành (A1:A3) ----
+  // ---- Khối pháp nhân phát hành (B1:M3) ----
   const headFont: Partial<ExcelJS.Font> = { name: FONT_HEAD, size: 11 };
   [
     [1, ISSUER.name, true],
     [2, ISSUER.address, false],
     [3, `MST: ${ISSUER.mst}`, false],
   ].forEach(([r, text, bold]) => {
-    ws.mergeCells(r as number, 1, r as number, 8);
-    const cell = ws.getCell(r as number, 1);
+    ws.mergeCells(r as number, 2, r as number, HEAD_LAST_COL);
+    const cell = ws.getCell(r as number, 2);
     cell.value = text as string;
     cell.font = { ...headFont, bold: bold as boolean };
   });
