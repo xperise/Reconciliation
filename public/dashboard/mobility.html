@@ -1631,7 +1631,9 @@ function crmDash(ALL, f, t) {
     <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">${[
       T('Cuộc gọi', cur.call, prv.call, n0(all.call), '', cTg),
       T('Meeting đã đi', cur.meet, prv.meet, n0(all.meet), `<b>${n0(mSoon7)}</b> meeting đã hẹn`, mTg),
-      T('Meeting được set', cur.mset, prv.mset, n0(all.mset), ''),
+      T('Email · Zalo', cur.email + cur.zalo, prv.email + prv.zalo, n0(all.email + all.zalo), ''),
+      T('Meeting được set', cur.mset, prv.mset, n0(all.mset), `<b>${n0(cur.mon)}</b> meeting theo lịch trong kỳ`),
+      T('Verbal confirm', cur.vc, prv.vc, n0(mine.filter(r => done(r.vc)).length), ''),
       T('Ký phụ lục / HĐ mới', cur.sign, prv.sign, n0(mine.filter(r => done(r.pl) || done(r.hd)).length), ''),
       T('Khởi tạo XPAY', mine.filter(r => inR(r.xp, f, t)).length, mine.filter(r => inR(r.xp, pf, pt)).length, n0(mine.filter(r => done(r.xp)).length), ''),
       T('DN active mới', mine.filter(r => r.first && r.first >= f && r.first <= t).length, mine.filter(r => r.first && r.first >= pf && r.first <= pt).length, n0(mine.filter(r => r.first).length), `<b>${n0(tact7)}</b> khách hẹn active`),
@@ -1647,7 +1649,7 @@ function crmDash(ALL, f, t) {
   h += `<div class="card"><div class="hd"><div><div class="eyebrow">Tiến độ theo nhóm khách</div><h2 class="card-title">Mỗi nhóm đang ở bước nào (tính đến ${dmy(t)})</h2></div><div class="card-note">bấm ô màu để mở danh sách ở tab Nhập liệu</div></div>${s}</div>`;
   // 3. DN active theo tuần · 4. Next steps · 5. Meeting · 6. Chi tiết từng người
   h += crmWeekActive(R, t) + crmNextSteps(R, who) + crmMeetings(ALL, f, t);
-  if (who) h += crmDaily(ALL, f, t);   // xem riêng 1 người: chi tiết từng action
+  if (who) h += crmDaily(ALL, f, t, true);   // xem riêng 1 người: bảng theo ngày + chi tiết từng action (ô số đã ở Tổng quan)
   if (!who && CR.who !== '_none') {
     const P = PICS.map(p => { const c1 = dayStats(ALL, f, t, p), c0 = dayStats(ALL, pf, pt, p), my = R.filter(r => r.pic === p);
       return {p, c1, c0, tc: tgt('call', f, t, p), tm: tgt('meet', f, t, p), my, nsd: my.filter(r => isoOk(r.nx) && r.nx <= TODAY).length, ns7: my.filter(r => isoOk(r.nx) && r.nx > TODAY && r.nx <= wk7).length}; });
@@ -1764,7 +1766,7 @@ function crmMeetings(ALL, f, t) {
     ${per}
     <div class="hint">Ngày / tháng / năm đếm theo ngày meeting (đã gặp hoặc ngày hẹn); meeting chưa chốt ngày không tính vào các ô này. Meeting đã set = mỗi lần ghi “Đặt lịch meeting” (file calling: Status “Đồng ý meeting” hoặc cột Meeting có ghi). Hoàn thành = đã ghi “Meeting (đã gặp)” (file calling: Meeting = Hoàn thành). Đã set tính cho người gọi; đã đi tính cho từng người tham dự (cột Nội dung meeting/ PIC; trống thì tính PIC khách), nên cộng các dòng có thể lớn hơn tổng toàn đội.</div></div>`;
 }
-function crmDaily(ALL, f, t) {
+function crmDaily(ALL, f, t, brief) {
   const who = PICS.includes(CR.who) ? CR.who : '', len = diffD(t, f) + 1, pt = addD(f, -1), pf = addD(f, -len), lab = rngLabel(f, t);
   const cur = dayStats(ALL, f, t, who), prv = dayStats(ALL, pf, pt, who), vs = len === 1 ? 'so với ngày trước' : `so với ${len} ngày trước đó`;
   const nxt7 = []; ALL.forEach(r => r.acts.forEach(x => { if (x.t === 'mset' && (!who || x.who === who) && isoOk(x.md) && x.md > t && x.md <= addD(t, 7)) nxt7.push(x); }));
@@ -1789,8 +1791,8 @@ function crmDaily(ALL, f, t) {
     det = `<div class="g2" style="margin-top:12px"><div><div class="eyebrow" style="margin-bottom:6px">Chi tiết action · ${lab} · ${n0(L.length)}</div>${L.length ? `<div class="tw" style="max-height:340px;overflow:auto"><table><thead><tr><th class="l">Ngày</th><th class="l">Khách</th><th class="l">Loại</th><th class="l">Kết quả</th><th class="l">Chi tiết</th></tr></thead><tbody>${L.slice(0, 200).map(tr).join('')}</tbody></table></div>` : '<div class="hint">Chưa ghi action nào trong kỳ này.</div>'}</div>
       <div><div class="eyebrow" style="margin-bottom:6px">Lịch meeting 7 ngày tới · ${n0(U.length)}</div>${U.length ? `<div class="tw" style="max-height:340px;overflow:auto"><table><thead><tr><th class="l">Ngày đặt</th><th class="l">Khách</th><th class="l">Loại</th><th class="l">Kết quả</th><th class="l">Chi tiết</th></tr></thead><tbody>${U.map(tr).join('')}</tbody></table></div>` : '<div class="hint">Chưa có meeting nào được hẹn trong 7 ngày tới.</div>'}</div></div>`;
   }
-  return `<div class="card"><div class="hd"><div><div class="eyebrow">Hoạt động PIC</div><h2 class="card-title">${who ? esc(who) + ' · ' + esc(ROLE[who] || '') : 'Toàn đội'} · ${lab}</h2></div><div class="card-note">${who ? '<button class="btn" data-crwho="" style="margin-right:8px">← Quay lại toàn đội</button>' : ''}${who ? 'tính theo người thực hiện từng lần liên hệ · verbal / ký tính theo khách PIC đang phụ trách' : 'bấm dòng để xem chi tiết từng người'}${nxt7.length && !who ? ` · ${n0(nxt7.length)} meeting đã hẹn trong 7 ngày tới` : ''}</div></div>
-    <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">${tiles}</div>
+  return `<div class="card"><div class="hd"><div><div class="eyebrow">${brief ? 'Chi tiết hoạt động' : 'Hoạt động PIC'}</div><h2 class="card-title">${who ? esc(who) + ' · ' + esc(ROLE[who] || '') : 'Toàn đội'} · ${brief ? 'theo ngày và từng lần liên hệ' : lab}</h2></div><div class="card-note">${who && !brief ? '<button class="btn" data-crwho="" style="margin-right:8px">← Quay lại toàn đội</button>' : ''}${who ? 'tính theo người thực hiện từng lần liên hệ · verbal / ký tính theo khách PIC đang phụ trách' : 'bấm dòng để xem chi tiết từng người'}${nxt7.length && !who ? ` · ${n0(nxt7.length)} meeting đã hẹn trong 7 ngày tới` : ''}</div></div>
+    ${brief ? '' : `<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">${tiles}</div>`}
     <div class="tw" style="margin-top:12px"><table><thead>${head}</thead><tbody>${tb}</tbody></table></div>${det}
     <div class="hint">Mỗi lần ghi ở “Liên hệ: gọi, email, Zalo, meeting” của khách là 1 action. <b>Meeting được set</b> = chọn loại “Đặt lịch meeting” (ghi kèm ngày hẹn); <b>Meeting theo lịch</b> = số meeting đã hẹn rơi vào ngày đang xem; <b>Meeting đã đi</b> = ghi loại “Meeting (đã gặp)”. <b>Verbal confirm</b> lấy ngày ở mốc “Đồng ý ký (verbal)”.</div></div>`;
 }
