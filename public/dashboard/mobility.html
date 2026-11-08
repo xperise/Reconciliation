@@ -580,7 +580,7 @@ const ovDay = () => { const ks = Object.keys(ACT).sort(), last = ks[ks.length - 
 /* ---------- render ---------- */
 let SEL = null, TAB = 'ov', CH = {log: false, full: false}, CANWRITE = false, PENDING = null;
 function render() {
-  try { renderInner(); } finally { if (typeof postRoute === 'function') postRoute(); }
+  try { renderInner(); } finally { if (typeof postRoute === 'function') postRoute(); if (typeof postToday === 'function') postToday(); }
 }
 /* Lộ trình ký hợp đồng 26/10 – 31/12 (file của anh Khải, public/dashboard/lo-trinh-ky-hop-dong.html) — đổi KYHD_V khi thay file */
 const KYHD_V = '20261104a';
@@ -1390,14 +1390,17 @@ const TEAM0 = [['Khoa', 'AE Top 200'], ['Phú', 'AE Top 200'], ['Hằng', 'AE h�
 /* chỉ tiêu tuần theo vai trò (file KPI Sales và AE) */
 const ROLE_KPI = {'AE Top 200': {meet: [15, 15, 15, 15, 15, 15, 10, 0, 0, 0, 0]}, 'AE hạng 201–300': {meet: [3, 3, 3, 3, 3, 3, 3, 4, 0, 0, 0]}, 'Lead hạng 201–300': {meet: [3, 3, 3, 3, 3, 3, 3, 4, 0, 0, 0]}, 'Sales Ops hạng 201–300': {meet: [3, 3, 3, 3, 3, 3, 3, 4, 0, 0, 0]}, 'SDR (nửa KPI)': {call: Array(11).fill(75)}};
 const ROLES = Object.keys(ROLE_KPI);
-let PICS = [], ROLE = {}, KPI_W = {};
+let PICS = [], ROLE = {}, KPI_W = {}, EMAIL = {}, MYMAIL = '';
+/* PIC của người đang đăng nhập (theo email trong Danh sách PIC) */
+const myPic = () => MYMAIL ? PICS.find(p => EMAIL[p] && EMAIL[p] === MYMAIL) || '' : '';
 function applyTeam(team) {
-  const T = (Array.isArray(team) && team.length ? team : TEAM0).map(x => Array.isArray(x) ? x : [x.name, x.role]).filter(x => x[0]);
+  const T = (Array.isArray(team) && team.length ? team : TEAM0).map(x => Array.isArray(x) ? x : [x.name, x.role, x.email]).filter(x => x[0]);
+  EMAIL = Object.fromEntries(T.map(x => [String(x[0]).trim(), String(x[2] || '').trim().toLowerCase()]));
   PICS = T.map(x => String(x[0]).trim()); ROLE = Object.fromEntries(T.map(x => [String(x[0]).trim(), x[1] || ROLES[1]]));
   KPI_W = Object.fromEntries(PICS.map(p => [p, ROLE_KPI[ROLE[p]] || ROLE_KPI['AE hạng 201–300']]));
 }
 applyTeam(null);
-async function saveTeam(team) { const db = await claude.use('db'); if (!db) throw new Error('Chưa kết nối được dữ liệu nhập'); const next = Object.assign({}, CFG || {}, {team: team.map(([n, r]) => ({name: n, role: r}))}); await db.doc('cfg/main').set(next); CFG = next; applyTeam(next.team); CRM_ = null; AUTOC_ = null; }
+async function saveTeam(team) { const db = await claude.use('db'); if (!db) throw new Error('Chưa kết nối được dữ liệu nhập'); const next = Object.assign({}, CFG || {}, {team: team.map(([n, r, e]) => ({name: n, role: r, email: (e || '').trim().toLowerCase()}))}); await db.doc('cfg/main').set(next); CFG = next; applyTeam(next.team); CRM_ = null; AUTOC_ = null; }
 const W1 = '2026-10-19';
 const GRP = {1: 'Đã ký phụ lục / HĐ mới, chưa khởi tạo XPAY', 2: 'Top 200', 3: 'Đã khởi tạo XPAY, chưa có giao dịch 30 ngày', 4: 'Chưa ký phụ lục, có giao dịch Mai Linh T6–T9', 5: 'Các khách còn lại', 9: 'Đã thanh lý'};
 const SPECIAL = ['', 'Vướng mắc', 'Tạm dừng', 'Thanh lý'];
@@ -1460,6 +1463,7 @@ function crmRows(d) {
       const dts = (kd[k] || []).filter(x => x >= from).sort(); r.tactAch = dts[0] || '';
       r.tactSt = r.tactAch ? (r.tactAch <= r.tact ? 'dat' : 'datTre') : r.tact < d ? 'tre' : diffD(r.tact, d) <= 7 ? 'sap' : 'cho'; }
     r.todo.tactlate = r.tactSt === 'tre'; r.todo.tactsoon = r.tactSt === 'sap';
+    r.todo.tactDue = !!r.tact && r.tact <= d && !r.tactAch; r.todo.mtgToday = (r.mtgs || []).some(m => m.md === d && m.st !== 'done'); r.todo.mtgLate = (r.mtgs || []).some(m => m.st === 'late');
     r.todo.vcwait = done(r.vc) && !r.signed && !r.liq;
     r.sug = crmSuggest(r, d);
     return r; });
@@ -1811,13 +1815,34 @@ const ACTK = [
   ['tactsoon', 'Sắp đến mục tiêu active', 'high', 'Còn ≤ 7 ngày: nhắc khách đặt chuyến đầu'],
 ];
 const prioScore = r => (r.todo.due ? 1000 : 0) + (r.todo.vcwait ? 700 : 0) + (r.todo.tactlate ? 900 : 0) + (r.todo.tactsoon ? 450 : 0) + (r.grp === 1 ? 800 : 0) + (r.todo.topnc ? 600 : 0) + (r.todo.stopped ? 500 : 0) + (r.todo.topnm ? 400 : 0) + (r.todo.never ? 200 : 0) + Math.min(300, (r.pot || 0) * 3) + (r.grp === 2 ? Math.max(0, 100 - (r.grank || 200) / 2) : 0) + Math.min(100, (r.ml69 || 0) / 1e6);
+/* Việc hôm nay của 1 người (hoặc toàn đội): meeting hôm nay, meeting quá hạn chưa cập nhật, next step đến hạn, khách hẹn active đến hạn */
+function todayItems(R, who, d) {
+  const out = [], mine = r => !who || r.pic === who;
+  R.forEach(r => { if (r.liq) return;
+    (r.mtgs || []).forEach(m => { const att = m.set && m.set.att ? String(m.set.att) : '', inv = !who || r.pic === who || (m.set && m.set.who === who) || att.includes(who);
+      if (!inv || m.st === 'done') return;
+      if (m.md === d) out.push({k: 'mtg', o: 0, r, t: 'Meeting hôm nay', det: (m.set && m.set.det) || ''});
+      else if (m.st === 'late') out.push({k: 'mtglate', o: 3, r, t: `Meeting ${dmy(m.md)} chưa cập nhật`, det: 'ghi “Meeting (đã gặp)” hoặc hẹn lại'}); });
+    if (!mine(r)) return;
+    if (isoOk(r.nx) && r.nx <= d) out.push({k: 'ns', o: r.nx < d ? 2 : 1, r, t: `${r.ns || 'Liên hệ lại'}${r.nx < d ? ` · quá ${diffD(d, r.nx)} ngày` : ''}`, det: 'next step đã hẹn khách'});
+    if (r.tact && r.tact <= d && !r.tactAch) out.push({k: 'act', o: r.tact < d ? 2 : 1, r, t: r.tact < d ? `Hẹn active ${dmy(r.tact)} · chưa có giao dịch` : 'Khách hứa active hôm nay', det: 'nhắc khách đặt chuyến đầu, kiểm tra thẻ'}); });
+  return out.sort((a, b) => a.o - b.o || a.r.name.localeCompare(b.r.name, 'vi'));
+}
+const TDK = {mtg: ['Meeting', 'high'], mtglate: ['Cập nhật meeting', 'critical'], ns: ['Next step', 'high'], act: ['Hẹn active', 'stable']};
 function crmAction(R, d) {
-  const A = R.filter(r => !r.liq && r.st !== 'Tạm dừng'), pot = L => L.reduce((a, r) => a + (r.pot || 0), 0);
-  const tiles = ACTK.map(([k, l, c, act]) => { const L = A.filter(r => r.todo[k]);
-    return `<div class="kpi hit" data-crtodo="${k}" style="cursor:pointer;${CR.todo === k ? 'border-color:var(--accent);box-shadow:0 0 0 2px var(--color-surface-primary)' : L.length && c === 'critical' ? 'border-color:#e83c3f55' : ''}"><div class="k">${l}</div><div class="v c-${L.length ? c : 'stable'}">${n0(L.length)}</div><div class="s">${act}</div>${L.length && pot(L) ? `<div class="s">tiềm năng ${nf(pot(L), 0)} triệu/tháng</div>` : ''}</div>`; }).join('');
-  return `<div class="card"><div class="hd"><div><div class="eyebrow">Hành động</div><h2 class="card-title">Việc cần ưu tiên${CR.who ? ' · ' + (CR.who === '_none' ? 'chưa phân công' : esc(CR.who)) : ''}</h2></div><div class="card-note">bấm ô để lọc danh sách bên dưới</div></div>
-    <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">${tiles}</div>
-    </div>`;
+  const A = R.filter(r => !r.liq && r.st !== 'Tạm dừng'), pot = L => L.reduce((a, r) => a + (r.pot || 0), 0), who = PICS.includes(CR.who) ? CR.who : '';
+  const tile = ([k, l, c, act], big) => { const L = A.filter(r => r.todo[k]);
+    return `<div class="kpi hit" data-crtodo="${k}" style="cursor:pointer;${CR.todo === k ? 'border-color:var(--accent);box-shadow:0 0 0 2px var(--color-surface-primary)' : L.length && c === 'critical' ? 'border-color:#e83c3f55' : ''}${big ? '' : ';padding:10px 12px'}"><div class="k">${l}</div><div class="v c-${L.length ? c : 'stable'}" ${big ? '' : 'style="font-size:20px"'}>${n0(L.length)}</div><div class="s">${act}</div>${big && L.length && pot(L) ? `<div class="s">tiềm năng ${nf(pot(L), 0)} triệu/tháng</div>` : ''}</div>`; };
+  // 1. Hôm nay cần làm (việc có hạn hôm nay)
+  const NOW = [['mtgToday', 'Meeting hôm nay', 'high', 'Chuẩn bị, đi gặp khách; xong ghi “Meeting (đã gặp)”'], ['due', 'Next step đến hạn', 'critical', 'Việc đã hẹn khách (hôm nay hoặc quá hạn)'], ['tactDue', 'Khách hứa active đến hạn', 'critical', 'Hôm nay hoặc đã qua ngày hẹn mà chưa có giao dịch'], ['mtgLate', 'Meeting chưa cập nhật', 'critical', 'Đã qua ngày hẹn, chưa ghi kết quả gặp']];
+  const IT = todayItems(A, who, d), top = IT.slice(0, 12);
+  const list = IT.length ? `<div class="tw" style="margin-top:10px;max-height:340px;overflow:auto"><table><thead><tr><th class="l">Việc</th><th class="l">Khách</th><th class="l">PIC</th><th class="l">Chi tiết</th></tr></thead><tbody>${IT.map(x => `<tr class="hit" data-cropen="${esc(x.r.key)}" style="cursor:pointer"><td class="l" style="white-space:nowrap"><span class="pill p-${TDK[x.k][1]}">${TDK[x.k][0]}</span> <b>${esc(x.t)}</b></td><td class="l name" style="color:var(--accent)">${esc(x.r.name)}<span class="def">HĐ ${esc(x.r.key)}</span></td><td class="l">${x.r.pic ? esc(x.r.pic) : '<b style="color:var(--critical)">chưa phân công</b>'}</td><td class="l" style="white-space:normal;font-size:12px;min-width:180px">${esc(String(x.det).slice(0, 140))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="hint" style="margin-top:8px">Hôm nay không có việc nào đến hạn. 🎉</div>';
+  // 2. Cần theo dõi (pipeline, không gấp trong ngày)
+  const LATER = ACTK.filter(([k]) => !['due', 'tactlate'].includes(k));
+  return `<div class="card"><div class="hd"><div><div class="eyebrow">Hôm nay cần làm · ${wd(d)} ${dmy(d)}${who ? ' · ' + esc(who) : CR.who === '_none' ? ' · chưa phân công' : ' · toàn đội'}</div><h2 class="card-title">${IT.length ? `${n0(IT.length)} việc đến hạn` : 'Không có việc đến hạn'}</h2></div><div class="card-note">bấm ô để lọc danh sách khách · bấm dòng để mở hồ sơ</div></div>
+    <div class="kpis" style="grid-template-columns:repeat(4,minmax(0,1fr))">${NOW.map(x => tile(x, 1)).join('')}</div>${list}</div>
+    <div class="card" style="padding:14px 20px"><div class="hd" style="margin-bottom:8px"><div><div class="eyebrow">Cần theo dõi</div><h2 class="card-title" style="font-size:15px">Khách cần đẩy tiếp trong tuần</h2></div><div class="card-note">bấm ô để lọc danh sách bên dưới</div></div>
+    <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">${LATER.map(x => tile(x, 0)).join('')}</div></div>`;
 }
 let CMORE = {}, COPEN = {};
 /* lọc theo mốc tiến độ: '' tất cả · 'y' đã có · 'n' chưa có */
@@ -1898,7 +1923,7 @@ function crmInput(ALL, d) {
   const R = crmFilter(ALL, d), q = fold(CR.q);
   const SEL = CR.msel || (CR.msel = new Set());
   const ed = DBST === 'ok' && DBW !== false;
-  const TD = {'': 'Tất cả', nocall: 'Chưa gọi', nomeet: 'Chưa meeting', unused: 'Có thẻ chưa dùng 30 ngày', due: 'Next step đến hạn', nsSoon: 'Next step 7 ngày tới', nopic: 'Chưa phân công'};
+  const TD = {'': 'Tất cả', mtgToday: 'Meeting hôm nay', mtgLate: 'Meeting chưa cập nhật', tactDue: 'Khách hứa active đến hạn', nocall: 'Chưa gọi', nomeet: 'Chưa meeting', unused: 'Có thẻ chưa dùng 30 ngày', due: 'Next step đến hạn', nsSoon: 'Next step 7 ngày tới', nopic: 'Chưa phân công'};
   const ACTL = Object.fromEntries(ACTK.map(([k, l]) => [k, l])), PS = patSummary(d);
   const flt = crmFilterTxt(), nDel = Object.values(DBX).filter(e => e && e.deleted).length, sel = on => on ? 'border-color:var(--accent);color:var(--color-action-theme-primary-active);font-weight:600;background:var(--color-surface-primary)' : '';
   const todoOpts = [...Object.entries(TD), ...ACTK.filter(([k]) => !(k in TD)).map(([k, l]) => [k, l])];
@@ -1944,8 +1969,8 @@ function crmInput(ALL, d) {
     h += `<div id="tmmask" style="position:fixed;inset:0;background:#0007;z-index:40;display:grid;place-items:center;padding:16px"><div class="card" style="width:min(620px,96vw);margin:0;max-height:90vh;overflow:auto">
       <div class="eyebrow">Tiến độ khách hàng</div><h2 class="card-title" style="margin:2px 0 6px">Danh sách người phụ trách</h2>
       <div class="hint" style="margin-bottom:8px">Vai trò quyết định chỉ tiêu tuần: AE Top 200 = 15 meeting · AE / Lead / Sales Ops hạng 201–300 = 3–4 meeting · SDR = 75 cuộc gọi. Bỏ một người khỏi danh sách không xoá phân công cũ — khách của họ vẫn ghi tên đó cho đến khi đổi PIC.</div>
-      <table><thead><tr><th class="l">Tên</th><th class="l">Vai trò</th><th>Khách đang phụ trách</th><th></th></tr></thead><tbody>
-      ${CR.team.map(([n, r], i) => `<tr data-tmrow="${i}"><td class="l"><input class="tm_n" value="${esc(n)}" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:8px"></td><td class="l"><select class="tm_r">${ROLES.map(x => `<option ${x === r ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></td><td>${n ? n0(cnt(n)) : '—'}</td><td><button class="btn" data-tmdel="${i}" title="Bỏ khỏi danh sách">✕</button></td></tr>`).join('')}
+      <table><thead><tr><th class="l">Tên</th><th class="l">Vai trò</th><th class="l" title="Email đăng nhập web — để gửi nhắc việc hôm nay cho đúng người">Email</th><th>Khách đang phụ trách</th><th></th></tr></thead><tbody>
+      ${CR.team.map(([n, r], i) => `<tr data-tmrow="${i}"><td class="l"><input class="tm_n" value="${esc(n)}" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:8px"></td><td class="l"><select class="tm_r">${ROLES.map(x => `<option ${x === r ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></td><td class="l"><input class="tm_e" value="${esc(CR.team[i][2] || '')}" placeholder="email đăng nhập" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:8px"></td><td>${n ? n0(cnt(n)) : '—'}</td><td><button class="btn" data-tmdel="${i}" title="Bỏ khỏi danh sách">✕</button></td></tr>`).join('')}
       </tbody></table>
       <div style="display:flex;gap:8px;justify-content:space-between;margin-top:12px"><button class="btn" id="tm_add">+ Thêm người</button><span style="display:flex;gap:8px"><button class="btn" id="tm_x">Huỷ</button><button class="btn pri" id="tm_ok">Lưu danh sách</button></span></div>
     </div></div>`; }
@@ -2614,10 +2639,10 @@ function bindJourney() {
   if ($('crpicx')) $('crpicx').onclick = () => keep(() => { CR.picImp = null; });
   if ($('crpicadd')) $('crpicadd').onclick = async () => { const I = CR.picImp, b = $('crpicadd'); b.disabled = true; b.textContent = 'Đang thêm…';
     try { const add = Object.keys(Object.assign({}, I.pic && I.pic.unknown || {}, I.call && I.call.unknown || {})).map(n => [n, ROLES.includes(I.roles[n]) ? I.roles[n] : ROLES.find(r => fold(r) === fold(I.roles[n] || '')) || 'AE hạng 201–300']);
-      await saveTeam([...PICS.map(p => [p, ROLE[p]]), ...add]);
+      await saveTeam([...PICS.map(p => [p, ROLE[p], EMAIL[p]]), ...add]);
       CR.picImp = await updParse(CR.picFile); keep(() => {}); }
     catch (e) { b.disabled = false; b.textContent = 'Thử lại'; alert('Chưa thêm được: ' + (e.message || e)); } };
-  if ($('crteam')) $('crteam').onclick = () => keep(() => { CR.team = PICS.map(p => [p, ROLE[p]]); });
+  if ($('crteam')) $('crteam').onclick = () => keep(() => { CR.team = PICS.map(p => [p, ROLE[p], EMAIL[p] || '']); });
   if ($('crdeleted')) $('crdeleted').onclick = () => keep(() => { CR.dl = 1; });
   document.querySelectorAll('.crsel').forEach(cb => { cb.onclick = ev => ev.stopPropagation(); cb.onchange = () => keep(() => { const S2 = CR.msel || (CR.msel = new Set()); if (cb.checked) S2.add(cb.dataset.sel); else S2.delete(cb.dataset.sel); }); });
   if ($('crselx')) $('crselx').onclick = () => keep(() => { CR.msel = new Set(); });
@@ -2650,7 +2675,7 @@ function bindJourney() {
   document.querySelectorAll('[data-restore]').forEach(b => b.onclick = async () => { const k2 = b.dataset.restore;
     try { await crmWrite(k2, {deleted: null}); if (DBX[k2]) delete DBX[k2].deleted; CRM_ = null; AUTOC_ = null; keep(() => {}); } catch (e) { alert('Chưa khôi phục được: ' + (e.message || e)); } });
   if ($('tmmask')) {
-    const rd = () => { CR.team = [...document.querySelectorAll('[data-tmrow]')].map(tr => [tr.querySelector('.tm_n').value.trim(), tr.querySelector('.tm_r').value]); };
+    const rd = () => { CR.team = [...document.querySelectorAll('[data-tmrow]')].map(tr => [tr.querySelector('.tm_n').value.trim(), tr.querySelector('.tm_r').value, tr.querySelector('.tm_e') ? tr.querySelector('.tm_e').value.trim() : '']); };
     $('tmmask').onclick = e => { if (e.target.id === 'tmmask') keep(() => { CR.team = null; }); };
     $('tm_x').onclick = () => keep(() => { CR.team = null; });
     $('tm_add').onclick = () => { rd(); keep(() => { CR.team.push(['', 'AE hạng 201–300']); }); };
@@ -2897,6 +2922,16 @@ function applyRoute(path, kh) {
 const routeOf = () => { const t = {ov: 'overall', zoom: 'roadmap', kyhd: 'signing', jr: 'progress', up: 'update'}[TAB] || 'overall';
   return t === 'progress' ? t + '/' + ({dash: 'dashboard', pat: 'pattern', input: 'input'}[CR.view] || 'dashboard') : t; };
 var ROUTE_LAST = '';
+/* chuông thông báo của web: việc hôm nay của PIC đang đăng nhập (email trong Danh sách PIC); quản lý chưa gắn PIC thì nhận tóm tắt toàn đội */
+var TODAY_SENT = '';
+function postToday() {
+  if (window.parent === window || DBST !== 'ok') return;
+  try { const me = myPic(), R = crmRows(TODAY).filter(r => !r.liq), IT = todayItems(R, me, TODAY);
+    const items = me ? IT.slice(0, 20).map(x => ({kind: x.k, title: `${TDK[x.k][0]}: ${x.t}`, body: x.r.name + (x.det ? ' · ' + String(x.det).slice(0, 80) : ''), kh: x.r.key, urgent: x.k === 'mtglate' || x.o === 2}))
+      : CANWRITE && IT.length ? [{kind: 'team', title: `Toàn đội có ${IT.length} việc đến hạn hôm nay`, body: `${IT.filter(x => x.k === 'mtg').length} meeting · ${IT.filter(x => x.k === 'ns').length} next step · ${IT.filter(x => x.k === 'act').length} khách hứa active · ${IT.filter(x => x.k === 'mtglate').length} meeting chưa cập nhật`, kh: ''}] : [];
+    const key = TODAY + JSON.stringify(items); if (key === TODAY_SENT) return; TODAY_SENT = key;
+    window.parent.postMessage({type: 'xpay-today', date: TODAY, pic: me, items}, location.origin); } catch (e) {}
+}
 function postRoute() {
   if (window.parent === window) return;
   const path = routeOf(), kh = CR.open || '', key = path + '|' + kh;
@@ -2911,6 +2946,8 @@ window.addEventListener('message', e => { if (e.origin !== location.origin || !e
 render();
 crmInit();
 cardsLoad();
+/* email người đang đăng nhập → PIC (nhắc việc hôm nay) */
+(async () => { try { const u = await claude.use('user'); MYMAIL = String(((u && await u.me()) || {}).email || '').toLowerCase(); TODAY_SENT = ''; postToday(); } catch (e) {} })();
 (async () => {
   try { const u = window.claude ? await claude.use('user') : null; CANWRITE = u ? await u.canEdit() : false; } catch (e) { CANWRITE = false; }
   if (TAB === 'up' || TAB === 'jr' || TAB === 'pat') render();

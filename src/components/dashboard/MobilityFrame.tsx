@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 
 // Đổi số này mỗi lần cập nhật public/dashboard/mobility.html để trình duyệt không dùng bản cũ
-export const MOBILITY_BUILD = "20261109a";
+export const MOBILITY_BUILD = "20261109b";
 
 export default function MobilityFrame({ reloadKey, initialPath = "", initialKh = "" }: { reloadKey: number; initialPath?: string; initialKh?: string }) {
   const ref = useRef<HTMLIFrameElement>(null);
@@ -28,7 +28,13 @@ export default function MobilityFrame({ reloadKey, initialPath = "", initialKh =
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
       if (e.origin !== location.origin || e.source !== ref.current?.contentWindow) return;
-      const d = e.data as { type?: string; path?: string; kh?: string; push?: boolean };
+      const d = e.data as { type?: string; path?: string; kh?: string; push?: boolean; date?: string; pic?: string; items?: unknown[] };
+      // việc hôm nay của PIC đang đăng nhập → chuông thông báo
+      if (d?.type === "xpay-today") {
+        try { localStorage.setItem("xpay_today", JSON.stringify({ date: d.date, pic: d.pic, items: d.items || [], at: Date.now() })); } catch { /* bỏ qua */ }
+        window.dispatchEvent(new Event("xpay-today"));
+        return;
+      }
       if (d?.type !== "xpay-route") return;
       const url = `/dashboard/mobility${d.path ? "/" + d.path : ""}${d.kh ? `?kh=${encodeURIComponent(d.kh)}` : ""}`;
       if (location.pathname + location.search === url) return;
