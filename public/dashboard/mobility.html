@@ -1661,21 +1661,24 @@ function crmDash(ALL, f, t) {
 }
 /* DN active mới theo tuần: T2–T6 + tổng tuần · dự kiến = khách có ngày mục tiêu active; ngày đã qua hiện số đã active / dự kiến */
 function crmWeekActive(R, t) {
-  const ws = addD(wkStart(t), 7 * (CR.wkOff || 0)), days = [0, 1, 2, 3, 4].map(i => addD(ws, i)), we = addD(ws, 6), who = PICS.includes(CR.who) ? CR.who : '';
-  const mine = R.filter(r => !who || r.pic === who);
-  const box = (x, lab) => { const L = mine.filter(r => r.tact === x), past = x < TODAY, ach = L.filter(r => r.tactAch && r.tactAch <= x), extra = mine.filter(r => r.first === x && !L.includes(r));
-    const head = past ? `<div class="v"><span class="${L.length && ach.length >= L.length ? 'up' : L.length ? 'dn' : ''}">${n0(ach.length)}</span><span class="lbl" style="font-size:16px">/${n0(L.length)}</span></div><div class="s">DN active / dự kiến${extra.length ? ` · <b class="up">+${n0(extra.length)}</b> ngoài dự kiến` : ''}</div>`
-      : `<div class="v">${n0(L.length)}</div><div class="s">DN dự kiến active${x === TODAY ? ' · hôm nay' : ''}</div>`;
-    const li = [...L.map(r => [r, past ? (r.tactAch && r.tactAch <= x ? 'ok' : 'miss') : r.tactAch ? 'ok' : '']), ...extra.map(r => [r, 'extra'])];
-    return `<div class="kpi" style="${x === TODAY ? 'border-color:var(--accent);box-shadow:0 0 0 2px var(--color-surface-primary)' : ''}"><div class="k">${lab}</div>${head}
-      <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;max-height:260px;overflow:auto">${li.map(([r, st]) => `<div class="hit" data-cropen="${esc(r.key)}" style="cursor:pointer;font-size:12px;line-height:1.3;padding:4px 6px;border-radius:8px;background:${st === 'ok' || st === 'extra' ? 'var(--color-surface-primary)' : st === 'miss' ? '#fdecec' : 'var(--surface-2)'}">${st === 'ok' ? '✓ ' : st === 'miss' ? '✕ ' : st === 'extra' ? '+ ' : ''}<b>${esc(r.name)}</b><span class="lbl" style="display:block">${r.pic ? 'PIC ' + esc(r.pic) : 'chưa phân công'}${st === 'extra' ? ' · active ngoài dự kiến' : ''}</span></div>`).join('') || '<span class="lbl" style="font-size:12px">—</span>'}</div></div>`; };
-  const all = mine.filter(r => r.tact >= ws && r.tact <= we), pastAll = all.filter(r => r.tact < TODAY), achAll = pastAll.filter(r => r.tactAch && r.tactAch <= r.tact), extraAll = mine.filter(r => r.first >= ws && r.first <= we && !all.includes(r));
-  const tot = `<div class="kpi" style="background:var(--color-surface-primary)"><div class="k">Tổng tuần ${dm(ws)} – ${dm(addD(ws, 4))}</div><div class="v">${n0(all.length)}</div><div class="s">DN dự kiến active trong tuần</div>
-    <div class="s" style="margin-top:6px">Đã qua: <b class="${achAll.length >= pastAll.length ? 'up' : 'dn'}">${n0(achAll.length)}/${n0(pastAll.length)}</b> DN active đúng hạn</div><div class="s">Còn lại: <b>${n0(all.length - pastAll.length)}</b> DN</div>${extraAll.length ? `<div class="s">Ngoài dự kiến: <b class="up">+${n0(extraAll.length)}</b> DN active mới</div>` : ''}</div>`;
-  return `<div class="card"><div class="hd"><div><div class="eyebrow">DN active mới theo tuần${who ? ' · ' + esc(who) : ''}</div><h2 class="card-title">Dự kiến active từng ngày · ngày đã qua hiện số DN đã active / dự kiến</h2></div>
+  const ws = addD(wkStart(t), 7 * (CR.wkOff || 0)), days = [0, 1, 2, 3, 4, 5, 6].map(i => addD(ws, i)), we = days[6], who = PICS.includes(CR.who) ? CR.who : '';
+  const mine = R.filter(r => r.tact && (!who || r.pic === who));
+  // trạng thái từng khách dự kiến: đã active (có giao dịch từ khi đặt mục tiêu) · chưa active (ngày đã qua = trễ)
+  const stOf = (r, x) => r.tactAch ? (r.tactAch <= x ? 'ok' : 'late-ok') : x < TODAY ? 'miss' : 'wait';
+  const box = x => { const L = mine.filter(r => r.tact === x), past = x < TODAY, ok = L.filter(r => stOf(r, x) === 'ok').length;
+    const head = past ? `<div class="v"><span class="${L.length ? (ok >= L.length ? 'up' : 'dn') : ''}">${n0(ok)}</span><span class="lbl" style="font-size:16px">/${n0(L.length)}</span></div><div class="s">DN active / dự kiến</div>`
+      : `<div class="v">${n0(L.length)}</div><div class="s">DN dự kiến active${x === TODAY ? ' · hôm nay' : ''}${ok ? ` · <b class="up">${n0(ok)}</b> đã active` : ''}</div>`;
+    const tag = {ok: ['✓ đã active', 'var(--color-surface-primary)', 'c-stable'], 'late-ok': ['✓ active trễ', 'var(--color-surface-primary)', 'c-high'], miss: ['✕ chưa active', '#fdecec', 'c-critical'], wait: ['chưa active', 'var(--surface-2)', 'lbl']};
+    return `<div class="kpi" style="${x === TODAY ? 'border-color:var(--accent);box-shadow:0 0 0 2px var(--color-surface-primary)' : ''}${isWd(x) ? '' : ';background:var(--surface-2)'}"><div class="k">${wd(x)} ${dm(x)}</div>${head}
+      <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;max-height:260px;overflow:auto">${L.map(r => { const st = stOf(r, x), g = tag[st];
+        return `<div class="hit" data-cropen="${esc(r.key)}" style="cursor:pointer;font-size:12px;line-height:1.3;padding:4px 6px;border-radius:8px;background:${g[1]}"><b>${esc(r.name)}</b><span style="display:block"><span class="${g[2]}" style="font-weight:600">${g[0]}${r.tactAch && st !== 'wait' ? ' ' + dm(r.tactAch) : ''}</span> <span class="lbl">· ${r.pic ? 'PIC ' + esc(r.pic) : 'chưa phân công'}</span></span></div>`; }).join('') || '<span class="lbl" style="font-size:12px">—</span>'}</div></div>`; };
+  const all = mine.filter(r => r.tact >= ws && r.tact <= we), past = all.filter(r => r.tact < TODAY), okPast = past.filter(r => stOf(r, r.tact) === 'ok').length, okAll = all.filter(r => r.tactAch).length;
+  const tot = `<div class="kpi" style="background:var(--color-surface-primary)"><div class="k">Tổng tuần ${dm(ws)} – ${dm(we)}</div><div class="v">${n0(all.length)}</div><div class="s">DN dự kiến active trong tuần</div>
+    <div class="s" style="margin-top:6px">Đã active: <b class="up">${n0(okAll)}</b>/${n0(all.length)}</div><div class="s">Ngày đã qua: <b class="${okPast >= past.length ? 'up' : 'dn'}">${n0(okPast)}/${n0(past.length)}</b> active đúng hạn</div><div class="s">Còn chờ: <b>${n0(all.filter(r => !r.tactAch && r.tact >= TODAY).length)}</b> DN</div></div>`;
+  return `<div class="card"><div class="hd"><div><div class="eyebrow">DN active mới theo tuần${who ? ' · ' + esc(who) : ''}</div><h2 class="card-title">Khách dự kiến active từng ngày (thứ 2 → chủ nhật) và trạng thái</h2></div>
     <div class="card-note" style="display:flex;gap:6px;align-items:center"><button class="btn" data-wk="-1">← Tuần trước</button>${CR.wkOff ? '<button class="btn" data-wk="0">Tuần này</button>' : ''}<button class="btn" data-wk="1">Tuần sau →</button></div></div>
-    <div class="kpis" style="grid-template-columns:repeat(6,minmax(0,1fr));align-items:start">${days.map(x => box(x, `${wd(x)} ${dm(x)}`)).join('')}${tot}</div>
-    <div class="hint">Dự kiến = khách có <b>Mục tiêu active</b> (PIC nhập ở hồ sơ khách) rơi vào ngày đó. ✓ đã có giao dịch đến hết ngày mục tiêu · ✕ chưa active · + khách có giao dịch đầu tiên trong ngày nhưng không có mục tiêu. Bấm tên khách để mở hồ sơ.</div></div>`;
+    <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));align-items:start">${days.map(box).join('')}${tot}</div>
+    <div class="hint">Dự kiến = khách có <b>Mục tiêu active</b> (PIC nhập ở hồ sơ khách) rơi vào ngày đó. ✓ đã active = có giao dịch đến hết ngày mục tiêu · ✓ active trễ = có giao dịch sau ngày mục tiêu · ✕ chưa active = đã qua ngày mục tiêu mà chưa có giao dịch. Bấm tên khách để mở hồ sơ.</div></div>`;
 }
 /* Next steps: việc đã hẹn khách — thống kê theo loại + danh sách theo khách */
 function crmNextSteps(R, who, brief) {
