@@ -95,6 +95,9 @@ details.mn>summary::-webkit-details-marker{display:none}
 .ceo tr.sec td{position:static;background:var(--color-surface-primary);box-shadow:none}
 .ceo .secl{position:sticky;left:12px}
 .ceo td:first-child{min-width:230px;max-width:260px}
+
+/* dòng Tổng cố định cuối bảng đơn vị */
+.utot td{position:sticky;bottom:0;z-index:2;background:var(--surface-2);font-weight:700;border-top:2px solid var(--line)}
 </style><div class="xd" id="app"><div class="page"><div class="card">Đang tải dashboard…</div></div></div><script id="state" type="application/json">{}</script><script id="main" type="text/plain">
 (function(){
 "use strict";
@@ -540,7 +543,9 @@ function unitSection() {
     </div>
     <div class="tw" style="margin-top:14px;max-height:420px;overflow:auto"><table><thead><tr><th>#</th><th class="l">Đơn vị phát sinh</th><th>GMV</th><th>% tổng</th><th>Kỳ trước</th><th>+/−</th><th>Chuyến</th><th>Tài xế active</th><th>GMV / tài xế</th><th>Chuyến / tài xế</th><th>DN phục vụ</th><th>Ngày có GD</th><th>GD gần nhất</th></tr></thead><tbody>
     ${rows.map((r, i) => { const pv = prev[r.u] || 0, dl = pv ? r.gmv / pv - 1 : null; return `<tr class="hit" data-ounit="${esc(r.u)}" style="cursor:pointer"><td>${i + 1}</td><td class="l name">${esc(r.u)}${!pv ? ' <span class="pill p-stable">mới</span>' : ''}</td><td><b>${money(r.gmv)}</b></td><td>${pct(r.gmv / tot)}</td><td>${pv ? money(pv) : '—'}</td><td class="${dl == null ? '' : dl >= 0 ? 'up' : 'dn'}">${dl == null ? '—' : (dl >= 0 ? '▲ ' : '▼ ') + nf(Math.abs(dl) * 100, 0) + '%'}</td><td>${n0(r.trips)}</td><td>${n0(r.drv.size)}</td><td>${money(r.gmv / r.drv.size)}</td><td>${nf(r.trips / r.drv.size, 1)}</td><td>${n0(r.cos.size)}</td><td>${n0(r.days.size)}/${n0(cur.ndays)}</td><td>${dmy(r.last)}</td></tr>`; }).join('') || `<tr><td colspan="13" class="l lbl">Không có giao dịch trong khoảng này.</td></tr>`}
-    </tbody></table></div>
+    </tbody>${rows.length ? (() => { const pv = prv.gmv || 0, dl = pv ? cur.gmv / pv - 1 : null, dset = new Set(rows.flatMap(r => [...r.days])), last = rows.reduce((a, r) => r.last > a ? r.last : a, '');
+      return `<tfoot><tr class="utot"><td></td><td class="l">Tổng · ${n0(rows.length)} đơn vị</td><td>${money(cur.gmv)}</td><td>100%</td><td>${pv ? money(pv) : '—'}</td><td class="${dl == null ? '' : dl >= 0 ? 'up' : 'dn'}">${dl == null ? '—' : (dl >= 0 ? '▲ ' : '▼ ') + nf(Math.abs(dl) * 100, 0) + '%'}</td><td>${n0(cur.trips)}</td><td>${n0(cur.drv.size)}</td><td>${cur.drv.size ? money(cur.gmv / cur.drv.size) : '—'}</td><td>${cur.drv.size ? nf(cur.trips / cur.drv.size, 1) : '—'}</td><td>${n0(cur.cos.size)}</td><td>${n0(dset.size)}/${n0(cur.ndays)}</td><td>${last ? dmy(last) : '—'}</td></tr></tfoot>`; })() : ''}</table></div>
+    <div class="hint" style="margin-top:4px">Dòng Tổng: tài xế active và DN phục vụ đếm không trùng (1 tài xế / doanh nghiệp đi với nhiều đơn vị chỉ tính 1 lần), nên có thể nhỏ hơn tổng cộng các dòng.</div>
     <div class="hint">Đơn vị lấy từ cột <b>Đơn vị phát sinh</b> của bảng kê taxi — cập nhật bảng kê ở tab Cập nhật số liệu là số đơn vị tự đồng bộ. Tài xế active = Mã NV (thiếu thì biển số) có ≥ 1 giao dịch. ${rows.some(r => r.u === UNK) ? `<b>${UNK}</b>: giao dịch từ bảng kê cũ chưa có cột đơn vị — nạp lại file bảng kê để bổ sung.` : ''}</div></div>`;
   return h;
 }
