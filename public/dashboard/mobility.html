@@ -1662,23 +1662,31 @@ function crmDash(ALL, f, t) {
 /* DN active mới theo tuần: T2–T6 + tổng tuần · dự kiến = khách có ngày mục tiêu active; ngày đã qua hiện số đã active / dự kiến */
 function crmWeekActive(R, t) {
   const ws = addD(wkStart(t), 7 * (CR.wkOff || 0)), days = [0, 1, 2, 3, 4, 5, 6].map(i => addD(ws, i)), we = days[6], who = PICS.includes(CR.who) ? CR.who : '';
-  const mine = R.filter(r => r.tact && (!who || r.pic === who));
-  // trạng thái từng khách dự kiến: đã active (có giao dịch từ khi đặt mục tiêu) · chưa active (ngày đã qua = trễ)
-  const stOf = (r, x) => r.tactAch ? (r.tactAch <= x ? 'ok' : 'late-ok') : x < TODAY ? 'miss' : 'wait';
-  const box = x => { const L = mine.filter(r => r.tact === x), past = x < TODAY, ok = L.filter(r => stOf(r, x) === 'ok').length;
-    const head = past ? `<div class="v"><span class="${L.length ? (ok >= L.length ? 'up' : 'dn') : ''}">${n0(ok)}</span><span class="lbl" style="font-size:16px">/${n0(L.length)}</span></div><div class="s">DN active / dự kiến</div>`
-      : `<div class="v">${n0(L.length)}</div><div class="s">DN dự kiến active${x === TODAY ? ' · hôm nay' : ''}${ok ? ` · <b class="up">${n0(ok)}</b> đã active` : ''}</div>`;
-    const tag = {ok: ['✓ đã active', 'var(--color-surface-primary)', 'c-stable'], 'late-ok': ['✓ active trễ', 'var(--color-surface-primary)', 'c-high'], miss: ['✕ chưa active', '#fdecec', 'c-critical'], wait: ['chưa active', 'var(--surface-2)', 'lbl']};
-    return `<div class="kpi" style="${x === TODAY ? 'border-color:var(--accent);box-shadow:0 0 0 2px var(--color-surface-primary)' : ''}${isWd(x) ? '' : ';background:var(--surface-2)'}"><div class="k">${wd(x)} ${dm(x)}</div>${head}
-      <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;max-height:260px;overflow:auto">${L.map(r => { const st = stOf(r, x), g = tag[st];
-        return `<div class="hit" data-cropen="${esc(r.key)}" style="cursor:pointer;font-size:12px;line-height:1.3;padding:4px 6px;border-radius:8px;background:${g[1]}"><b>${esc(r.name)}</b><span style="display:block"><span class="${g[2]}" style="font-weight:600">${g[0]}${r.tactAch && st !== 'wait' ? ' ' + dm(r.tactAch) : ''}</span> <span class="lbl">· ${r.pic ? 'PIC ' + esc(r.pic) : 'chưa phân công'}</span></span></div>`; }).join('') || '<span class="lbl" style="font-size:12px">—</span>'}</div></div>`; };
-  const all = mine.filter(r => r.tact >= ws && r.tact <= we), past = all.filter(r => r.tact < TODAY), okPast = past.filter(r => stOf(r, r.tact) === 'ok').length, okAll = all.filter(r => r.tactAch).length;
-  const tot = `<div class="kpi" style="background:var(--color-surface-primary)"><div class="k">Tổng tuần ${dm(ws)} – ${dm(we)}</div><div class="v">${n0(all.length)}</div><div class="s">DN dự kiến active trong tuần</div>
-    <div class="s" style="margin-top:6px">Đã active: <b class="up">${n0(okAll)}</b>/${n0(all.length)}</div><div class="s">Ngày đã qua: <b class="${okPast >= past.length ? 'up' : 'dn'}">${n0(okPast)}/${n0(past.length)}</b> active đúng hạn</div><div class="s">Còn chờ: <b>${n0(all.filter(r => !r.tactAch && r.tact >= TODAY).length)}</b> DN</div></div>`;
-  return `<div class="card"><div class="hd"><div><div class="eyebrow">DN active mới theo tuần${who ? ' · ' + esc(who) : ''}</div><h2 class="card-title">Khách dự kiến active từng ngày (thứ 2 → chủ nhật) và trạng thái</h2></div>
+  const mine = R.filter(r => r.tact && (!who || r.pic === who)), sel = CR.wkDay && CR.wkDay >= ws && CR.wkDay <= we ? CR.wkDay : '';
+  // trạng thái: đã active (có giao dịch đến hết ngày mục tiêu) · active trễ · chưa active (đã qua ngày) · chờ
+  const stOf = r => r.tactAch ? (r.tactAch <= r.tact ? 'ok' : 'late') : r.tact < TODAY ? 'miss' : 'wait';
+  const ST = {ok: ['Đã active', 'stable'], late: ['Active trễ', 'high'], miss: ['Chưa active · quá hạn', 'critical'], wait: ['Chờ active', 'mute']};
+  const all = mine.filter(r => r.tact >= ws && r.tact <= we);
+  // dải 7 ngày + tổng tuần: gọn, bấm để lọc danh sách
+  const chip = x => { const L = all.filter(r => r.tact === x), ok = L.filter(r => stOf(r) === 'ok' || stOf(r) === 'late').length, past = x < TODAY, on = sel === x, td = x === TODAY;
+    const col = !L.length ? 'var(--ink-3)' : ok >= L.length ? 'var(--stable)' : past ? 'var(--critical)' : 'var(--ink)';
+    return `<div class="hit" data-wkday="${x}" style="cursor:pointer;padding:10px 12px;border-radius:12px;border:1px solid ${on ? 'var(--accent)' : td ? 'var(--accent)' : 'var(--line)'};background:${on ? 'var(--color-surface-primary)' : isWd(x) ? 'var(--surface)' : 'var(--surface-2)'};${on ? 'box-shadow:0 0 0 2px var(--color-surface-primary)' : ''}">
+      <div class="lbl" style="font-weight:600;${td ? 'color:var(--accent)' : ''}">${wd(x)} ${dm(x)}${td ? ' · hôm nay' : ''}</div>
+      <div style="font-size:22px;font-weight:700;color:${col};margin-top:2px">${L.length ? `${n0(ok)}<span style="font-size:14px;color:var(--ink-3)">/${n0(L.length)}</span>` : '<span style="font-size:16px">—</span>'}</div>
+      <div style="height:4px;border-radius:2px;background:var(--line-soft);margin-top:6px;overflow:hidden"><i style="display:block;height:100%;width:${L.length ? 100 * ok / L.length : 0}%;background:var(--stable)"></i></div></div>`; };
+  const okAll = all.filter(r => stOf(r) === 'ok' || stOf(r) === 'late').length, miss = all.filter(r => stOf(r) === 'miss').length, wait = all.filter(r => stOf(r) === 'wait').length;
+  const totChip = `<div class="hit" data-wkday="" style="cursor:pointer;padding:10px 12px;border-radius:12px;border:1px solid ${!sel ? 'var(--accent)' : 'var(--line)'};background:var(--color-surface-primary)">
+    <div class="lbl" style="font-weight:600">Cả tuần</div><div style="font-size:22px;font-weight:700;margin-top:2px">${n0(okAll)}<span style="font-size:14px;color:var(--ink-3)">/${n0(all.length)}</span></div>
+    <div class="lbl" style="font-size:11.5px;margin-top:2px">${miss ? `<b class="c-critical">${n0(miss)}</b> quá hạn · ` : ''}${n0(wait)} chờ</div></div>`;
+  const L = all.filter(r => !sel || r.tact === sel).sort((a, b) => a.tact.localeCompare(b.tact) || ['miss', 'wait', 'late', 'ok'].indexOf(stOf(a)) - ['miss', 'wait', 'late', 'ok'].indexOf(stOf(b)) || a.name.localeCompare(b.name, 'vi'));
+  const list = L.length ? `<div class="tw" style="max-height:360px;overflow:auto;margin-top:12px"><table><thead><tr><th class="l">Ngày mục tiêu</th><th class="l">Khách dự kiến active</th><th class="l">PIC</th><th class="l">Trạng thái</th><th class="l">Next step</th></tr></thead><tbody>${L.map(r => { const st = stOf(r);
+      return `<tr class="hit" data-cropen="${esc(r.key)}" style="cursor:pointer"><td class="l" style="white-space:nowrap">${wd(r.tact)} ${dmy(r.tact)}</td><td class="l name" style="color:var(--accent)">${esc(r.name)}<span class="def">HĐ ${esc(r.key)}</span></td><td class="l">${r.pic ? esc(r.pic) : '<b style="color:var(--critical)">chưa phân công</b>'}</td><td class="l"><span class="pill p-${ST[st][1]}">${ST[st][0]}</span>${r.tactAch ? `<span class="def">giao dịch ${dmy(r.tactAch)}</span>` : ''}</td><td class="l" style="font-size:12px">${r.ns || isoOk(r.nx) ? `${esc(r.ns || 'Liên hệ lại')}${isoOk(r.nx) ? ' · ' + dm(r.nx) : ''}` : '<span class="lbl">—</span>'}</td></tr>`; }).join('')}</tbody></table></div>`
+    : `<div class="hint" style="margin-top:12px">${sel ? `Không có khách dự kiến active ngày ${dmy(sel)}.` : 'Tuần này chưa có khách nào được đặt mục tiêu active.'}</div>`;
+  return `<div class="card"><div class="hd"><div><div class="eyebrow">DN active mới theo tuần${who ? ' · ' + esc(who) : ''}</div><h2 class="card-title">Tuần ${dm(ws)} – ${dm(we)} · ${n0(okAll)}/${n0(all.length)} khách dự kiến đã active</h2></div>
     <div class="card-note" style="display:flex;gap:6px;align-items:center"><button class="btn" data-wk="-1">← Tuần trước</button>${CR.wkOff ? '<button class="btn" data-wk="0">Tuần này</button>' : ''}<button class="btn" data-wk="1">Tuần sau →</button></div></div>
-    <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));align-items:start">${days.map(box).join('')}${tot}</div>
-    <div class="hint">Dự kiến = khách có <b>Mục tiêu active</b> (PIC nhập ở hồ sơ khách) rơi vào ngày đó. ✓ đã active = có giao dịch đến hết ngày mục tiêu · ✓ active trễ = có giao dịch sau ngày mục tiêu · ✕ chưa active = đã qua ngày mục tiêu mà chưa có giao dịch. Bấm tên khách để mở hồ sơ.</div></div>`;
+    <div style="display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px">${days.map(chip).join('')}${totChip}</div>
+    <div class="eyebrow" style="margin-top:14px">${sel ? `Khách dự kiến active ${wd(sel)} ${dmy(sel)} · ${n0(L.length)}` : `Khách dự kiến active cả tuần · ${n0(L.length)}`}</div>${list}
+    <div class="hint">Số trên mỗi ngày = khách đã active / khách dự kiến (theo <b>Mục tiêu active</b> PIC nhập ở hồ sơ khách). Bấm một ngày để xem danh sách ngày đó, bấm “Cả tuần” để xem hết. Đã active = có giao dịch đến hết ngày mục tiêu; active trễ = có giao dịch sau ngày mục tiêu.</div></div>`;
 }
 /* Next steps: việc đã hẹn khách — thống kê theo loại + danh sách theo khách */
 function crmNextSteps(R, who, brief) {
@@ -2558,7 +2566,8 @@ function bindJourney() {
   document.onmousedown = e => { if (RP.open && $('rpp') && !$('rpp').contains(e.target) && e.target.id !== 'rpb') keep(() => { RP.open = false; });
     if (PAT.msOpen && $('pmsp') && !$('pmsp').contains(e.target) && e.target.id !== 'pmsb') { PAT.msOpen = false; $('pmsp').style.display = 'none'; } };
   document.querySelectorAll('[data-mf]').forEach(el => el.onclick = ev => { ev.preventDefault(); keep(() => { const k = el.dataset.mf; CR.mf = CR.mf === k && k !== 'soon7' ? 'soon7' : k; }); });
-  document.querySelectorAll('[data-wk]').forEach(el => el.onclick = () => keep(() => { const v = +el.dataset.wk; CR.wkOff = v === 0 ? 0 : (CR.wkOff || 0) + v; }));
+  document.querySelectorAll('[data-wk]').forEach(el => el.onclick = () => keep(() => { const v = +el.dataset.wk; CR.wkOff = v === 0 ? 0 : (CR.wkOff || 0) + v; CR.wkDay = ''; }));
+  document.querySelectorAll('[data-wkday]').forEach(el => el.onclick = () => keep(() => { const v = el.dataset.wkday; CR.wkDay = CR.wkDay === v ? '' : v; }));
   document.querySelectorAll('[data-nsf]').forEach(el => el.onclick = ev => { ev.preventDefault(); keep(() => { const v = el.dataset.nsf; CR.nsf = !v || CR.nsf === v ? '' : v; }); });
   document.querySelectorAll('[data-crwho]').forEach(el => el.onclick = () => keep(() => { CR.who = el.dataset.crwho; try { localStorage.setItem('xpay_who', CR.who); } catch (e) {} }));
   document.querySelectorAll('[data-crgo]').forEach(el => el.onclick = () => { CR.view = 'input'; CR.grp = el.dataset.crgo; CR.todo = ''; CR.res = ''; render(); window.scrollTo(0, 0); });
