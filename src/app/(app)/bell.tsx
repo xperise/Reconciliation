@@ -25,6 +25,17 @@ export function Bell({ items, userId }: { items: any[]; userId: string }) {
   const router = useRouter();
   const [mo, setMo] = useState(false);
   const xp = useXpayToday();
+  // việc hôm nay XPAY: mở chuông = đã xem → không đếm vào chấm đỏ nữa (có việc mới thì đếm lại)
+  const xpKey = xp.items.map((n) => n.kind + '|' + n.kh + '|' + n.title).sort().join('§');
+  const [xpSeen, setXpSeen] = useState('');
+  useEffect(() => { try { setXpSeen(localStorage.getItem('xpay_today_seen') || ''); } catch { /* bỏ qua */ } }, []);
+  const seenSet = new Set(xpSeen ? xpSeen.split('§') : []);
+  const xpNew = xp.items.filter((n) => !seenSet.has(n.kind + '|' + n.kh + '|' + n.title)).length;
+  useEffect(() => {
+    if (!mo || !xpKey) return;
+    try { localStorage.setItem('xpay_today_seen', xpKey); } catch { /* bỏ qua */ }
+    setXpSeen(xpKey);
+  }, [mo, xpKey]);
   const [, start] = useTransition();
   const ref = useRef<HTMLDivElement>(null);
 
@@ -56,7 +67,7 @@ export function Bell({ items, userId }: { items: any[]; userId: string }) {
           <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
           <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>
-        {chuaDoc.length + xp.items.length > 0 && <span className="bell-dot">{chuaDoc.length + xp.items.length > 9 ? '9+' : chuaDoc.length + xp.items.length}</span>}
+        {chuaDoc.length + xpNew > 0 && <span className="bell-dot">{chuaDoc.length + xpNew > 9 ? '9+' : chuaDoc.length + xpNew}</span>}
       </button>
 
       {mo && (
@@ -78,7 +89,7 @@ export function Bell({ items, userId }: { items: any[]; userId: string }) {
               </div>
             )}
             {xp.items.map((n, i) => (
-              <a key={'xp' + i} href={n.kh ? `/dashboard/mobility/progress/input?kh=${encodeURIComponent(n.kh)}` : '/dashboard/mobility/progress/input'} className="bell-item" data-unread>
+              <a key={'xp' + i} href={n.kh ? `/dashboard/mobility/progress/input?kh=${encodeURIComponent(n.kh)}` : '/dashboard/mobility/progress/input'} className="bell-item" data-unread={!seenSet.has(n.kind + '|' + n.kh + '|' + n.title)}>
                 <div className="flex items-start justify-between gap-2">
                   <span className={`pill ${n.urgent ? 'pill-critical' : 'pill-high'} !text-[10px] !py-0`}>{n.urgent ? 'Quá hạn' : 'Hôm nay'}</span>
                 </div>
