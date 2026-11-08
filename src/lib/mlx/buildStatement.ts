@@ -25,6 +25,8 @@ const dateText = (d: Date) => { const s = `${p2(d.getUTCDate())}/${p2(d.getUTCMo
 const HEADER_ROW = 9;
 const FIRST_DATA_ROW = 10;
 const LAST_COL = COLUMNS.length; // 15 = cột O
+/** Khối tiêu đề (dòng 4–7) chỉ gộp B → M, không kéo sang cột Đơn vị phát sinh / Khoảng cách */
+const HEAD_LAST_COL = 13; // cột M
 
 export interface BuildInput {
   customer: MlxCustomer;
@@ -85,9 +87,9 @@ export async function buildStatement(
     cell.font = { ...headFont, bold: bold as boolean };
   });
 
-  // ---- Tiêu đề + kỳ + khách hàng (B4:O7) ----
+  // ---- Tiêu đề + kỳ + khách hàng (B4:M7) ----
   const centered = (r: number, text: string, font: Partial<ExcelJS.Font>) => {
-    ws.mergeCells(r, 2, r, LAST_COL);
+    ws.mergeCells(r, 2, r, HEAD_LAST_COL);
     const cell = ws.getCell(r, 2);
     cell.value = text;
     cell.font = font;
