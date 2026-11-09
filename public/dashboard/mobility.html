@@ -1637,15 +1637,19 @@ function crmDash(ALL, f, t) {
   const cur = dayStats(ALL, f, t, who), prv = dayStats(ALL, pf, pt, who), all = dayStats(ALL, '0000-00-00', t, who);
   const mine = R.filter(r => !who || r.pic === who), M = mtgList(ALL, who);
   const inR = (v, a, b) => isoOk(v) && v >= a && v <= b;
+  // nguồn số cuộc gọi: file calling (Cập nhật bằng file) vs PIC nhập tay — để thấy ngày nào chưa có file
+  let impTs = 0, cFile = 0, cTay = 0; ALL.forEach(r => r.acts.forEach(a => { if (a.imp && (a.ts || 0) > impTs) impTs = a.ts; if (a.t === 'call' && a.d >= f && a.d <= t && inAct(a, who)) a.imp ? cFile++ : cTay++; }));
+  const impDay = impTs ? new Date(impTs + 7 * 3600e3).toISOString().slice(0, 10) : '', impTxt = impTs ? `${dmy(impDay)} ${new Date(impTs + 7 * 3600e3).toISOString().slice(11, 16)}` : '';
+  const stale = impTs && t > impDay ? `<div class="banner" style="border-color:var(--watch);background:color-mix(in srgb,var(--watch) 8%,transparent)"><b>File calling mới cập nhật đến ${impTxt}.</b> Cuộc gọi, meeting của Tâm, Tuấn sau thời điểm này chưa có trên dashboard; ${t > impDay && f > impDay ? 'số trong kỳ đang xem' : 'số các ngày sau ' + dmy(impDay)} chỉ gồm phần PIC tự ghi trong hồ sơ khách. Upload file calling mới nhất ở <b>Nhập liệu → Cập nhật bằng file</b>, nhớ điền cột <b>Ngày liên hệ</b> để cuộc gọi rơi đúng ngày.</div>` : '';
   const sgn = (a, b) => a > b ? `<span class="up">▲ ${n0(a - b)}</span>` : a < b ? `<span class="dn">▼ ${n0(b - a)}</span>` : '<span class="lbl">=</span>';
   // 1. Tổng quan các mốc theo kỳ đang lọc: số trong kỳ · so với kỳ trước · lũy kế · sắp tới
   const nsOver = mine.filter(r => isoOk(r.nx) && r.nx < TODAY).length, ns7 = mine.filter(r => isoOk(r.nx) && r.nx >= TODAY && r.nx <= wk7).length;
   const mSoon7 = M.filter(m => m.st === 'soon' && m.md <= wk7).length, tact7 = mine.filter(r => r.tact && r.tact >= TODAY && r.tact <= wk7 && !r.tactAch).length;
   const cTg = tgt('call', f, t), mTg = tgt('meet', f, t);
-  const T = (k, a, b, lk, fu, tg) => `<div class="kpi"><div class="k">${k}</div><div class="v">${n0(a)}</div><div class="s">${sgn(a, b)} so với ${vsTxt} (${n0(b)})</div>${tg ? `<div class="s">chỉ tiêu ${nf(tg, tg < 10 ? 1 : 0)} · đạt <b>${pct(a / tg)}</b></div>` : ''}<div class="s">lũy kế <b>${lk}</b></div>${fu ? `<div class="s">sắp tới: ${fu}</div>` : ''}</div>`;
-  let h = `${who ? `<div class="banner" style="display:flex;justify-content:space-between;align-items:center"><span>Đang xem riêng <b>${esc(who)}</b> · ${esc(ROLE[who] || '')}</span><button class="btn" data-crwho="">← Quay lại toàn đội</button></div>` : ''}<div class="card"><div class="hd"><div><div class="eyebrow">Tổng quan ${who ? '· ' + esc(who) : '· toàn đội'}</div><h2 class="card-title">Các mốc trong ${lab}</h2></div><div class="card-note">số lớn = trong kỳ đang lọc · lũy kế tính đến ${dmy(t)} · sắp tới = 7 ngày kể từ hôm nay</div></div>
+  const T = (k, a, b, lk, fu, tg, ex) => (ex ? x => x.replace(/<\/div>$/, `<div class="s lbl">${ex}</div></div>`) : x => x)(`<div class="kpi"><div class="k">${k}</div><div class="v">${n0(a)}</div><div class="s">${sgn(a, b)} so với ${vsTxt} (${n0(b)})</div>${tg ? `<div class="s">chỉ tiêu ${nf(tg, tg < 10 ? 1 : 0)} · đạt <b>${pct(a / tg)}</b></div>` : ''}<div class="s">lũy kế <b>${lk}</b></div>${fu ? `<div class="s">sắp tới: ${fu}</div>` : ''}</div>`);
+  let h = stale + `${who ? `<div class="banner" style="display:flex;justify-content:space-between;align-items:center"><span>Đang xem riêng <b>${esc(who)}</b> · ${esc(ROLE[who] || '')}</span><button class="btn" data-crwho="">← Quay lại toàn đội</button></div>` : ''}<div class="card"><div class="hd"><div><div class="eyebrow">Tổng quan ${who ? '· ' + esc(who) : '· toàn đội'}</div><h2 class="card-title">Các mốc trong ${lab}</h2></div><div class="card-note">số lớn = trong kỳ đang lọc · lũy kế tính đến ${dmy(t)} · sắp tới = 7 ngày kể từ hôm nay</div></div>
     <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">${[
-      T('Cuộc gọi', cur.call, prv.call, n0(all.call), '', cTg),
+      T('Cuộc gọi', cur.call, prv.call, n0(all.call), '', cTg, `${n0(cFile)} từ file calling · ${n0(cTay)} PIC tự ghi`),
       T('Meeting đã đi', cur.meet, prv.meet, n0(all.meet), `<b>${n0(mSoon7)}</b> meeting đã hẹn`, mTg),
       T('Email · Zalo', cur.email + cur.zalo, prv.email + prv.zalo, n0(all.email + all.zalo), ''),
       T('Meeting được set', cur.mset, prv.mset, n0(all.mset), `<b>${n0(cur.mon)}</b> meeting theo lịch trong kỳ`),
