@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 
 // Đổi số này mỗi lần cập nhật public/dashboard/mobility.html để trình duyệt không dùng bản cũ
-export const MOBILITY_BUILD = "20261109e";
+export const MOBILITY_BUILD = "20261109f";
 
 export default function MobilityFrame({ reloadKey, initialPath = "", initialKh = "" }: { reloadKey: number; initialPath?: string; initialKh?: string }) {
   const ref = useRef<HTMLIFrameElement>(null);

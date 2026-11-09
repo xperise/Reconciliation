@@ -2405,10 +2405,15 @@ function callRows(A, hi, day) {
     if (pv && !PICS.some(p => fold(p) === fold(pv))) unknown[pv] = (unknown[pv] || 0) + 1;
     const res = CALL_RES[fold(st)] || st.replace(/\s+$/, ''), kq = v(raw, cR), lh = v(raw, cL), mp = v(raw, cMP);
     // so khớp theo nội dung với các lần nhập trước (không theo ngày) → upload lại cả file không nhân đôi cuộc gọi / meeting
-    const exE = Object.entries((DBX[r.key] || {}).acts || {}).filter(([, a]) => a && a.imp), taken = new Set(acts.filter(x => x.key === r.key).map(x => x.id));
+    const fin = {}, exE = Object.entries((DBX[r.key] || {}).acts || {}).filter(([, a]) => a && a.imp), taken = new Set(acts.filter(x => x.key === r.key).map(x => x.id));
     const ref0 = (id, a) => exE.some(([, y]) => y.t === 'meet' && y.ref === id) || acts.some(x => x.key === r.key && x.a.t === 'meet' && x.a.ref === id);
     const add = (o, pick) => { const m = exE.find(([id, a]) => a.t === o.t && !taken.has(id) && pick(a, id)), id = m ? m[0] : 'im' + hashId(r.key + '|' + o.t + '|' + (o.t === 'call' ? o.d + '|' + o.res : o.md || o.d)), old = m ? m[1] : null;
       if (old && o.t !== 'meet') o.d = old.d;   // giữ ngày gọi / ngày đặt lịch lần đầu
+      // lịch hẹn không đổi chữ → giữ ngày hẹn đã đọc lần đầu (chữ "Thứ 5" không có ngày sẽ bị hiểu sang tuần sau nếu tải lại muộn)
+      if (old && o.t === 'mset' && (old.det || '') === (o.det || '')) { if (old.md) o.md = old.md; else delete o.md; }
+      // meeting đã đi mà ngày chỉ là ngày mặc định (không có ngày hẹn rõ) → giữ ngày đã ghi lần trước
+      if (old && o.t === 'meet' && o.fb && old.d) o.d = old.d;
+      delete o.fb; fin[r.key + '|' + id] = o;
       taken.add(id);
       if (old && ['d', 'res', 'det', 'md', 'who', 'att', 'ref'].every(f => (old[f] || '') === (o[f] || '')) && JSON.stringify(old.with || []) === JSON.stringify(o.with || [])) { same++; return id; }
       acts.push({key: r.key, name: r.name, id, a: Object.assign({ts: Date.now(), imp: 1}, o), upd: !!old}); return id; };
@@ -2416,8 +2421,9 @@ function callRows(A, hi, day) {
     if (!noCall) add({t: 'call', d, who: pic, res, det: callDet}, a => a.res === res && (a.det || '') === callDet);
     if (isSet) { const md = meetDay(lh, d); if (lh && !md) noMd.push(`${r.name}: “${lh.slice(0, 60)}”`);
       const sid = add(Object.assign({t: 'mset', d, who: pic, res: 'Đồng ý meeting', det: lh || ''}, md ? {md} : {}, mp ? {att: mp} : {}), (a, id) => (md && a.md === md) || (a.det || '') === (lh || '') || !ref0(id));
-      if (mt === fold('Hoàn thành')) { const att = attOf(mp), main = att[0] || PICS.find(p => fold(p) === fold(v(raw, cP))) || r.pic || pic, dd = md && md <= TODAY ? md : d;
-        add(Object.assign({t: 'meet', d: dd, who: main, res: noCall || st === 'N/A' ? 'Đã meeting' : res, det: [lh, kq].filter(Boolean).join(' · '), ref: sid}, att.length > 1 ? {with: att.slice(1)} : {}, mp ? {att: mp} : {}), a => a.ref === sid || a.d === dd); } }
+      if (mt === fold('Hoàn thành')) { const md2 = (fin[r.key + '|' + sid] || {}).md || ((exE.find(([id]) => id === sid) || [])[1] || {}).md || md;
+        const att = attOf(mp), main = att[0] || PICS.find(p => fold(p) === fold(v(raw, cP))) || r.pic || pic, dd = md2 && md2 <= TODAY ? md2 : d;
+        add(Object.assign({t: 'meet', d: dd, fb: !(md2 && md2 <= TODAY), who: main, res: noCall || st === 'N/A' ? 'Đã meeting' : res, det: [lh, kq].filter(Boolean).join(' · '), ref: sid}, att.length > 1 ? {with: att.slice(1)} : {}, mp ? {att: mp} : {}), a => a.ref === sid || a.d === dd); } }
   }
   miss.forEach(m => errors.push(`Dòng ${m.line}: ${m.name} — ${m.why}, bỏ qua`));
   noMd.forEach(x => errors.push(`Không đọc được ngày meeting, vẫn ghi đặt lịch (không có ngày hẹn): ${x}`));
