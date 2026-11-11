@@ -1489,7 +1489,7 @@ function mtgOf(acts, d) {
   const used = new Set(), pair = new Map();
   S.forEach(x => { const m = M.find(y => !used.has(y) && y.ref && y.ref === x.id); if (m) { used.add(m); pair.set(x, m); } });
   S.forEach(x => { if (pair.has(x)) return; const m = M.find(y => !used.has(y) && !y.ref && isoOk(y.d) && y.d >= (x.d || '')); if (m) { used.add(m); pair.set(x, m); } });
-  const out = S.map(x => { const m = pair.get(x) || null; return {set: x, meet: m, md: m ? m.d : x.md || '', st: m ? 'done' : !isoOk(x.md) ? 'nodate' : x.md >= d ? 'soon' : 'late'}; });
+  const out = S.map(x => { const m = pair.get(x) || null; return {set: x, meet: m, md: m ? m.d : x.md || '', mt: x.mt || '', st: m ? 'done' : !isoOk(x.md) ? 'nodate' : x.md >= d ? 'soon' : 'late'}; });
   M.filter(y => !used.has(y)).forEach(m => out.push({set: null, meet: m, md: m.d, st: 'done'}));
   return out;
 }
@@ -1774,7 +1774,7 @@ function crmMeetings(ALL, f, t) {
   const ord = {soon: 0, late: 1, nodate: 2, done: 3};
   const nx = L.filter(mfo[1]).sort((a, b) => ord[a.st] - ord[b.st] || (a.st === 'soon' ? (a.md || '').localeCompare(b.md || '') : (b.md || '').localeCompare(a.md || '')));
   const lhTxt = m => [m.set && m.set.det, m.meet && m.meet.det && m.meet.det !== (m.set && m.set.det) ? m.meet.det : ''].filter(Boolean).join(' · ');
-  const next7 = nx.length ? `<div class="tw" style="max-height:420px;overflow:auto"><table><thead><tr><th class="l">Ngày</th><th class="l">Khách</th><th class="l">Người dự</th><th class="l">Lịch hẹn · nội dung</th></tr></thead><tbody>${nx.slice(0, 300).map(m => `<tr class="hit" data-cropen="${esc(m.r.key)}" style="cursor:pointer"><td class="l" style="white-space:nowrap">${m.md ? `${wd(m.md)} ${dmy(m.md)}` : '<span class="lbl">chưa chốt</span>'}<span class="def"><span class="pill p-${MST[m.st][0]}" style="font-size:10.5px">${MST[m.st][1]}</span></span></td><td class="l name" style="color:var(--accent)">${esc(m.r.name)}<span class="def">${m.setter ? 'set: ' + esc(m.setter) : ''}${m.r.pic ? ' · PIC ' + esc(m.r.pic) : ''}</span></td><td class="l">${m.att.length ? m.att.map(esc).join(', ') : '<span class="lbl">chưa phân người</span>'}</td><td class="l" style="white-space:normal;font-size:12px;min-width:200px">${esc(lhTxt(m).slice(0, 160))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="hint">Không có meeting nào.</div>';
+  const next7 = nx.length ? `<div class="tw" style="max-height:420px;overflow:auto"><table><thead><tr><th class="l">Ngày</th><th class="l">Khách</th><th class="l">Người dự</th><th class="l">Lịch hẹn · nội dung</th></tr></thead><tbody>${nx.slice(0, 300).map(m => `<tr class="hit" data-cropen="${esc(m.r.key)}" style="cursor:pointer"><td class="l" style="white-space:nowrap">${m.md ? `${wd(m.md)} ${dmy(m.md)}${m.mt ? ` · <b>${m.mt}</b>` : ''}` : '<span class="lbl">chưa chốt</span>'}<span class="def"><span class="pill p-${MST[m.st][0]}" style="font-size:10.5px">${MST[m.st][1]}</span></span></td><td class="l name" style="color:var(--accent)">${esc(m.r.name)}<span class="def">${m.setter ? 'set: ' + esc(m.setter) : ''}${m.r.pic ? ' · PIC ' + esc(m.r.pic) : ''}</span></td><td class="l">${m.att.length ? m.att.map(esc).join(', ') : '<span class="lbl">chưa phân người</span>'}</td><td class="l" style="white-space:normal;font-size:12px;min-width:200px">${esc(lhTxt(m).slice(0, 160))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="hint">Không có meeting nào.</div>';
   // theo từng người
   let per = '';
   if (!who) { const P = PICS.map(p => { const S2 = L.filter(m => m.setter === p), A = L.filter(m => m.att.includes(p)); return [p, S2.length, A.filter(m => m.st === 'done').length, A.filter(m => m.st === 'soon').length, A.filter(m => m.st === 'late').length, A.filter(m => m.st === 'nodate').length]; }).filter(x => x[1] + x[2] + x[3] + x[4] + x[5]);
@@ -1837,12 +1837,12 @@ function todayItems(R, who, d) {
   R.forEach(r => { if (r.liq) return;
     (r.mtgs || []).forEach(m => { const att = m.set && m.set.att ? String(m.set.att) : '', inv = !who || r.pic === who || (m.set && m.set.who === who) || att.includes(who);
       if (!inv || m.st === 'done') return;
-      if (m.md === d) out.push({k: 'mtg', o: 0, r, t: 'Meeting hôm nay', det: (m.set && m.set.det) || ''});
+      if (m.md === d) out.push({k: 'mtg', o: 0, r, t: `Meeting hôm nay${m.mt ? ' lúc ' + m.mt : ''}`, det: (m.set && m.set.det) || '', mt: m.mt || ''});
       else if (m.st === 'late') out.push({k: 'mtglate', o: 3, r, t: `Meeting ${dmy(m.md)} chưa cập nhật`, det: 'ghi “Meeting (đã gặp)” hoặc hẹn lại'}); });
     if (!mine(r)) return;
     if (isoOk(r.nx) && r.nx <= d) out.push({k: 'ns', o: r.nx < d ? 2 : 1, r, t: `${r.ns || 'Liên hệ lại'}${r.nx < d ? ` · quá ${diffD(d, r.nx)} ngày` : ''}`, det: 'next step đã hẹn khách'});
     if (r.tact && r.tact <= d && !r.tactAch) out.push({k: 'act', o: r.tact < d ? 2 : 1, r, t: r.tact < d ? `Hẹn active ${dmy(r.tact)} · chưa có giao dịch` : 'Khách hứa active hôm nay', det: 'nhắc khách đặt chuyến đầu, kiểm tra thẻ'}); });
-  return out.sort((a, b) => a.o - b.o || a.r.name.localeCompare(b.r.name, 'vi'));
+  return out.sort((a, b) => a.o - b.o || (a.mt || '99').localeCompare(b.mt || '99') || a.r.name.localeCompare(b.r.name, 'vi'));
 }
 const TDK = {mtg: ['Meeting', 'high'], mtglate: ['Cập nhật meeting', 'critical'], ns: ['Next step', 'high'], act: ['Hẹn active', 'stable']};
 function crmAction(R, d) {
@@ -2108,12 +2108,12 @@ ${ms('hd', 'Ký hợp đồng mới', 'khách mới ký hợp đồng XPAY')}${m
         <label class="lbl">Kết quả<select id="cat_r" ${dis} style="width:100%">${cats().map(c => `<option>${esc(c)}</option>`).join('')}<option value="__new">+ Thêm loại mới…</option></select></label></div>
       <input id="cat_new" placeholder="Tên loại kết quả mới" style="${inp};width:100%;margin-top:8px;display:none">
       <textarea id="cat_x" placeholder="Feedback chi tiết" ${dis} style="${inp};width:100%;margin-top:8px;min-height:60px"></textarea>
-      <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap"><span id="cat_mdw" style="display:none;gap:8px;align-items:center"><span class="lbl"><b>Ngày meeting</b></span><input type="date" id="cat_md" ${dis} style="${inp}"></span></div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap"><span id="cat_mdw" style="display:none;gap:8px;align-items:center"><span class="lbl"><b>Ngày meeting</b></span><input type="date" id="cat_md" ${dis} style="${inp}"><span class="lbl"><b>Giờ</b></span><input type="time" id="cat_mt" step="900" ${dis} style="${inp}"></span></div>
       <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;margin-top:8px;padding:10px;border:1px dashed var(--line);border-radius:10px">
         <label class="lbl"><b>Next step</b> · hẹn khách làm gì tiếp<select id="cat_ns" ${dis} style="width:100%"><option value="">— Không có / đã xong —</option>${[...new Set([...nsList(), ...(r.ns ? [r.ns] : [])])].map(c => `<option ${c === r.ns ? 'selected' : ''}>${esc(c)}</option>`).join('')}<option value="__new">+ Thêm next step mới…</option></select></label>
         <label class="lbl"><b>Ngày</b> next step<input type="date" id="cat_nx" value="${isoOk(r.nx) ? r.nx : ''}" ${dis} style="${inp};width:100%"></label>
         <input id="cat_nsnew" placeholder="Tên next step mới" style="${inp};width:100%;display:none;grid-column:1 / -1"></div>
-      ${r.acts.length ? `<div class="tw" style="margin-top:10px"><table><thead><tr><th class="l">Ngày</th><th class="l">Loại</th><th class="l">Người</th><th class="l">Kết quả</th><th class="l">Chi tiết</th><th></th></tr></thead><tbody>${r.acts.map(a => `<tr><td class="l">${isoOk(a.d) ? dmy(a.d) : esc(a.d)}</td><td class="l">${actLab(a.t)}${a.t === 'mset' ? (m => `<span class="def">${isoOk(a.md) ? 'hẹn ' + dmy(a.md) + ' · ' : ''}${m ? MST[m.st][1] : ''}</span>`)(r.mtgs.find(m => m.set === a)) : ''}${a.t === 'meet' && (a.with || []).length ? `<span class="def">cùng ${a.with.map(esc).join(', ')}</span>` : ''}</td><td class="l">${esc(a.who || '')}</td><td class="l">${esc(a.res || '')}</td><td class="l" style="white-space:normal;min-width:220px">${esc(a.det || '')}</td><td>${a.seed ? '<span class="lbl">file giao thẻ</span>' : ed ? `<a data-cadel="${esc(a.id)}" style="cursor:pointer;color:var(--critical)">xóa</a>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="hint">Chưa có lần liên hệ nào.</div>'}`)
+      ${r.acts.length ? `<div class="tw" style="margin-top:10px"><table><thead><tr><th class="l">Ngày</th><th class="l">Loại</th><th class="l">Người</th><th class="l">Kết quả</th><th class="l">Chi tiết</th><th></th></tr></thead><tbody>${r.acts.map(a => `<tr><td class="l">${isoOk(a.d) ? dmy(a.d) : esc(a.d)}</td><td class="l">${actLab(a.t)}${a.t === 'mset' ? (m => `<span class="def">${isoOk(a.md) ? 'hẹn ' + dmy(a.md) + (a.mt ? ' ' + a.mt : '') + ' · ' : ''}${m ? MST[m.st][1] : ''}</span>`)(r.mtgs.find(m => m.set === a)) : ''}${a.t === 'meet' && (a.with || []).length ? `<span class="def">cùng ${a.with.map(esc).join(', ')}</span>` : ''}</td><td class="l">${esc(a.who || '')}</td><td class="l">${esc(a.res || '')}</td><td class="l" style="white-space:normal;min-width:220px">${esc(a.det || '')}</td><td>${a.seed ? '<span class="lbl">file giao thẻ</span>' : ed ? `<a data-cadel="${esc(a.id)}" style="cursor:pointer;color:var(--critical)">xóa</a>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="hint">Chưa có lần liên hệ nào.</div>'}`)
       + sec('pat', 'Pattern di chuyển', tr.length ? `${n0(tr.length)} chuyến toàn bộ${ps ? ` · 30 ngày: ${esc(ps.route)} (${ps.rn} chuyến), ${esc(ps.p)}, ${ps.band}` : ''}` : 'chưa có chuyến XPAY', secOn('pat') ? (tr.length ? kpiRow(tr) : '') + custPatterns(r.key, tr) : '')
       + sec('asg', 'Phân công, phân loại', `PIC ${r.pic ? esc(r.pic) : '<b style="color:var(--critical)">chưa phân công</b>'} · nhóm ${r.grp === 9 ? 'Đã thanh lý' : r.grp}${r.grpM ? ' (chọn tay)' : ' (tự động)'}${r.st ? ' · ' + esc(r.st) : ''}${r.note ? ' · có ghi chú' : ''}`, `
 
@@ -2572,7 +2572,7 @@ function picPanel() {
     parts.push(sec(`Liên hệ từ file calling (sheet “${esc(I.callSrc.n)}”) · ${n0(T.call)} cuộc gọi · ${n0(T.mset)} đặt lịch meeting · ${n0(T.meet)} meeting đã đi${CL.same ? ` · ${n0(CL.same)} đã có, giữ nguyên` : ''}`,
       `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><span class="lbl">Ngày liên hệ cho các dòng file để trống</span><input type="date" id="crcallday" value="${CL.day}" style="font:13px var(--font-family-sans-serif);padding:5px 8px;border:1px solid var(--line);border-radius:8px"><span class="lbl">· ${n0(CL.rows)} khách có kết quả · ${n0(CL.skip)} dòng chưa gọi / chưa có số bỏ qua${CL.miss ? ` · <b style="color:var(--critical)">${n0(CL.miss)} khách không khớp</b>` : ''}</span></div>
       <div class="lbl" style="margin-bottom:6px">Theo người: ${Object.entries(byP).map(([p, o]) => `<b>${esc(p)}</b> ${n0(o.call)} gọi · ${n0(o.mset)} đặt lịch · ${n0(o.meet)} meeting`).join(' &nbsp;|&nbsp; ')}</div>`
-      + (CL.acts.length ? tbl(['Doanh nghiệp', 'Ngày', 'Loại', 'Người', 'Kết quả', 'Chi tiết'], CL.acts.map(x => `<tr class="hit" data-cropen="${esc(x.key)}" style="cursor:pointer"><td class="l name">${esc(x.name)}<span class="def">HĐ ${esc(x.key)}${x.upd ? ' · sửa dòng đã nhập' : ''}</span></td><td class="l">${dmy(x.a.d)}</td><td class="l">${actLab(x.a.t)}${x.a.md ? `<span class="def">hẹn ${wd(x.a.md)} ${dmy(x.a.md)}</span>` : x.a.t === 'mset' ? '<span class="def" style="color:var(--critical)">chưa rõ ngày</span>' : ''}</td><td class="l">${esc(x.a.who || '—')}</td><td class="l">${esc(x.a.res)}</td><td class="l" style="white-space:normal;min-width:240px;font-size:12px">${esc(x.a.det || '')}</td></tr>`).join('')) : '<div class="hint">Không có liên hệ mới.</div>'))); }
+      + (CL.acts.length ? tbl(['Doanh nghiệp', 'Ngày', 'Loại', 'Người', 'Kết quả', 'Chi tiết'], CL.acts.map(x => `<tr class="hit" data-cropen="${esc(x.key)}" style="cursor:pointer"><td class="l name">${esc(x.name)}<span class="def">HĐ ${esc(x.key)}${x.upd ? ' · sửa dòng đã nhập' : ''}</span></td><td class="l">${dmy(x.a.d)}</td><td class="l">${actLab(x.a.t)}${x.a.md ? `<span class="def">hẹn ${wd(x.a.md)} ${dmy(x.a.md)}${x.a.mt ? ' · ' + x.a.mt : ''}</span>` : x.a.t === 'mset' ? '<span class="def" style="color:var(--critical)">chưa rõ ngày</span>' : ''}</td><td class="l">${esc(x.a.who || '—')}</td><td class="l">${esc(x.a.res)}</td><td class="l" style="white-space:normal;min-width:240px;font-size:12px">${esc(x.a.det || '')}</td></tr>`).join('')) : '<div class="hint">Không có liên hệ mới.</div>'))); }
   if (P) { const cnt = {}; P.changes.forEach(c => { const t = c.to || PIC_CLEAR; cnt[t] = (cnt[t] || 0) + 1; });
     parts.push(sec(`Phân công PIC · ${n0(P.changes.length)} khách đổi · ${n0(P.same)} giữ nguyên`, P.changes.length ? `<div class="lbl" style="margin-bottom:6px">Sau khi áp dụng: ${Object.entries(cnt).map(([p, n]) => `<b>${esc(p)}</b> nhận ${n0(n)}`).join(' · ')}</div>` + tbl(['Doanh nghiệp', 'Nhóm', 'PIC hiện tại', 'PIC mới'], P.changes.map(c => `<tr><td class="l name">${esc(c.name)}<span class="def">HĐ ${esc(c.key)}</span></td><td class="l">${c.grp === 9 ? '' : c.grp + '. '}${esc(GRP[c.grp])}</td><td class="l">${lab(c.from)}</td><td class="l"><b>${lab(c.to)}</b></td></tr>`).join('')) : `<div class="hint">${P.filled ? 'Không có khách nào đổi PIC.' : 'Chưa điền cột "PIC mới" ở dòng nào.'}</div>`)); }
   if (M) { const mv = v => isoOk(v) ? dmy(v) : done(v) ? 'đã ký (không rõ ngày)' : '<span class="lbl">—</span>';
@@ -2854,7 +2854,8 @@ function bindDrawer() {
       const d = $('cat_d').value; if (!isoOk(d)) return {err: 'Chọn ngày liên hệ.'};
       if (at === 'mset' && !isoOk(md)) return {err: 'Chọn ngày meeting đã hẹn với khách.'};
       const id = 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-      patch.acts = {[id]: Object.assign({t: at, d, who: $('cat_w').value, res, det, ts: Date.now()}, at === 'mset' ? {md} : {})};
+      const mt = $('cat_mt') ? $('cat_mt').value : '';
+      patch.acts = {[id]: Object.assign({t: at, d, who: $('cat_w').value, res, det, ts: Date.now()}, at === 'mset' ? Object.assign({md}, /^\d{2}:\d{2}$/.test(mt) ? {mt} : {}) : {})};
     }
     let ns = $('cat_ns').value; if (ns === '__new') { ns = $('cat_nsnew').value.trim(); if (!ns) return {err: 'Nhập tên next step mới.'}; out.ns = ns; }
     const nx = $('cat_nx').value;
@@ -2877,7 +2878,7 @@ function bindDrawer() {
     } catch (e) { fail(e); if (btn) btn.disabled = false; }
   };
   if ($('crsaveall')) $('crsaveall').onclick = saveAll;
-  ['cat_t', 'cat_r', 'cat_md', 'cat_d', 'cat_w'].forEach(id => { if ($(id)) $(id).addEventListener('change', () => { CR.actTouched = true; }); });
+  ['cat_t', 'cat_r', 'cat_md', 'cat_mt', 'cat_d', 'cat_w'].forEach(id => { if ($(id)) $(id).addEventListener('change', () => { CR.actTouched = true; }); });
   if ($('cat_ns')) $('cat_ns').onchange = e => { $('cat_nsnew').style.display = e.target.value === '__new' ? 'block' : 'none'; };
 }
 function bind() {
