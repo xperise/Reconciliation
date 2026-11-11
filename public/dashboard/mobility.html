@@ -1765,6 +1765,36 @@ function renderJourney() {
   const body = CR.view === 'dash' ? crmDash(ALL, f, t) : CR.view === 'pat' ? renderPattern(t) : crmInput(ALL, d);
   return tabs + body;
 }
+/* danh sách bên dưới các ô "Các mốc trong …": bấm ô nào hiện đúng các khách / lần liên hệ đã đếm vào ô đó (cùng kỳ, cùng người đang lọc) */
+function crmKpiList(ALL, mine, f, t, who0, id, lab) {
+  const who = CR.kpiWho || who0; if (CR.kpiWho) mine = ALL.filter(r => !r.liq && r.pic === who);
+  const inR = (v, a, b) => isoOk(v) && v >= a && v <= b, open = r => `data-cropen="${esc(r.key)}" class="hit" style="cursor:pointer"`;
+  const nm = r => `<td class="l name" style="white-space:normal;min-width:220px;color:var(--accent)">${esc(r.name)}<span class="def">HĐ ${esc(r.key)}</span></td>`;
+  const picTd = r => `<td class="l">${r.pic ? esc(r.pic) : '<span class="lbl">chưa phân công</span>'}</td>`;
+  const last = r => { const a = r.acts[0]; return a ? `${isoOk(a.d) ? dmy(a.d) : esc(a.d || '')} · ${esc(actLab(a.t))}${a.res ? ' · ' + esc(a.res) : ''}` : '<span class="lbl">—</span>'; };
+  const nxt = r => r.ns || isoOk(r.nx) ? `${esc(r.ns || 'Liên hệ lại')}${isoOk(r.nx) ? ` <b class="${r.nx < TODAY ? 'c-critical' : r.nx === TODAY ? 'c-high' : ''}">${dmy(r.nx)}</b>` : ''}` : '<span class="lbl">—</span>';
+  const TT = {call: 'Cuộc gọi', meet: 'Meeting đã đi', email: 'Email · Zalo', mset: 'Meeting được set', vc: 'Verbal confirm', sign: 'Ký phụ lục / HĐ mới', xp: 'Khởi tạo XPAY', first: 'DN active mới', nx: 'Next step đến hạn'};
+  let head, rows, n;
+  if (['call', 'meet', 'email', 'mset'].includes(id)) {
+    const ty = id === 'email' ? ['email', 'zalo'] : [id], L = [];
+    ALL.forEach(r => r.acts.forEach(a => { if (ty.includes(a.t) && a.d >= f && a.d <= t && inAct(a, who)) L.push({r, a}); }));
+    L.sort((x, y) => (y.a.d || '').localeCompare(x.a.d || '') || (y.a.ts || 0) - (x.a.ts || 0)); n = L.length;
+    head = `<th class="l">Ngày</th><th class="l">Khách hàng</th><th class="l">Người thực hiện</th>${id === 'email' ? '<th class="l">Kênh</th>' : ''}${id === 'mset' ? '<th class="l">Ngày meeting</th>' : ''}<th class="l">Kết quả</th><th class="l">Chi tiết / nội dung</th><th class="l">PIC khách</th><th class="l">Next step</th>`;
+    rows = L.map(({r, a}) => `<tr ${open(r)}><td class="l" style="white-space:nowrap">${isoOk(a.d) ? `${wd(a.d)} ${dmy(a.d)}` : esc(a.d)}</td>${nm(r)}<td class="l">${esc([a.who, ...(a.with || [])].filter(Boolean).join(', ') || '—')}</td>${id === 'email' ? `<td class="l">${esc(actLab(a.t))}</td>` : ''}${id === 'mset' ? `<td class="l" style="white-space:nowrap">${isoOk(a.md) ? `<b>${wd(a.md)} ${dmy(a.md)}</b>` : `<span class="lbl">${esc(a.md || 'chưa chốt')}</span>`}</td>` : ''}<td class="l" style="white-space:normal;min-width:120px">${esc(a.res || '—')}</td><td class="l" style="white-space:normal;min-width:240px;font-size:12px">${esc((a.det || '').slice(0, 220)) || '<span class="lbl">—</span>'}</td>${picTd(r)}<td class="l" style="white-space:normal;font-size:12px">${nxt(r)}</td></tr>`);
+  } else {
+    const fld = {vc: r => inR(r.vc, f, t) ? r.vc : '', sign: r => [inR(r.pl, f, t) ? r.pl : '', inR(r.hd, f, t) ? r.hd : ''].filter(Boolean).sort()[0] || '', xp: r => inR(r.xp, f, t) ? r.xp : '', first: r => r.first && r.first >= f && r.first <= t ? r.first : '', nx: r => inR(r.nx, f, t) ? r.nx : ''}[id];
+    const src = id === 'vc' || id === 'sign' ? ALL.filter(r => !r.liq && (!who || r.pic === who)) : mine;
+    const L = src.map(r => ({r, d: fld(r)})).filter(x => x.d).sort((a, b) => b.d.localeCompare(a.d)); n = L.length;
+    const kind = r => id === 'sign' ? (inR(r.pl, f, t) ? 'Ký phụ lục' : 'Ký HĐ mới') : '';
+    head = `<th class="l">Ngày ${id === 'nx' ? 'next step' : 'mốc'}</th><th class="l">Khách hàng</th>${id === 'sign' ? '<th class="l">Loại</th>' : ''}<th class="l">PIC</th><th class="l">Nhóm</th><th>GMV 30 ngày</th><th class="l">Liên hệ gần nhất</th><th class="l">Next step</th>`;
+    rows = L.map(({r, d}) => `<tr ${open(r)}><td class="l" style="white-space:nowrap"><b>${wd(d)} ${dmy(d)}</b></td>${nm(r)}${id === 'sign' ? `<td class="l">${kind(r)}</td>` : ''}${picTd(r)}<td class="l" style="font-size:12px">${r.grp === 9 ? '' : r.grp + '. '}${esc(GRP[r.grp] || '')}</td><td>${r.gmv30 ? money(r.gmv30) : '<span class="lbl">–</span>'}</td><td class="l" style="white-space:normal;min-width:200px;font-size:12px">${last(r)}</td><td class="l" style="white-space:normal;font-size:12px">${nxt(r)}</td></tr>`);
+  }
+  const unit = ['call', 'meet', 'email', 'mset'].includes(id) ? 'lần' : 'khách';
+  return `<div id="crkpil" style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap"><div><b style="font-size:15px">${TT[id]}${CR.kpiWho ? ' · ' + esc(CR.kpiWho) : ''}</b> <span class="lbl">· ${lab}${who ? ' · ' + esc(who) : ' · toàn đội'} · <b style="color:var(--ink)">${n0(n)}</b> ${unit}</span></div>
+    <div style="display:flex;gap:8px">${CR.kpiWho ? `<button class="btn" data-crkpi="${id}" data-keep="1">Xem cả đội</button>` : ''}<button class="btn" id="crkpicsv">Tải CSV</button><button class="btn" data-crkpi="${id}">Đóng ✕</button></div></div>
+    ${n ? `<div class="tw" style="max-height:520px;overflow:auto;margin-top:8px"><table id="crkpit"><thead><tr>${head}</tr></thead><tbody>${rows.join('')}</tbody></table></div><div class="hint" style="margin-top:6px">Bấm một dòng để mở hồ sơ khách, cập nhật cuộc gọi / meeting / mốc ký.</div>` : `<div class="hint" style="margin-top:8px">Không có ${unit === 'lần' ? 'lần liên hệ' : 'khách'} nào trong kỳ này.</div>`}</div>`;
+}
 function crmDash(ALL, f, t) {
   const R = crmScope(ALL).filter(r => !r.liq), who = PICS.includes(CR.who) ? CR.who : '', ppl = who ? [who] : PICS;
   const len = diffD(t, f) + 1, pt = addD(f, -1), pf = addD(f, -len), lab = rngLabel(f, t), wk7 = addD(TODAY, 7);
@@ -1783,17 +1813,18 @@ function crmDash(ALL, f, t) {
   const mSoon7 = M.filter(m => m.st === 'soon' && m.md <= wk7).length, tact7 = mine.filter(r => r.tact && r.tact >= TODAY && r.tact <= wk7 && !r.tactAch).length;
   const cTg = tgt('call', f, t), mTg = tgt('meet', f, t);
   const T = (k, a, b, lk, fu, tg, ex) => (ex ? x => x.replace(/<\/div>$/, `<div class="s lbl">${ex}</div></div>`) : x => x)(`<div class="kpi"><div class="k">${k}</div><div class="v">${n0(a)}</div><div class="s">${sgn(a, b)} so với ${vsTxt} (${n0(b)})</div>${tg ? `<div class="s">chỉ tiêu ${nf(tg, tg < 10 ? 1 : 0)} · đạt <b>${pct(a / tg)}</b></div>` : ''}<div class="s">lũy kế <b>${lk}</b></div>${fu ? `<div class="s">sắp tới: ${fu}</div>` : ''}</div>`);
+  const K = (id, ...a) => T(...a).replace('<div class="kpi">', `<div class="kpi hit" data-crkpi="${id}" title="Bấm để xem danh sách bên dưới" style="cursor:pointer;${CR.kpi === id ? 'outline:2px solid var(--accent);outline-offset:-2px;background:var(--color-surface-primary)' : ''}">`);
   let h = stale + `${who ? `<div class="banner" style="display:flex;justify-content:space-between;align-items:center"><span>Đang xem riêng <b>${esc(who)}</b> · ${esc(ROLE[who] || '')}</span><button class="btn" data-crwho="">← Quay lại toàn đội</button></div>` : ''}<div class="card"><div class="hd"><div><div class="eyebrow">Tổng quan ${who ? '· ' + esc(who) : '· toàn đội'}</div><h2 class="card-title">Các mốc trong ${lab}</h2></div><div class="card-note">số lớn = trong kỳ đang lọc · lũy kế tính đến ${dmy(t)} · sắp tới = 7 ngày kể từ hôm nay</div></div>
     <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">${[
-      T('Cuộc gọi', cur.call, prv.call, n0(all.call), '', cTg, `${n0(cFile)} từ file calling · ${n0(cTay)} PIC tự ghi`),
-      T('Meeting đã đi', cur.meet, prv.meet, n0(all.meet), `<b>${n0(mSoon7)}</b> meeting đã hẹn`, mTg),
-      T('Email · Zalo', cur.email + cur.zalo, prv.email + prv.zalo, n0(all.email + all.zalo), ''),
-      T('Meeting được set', cur.mset, prv.mset, n0(all.mset), `<b>${n0(cur.mon)}</b> meeting theo lịch trong kỳ`),
-      T('Verbal confirm', cur.vc, prv.vc, n0(mine.filter(r => done(r.vc)).length), ''),
-      T('Ký phụ lục / HĐ mới', cur.sign, prv.sign, n0(mine.filter(r => done(r.pl) || done(r.hd)).length), ''),
-      T('Khởi tạo XPAY', mine.filter(r => inR(r.xp, f, t)).length, mine.filter(r => inR(r.xp, pf, pt)).length, n0(mine.filter(r => done(r.xp)).length), ''),
-      T('DN active mới', mine.filter(r => r.first && r.first >= f && r.first <= t).length, mine.filter(r => r.first && r.first >= pf && r.first <= pt).length, n0(mine.filter(r => r.first).length), `<b>${n0(tact7)}</b> khách hẹn active`),
-      T('Next step đến hạn', mine.filter(r => inR(r.nx, f, t)).length, mine.filter(r => inR(r.nx, pf, pt)).length, `<span class="${nsOver ? 'dn' : ''}">${n0(nsOver)} quá hạn</span>`, `<b>${n0(ns7)}</b> việc`)].join('')}</div></div>`;
+      K('call', 'Cuộc gọi', cur.call, prv.call, n0(all.call), '', cTg, `${n0(cFile)} từ file calling · ${n0(cTay)} PIC tự ghi`),
+      K('meet', 'Meeting đã đi', cur.meet, prv.meet, n0(all.meet), `<b>${n0(mSoon7)}</b> meeting đã hẹn`, mTg),
+      K('email', 'Email · Zalo', cur.email + cur.zalo, prv.email + prv.zalo, n0(all.email + all.zalo), ''),
+      K('mset', 'Meeting được set', cur.mset, prv.mset, n0(all.mset), `<b>${n0(cur.mon)}</b> meeting theo lịch trong kỳ`),
+      K('vc', 'Verbal confirm', cur.vc, prv.vc, n0(mine.filter(r => done(r.vc)).length), ''),
+      K('sign', 'Ký phụ lục / HĐ mới', cur.sign, prv.sign, n0(mine.filter(r => done(r.pl) || done(r.hd)).length), ''),
+      K('xp', 'Khởi tạo XPAY', mine.filter(r => inR(r.xp, f, t)).length, mine.filter(r => inR(r.xp, pf, pt)).length, n0(mine.filter(r => done(r.xp)).length), ''),
+      K('first', 'DN active mới', mine.filter(r => r.first && r.first >= f && r.first <= t).length, mine.filter(r => r.first && r.first >= pf && r.first <= pt).length, n0(mine.filter(r => r.first).length), `<b>${n0(tact7)}</b> khách hẹn active`),
+      K('nx', 'Next step đến hạn', mine.filter(r => inR(r.nx, f, t)).length, mine.filter(r => inR(r.nx, pf, pt)).length, `<span class="${nsOver ? 'dn' : ''}">${n0(nsOver)} quá hạn</span>`, `<b>${n0(ns7)}</b> việc`)].join('')}</div>${CR.kpi ? crmKpiList(ALL, mine, f, t, who, CR.kpi, lab) : '<div class="hint" style="margin-top:8px">Bấm vào một ô (cuộc gọi, meeting, verbal confirm, ký…) để xem danh sách khách ngay bên dưới.</div>'}</div>`;
   // 2. Tiến độ theo nhóm khách (bức tranh pipeline)
   const G = [1, 2, 3, 4, 5], SC = ['#d9d9db', '#b9e9e2', '#5ed6c8', '#00a693', '#006e61'], W = 1100, L = 330, rh = 36, bw = W - L - 90;
   let s = `<svg viewBox="0 0 ${W} ${G.length * rh + 6}" width="100%" style="max-width:${W}px;display:block">`;
@@ -1807,13 +1838,15 @@ function crmDash(ALL, f, t) {
   h += crmWeekActive(R, t) + crmNextSteps(R, who) + crmMeetings(ALL, f, t);
   if (who) h += crmDaily(ALL, f, t, true);   // xem riêng 1 người: bảng theo ngày + chi tiết từng action (ô số đã ở Tổng quan)
   if (!who && CR.who !== '_none') {
-    const P = PICS.map(p => { const c1 = dayStats(ALL, f, t, p), c0 = dayStats(ALL, pf, pt, p), my = R.filter(r => r.pic === p);
+    const extra = []; ALL.forEach(r => r.acts.forEach(a => { if (a.d >= f && a.d <= t) [a.who, ...(a.with || [])].forEach(x => { if (x && !PICS.includes(x) && !extra.includes(x)) extra.push(x); }); }));
+    const P = [...PICS, ...extra.sort()].map(p => { const c1 = dayStats(ALL, f, t, p), c0 = dayStats(ALL, pf, pt, p), my = R.filter(r => r.pic === p);
       return {p, c1, c0, tc: tgt('call', f, t, p), tm: tgt('meet', f, t, p), my, nsd: my.filter(r => isoOk(r.nx) && r.nx <= TODAY).length, ns7: my.filter(r => isoOk(r.nx) && r.nx > TODAY && r.nx <= wk7).length}; });
+    const pk = v => v ? `<b style="color:var(--accent);text-decoration:underline;cursor:pointer">${n0(v)}</b>` : '0';
     h += `<div class="card"><div class="hd"><div><div class="eyebrow">Chi tiết từng người</div><h2 class="card-title">Hoạt động trong ${lab}</h2></div><div class="card-note">bấm dòng để xem riêng người đó</div></div><div class="tw"><table><thead><tr><th class="l">Người</th><th>Action</th><th>Cuộc gọi</th><th>Meeting đã đi</th><th>Meeting set</th><th>Ký PL / HĐ mới</th><th>Next step đến hạn</th><th>Next step 7 ngày tới</th><th>Khách phụ trách</th></tr></thead><tbody>
-      ${P.map(o => `<tr class="hit" data-crwho="${esc(o.p)}" style="cursor:pointer"><td class="l name">${esc(o.p)}<span class="def">${esc(ROLE[o.p] || '')}</span></td><td><b>${n0(o.c1.all)}</b> <span class="def">${sgn(o.c1.all, o.c0.all)} so với ${vsTxt}</span></td>
-        <td>${n0(o.c1.call)}${o.tc ? `<span class="def">/ ${n0(Math.round(o.tc))} · ${pct(o.c1.call / o.tc)}</span>` : ''}</td><td>${n0(o.c1.meet)}${o.tm ? `<span class="def">/ ${nf(o.tm, 1)} · ${pct(o.c1.meet / o.tm)}</span>` : ''}</td><td>${n0(o.c1.mset)}</td><td>${n0(o.c1.sign)}</td>
+      ${P.map(o => `<tr ${PICS.includes(o.p) ? `class="hit" data-crwho="${esc(o.p)}" style="cursor:pointer"` : 'style="background:var(--surface-2)"'}><td class="l name">${esc(o.p)}<span class="def">${esc(ROLE[o.p] || (PICS.includes(o.p) ? '' : 'calling · không phụ trách khách'))}</span></td><td><b>${n0(o.c1.all)}</b> <span class="def">${sgn(o.c1.all, o.c0.all)} so với ${vsTxt}</span></td>
+        <td data-crpk="${esc(o.p)}|call" title="Xem các cuộc gọi của ${esc(o.p)}">${pk(o.c1.call)}${o.tc ? `<span class="def">/ ${n0(Math.round(o.tc))} · ${pct(o.c1.call / o.tc)}</span>` : ''}</td><td data-crpk="${esc(o.p)}|meet" title="Xem meeting của ${esc(o.p)}">${pk(o.c1.meet)}${o.tm ? `<span class="def">/ ${nf(o.tm, 1)} · ${pct(o.c1.meet / o.tm)}</span>` : ''}</td><td data-crpk="${esc(o.p)}|mset">${pk(o.c1.mset)}</td><td data-crpk="${esc(o.p)}|sign">${pk(o.c1.sign)}</td>
         <td class="${o.nsd ? 'dn' : ''}">${o.nsd ? `<b>${n0(o.nsd)}</b>` : '0'}</td><td>${n0(o.ns7)}</td><td>${n0(o.my.length)}</td></tr>`).join('')}</tbody></table></div>
-      <div class="hint">Action tính theo người thực hiện và ngày ghi lần liên hệ. Chỉ tiêu theo file KPI Sales và AE (chỉ tiêu ngày = tuần ÷ 5 ngày làm việc). Ký, khởi tạo, DN active mới, next step tính theo khách PIC phụ trách.</div></div>`;
+      <div class="hint">Action tính theo người thực hiện và ngày ghi lần liên hệ. Chỉ tiêu theo file KPI Sales và AE (chỉ tiêu ngày = tuần ÷ 5 ngày làm việc). Ký, khởi tạo, DN active mới, next step tính theo khách PIC phụ trách. Bấm vào số cuộc gọi / meeting / ký của từng người để xem danh sách khách của người đó trong kỳ.</div></div>`;
   }
   return h;
 }
@@ -1870,7 +1903,6 @@ function dayStats(ALL, a, b, who) {
     if (r.liq || (who && r.pic !== who)) return;
     if (isoOk(r.vc) && r.vc >= a && r.vc <= b) o.vc++;
     if (isoOk(r.pl) && r.pl >= a && r.pl <= b) o.sign++;
-    if (isoOk(r.hd) && r.hd >= a && r.hd <= b) o.sign++;
     if (isoOk(r.hd) && r.hd >= a && r.hd <= b) o.sign++; });
   return o;
 }
@@ -3017,6 +3049,10 @@ function bindDrawer() {
   if ($('cat_ns')) $('cat_ns').onchange = e => { $('cat_nsnew').style.display = e.target.value === '__new' ? 'block' : 'none'; };
 }
 function bind() {
+  document.querySelectorAll('[data-crpk]').forEach(el => el.onclick = ev => { ev.stopPropagation(); const [p, k] = el.dataset.crpk.split('|'); CR.kpi = k; CR.kpiWho = p; render(); const L = $('crkpil'); if (L) window.scrollTo({top: L.getBoundingClientRect().top + window.scrollY - 140}); });
+  document.querySelectorAll('[data-crkpi]').forEach(el => el.onclick = ev => { ev.preventDefault(); const k = el.dataset.crkpi, y = window.scrollY; CR.kpi = CR.kpi === k && !CR.kpiWho && !el.dataset.keep ? '' : k; CR.kpiWho = ''; render(); window.scrollTo(0, y); if (CR.kpi && $('crkpil')) { const b = $('crkpil').getBoundingClientRect(); if (b.top > window.innerHeight - 120) window.scrollBy({top: b.top - 260, behavior: 'smooth'}); } });
+  if ($('crkpicsv')) $('crkpicsv').onclick = () => { const T = $('crkpit'); if (!T) return; const q = x => '"' + String(x).replace(/\s+/g, ' ').trim().replace(/"/g, '""') + '"';
+    const csv = [...T.querySelectorAll('tr')].map(tr => [...tr.children].map(td => q(td.innerText)).join(';')).join('\n'); const b = new Blob(['\ufeff' + csv], {type: 'text/csv;charset=utf-8'}); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `XPAY_${CR.kpi}_${TODAY}.csv`; a.click(); };
   if (TAB === 'tep') bindTep();
   document.querySelectorAll('[data-tepgo]').forEach(el => el.onclick = ev => { ev.preventDefault(); ev.stopPropagation(); TEPF.q = el.dataset.tepgo; TEPF.g = 0; TEPF.n = 300; CR.open = null; TAB = 'tep'; render(); window.scrollTo(0, 0); });
   document.querySelectorAll('[data-tab]').forEach(el => el.onclick = ev => { ev.preventDefault(); TAB = el.dataset.tab; if (el.dataset.ovmtg) { CR.view = 'dash'; CR.who = ''; } try { localStorage.setItem('xpay_tab', TAB); } catch (e) {} render(); window.scrollTo(0, 0); });
