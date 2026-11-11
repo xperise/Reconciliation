@@ -272,7 +272,7 @@ function cardsCount() {
 /* mốc ký theo ngày (tab Tiến độ khách hàng, không tính khách thanh lý): đã ký mà không rõ ngày thì tính từ đầu */
 let SIGN_ = null;
 function signDates() { if (SIGN_) return SIGN_; let R = []; try { R = crmRows(LASTDAY || '9999').filter(r => !r.liq); } catch (e) { R = []; }
-  SIGN_ = {pl: R.filter(r => done(r.pl)).map(r => isoOk(r.pl) ? r.pl : ''), hd: R.filter(r => done(r.hd)).map(r => isoOk(r.hd) ? r.hd : '')}; return SIGN_; }
+  SIGN_ = {pl: R.filter(r => done(r.pl)).map(r => isoOk(r.pl) ? r.pl : ''), hd: R.filter(r => done(r.hd)).map(r => isoOk(r.hd) ? r.hd : ''), xp: R.filter(r => done(r.xp)).map(r => isoOk(r.xp) ? r.xp : '')}; return SIGN_; }
 const cntTo = (L, d) => L.reduce((n, x) => n + (!x || x <= d ? 1 : 0), 0);
 function hdCountAt(d) { return cntTo(signDates().hd, d); }
 /* DN ký xong (phụ lục + HĐ mới) theo NGÀY KÝ thực tế trong khoảng [a, b] — không tính khách thanh lý, bỏ qua khách đã ký nhưng không rõ ngày */
@@ -285,6 +285,10 @@ function signedAt(d) {
   return a == null ? null : a + hdCountAt(d);
 }
 function manualAt(d, k) { if ((k === 'appendix' || k === 'onboard' || k === 'cards_issued') && LASTDAY && d >= LASTDAY) return countSrc(d, k).v;
+  // đang dùng số tự động / đếm thẻ: các ngày sau lần nhập tay cuối cùng cũng lấy số tự động (không kéo dài số nhập tay cũ)
+  if ((k === 'appendix' || k === 'onboard' || k === 'cards_issued') && LASTDAY) { const src = countSrc(LASTDAY, k).src;
+    if (src === 'crm' || src === 'cards') { const lm = manualLast(LASTDAY, k);
+      if (!lm || d > lm.d) return k === 'cards_issued' ? autoCounts().cards_issued : cntTo(signDates()[k === 'onboard' ? 'xp' : 'pl'], d); } }
   let v = null, best = ''; for (const [dd, o] of Object.entries(S.manual)) if (dd <= d && dd >= best && o[k] != null) { best = dd; v = o[k]; } return v; }
 function supplyAt(d) {
   const D = S.drv.dates; let units = 0, init = 0, act = 0, ok = 0, any = false;
@@ -1670,8 +1674,9 @@ async function cardsLoad() {
   try { const r = await c.summary(); CARDS = r.sum || {}; CARDST = 'ok'; AUTOC_ = null; CRM_ = null; CARDMSG = r.keyOk ? '' : 'Chưa cấu hình khoá mã hoá MOB_CARD_KEY nên chưa lưu được số thẻ.'; }
   catch (e) { CARDST = 'err'; CARDMSG = e.message || String(e); }
   // số Thẻ đã phát hành đếm theo thẻ: tính lại số thực tế khi dữ liệu thẻ tải xong (lần tính đầu chạy trước khi có dữ liệu thẻ)
-  if (CARDST === 'ok' && MMODE('cards_issued') === 'auto') { AUTOC_ = null; computeActuals(); }
-  if (TAB === 'jr') crmRerender(); else if ((TAB === 'ov' || TAB === 'zoom') && MMODE('cards_issued') === 'auto') render();
+  // có thẻ = đã khởi tạo XPAY: dữ liệu thẻ tải xong thì tính lại số tự động (thẻ phát hành, DN khởi tạo)
+  if (CARDST === 'ok') { AUTOC_ = null; SIGN_ = null; computeActuals(); }
+  if (TAB === 'jr') crmRerender(); else if (TAB === 'ov' || TAB === 'zoom') render();
   else if ($('mkm')) {   // tab Cập nhật số liệu: chỉ cập nhật ô chọn, không vẽ lại (giữ file đã chọn)
     const o = $('mkm').querySelector('option[value="auto"]'), n = cardsCount();
     if (o) { o.disabled = n == null; o.textContent = 'Đếm theo thẻ trên hệ thống' + (n == null ? ` (${CARDST === 'err' ? 'lỗi: ' + CARDMSG : 'chưa tải được dữ liệu thẻ'})` : ` (${n0(n)} thẻ${cardsCount.liq ? `, đã loại ${n0(cardsCount.liq)} thẻ DN thanh lý` : ''})`); }
