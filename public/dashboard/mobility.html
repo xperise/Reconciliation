@@ -600,7 +600,10 @@ let SEL = null, TAB = 'ov', CH = {log: false, full: false}, CANWRITE = false, PE
    Các trường động lấy trực tiếp từ dữ liệu sales đang cập nhật: PIC, ký PL / HĐ mới, đồng ý ký, thẻ & khởi tạo XPAY, GMV / chuyến 30 ngày,
    lần liên hệ gần nhất, next step, meeting — nên nhóm khách tự chuyển khi khách ký / có thẻ / chạy chuyến. Bấm tên khách mở hồ sơ. */
 let TEP = null, TEPMAP = {}, TEPST = 'off';
-const TEPF = {g: 0, q: '', gl: '', sg: '', t2: '', rg: '', cd: '', pic: '', so: 'd', mv: '', n: 300};
+/* Khách ĐÃ CÓ XPAY nhưng CHƯA KÝ (file KH_phat_sinh_chua_ky_HD_T04-T09_2026_co_PIC_5, 11/11): mã HĐ → [STT trong file, status trong file, tên nếu chưa có trong Tệp].
+   Trường "Có XPAY, chưa ký" tự tắt khi khách có ngày ký PL / HĐ mới trên dashboard; khách status Thanh lý trên dashboard không tính. */
+const XPNS = {"20006334":[1,"Đã ký PLHĐ/ HĐ"],"20005598":[2,"Đồng ý tiếp tục & gửi HĐ qua review"],"20008840":[3,"Đồng ý tiếp tục & gửi HĐ qua review"],"20007758":[4,"Đồng ý tiếp tục & gửi HĐ qua review"],"20005167":[5,"Đang cân nhắc & cần thời gian phản hồi"],"20005864":[6,"Đồng ý tiếp tục & gửi HĐ qua review"],"24000381":[7,"Đồng ý tiếp tục & gửi HĐ qua review"],"20000029":[8,"Đã ký PLHĐ/ HĐ"],"20006679":[9,"Đã ký PLHĐ/ HĐ"],"22000531":[10,"Ko đúng đối tượng"],"20000034":[11,"Thanh lý","CTY TNHH BSI VIỆT NAM"],"20005786":[12,"Đã ký PLHĐ/ HĐ"],"20006920":[13,"Đang cân nhắc & cần thời gian phản hồi"],"22000158":[14,"Đang cân nhắc & cần thời gian phản hồi"],"20004708":[15,"Thanh lý"],"20009400":[16,"Đã ký PLHĐ/ HĐ"],"20004766":[17,"Ko đúng đối tượng"],"20010643":[19,"Đã ký PLHĐ/ HĐ"],"20006161":[20,"Thanh lý","CHI NHÁNH CÔNG TY TNHH KỸ THUẬT CÔNG NGHỆ DKSH"],"20008934":[21,"Đã ký PLHĐ/ HĐ"],"20006185":[22,"Thanh lý"],"20004910":[23,"Đang cân nhắc & cần thời gian phản hồi"],"22000593":[24,"Đang cân nhắc & cần thời gian phản hồi"],"20008681":[25,"Ko đúng đối tượng"],"20005267":[26,"Đã ký PLHĐ/ HĐ"],"20010386":[27,"Thanh lý"],"20005888":[28,""],"20008066":[29,"Thanh lý"],"20005320":[30,"Đang cân nhắc & cần thời gian phản hồi"],"20010474":[31,"Đã ký PLHĐ/ HĐ"],"20004854":[32,"Đồng ý tiếp tục & gửi HĐ qua review"],"20005841":[33,""],"20010655":[34,"Đồng ý tiếp tục & gửi HĐ qua review"],"20006238":[35,"Đã ký PLHĐ/ HĐ"],"20006433":[36,"Đang cân nhắc & cần thời gian phản hồi"],"24000338":[37,"Đã ký PLHĐ/ HĐ"],"20006054":[38,"Ko đúng đối tượng"],"20007329":[39,"Ko đúng đối tượng"],"24000041":[40,"Đang cân nhắc & cần thời gian phản hồi"],"20005185":[41,"Đồng ý tiếp tục & gửi HĐ qua review"],"20008149":[42,"Đồng ý tiếp tục & gửi HĐ qua review"],"20006489":[43,"Chưa có số liên hệ"],"20007607":[44,"Chưa có số liên hệ"],"20006710":[45,"Ko đúng đối tượng"],"20005879":[46,""],"20006088":[47,"Đang cân nhắc & cần thời gian phản hồi"],"20006393":[48,"Đã ký PLHĐ/ HĐ"],"20007193":[49,"Thanh lý"],"20006046":[50,"Thanh lý"],"20006721":[51,"Chưa có số liên hệ"],"20004767":[52,"Đã ký PLHĐ/ HĐ"],"20007888":[53,"Đã ký PLHĐ/ HĐ"],"20007906":[54,"Chưa có số liên hệ"],"20005904":[55,"Thanh lý"],"20004681":[56,"Thanh lý"],"20008816":[57,"Chưa có số liên hệ"],"20008044":[58,"Đã ký PLHĐ/ HĐ"],"21000880":[59,"Đã ký PLHĐ/ HĐ"],"20000031":[60,"Chưa có số liên hệ"],"20010277":[61,"Đồng ý tiếp tục & gửi HĐ qua review"],"20008561":[62,"Ko đúng đối tượng"],"20008361":[63,"Đồng ý tiếp tục & gửi HĐ qua review"],"20006567":[64,"KNM/ MB"],"20004972":[65,"Ko đúng đối tượng"],"20007391":[66,"Đồng ý tiếp tục & gửi HĐ qua review"],"20004865":[67,""],"22000964":[68,"Ko đúng đối tượng"],"20010596":[69,"Thanh lý"],"20010580":[70,"Đang cân nhắc & cần thời gian phản hồi"],"20004814":[71,"Chưa có số liên hệ"],"20007563":[72,"Ko đúng đối tượng"],"20005613":[73,"Ko đúng đối tượng"],"20004884":[74,"Chưa có số liên hệ"],"20005762":[75,"Chưa có số liên hệ"],"20005083":[76,"Đồng ý tiếp tục & gửi HĐ qua review"],"20004663":[77,"Ko đúng đối tượng"],"20008505":[78,"Đang cân nhắc & cần thời gian phản hồi"],"20008994":[79,"KNM/ MB"],"20005668":[80,"Ko đúng đối tượng"],"20004674":[81,"Đã ký PLHĐ/ HĐ"],"20007513":[82,"Thanh lý"],"20007039":[83,"KNM/ MB"],"20008099":[84,"Đồng ý tiếp tục & gửi HĐ qua review"],"20004668":[85,"Đang cân nhắc & cần thời gian phản hồi"],"23000847":[86,"Đang cân nhắc & cần thời gian phản hồi"],"20005918":[87,"Chưa có số liên hệ"],"20005624":[88,"Ko đúng đối tượng"],"20007316":[89,"Thanh lý"],"20005316":[90,""],"20008988":[91,"Thanh lý"],"20005649":[92,"Ko đúng đối tượng"],"20005068":[93,"Chưa có số liên hệ"],"20008414":[94,"Chưa có số liên hệ"],"20007947":[95,"Chưa có số liên hệ"],"20005211":[96,"Chưa có số liên hệ"]};
+const TEPF = {g: 0, q: '', gl: '', sg: '', xs: '', t2: '', rg: '', cd: '', pic: '', so: 'd', mv: '', n: 300};
 const TEPGN = {1: 'XPAY active', 2: 'XPAY non-active', 3: 'Đã ký – chưa có XPAY', 4: 'Active chưa ký – chưa có XPAY', 5: 'Top 200 lapser', 6: 'Other lapser'};
 const TEPGD = {1: 'Có chuyến XPAY trong 30 ngày', 2: 'Đã có thẻ hoặc khởi tạo XPAY nhưng không chạy trong 30 ngày', 3: 'Đã ký phụ lục / HĐ mới nhưng chưa có thẻ, khởi tạo XPAY', 4: 'Đang dùng taxi gần đây, chưa ký và chưa có XPAY', 5: 'Top 200 năm 2022 đã ngừng hoặc giảm mạnh, chưa có XPAY', 6: 'Lapser còn lại có lịch sử doanh thu, chưa có XPAY'};
 const TEPC = {1: '#2a78d6', 2: '#eb6834', 3: '#1baf7a', 4: '#0e8f9b', 5: '#eda100', 6: '#8a6fd1'};
@@ -612,6 +615,7 @@ async function tepLoad() {
     const a = html.indexOf('const D='), b = html.indexOf('\n', a);
     TEP = JSON.parse(html.slice(a + 8, b).trim().replace(/;$/, '')); TEPMAP = {};
     TEP.forEach(t => { t.k = MERGE[t.so] || t.so; if (!TEPMAP[t.k] || (TEPMAP[t.k].v || 0) < (t.v || 0)) TEPMAP[t.k] = t; });
+    Object.entries(XPNS).forEach(([k, x]) => { if (!TEPMAP[k]) TEP.push(TEPMAP[k] = {g: 2, so: k, k, n: x[2] || k, rg: '', e: 0, gt: '', gw: '', t2: 0, t2l: 0, sg: 0, ini: 1, cd: 0, v: 0, r10: 0, lm: '', pic: '', sub: 'Thêm từ file Có XPAY – chưa ký', ex: 1}); });
     TEPST = 'ok';
   } catch (e) { TEPST = 'err'; console.warn('tep', e); }
   if (TAB === 'tep' || CR.open) { const y = window.scrollY; render(); window.scrollTo(0, y); }
@@ -619,16 +623,17 @@ async function tepLoad() {
 const tepIsG = t => t.gt === 'cao' || t.gt === 'trung bình';
 /* nhóm hiện tại: tính lại từ dữ liệu sống (giao dịch 30 ngày, thẻ / khởi tạo, ký); khách lapser chỉ đổi nhóm khi đã có XPAY */
 function tepLive(t, r) {
-  if (!r) return {g: t.g, card: t.cd || 0, ini: !!t.ini, signed: !!t.sg};
-  const card = (CARDS && CARDS[r.key] && CARDS[r.key].n) || 0, ini = done(r.xp), signed = r.signed;
-  const g = r.gmv30 > 0 ? 1 : card || ini ? 2 : t.g === 3 || t.g === 4 ? (signed ? 3 : 4) : t.g;
-  return {g, card, ini, signed};
+  const x = XPNS[t.k];
+  if (!r) return {g: t.g, card: t.cd || 0, ini: !!t.ini, signed: !!t.sg, liq: false, xpn: !!x && !t.sg, xs: x ? x[1] : ''};
+  const card = (CARDS && CARDS[r.key] && CARDS[r.key].n) || 0, ini = done(r.xp), signed = r.signed, liq = r.st === 'Thanh lý';
+  const g = liq ? 0 : r.gmv30 > 0 ? 1 : card || ini ? 2 : t.g === 3 || t.g === 4 ? (signed ? 3 : 4) : t.g;
+  return {g, card, ini, signed, liq, xpn: !!x && !signed && !liq, xs: x ? x[1] : ''};
 }
 function tepTag(r) {
   if (TEPST === 'off') setTimeout(tepLoad, 0);
   const t = TEPMAP[r.key]; if (!t) return '';
   const L = tepLive(t, r);
-  return ` · <a href="#" data-tepgo="${esc(t.n)}" style="color:var(--accent);font-weight:600" title="Mở trong Tệp khách hàng mục tiêu">Tệp KH: nhóm ${L.g}. ${TEPGN[L.g]}${tepIsG(t) ? ' · Global' : ''}</a>`;
+  return ` · <a href="#" data-tepgo="${esc(t.n)}" style="color:var(--accent);font-weight:600" title="Mở trong Tệp khách hàng mục tiêu">Tệp KH: ${L.liq ? 'Thanh lý' : `nhóm ${L.g}. ${TEPGN[L.g]}`}${tepIsG(t) ? ' · Global' : ''}${L.xpn ? ' · Có XPAY, chưa ký' : ''}</a>`;
 }
 function tepRows() {
   const R = crmRows(TODAY), byK = {}; R.forEach(r => byK[r.key] = r);
@@ -638,11 +643,11 @@ function tepFilter(A) {
   const F = TEPF, q = fold(F.q);
   let L = A.filter(({t, r, L}) => (!F.g || L.g === F.g) && (!q || fold(t.n).includes(q) || t.so.includes(F.q.trim()) || (r && fold(r.name).includes(q)))
     && (F.gl === '' || (F.gl === 'f' ? tepIsG(t) : F.gl === 'w' ? t.gt === 'thấp' : !t.gt))
-    && (F.sg === '' || (F.sg === 'v' ? r && done(r.vc) && !L.signed : String(+L.signed) === F.sg))
+    && (F.sg === '' || (F.sg === 'v' ? r && done(r.vc) && !L.signed && !L.liq : F.sg === 'x' ? L.xpn && (!F.xs || L.xs === F.xs) : F.sg === 'l' ? L.liq : F.sg === '0' ? !L.signed && !L.liq : L.signed))
     && (F.t2 === '' || (F.t2 === 'c' ? t.t2 : t.t2l)) && (!F.rg || t.rg === F.rg)
     && (F.cd === '' || (F.cd === '1') === !!(L.card || L.ini || (r && r.gmv30)))
     && (!F.pic || (F.pic === '_none' ? !(r ? r.pic : t.pic) : (r ? r.pic : t.pic) === F.pic))
-    && (!F.mv || L.g !== t.g));
+    && (!F.mv || (L.g !== t.g && !L.liq)));
   const k = {v: (a, b) => b.t.v - a.t.v, x: (a, b) => ((b.r && b.r.gmv30) || 0) - ((a.r && a.r.gmv30) || 0), r: (a, b) => (b.t.r10 || 0) - (a.t.r10 || 0), n: (a, b) => a.t.n.localeCompare(b.t.n, 'vi'),
     c: (a, b) => ((b.r && b.r.acts[0] && b.r.acts[0].d) || '').localeCompare((a.r && a.r.acts[0] && a.r.acts[0].d) || '')}[F.so];
   return k ? L.slice().sort(k) : L;
@@ -650,24 +655,30 @@ function tepFilter(A) {
 function renderTep() {
   if (!document.getElementById('tep-src')) return `<div class="card"><div class="hint">Trang này chưa nhúng file Tệp khách hàng mục tiêu.</div></div>`;
   if (TEPST !== 'ok') { if (TEPST === 'off') setTimeout(tepLoad, 0); return `<div class="card"><div class="hint">${TEPST === 'err' ? 'Trình duyệt không giải nén được file Tệp khách hàng (cần Chrome / Edge / Safari bản mới).' : 'Đang mở Tệp khách hàng mục tiêu…'}</div></div>`; }
-  const A = tepRows(), F = TEPF, L = tepFilter(A), linked = A.filter(x => x.r).length, moved = A.filter(x => x.L.g !== x.t.g).length;
+  const A = tepRows(), F = TEPF, L = tepFilter(A), linked = A.filter(x => x.r).length, moved = A.filter(x => x.L.g !== x.t.g && !x.L.liq).length, nliq = A.filter(x => x.L.liq).length;
   const sel = (id, opts, v) => `<select id="${id}">${opts.map(([k, l]) => `<option value="${k}" ${String(v) === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
-  let h = `<div class="card"><div class="hd"><div><div class="eyebrow">Tệp khách hàng focus · 6 nhóm</div><h2 class="card-title">${n0(A.length)} khách · ${n0(A.filter(x => tepIsG(x.t)).length)} Global focus</h2></div>
+  let h = `<div class="card"><div class="hd"><div><div class="eyebrow">Tệp khách hàng focus · 6 nhóm</div><h2 class="card-title">${n0(A.length)} khách · ${n0(A.filter(x => tepIsG(x.t)).length)} Global focus${nliq ? ` · <a href="#" data-tepsg="l" style="color:var(--critical)">${n0(nliq)} thanh lý</a>` : ''}</h2></div>
     <div class="card-note">Nhóm tính lại theo dữ liệu đang cập nhật (ký, thẻ, giao dịch 30 ngày) · ${n0(linked)}/${n0(A.length)} khách đã khớp hồ sơ trên dashboard${moved ? ` · <a href="#" id="tepmv" style="color:var(--accent);font-weight:600">${n0(moved)} khách đã đổi nhóm so với file gốc</a>` : ''}</div></div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin-top:12px">`;
   for (let g = 1; g <= 6; g++) {
     const a = A.filter(x => x.L.g === g), gf = a.filter(x => tepIsG(x.t)).length, base = A.filter(x => x.t.g === g).length, sg = a.filter(x => x.L.signed).length;
     const gmv = a.reduce((s, x) => s + ((x.r && x.r.gmv30) || 0), 0), val = a.reduce((s, x) => s + (x.t.v || 0), 0);
-    h += `<button class="hit" data-tepg="${g}" style="text-align:left;font:inherit;color:inherit;cursor:pointer;background:${F.g === g ? 'var(--color-surface-primary)' : 'var(--surface)'};border:1.5px solid ${F.g === g ? TEPC[g] : 'var(--line)'};border-top:5px solid ${TEPC[g]};border-radius:12px;padding:12px 14px">
+    h += `<button class="hit" data-tepg="${g}" style="display:flex;flex-direction:column;justify-content:flex-start;text-align:left;font:inherit;color:inherit;cursor:pointer;background:${F.g === g ? 'var(--color-surface-primary)' : 'var(--surface)'};border:1.5px solid ${F.g === g ? TEPC[g] : 'var(--line)'};border-top:5px solid ${TEPC[g]};border-radius:12px;padding:12px 14px">
       <div style="font-weight:700">${g}. ${TEPGN[g]}</div><div class="lbl" style="min-height:34px;font-size:12px">${TEPGD[g]}</div>
       <div style="font-size:26px;font-weight:700;margin:2px 0">${n0(a.length)}${a.length !== base ? `<span class="lbl" style="font-size:12px;font-weight:400;margin-left:6px">file gốc ${n0(base)}</span>` : ''}</div>
       <div class="lbl" style="font-size:12px"><b style="color:var(--ink)">Global focus ${n0(gf)}</b> · đã ký ${n0(sg)} · giá trị ${nf(val, 0)} tr/tháng${gmv ? ' · GMV 30N ' + ty(gmv) : ''}</div></button>`;
   }
+  { const X = A.filter(x => x.L.xpn), stOf = {}; X.forEach(x => { const k = x.L.xs || 'Chưa có status'; stOf[k] = (stOf[k] || 0) + 1; });
+    const nF = Object.keys(XPNS).length, nS = A.filter(x => XPNS[x.t.k] && x.L.signed).length, nL = A.filter(x => XPNS[x.t.k] && x.L.liq).length, on = F.sg === 'x', cX = '#d4537e';
+    h += `<div class="hit" data-tepsg="x" style="text-align:left;cursor:pointer;background:${on ? 'var(--color-surface-primary)' : 'var(--surface)'};border:1.5px solid ${on ? cX : 'var(--line)'};border-top:5px solid ${cX};border-radius:12px;padding:12px 14px">
+      <div style="font-weight:700">Đã có XPAY nhưng chưa ký</div><div class="lbl" style="min-height:34px;font-size:12px">Danh sách 11/11 · PIC Khánh · tự rời khi có ngày ký</div>
+      <div style="font-size:26px;font-weight:700;margin:2px 0">${n0(X.length)}<span class="lbl" style="font-size:12px;font-weight:400;margin-left:6px">file gốc ${n0(nF)} · đã ký ${n0(nS)} · thanh lý ${n0(nL)}</span></div>
+      <div class="lbl" style="font-size:11.5px;line-height:1.55">${Object.entries(stOf).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<a href="#" data-tepxs="${esc(k)}" style="color:${on && F.xs === k ? cX : 'inherit'};${on && F.xs === k ? 'font-weight:700' : ''}">${esc(k)} ${n0(n)}</a>`).join(' · ')}</div></div>`; }
   h += `</div></div>`;
   h += `<div class="card"><div class="ctl" style="flex-wrap:wrap;gap:8px;justify-content:flex-start">
     <input id="tepq" type="search" placeholder="Tìm tên hoặc số HĐ" value="${esc(F.q)}" style="width:190px">
     <span class="lbl">Global</span>${sel('tepgl', [['', 'Tất cả'], ['f', 'Global focus'], ['w', 'Global thấp'], ['n', 'Không global']], F.gl)}
-    <span class="lbl">Ký</span>${sel('tepsg', [['', 'Tất cả'], ['1', 'Đã ký'], ['v', 'Đồng ý ký, chưa ký xong'], ['0', 'Chưa ký']], F.sg)}
+    <span class="lbl">Ký</span>${sel('tepsg', [['', 'Tất cả'], ['1', 'Đã ký'], ['v', 'Đồng ý ký, chưa ký xong'], ['x', 'Đã có XPAY, chưa ký'], ['0', 'Chưa ký'], ['l', 'Thanh lý']], F.sg)}
     <span class="lbl">Top 200</span>${sel('tept2', [['', 'Tất cả'], ['c', 'Đang dùng'], ['l', 'Lapser']], F.t2)}
     <span class="lbl">Khu vực</span>${sel('teprg', [['', 'Tất cả'], ['HCM', 'HCM'], ['HN', 'HN'], ['Khác', 'Tỉnh khác']], F.rg)}
     <span class="lbl">XPAY</span>${sel('tepcd', [['', 'Tất cả'], ['1', 'Có thẻ / khởi tạo'], ['0', 'Chưa có']], F.cd)}
@@ -678,12 +689,12 @@ function renderTep() {
     <div class="tw" style="max-height:72vh;overflow:auto"><table><thead><tr><th>#</th><th class="l">Khách hàng</th><th class="l">Nhóm</th><th>Khu vực</th><th class="l">Global</th><th>Top 200</th><th class="l">Ký PL / HĐ mới</th><th class="l">Thẻ XPAY</th><th>GMV XPAY 30N</th><th>Chuyến gần nhất</th><th>Giá trị (tr/tháng)</th><th>DT 10 tháng (tr)</th><th class="l">PIC</th><th class="l">Liên hệ gần nhất</th><th class="l">Next step · meeting</th></tr></thead><tbody>`;
   h += L.slice(0, F.n).map(({t, r, L: v}, i) => {
     const a = r && r.acts[0], ok = s => `<b style="color:var(--stable)">${s}</b>`;
-    const sign = v.signed ? ok('Đã ký') + (r && isoOk(r.pl) ? ' ' + dmy(r.pl) : r && isoOk(r.hd) ? ' ' + dmy(r.hd) : '') : r && done(r.vc) ? `<span class="pill p-high">Đồng ý ký${isoOk(r.vc) ? ' ' + dm(r.vc) : ''}</span>` : '<span class="lbl">Chưa</span>';
+    const sign = v.liq ? '<span class="pill p-critical">Thanh lý</span>' : v.xpn ? `<span class="pill p-high">Có XPAY, chưa ký</span>${v.xs ? `<span class="def">${esc(v.xs)}</span>` : ''}` : v.signed ? ok('Đã ký') + (r && isoOk(r.pl) ? ' ' + dmy(r.pl) : r && isoOk(r.hd) ? ' ' + dmy(r.hd) : '') : r && done(r.vc) ? `<span class="pill p-high">Đồng ý ký${isoOk(r.vc) ? ' ' + dm(r.vc) : ''}</span>` : '<span class="lbl">Chưa</span>';
     const xp = v.card ? ok('Có thẻ') + ' · ' + n0(v.card) + ' thẻ' : v.ini ? 'Đã khởi tạo' : '<span class="lbl">Chưa có</span>';
     const nx = r ? [r.ns || isoOk(r.nx) ? `${esc(r.ns || 'Liên hệ lại')}${isoOk(r.nx) ? ` <b class="${r.nx < TODAY ? 'c-critical' : r.nx === TODAY ? 'c-high' : ''}">${dm(r.nx)}</b>` : ''}` : '', r.mnext ? `Meeting <b>${dm(r.mnext)}</b>` : ''].filter(Boolean).join(' · ') : '';
     return `<tr class="${r ? 'hit' : ''}" ${r ? `data-cropen="${esc(r.key)}" style="cursor:pointer;${tepIsG(t) ? 'background:#fff2b380' : ''}"` : `style="${tepIsG(t) ? 'background:#fff2b380' : ''}"`}>
       <td>${i + 1}</td><td class="l name" style="white-space:normal;min-width:230px">${r ? `<span style="color:var(--accent)">${esc(t.n)}</span>` : esc(t.n)}<span class="def">HĐ ${esc(t.so)}${r ? '' : ' · chưa có hồ sơ trên dashboard'}${t.gw ? ' · ' + esc(t.gw) : ''}</span></td>
-      <td class="l"><span class="pill" style="background:${TEPC[v.g]}22;color:${TEPC[v.g]};font-weight:600">${v.g}. ${TEPGN[v.g]}</span>${v.g !== t.g ? `<span class="def">từ nhóm ${t.g} (file gốc)</span>` : t.sub ? `<span class="def">${esc(t.sub)}</span>` : ''}</td>
+      <td class="l">${v.liq ? `<span class="pill p-critical">Thanh lý</span>` : `<span class="pill" style="background:${TEPC[v.g]}22;color:${TEPC[v.g]};font-weight:600">${v.g}. ${TEPGN[v.g]}</span>`}${v.g !== t.g ? `<span class="def">${v.liq ? 'trước là' : 'từ'} nhóm ${t.g} (file gốc)</span>` : t.sub ? `<span class="def">${esc(t.sub)}</span>` : ''}</td>
       <td>${t.rg === 'Khác' ? 'Tỉnh khác' : esc(t.rg)}${t.e ? '<span class="lbl"> ~</span>' : ''}</td><td class="l">${t.gt ? `<span class="pill ${t.gt === 'thấp' ? 'p-mute' : 'p-stable'}">${t.gt === 'thấp' ? 'Global thấp' : 'Global'}</span>` : ''}</td>
       <td>${t.t2 ? 'Đang dùng' : t.t2l ? 'Lapser' : ''}</td><td class="l">${sign}</td><td class="l">${xp}</td>
       <td>${r && r.gmv30 ? money(r.gmv30) : '<span class="lbl">–</span>'}</td><td>${r && r.lastTx ? dmy(r.lastTx) : '<span class="lbl">–</span>'}</td>
@@ -697,17 +708,19 @@ function renderTep() {
 function bindTep() {
   const re = () => { const y = window.scrollY; render(); window.scrollTo(0, y); };
   document.querySelectorAll('[data-tepg]').forEach(el => el.onclick = () => { const g = +el.dataset.tepg; TEPF.g = TEPF.g === g ? 0 : g; TEPF.n = 300; re(); });
-  [['tepgl', 'gl'], ['tepsg', 'sg'], ['tept2', 't2'], ['teprg', 'rg'], ['tepcd', 'cd'], ['teppic', 'pic'], ['tepso', 'so']].forEach(([id, f]) => { if ($(id)) $(id).onchange = e => { TEPF[f] = e.target.value; TEPF.n = 300; re(); }; });
+  [['tepgl', 'gl'], ['tepsg', 'sg', 1], ['tept2', 't2'], ['teprg', 'rg'], ['tepcd', 'cd'], ['teppic', 'pic'], ['tepso', 'so']].forEach(([id, f, c]) => { if ($(id)) $(id).onchange = e => { TEPF[f] = e.target.value; if (c) TEPF.xs = ''; TEPF.n = 300; re(); }; });
+  document.querySelectorAll('[data-tepsg]').forEach(el => el.onclick = e => { e.preventDefault(); const v = el.dataset.tepsg; TEPF.sg = TEPF.sg === v && !TEPF.xs ? '' : v; TEPF.xs = ''; TEPF.g = 0; TEPF.n = 300; re(); });
+  document.querySelectorAll('[data-tepxs]').forEach(el => el.onclick = e => { e.preventDefault(); e.stopPropagation(); const v = el.dataset.tepxs; if (TEPF.sg === 'x' && TEPF.xs === v) TEPF.xs = ''; else { TEPF.sg = 'x'; TEPF.xs = v; } TEPF.g = 0; TEPF.n = 300; re(); });
   if ($('tepq')) $('tepq').onchange = e => { TEPF.q = e.target.value; TEPF.n = 300; re(); };
-  if ($('tepall')) $('tepall').onclick = () => { Object.assign(TEPF, {g: 0, q: '', gl: '', sg: '', t2: '', rg: '', cd: '', pic: '', mv: '', n: 300}); re(); };
+  if ($('tepall')) $('tepall').onclick = () => { Object.assign(TEPF, {g: 0, q: '', gl: '', sg: '', xs: '', t2: '', rg: '', cd: '', pic: '', mv: '', n: 300}); re(); };
   if ($('tepmv')) $('tepmv').onclick = e => { e.preventDefault(); TEPF.mv = TEPF.mv ? '' : '1'; TEPF.n = 300; re(); };
   if ($('tepmore')) $('tepmore').onclick = () => { TEPF.n += 300; re(); };
   if ($('tepcsv')) $('tepcsv').onclick = () => {
     const q = s => '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"';
-    const H = ['Nhóm hiện tại', 'Nhóm file gốc', 'Khách hàng', 'Số hợp đồng', 'Khu vực', 'Global', 'Dấu hiệu global', 'Top 200', 'Ký PL / HĐ mới', 'Đồng ý ký', 'Số thẻ XPAY', 'Khởi tạo XPAY', 'GMV XPAY 30N (đ)', 'Chuyến gần nhất', 'Giá trị (tr/tháng)', 'DT 10 tháng (tr)', 'PIC', 'Liên hệ gần nhất', 'Kết quả', 'Next step', 'Ngày next step', 'Meeting sắp tới'];
+    const H = ['Nhóm hiện tại', 'Nhóm file gốc', 'Khách hàng', 'Số hợp đồng', 'Khu vực', 'Global', 'Dấu hiệu global', 'Top 200', 'Ký PL / HĐ mới', 'Có XPAY, chưa ký (file 11/11)', 'Status file 11/11', 'Đồng ý ký', 'Số thẻ XPAY', 'Khởi tạo XPAY', 'GMV XPAY 30N (đ)', 'Chuyến gần nhất', 'Giá trị (tr/tháng)', 'DT 10 tháng (tr)', 'PIC', 'Liên hệ gần nhất', 'Kết quả', 'Next step', 'Ngày next step', 'Meeting sắp tới'];
     const rows = tepFilter(tepRows()).map(({t, r, L}) => { const a = r && r.acts[0];
-      return [L.g + '. ' + TEPGN[L.g], t.g + '. ' + TEPGN[t.g], t.n, t.so, t.rg, t.gt ? (t.gt === 'thấp' ? 'Global thấp' : 'Global focus') : '', t.gw, t.t2 ? 'Đang dùng' : t.t2l ? 'Lapser' : '',
-        L.signed ? 'Đã ký' + (r && isoOk(r.pl) ? ' ' + r.pl : r && isoOk(r.hd) ? ' ' + r.hd : '') : 'Chưa ký', r && done(r.vc) ? (isoOk(r.vc) ? r.vc : 'Có') : '', L.card || '', L.ini ? 'Có' : '',
+      return [L.liq ? 'Thanh lý' : L.g + '. ' + TEPGN[L.g], t.g + '. ' + TEPGN[t.g], t.n, t.so, t.rg, t.gt ? (t.gt === 'thấp' ? 'Global thấp' : 'Global focus') : '', t.gw, t.t2 ? 'Đang dùng' : t.t2l ? 'Lapser' : '',
+        L.liq ? 'Thanh lý' : L.signed ? 'Đã ký' + (r && isoOk(r.pl) ? ' ' + r.pl : r && isoOk(r.hd) ? ' ' + r.hd : '') : 'Chưa ký', L.xpn ? 'Có' : '', XPNS[t.k] ? XPNS[t.k][1] : '', r && done(r.vc) ? (isoOk(r.vc) ? r.vc : 'Có') : '', L.card || '', L.ini ? 'Có' : '',
         r && r.gmv30 ? Math.round(r.gmv30) : '', r && r.lastTx || '', t.v, t.r10 || '', (r && r.pic) || t.pic || '', a ? a.d : '', a ? a.res || '' : '', r ? r.ns : '', r ? r.nx : '', r ? r.mnext : ''].map(q).join(';'); });
     const b = new Blob(['﻿' + H.map(q).join(';') + '\n' + rows.join('\n')], {type: 'text/csv;charset=utf-8'}); const x = document.createElement('a'); x.href = URL.createObjectURL(b); x.download = `XPAY_tep_khach_hang_${TODAY}.csv`; x.click();
   };
