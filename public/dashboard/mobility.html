@@ -1602,6 +1602,7 @@ function crmRows(d) {
     // 2 mốc ký riêng: Ký phụ lục (khách Mai Linh chuyển đổi) · Ký hợp đồng mới (khách mới)
     r.hd = ms.hd == null ? '' : ms.hd; r.signed = done(r.pl) || done(r.hd);
     r.vc = ms.vc == null ? '' : ms.vc;
+    r.picM = e.picM || ''; r.picK = e.picK || '';   // PIC Call / Setup meeting · PIC ký PLHĐ / HĐ (PIC chính = người triển khai active XPAY)
     r.cts = ctOf(k); r.ct0 = r.cts[0] || null;   // khách đồng ý ký bằng lời (verbal confirm), chưa ký xong
     r.mtgs = mtgOf(acts, d);
     r.mnext = r.mtgs.filter(m => m.st === 'soon').map(m => m.md).sort()[0] || '';   // lịch meeting sắp tới
@@ -1773,6 +1774,12 @@ function renderJourney() {
   return tabs + body;
 }
 /* danh sách bên dưới các ô "Các mốc trong …": bấm ô nào hiện đúng các khách / lần liên hệ đã đếm vào ô đó (cùng kỳ, cùng người đang lọc) */
+/* người chọn được cho 3 vai trò PIC: danh sách PIC + người đã ghi lần liên hệ (vd Tâm, Tuấn bên calling) */
+function picPeople(extra) {
+  const set = new Set(PICS); (CRM_ || []).forEach(r => r.acts.forEach(a => { if (a.who) set.add(a.who); }));
+  Object.values(DBX).forEach(e => ['picM', 'picK'].forEach(f => { if (e && e[f]) set.add(e[f]); })); (extra || []).forEach(x => x && set.add(x));
+  return [...PICS, ...[...set].filter(p => !PICS.includes(p)).sort((a, b) => a.localeCompare(b, 'vi'))];
+}
 function crmKpiList(ALL, mine, f, t, who0, id, lab) {
   const who = CR.kpiWho || who0; if (CR.kpiWho) mine = ALL.filter(r => !r.liq && r.pic === who);
   const inR = (v, a, b) => isoOk(v) && v >= a && v <= b, open = r => `data-cropen="${esc(r.key)}" class="hit" style="cursor:pointer"`;
@@ -2290,12 +2297,14 @@ ${ms('hd', 'Ký hợp đồng mới', 'khách mới ký hợp đồng XPAY')}${m
         <input id="cat_nsnew" placeholder="Tên next step mới" style="${inp};width:100%;display:none;grid-column:1 / -1"></div>
       ${r.acts.length ? `<div class="tw" style="margin-top:10px"><table><thead><tr><th class="l">Ngày</th><th class="l">Loại</th><th class="l">Người</th><th class="l">Kết quả</th><th class="l">Chi tiết</th><th></th></tr></thead><tbody>${r.acts.map(a => `<tr><td class="l">${isoOk(a.d) ? dmy(a.d) : esc(a.d)}</td><td class="l">${actLab(a.t)}${a.t === 'mset' ? (m => `<span class="def">${isoOk(a.md) ? 'hẹn ' + dmy(a.md) + ' · ' : ''}${m ? MST[m.st][1] : ''}</span>`)(r.mtgs.find(m => m.set === a)) : ''}${a.t === 'meet' && (a.with || []).length ? `<span class="def">cùng ${a.with.map(esc).join(', ')}</span>` : ''}</td><td class="l">${esc(a.who || '')}</td><td class="l">${esc(a.res || '')}</td><td class="l" style="white-space:normal;min-width:220px">${esc(a.det || '')}</td><td>${a.seed ? '<span class="lbl">file giao thẻ</span>' : ed ? `<a data-cadel="${esc(a.id)}" style="cursor:pointer;color:var(--critical)">xóa</a>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="hint">Chưa có lần liên hệ nào.</div>'}`)
       + sec('pat', 'Pattern di chuyển', tr.length ? `${n0(tr.length)} chuyến toàn bộ${ps ? ` · 30 ngày: ${esc(ps.route)} (${ps.rn} chuyến), ${esc(ps.p)}, ${ps.band}` : ''}` : 'chưa có chuyến XPAY', secOn('pat') ? (tr.length ? kpiRow(tr) : '') + custPatterns(r.key, tr) : '')
-      + sec('asg', 'Phân công, phân loại', `PIC ${r.pic ? esc(r.pic) : '<b style="color:var(--critical)">chưa phân công</b>'} · nhóm ${r.grp === 9 ? 'Đã thanh lý' : r.grp}${r.grpM ? ' (chọn tay)' : ' (tự động)'}${r.st ? ' · ' + esc(r.st) : ''}${r.note ? ' · có ghi chú' : ''}`, `
+      + sec('asg', 'Phân công, phân loại', `PIC ${r.pic ? esc(r.pic) : '<b style="color:var(--critical)">chưa phân công</b>'}${r.picM || r.picK ? ` · call/meeting ${esc(r.picM || '—')} · ký ${esc(r.picK || '—')}` : ''} · nhóm ${r.grp === 9 ? 'Đã thanh lý' : r.grp}${r.grpM ? ' (chọn tay)' : ' (tự động)'}${r.st ? ' · ' + esc(r.st) : ''}${r.note ? ' · có ghi chú' : ''}`, `
 
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
-        <label class="lbl">Người phụ trách<select id="crf_pic" ${dis} style="width:100%"><option value="">Chưa phân công</option>${PICS.map(p => `<option ${r.pic === p ? 'selected' : ''}>${p}</option>`).join('')}</select></label>
+        <label class="lbl">Người phụ trách chính · triển khai active XPAY<select id="crf_pic" ${dis} style="width:100%"><option value="">Chưa phân công</option>${PICS.map(p => `<option ${r.pic === p ? 'selected' : ''}>${p}</option>`).join('')}</select></label>
         <label class="lbl">Nhóm khách<select id="crf_grp" ${dis} style="width:100%"><option value="">Tự động: ${r.grpA === 9 ? '' : r.grpA + '. '}${esc(GRP[r.grpA])}</option>${[1, 2, 3, 4, 5].map(g => `<option value="${g}" ${r.grpM === String(g) ? 'selected' : ''}>${g}. ${GRP[g]}</option>`).join('')}</select></label>
         <label class="lbl">Tình trạng đặc biệt<select id="crf_st" ${dis} style="width:100%">${SPECIAL.map(s => `<option value="${s}" ${r.st === s ? 'selected' : ''}>${s || '—'}</option>`).join('')}</select></label></div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px">${(() => { const ppl = picPeople([r.picM, r.picK]);
+        return [['picM', 'PIC Call / Setup meeting'], ['picK', 'PIC ký PLHĐ / Hợp đồng']].map(([f, l]) => `<label class="lbl">${l}<select id="crf_${f}" ${dis} style="width:100%"><option value="">— chưa phân công</option>${ppl.map(p => `<option ${r[f] === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></label>`).join(''); })()}</div>
       <textarea id="crf_note" placeholder="Ghi chú chung" ${dis} style="${inp};width:100%;margin-top:8px;min-height:50px">${esc(r.note)}</textarea>
       `);
     })()}`}
@@ -3014,6 +3023,7 @@ function bindDrawer() {
       ms[f] = v === auto[f] ? null : v; });
     const st = $('crf_st').value, stAuto = b.tl ? 'Thanh lý' : '';
     const patch = {ms, pic: $('crf_pic').value === (c[2] || '') ? null : $('crf_pic').value, grp: $('crf_grp').value || null, st: st === stAuto ? null : st, note: $('crf_note').value.trim()};
+    ['picM', 'picK'].forEach(f => { if ($('crf_' + f)) { const v = $('crf_' + f).value; if (v !== (r[f] || '')) patch[f] = v || null; } });
     const tv = $('crf_tact') ? $('crf_tact').value : r.tact; if (tv !== r.tact) { patch.tact = tv || null; patch.tactSet = tv ? TODAY : null; }
     if (['pl', 'hd', 'xp'].some(f => (ms[f] == null ? null : ms[f]) !== (((DBX[k] || {}).ms || {})[f] == null ? null : DBX[k].ms[f]))) patch.mts = Date.now();
     return patch;
