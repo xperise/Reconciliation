@@ -5,11 +5,11 @@ import {
   doiMatKhauNguoiDung, xoaNguoiDung,
 } from '@/app/actions';
 
-/** Quyền xem: tab Xperise, MLX và 3 phần của tab Dashboard */
-export type Quyen = { xperise: boolean; mlx: boolean; all: boolean; ts: boolean; m: boolean; hd: boolean; hdSua: boolean };
-const KHONG: Quyen = { xperise: false, mlx: false, all: false, ts: false, m: false, hd: true, hdSua: false };
-const TAT_CA: Quyen = { xperise: true, mlx: true, all: true, ts: true, m: true, hd: true, hdSua: true };
-const coPhan = (q: Quyen) => q.xperise || q.mlx || q.all || q.ts || q.m || q.hd;
+/** Quyền xem: tab Xperise, MLX, 3 phần của tab Dashboard, Hướng dẫn và Workstream */
+export type Quyen = { xperise: boolean; mlx: boolean; all: boolean; ts: boolean; m: boolean; hd: boolean; hdSua: boolean; ws: boolean };
+const KHONG: Quyen = { xperise: false, mlx: false, all: false, ts: false, m: false, hd: true, hdSua: false, ws: false };
+const TAT_CA: Quyen = { xperise: true, mlx: true, all: true, ts: true, m: true, hd: true, hdSua: true, ws: true };
+const coPhan = (q: Quyen) => q.xperise || q.mlx || q.all || q.ts || q.m || q.hd || q.ws;
 
 /** Ô tick chọn phần được xem */
 function TabCheckboxes({ q, onChange, disabled, locked }: {
@@ -23,7 +23,7 @@ function TabCheckboxes({ q, onChange, disabled, locked }: {
   );
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex items-center gap-5">{box('Xperise', 'xperise')}{box('MLX', 'mlx')}</div>
+      <div className="flex items-center gap-5">{box('Xperise', 'xperise')}{box('MLX', 'mlx')}{box('Workstream', 'ws')}</div>
       <div className="flex items-center gap-4 flex-wrap">
         <span className="text-xs font-semibold text-[var(--ink-3)]">Dashboard:</span>
         {box('Tổng quan', 'all')}{box('Travel & SaaS', 'ts')}{box('Mobility', 'm')}
@@ -56,7 +56,7 @@ export function CreateUser() {
     setTb('');
     start(async () => {
       try {
-        await taoNguoiDung(email, mk, ten, vaiTro, laAdmin || q.xperise, laAdmin || q.mlx, { all: laAdmin || q.all, ts: laAdmin || q.ts, m: laAdmin || q.m }, { xem: laAdmin || q.hd, sua: laAdmin || (q.hd && q.hdSua) });
+        await taoNguoiDung(email, mk, ten, vaiTro, laAdmin || q.xperise, laAdmin || q.mlx, { all: laAdmin || q.all, ts: laAdmin || q.ts, m: laAdmin || q.m }, { xem: laAdmin || q.hd, sua: laAdmin || (q.hd && q.hdSua) }, laAdmin || q.ws);
         setTb(`Đã cấp tài khoản cho ${email}.`);
         setEmail(''); setMk(''); setTen('');
         setQ(KHONG);
@@ -128,7 +128,7 @@ export function AccessToggle({ id, q: q0, isAdmin }: { id: string; q: Quyen; isA
     const cu = q;
     setQ(n); setLoi('');
     start(async () => {
-      try { await doiQuyenXemTab(id, n.xperise, n.mlx, { all: n.all, ts: n.ts, m: n.m }, { xem: n.hd, sua: n.hd && n.hdSua }); }
+      try { await doiQuyenXemTab(id, n.xperise, n.mlx, { all: n.all, ts: n.ts, m: n.m }, { xem: n.hd, sua: n.hd && n.hdSua }, n.ws); }
       catch (e) { setQ(cu); setLoi(e instanceof Error ? e.message : 'Không lưu được'); }
     });
   }

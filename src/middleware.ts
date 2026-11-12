@@ -1,6 +1,6 @@
 import { createServerClient, type SetAllCookies } from '@supabase/ssr';
 import { NextRequest, NextResponse } from 'next/server';
-import { coQuyen, isDashboardPath, isGuidePath, isMlxPath, tabAccess, trangChu } from '@/lib/access';
+import { coQuyen, isDashboardPath, isGuidePath, isMlxPath, isWorkstreamPath, tabAccess, trangChu } from '@/lib/access';
 
 /** Làm mới phiên đăng nhập và chặn truy cập khi chưa đăng nhập. */
 export async function middleware(req: NextRequest) {
@@ -92,6 +92,11 @@ export async function middleware(req: NextRequest) {
   }
   if (isDashboardPath(path)) {
     if (!access.dashboard) return chuyenHuong(home);
+    return res;
+  }
+  // Workstream: cả trang lẫn tệp tĩnh (html/js/css trong public/workstream) đều phải có quyền
+  if (isWorkstreamPath(path)) {
+    if (!access.workstream) return chuyenHuong(home);
     return res;
   }
   if (!path.startsWith('/api/')) {

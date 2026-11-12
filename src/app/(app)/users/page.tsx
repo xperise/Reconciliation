@@ -53,6 +53,8 @@ export default async function UsersPage() {
                       // Chưa chạy SQL 23: ai cũng xem được Hướng dẫn, chưa ai được sửa
                       hd: u.xem_huongdan ?? true,
                       hdSua: u.sua_huongdan ?? false,
+                      // Chưa chạy SQL 29: chưa ai (ngoài admin) xem được Workstream
+                      ws: u.xem_workstream ?? false,
                     }}
                     isAdmin={u.role === 'admin'}
                   />

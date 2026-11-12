@@ -68,6 +68,8 @@ export function Shell({ role, email, userId, soChoDuyet, thongBao, access, child
   const laDash = path === '/dashboard' || path.startsWith('/dashboard/');
   // Tab Hướng dẫn: không dùng các nhóm tab của Xperise
   const laHd = path === '/huong-dan' || path.startsWith('/huong-dan/');
+  // Tab Workstream: ứng dụng chạy trong khung riêng, có thanh tab riêng
+  const laWs = path === '/workstream' || path.startsWith('/workstream/');
 
   const isOn = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));
 
@@ -86,10 +88,10 @@ export function Shell({ role, email, userId, soChoDuyet, thongBao, access, child
       <header className="topbar">
         <img src={LOGO} alt="xperise" className="topbar-logo" />
         <span className="topbar-div" />
-        <span className="topbar-name">{laMlx ? 'Bảng kê MLX' : laDash ? 'Dashboard quản trị' : laHd ? 'Hướng dẫn sử dụng' : 'Đối soát bảng kê'}</span>
+        <span className="topbar-name">{laMlx ? 'Bảng kê MLX' : laDash ? 'Dashboard quản trị' : laHd ? 'Hướng dẫn sử dụng' : laWs ? 'Workstream' : 'Đối soát bảng kê'}</span>
 
         <div className="ml-auto flex items-center gap-3 no-print">
-          <AppTabs xperise={access?.xperise ?? true} mlx={access?.mlx ?? true} dashboard={access?.dashboard ?? false} guide={access?.guide ?? true} />
+          <AppTabs xperise={access?.xperise ?? true} mlx={access?.mlx ?? true} dashboard={access?.dashboard ?? false} guide={access?.guide ?? true} workstream={access?.workstream ?? false} />
           <Bell items={thongBao} userId={userId} />
           <div className="text-right leading-tight hidden sm:block">
             <div className="text-[11.5px] text-[var(--ink-2)] font-semibold">{email}</div>
@@ -99,7 +101,7 @@ export function Shell({ role, email, userId, soChoDuyet, thongBao, access, child
         </div>
       </header>
 
-      {!laMlx && !laDash && !laHd && (
+      {!laMlx && !laDash && !laHd && !laWs && (
         <>
           {/* Hàng 1: nhóm tab */}
           <nav className="tabs no-print" aria-label="Nhóm chức năng">
@@ -139,7 +141,7 @@ export function Shell({ role, email, userId, soChoDuyet, thongBao, access, child
       )}
 
       {/* Trang MLX tự có khung & lề riêng, không bọc thêm .page để tránh lề đôi */}
-      {laMlx || laDash || laHd ? <main>{children}</main> : <main className="page">{children}</main>}
+      {laMlx || laDash || laHd || laWs ? <main>{children}</main> : <main className="page">{children}</main>}
     </>
   );
 }

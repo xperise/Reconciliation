@@ -1,20 +1,21 @@
 'use client';
 
-// Nút chuyển Xperise | MLX | Dashboard | Hướng dẫn — đặt trong header, ngay trước chuông thông báo.
+// Nút chuyển Xperise | MLX | Dashboard | Workstream | Hướng dẫn — đặt trong header, ngay trước chuông thông báo.
 // Chỉ hiện những tab người dùng được xem; được xem 1 tab thì ẩn hẳn nút.
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const TABS = [
-  { key: 'xperise', href: '/', label: 'Xperise', match: (p: string) => !p.startsWith('/mlx') && !p.startsWith('/dashboard') && !p.startsWith('/huong-dan') },
+  { key: 'xperise', href: '/', label: 'Xperise', match: (p: string) => !p.startsWith('/mlx') && !p.startsWith('/dashboard') && !p.startsWith('/huong-dan') && !p.startsWith('/workstream') },
   { key: 'mlx', href: '/mlx', label: 'MLX', match: (p: string) => p.startsWith('/mlx') },
   { key: 'dashboard', href: '/dashboard', label: 'Dashboard', match: (p: string) => p.startsWith('/dashboard') },
+  { key: 'workstream', href: '/workstream', label: 'Workstream', match: (p: string) => p.startsWith('/workstream') },
   { key: 'guide', href: '/huong-dan', label: 'Hướng dẫn', match: (p: string) => p.startsWith('/huong-dan') },
 ] as const;
 
-export default function AppTabs({ xperise = true, mlx = true, dashboard = false, guide = false }: { xperise?: boolean; mlx?: boolean; dashboard?: boolean; guide?: boolean }) {
+export default function AppTabs({ xperise = true, mlx = true, dashboard = false, guide = false, workstream = false }: { xperise?: boolean; mlx?: boolean; dashboard?: boolean; guide?: boolean; workstream?: boolean }) {
   const pathname = usePathname() ?? '/';
-  const allowed = TABS.filter((t) => (t.key === 'xperise' ? xperise : t.key === 'mlx' ? mlx : t.key === 'dashboard' ? dashboard : guide));
+  const allowed = TABS.filter((t) => (t.key === 'xperise' ? xperise : t.key === 'mlx' ? mlx : t.key === 'dashboard' ? dashboard : t.key === 'workstream' ? workstream : guide));
   if (allowed.length < 2) return null;
 
   return (

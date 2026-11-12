@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Workstream Intelligence — Xperise</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+<link href="https://cdn.datatables.net/2.1.8/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+<link href="style.css" rel="stylesheet" />
+<!-- Chạy trong khung của Reconciliation (/workstream): ẩn logo và tên vì thanh trên cùng của web đã có -->
+<script>if (window.self !== window.top) document.documentElement.classList.add("embedded");</script>
+<style>html.embedded .brand { display: none; } html.embedded .searchbox { margin-left: 0; }</style>
+</head>
+
+<body>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <div class="brand">
+      <img class="brand-logo" src="xperise-logo.png" alt="Xperise" />
+      <span class="brand-divider"></span>
+      <span class="brand-name" id="brandName">Workstream Intelligence</span>
+    </div>
+
+    <div class="searchbox" id="searchBox">
+      <i class="bi bi-search"></i>
+      <input type="text" id="globalSearch" data-i18n-ph="searchPh" autocomplete="off" />
+      <kbd class="kbd-hint">⌘K</kbd>
+      <div class="search-sugg d-none" id="searchSugg" role="listbox"></div>
+    </div>
+
+    <div class="top-actions">
+      <div class="seg mode-seg" id="modeSeg" role="tablist" aria-label="Mode">
+        <button class="seg-btn is-active" data-mode="workstream" data-i18n="modeWork"></button>
+        <button class="seg-btn" data-mode="performance" data-i18n="modePerf"></button>
+      </div>
+      <div class="seg lang-seg" id="langSeg">
+        <button class="seg-btn is-active" data-lang="vi">VI</button>
+        <button class="seg-btn" data-lang="en">EN</button>
+      </div>
+      <button class="btn btn-primary ws-only" id="btnNew"><i class="bi bi-plus-lg"></i> <span data-i18n="newItem"></span></button>
+      <button class="icon-btn" id="btnRefresh" data-i18n-title="refresh"><i class="bi bi-arrow-clockwise"></i></button>
+    </div>
+  </div>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab is-active" data-view="overview" data-i18n="tabOverview"></button>
+    <button class="tab" data-view="network" data-i18n="tabNetwork"></button>
+    <button class="tab" data-view="streams" data-i18n="tabStreams"></button>
+    <button class="tab" data-view="timeline" data-i18n="tabTimeline"></button>
+    <button class="tab" data-view="board" data-i18n="tabBoard"></button>
+    <button class="tab" data-view="list" data-i18n-title="tabListTip"><span data-i18n="tabList"></span> <span class="tab-count" id="tabCountList">0</span></button>
+    <button class="tab" data-view="docs" data-i18n-title="dTabTip"><span data-i18n="dTab"></span> <span class="tab-count" id="tabCountDocs">0</span></button>
+    <button class="tab" data-view="system" data-i18n-title="tabSystemTip"><span data-i18n="tabSystem"></span> <span class="tab-count" id="tabCountSystem">0</span></button>
+    <span class="tabs-spacer"></span>
+    <button class="tab tab-plain" id="btnCsv" data-i18n="exportCsv"></button>
+    <button class="tab tab-plain" id="btnPrint" data-i18n="printReport"></button>
+  </nav>
+</header>
+
+<main class="page">
+
+  <div class="notice d-none" id="modeNotice"></div>
+
+  <!-- HELICOPTER VIEW — hiển thị ở mọi tab -->
+  <section class="exec ws-only" id="execBanner">
+    <span class="exec-eyebrow" data-i18n="execEyebrow"></span>
+    <p class="exec-text" id="execText"></p>
+    <div class="exec-chips" id="execChips"></div>
+  </section>
+
+  <section class="kpi-strip ws-only" id="kpiStrip"></section>
+
+  <!-- BỘ LỌC TỔNG — áp cho mọi tab -->
+  <section class="card filters ws-only" id="filtersCard">
+    <div class="card-head">
+      <div>
+        <span class="eyebrow" data-i18n="filterEyebrow"></span>
+        <h2 class="card-title" id="filterSummary"></h2>
+      </div>
+      <button class="btn btn-ghost btn-sm" id="btnClear" data-i18n="clearFilters"></button>
+    </div>
+
+    <div class="quick-chips" id="quickChips"></div>
+
+    <div class="filter-grid">
+      <div>
+        <label class="lbl" data-i18n="owner"></label>
+        <div class="multi" id="fPic"></div>
+      </div>
+      <div>
+        <label class="lbl" data-i18n="status"></label>
+        <div class="multi" id="fStatus"></div>
+      </div>
+      <div>
+        <label class="lbl" data-i18n="priority"></label>
+        <div class="multi" id="fPriority"></div>
+      </div>
+      <div>
+        <label class="lbl" data-i18n="stream"></label>
+        <div class="multi" id="fStream"></div>
+      </div>
+      <div>
+        <label class="lbl" data-i18n="riskLevel"></label>
+        <div class="multi" id="fBand"></div>
+      </div>
+      <div>
+        <label class="lbl" for="fFrom" data-i18n="dateFrom"></label>
+        <input type="date" class="form-control" id="fFrom" />
+      </div>
+      <div>
+        <label class="lbl" for="fTo" data-i18n="dateTo"></label>
+        <input type="date" class="form-control" id="fTo" />
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 1 — TỔNG QUAN -->
+  <div class="view is-active" id="view-overview">
+    <div class="split split-5-7">
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <span class="eyebrow" data-i18n="signature"></span>
+            <h2 class="card-title" data-i18n="riskMapTitle"></h2>
+          </div>
+          <span class="card-note" data-i18n="riskMapNote"></span>
+        </div>
+        <div id="riskMap" class="riskmap"></div>
+        <div class="legend" id="riskLegend"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <span class="eyebrow" data-i18n="triageEyebrow"></span>
+            <h2 class="card-title" data-i18n="triageTitle"></h2>
+          </div>
+        </div>
+        <ol class="triage" id="triageList"></ol>
+      </section>
+    </div>
+
+    <div class="split split-3">
+      <section class="card">
+        <div class="card-head">
+          <div><h2 class="card-title" data-i18n="workloadTitle"></h2></div>
+          <span class="local-reset" id="resetWorkload"></span>
+        </div>
+        <div id="workload"></div>
+        <div class="wl-detail d-none" id="workloadDetail"></div>
+        <div class="hhi-row">
+          <span data-i18n="hhiLabel"></span>
+          <strong id="hhiValue">—</strong>
+        </div>
+        <div class="hhi-bar"><div id="hhiFill"></div></div>
+        <div class="hhi-note" id="hhiNote"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div><h2 class="card-title" data-i18n="mixTitle"></h2></div>
+          <span class="local-reset" id="resetMix"></span>
+        </div>
+        <div class="donut-wrap">
+          <canvas id="statusDonut"></canvas>
+          <div class="donut-center"><strong id="donutTotal">0</strong><span data-i18n="itemsUnit"></span></div>
+        </div>
+        <div class="legend" id="statusLegend"></div>
+        <div class="prio-bars" id="prioBars"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div><h2 class="card-title" data-i18n="dueTitle"></h2></div>
+          <span class="local-reset" id="resetDue"></span>
+        </div>
+        <div class="chart-box"><canvas id="dueChart"></canvas></div>
+        <p class="card-foot" id="dueNote"></p>
+      </section>
+    </div>
+  </div>
+
+  <!-- TAB 2 — MẠNG LƯỚI -->
+  <div class="view" id="view-network">
+    <div class="split split-5-7">
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <span class="eyebrow" data-i18n="signature"></span>
+            <h2 class="card-title" data-i18n="networkTitle"></h2>
+          </div>
+          <div class="seg" id="netMode">
+            <button class="seg-btn is-active" data-mode="dep" data-i18n="modeDep"></button>
+            <button class="seg-btn" data-mode="own" data-i18n="modeOwn"></button>
+          </div>
+        </div>
+        <div id="network" class="network"></div>
+        <div class="legend" id="netLegend"></div>
+        <p class="card-foot" id="netNote"></p>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <span class="eyebrow" data-i18n="cpEyebrow"></span>
+            <h2 class="card-title" data-i18n="cpTitle"></h2>
+          </div>
+        </div>
+        <div id="criticalPath"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- TAB 3 — LUỒNG CHIẾN LƯỢC -->
+  <div class="view" id="view-streams">
+    <section class="card">
+      <div class="card-head" style="margin:0">
+        <div>
+          <span class="eyebrow" data-i18n="streamsEyebrow"></span>
+          <h2 class="card-title" data-i18n="streamsTitle"></h2>
+        </div>
+        <button class="btn btn-primary btn-sm" id="btnNewStream"><i class="bi bi-plus-lg"></i> <span data-i18n="newStream"></span></button>
+      </div>
+    </section>
+    <div id="streamList"></div>
+    <p class="foot-note" data-i18n="streamFootnote"></p>
+  </div>
+
+  <!-- TAB 4 — DÒNG THỜI GIAN -->
+  <div class="view" id="view-timeline">
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <span class="eyebrow" data-i18n="timelineEyebrow"></span>
+          <h2 class="card-title" data-i18n="timelineTitle"></h2>
+        </div>
+        <span class="card-note" data-i18n="timelineNote"></span>
+      </div>
+      <div id="gantt" class="gantt"></div>
+    </section>
+  </div>
+
+  <!-- TAB 5 — BẢNG ĐIỀU HÀNH -->
+  <div class="view" id="view-board">
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <span class="eyebrow" data-i18n="boardEyebrow"></span>
+          <h2 class="card-title" data-i18n="boardTitle"></h2>
+        </div>
+        <span class="card-note" id="boardNote"></span>
+      </div>
+      <div class="board" id="board"></div>
+    </section>
+  </div>
+
+  <!-- TAB 6 — DANH SÁCH -->
+  <div class="view" id="view-list">
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <span class="eyebrow" data-i18n="listEyebrow"></span>
+          <h2 class="card-title"><span id="listCount">0</span> <span data-i18n="itemsUnit"></span></h2>
+          <div class="sortbar" id="sortBar"></div>
+        </div>
+        <span class="card-note" data-i18n="listNote"></span>
+      </div>
+      <div class="table-wrap">
+        <table id="itemsTable" class="table w-100">
+          <thead><tr>
+            <th data-i18n="colItem"></th><th data-i18n="colProgress"></th><th data-i18n="colRisk"></th><th data-i18n="colOwner"></th>
+            <th data-i18n="colDue"></th><th data-i18n="colPriority"></th><th data-i18n="colStatus"></th>
+            <th data-i18n="colNext"></th><th></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <!-- TAB 7 — BIÊN BẢN HỌP -->
+  <!-- =====================================================================
+       TAB TÀI LIỆU — 2 tab con: Biên bản họp · Tài liệu khác
+       ===================================================================== -->
+  <div class="view" id="view-docs">
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <span class="eyebrow" data-i18n="dEyebrow"></span>
+          <h2 class="card-title" data-i18n="dTitle"></h2>
+        </div>
+        <div class="seg" id="docSeg">
+          <button class="seg-btn is-active" data-doc="minutes" data-i18n="dSubMinutes"></button>
+          <button class="seg-btn" data-doc="files" data-i18n="dSubFiles"></button>
+        </div>
+      </div>
+
+      <!-- ---------- Tab con 1: BIÊN BẢN HỌP ---------- -->
+      <div id="docPaneMinutes">
+        <div class="doc-bar">
+          <span class="doc-hint" data-i18n="dMinutesHint"></span>
+          <span class="grow"></span>
+          <button class="btn btn-primary btn-sm" id="btnNewMinute">
+            <i class="bi bi-plus-lg"></i> <span data-i18n="mNew"></span>
+          </button>
+        </div>
+
+        <div class="minute-form d-none" id="minuteForm">
+          <div class="mf-grid">
+            <label class="mf-field">
+              <span data-i18n="mDate"></span>
+              <input type="date" class="form-control" id="mDate" />
+            </label>
+            <label class="mf-field mf-wide">
+              <span data-i18n="mSubject"></span>
+              <input type="text" class="form-control" id="mSubject" data-i18n-ph="mSubjectPh" />
+            </label>
+            <label class="mf-field mf-wide">
+              <span data-i18n="mAttendees"></span>
+              <input type="text" class="form-control" id="mAttendees" data-i18n-ph="mAttendeesPh" />
+            </label>
+            <label class="mf-field mf-full">
+              <span data-i18n="mSummary"></span>
+              <textarea class="form-control" id="mSummary" rows="3" data-i18n-ph="mSummaryPh"></textarea>
+            </label>
+          </div>
+
+          <div class="drop drop-sm" id="minuteDrop">
+            <input type="file" id="minuteFile" hidden />
+            <i class="bi bi-paperclip drop-icon"></i>
+            <p class="drop-main" id="minuteDropMain"></p>
+            <p class="drop-sub" data-i18n="mDropSub"></p>
+          </div>
+
+          <div class="mf-actions">
+            <button class="btn btn-ghost btn-sm" id="btnMinuteCancel" data-i18n="cancel"></button>
+            <button class="btn btn-primary btn-sm" id="btnMinuteSave" data-i18n="mSave"></button>
+          </div>
+        </div>
+
+        <div class="minute-list" id="minuteList"></div>
+      </div>
+
+      <!-- ---------- Tab con 2: TÀI LIỆU KHÁC ---------- -->
+      <div id="docPaneFiles" class="d-none">
+        <div class="doc-bar">
+          <div class="doc-search">
+            <i class="bi bi-search"></i>
+            <input type="text" id="docSearch" data-i18n-ph="dSearchPh" autocomplete="off" />
+          </div>
+          <span class="grow"></span>
+          <button class="btn btn-ghost btn-sm" id="btnNewFolder">
+            <i class="bi bi-folder-plus"></i> <span data-i18n="dNewFolder"></span>
+          </button>
+          <button class="btn btn-primary btn-sm" id="btnDocUpload">
+            <i class="bi bi-upload"></i> <span data-i18n="dUpload"></span>
+          </button>
+          <input type="file" id="docFile" multiple hidden />
+        </div>
+
+        <nav class="doc-crumb" id="docCrumb"></nav>
+
+        <div class="drop d-none" id="docDrop">
+          <i class="bi bi-cloud-arrow-up drop-icon"></i>
+          <p class="drop-main" data-i18n="dDropMain"></p>
+          <p class="drop-sub" data-i18n="dDropSub"></p>
+        </div>
+
+        <div id="docBody"></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- TAB 8 — DỮ LIỆU & HỆ THỐNG -->
+  <div class="view" id="view-system">
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <span class="eyebrow" data-i18n="qualityEyebrow"></span>
+          <h2 class="card-title" data-i18n="qualityTitle"></h2>
+        </div>
+        <span class="card-note" data-i18n="qualityNote"></span>
+      </div>
+      <div class="quality-grid" id="qualityGrid"></div>
+      <p class="card-foot" id="qualityFoot"></p>
+    </section>
+
+    <!-- Khối "Tăng kết nối" đã gỡ: chỉ người viết code cần biết.
+         Đoạn SQL vẫn giữ trong app.js (hằng SQL_CONNECTED) để tra cứu. -->
+
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <span class="eyebrow" data-i18n="formulaEyebrow"></span>
+          <h2 class="card-title" data-i18n="formulaTitle"></h2>
+        </div>
+      </div>
+      <p class="formula-intro" id="formulaIntro"></p>
+      <div class="formula-grid" id="formulaGrid"></div>
+      <div class="threshold-row" id="thresholdRow"></div>
+      <div class="legend" id="bandLegend"></div>
+    </section>
+  </div>
+
+
+  <!-- ==================================================================
+       PERFORMANCE DASHBOARD
+       Chỉ hiện khi bật chế độ Performance ở thanh trên cùng.
+       ================================================================== -->
+  <div class="perf-shell d-none" id="perfShell">
+
+    <!-- Thanh điều khiển mô hình: kịch bản + đặt lại + in -->
+    <div class="fm-bar">
+      <div class="seg" id="fmScn">
+      <button data-s="cons">Conservative</button>
+      <button data-s="base" class="on">Base</button>
+      <button data-s="up">Upside</button>
+      </div>
+      <span class="fm-spacer"></span>
+      <button class="btn" id="fmReset">Reset drivers</button>
+      <button class="btn" id="fmPrint">Print</button>
+    </div>
+
+    <div class="tabs" id="fmTabs">
+      <button data-v="ov" class="on">Overview</button>
+      <button data-v="cu">Customers</button>
+      <button data-v="rm">Revenue &amp; Margin</button>
+      <button data-v="pa">People &amp; AI</button>
+      <button data-v="vl">Valuation</button>
+      <button data-v="uf">Use of Funds</button>
+    </div>
+
+    <div class="page">
+      <div class="banner" id="fmBanner"></div>
+      <div class="kpis" id="fmKpis"></div>
+
+      <div class="card drivers-card">
+        <div class="chead">
+          <div>
+            <div class="eyebrow">Drivers</div>
+            <h2 class="ctitle">Change an assumption, every view updates</h2>
+            <div class="cnote">Defaults reproduce the workbook exactly. FY2025 is audited and never moves. Pricing and take-rate also touch FY2026, so the tie-out on the right turns red when a setting pulls FY2026 off the figure already issued.</div>
+          </div>
+          <div class="cnote mono" id="fmTie"></div>
+        </div>
+        <div class="drivers" id="fmDrv"></div>
+      </div>
+
+      <div class="view on" id="v-ov"></div>
+      <div class="view" id="v-cu"></div>
+      <div class="view" id="v-rm"></div>
+      <div class="view" id="v-pa"></div>
+      <div class="view" id="v-vl"></div>
+      <div class="view" id="v-uf"></div>
+
+      <div class="foot" id="fmFoot"></div>
+    </div>
+  </div>
+
+</main>
+
+
+<!-- MODAL — THÊM / SỬA ĐẦU MỤC -->
+<div class="modal fade" id="itemModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title" id="modalTitle"></h5>
+          <div class="modal-sub" id="modalSub"></div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="itemForm">
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="lbl" for="mTitle"><span data-i18n="fTitle"></span> <span class="req">*</span></label>
+              <input class="form-control" id="mTitle" required />
+            </div>
+            <div class="col-12">
+              <label class="lbl" for="mDesc" data-i18n="fDesc"></label>
+              <textarea class="form-control" id="mDesc" rows="2"></textarea>
+            </div>
+            <div class="col-md-6">
+              <label class="lbl" for="mStart" data-i18n="fStart"></label>
+              <input type="date" class="form-control" id="mStart" />
+            </div>
+            <div class="col-md-6">
+              <label class="lbl" for="mEnd" data-i18n="fEnd"></label>
+              <input type="date" class="form-control" id="mEnd" />
+            </div>
+            <div class="col-md-6">
+              <label class="lbl" for="mPic"><span data-i18n="fOwner"></span> <span class="req">*</span></label>
+              <input class="form-control" id="mPic" list="picList" data-i18n-ph="fOwnerPh" required />
+              <datalist id="picList"></datalist>
+            </div>
+            <div class="col-md-3">
+              <label class="lbl" for="mPriority" data-i18n="priority"></label>
+              <select class="form-select" id="mPriority">
+                <option>High</option><option selected>Medium</option><option>Low</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="lbl" for="mStatus" data-i18n="status"></label>
+              <select class="form-select" id="mStatus">
+                <option selected>Open</option><option>In Progress</option><option>Done</option>
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="lbl" for="mNext" data-i18n="fNext"></label>
+              <textarea class="form-control" id="mNext" rows="2" data-i18n-ph="fNextPh"></textarea>
+            </div>
+            <div class="col-12" id="subBlock">
+              <div class="sub-head">
+                <label class="lbl" data-i18n="subTitle"></label>
+                <span class="sub-progress" id="subProgress"></span>
+              </div>
+              <div id="subList" class="sub-list"></div>
+              <div class="sub-add">
+                <input class="form-control" id="subNew" data-i18n-ph="subAddPh" />
+                <button type="button" class="btn btn-ghost btn-sm" id="btnSubAdd" data-i18n="subAdd"></button>
+              </div>
+              <div class="hint" id="subHint"></div>
+            </div>
+            <div class="col-12">
+              <label class="lbl" for="mStream" data-i18n="stream"></label>
+              <select class="form-select" id="mStream"></select>
+              <div class="hint" id="streamHint"></div>
+            </div>
+          </div>
+
+          <div class="wri-preview" id="wriPreview"></div>
+          <div class="alert-box d-none" id="modalError"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" id="btnDelete" data-i18n="deleteItem"></button>
+          <span class="flex-grow-1"></span>
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal" data-i18n="cancel"></button>
+          <button type="submit" class="btn btn-primary btn-sm" id="btnSave" data-i18n="save"></button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="toast-tray" id="toastTray"></div>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.datatables.net/2.1.8/js/dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/2.1.8/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<script src="i18n.js"></script>
+<script src="app.js"></script>
+<script src="views.js"></script>
+<script src="perf.js"></script>
+<script src="docs.js"></script>
+<script>document.addEventListener("DOMContentLoaded", boot);</script>
+</body>
+</html>
