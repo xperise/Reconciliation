@@ -822,8 +822,71 @@ function kyhdHide() {
 }
 
 
-const CVK = (() => { try { return JSON.parse(document.getElementById('cv-src').textContent); } catch (e) { return {}; } })();
 
+/* ================= FILE THAM CHIẾU (cập nhật theo tháng) =================
+   3 bộ dữ liệu sếp làm sẵn trong file dashboard (.html): Tệp khách hàng focus, Chuyển đổi XPay (thẻ MCC), Action 7 ngày.
+   Mặc định dùng bản nhúng trong trang; khi ai nạp file mới ở tab Cập nhật số liệu → lưu vào dữ liệu chung (ref/<id>) → cả đội dùng bản mới. */
+const REFS = [
+  {id: 'tep', el: 'tep-src', name: 'Tệp khách hàng focus', what: 'nhóm khách, Global, Top 200, khu vực, giá trị, doanh thu taxi 10 tháng', used: 'Tệp khách hàng mục tiêu · Tiến độ ký HĐ · tô vàng Global'},
+  {id: 'cv', el: 'cv-src', name: 'Chuyển đổi XPay (thẻ MCC)', what: 'số thẻ MCC theo tháng, thẻ đã phát của từng khách', used: 'Tiến độ ký HĐ · Tiến độ Active XPAY'},
+  {id: 'w7', el: 'w7-src', name: 'Action 7 ngày', what: 'khung trang + dữ liệu gốc (bảng kê đến ngày file, kế hoạch, phân loại khách)', used: 'Action 7 ngày'}];
+const REFI = {};          // id → {src, at, by, file, asof, n} khi đã nạp bản mới; trống = dùng bản nhúng
+let REFNEW = null;        // bản vừa đọc từ file, chờ bấm Lưu
+let CVK = {};
+function cvParse() { try { CVK = JSON.parse(document.getElementById('cv-src').textContent); } catch (e) { CVK = {}; } }
+cvParse();
+async function refMeta(id, src) {          // tóm tắt nội dung để hiện cho người nạp kiểm tra
+  try {
+    if (id === 'cv') { const o = JSON.parse(src); return {n: Object.keys(o).length + ' khách', asof: ''}; }
+    const bin = Uint8Array.from(atob(src.trim()), c => c.charCodeAt(0));
+    const h = await new Response(new Blob([bin]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+    if (id === 'tep') { const a = h.indexOf('const D='), b = h.indexOf('\n', a); const D = JSON.parse(h.slice(a + 8, b).trim().replace(/;$/, '')); return {n: D.length + ' khách', asof: ''}; }
+    const ds = (h.match(/"d":"(\d{4}-\d\d-\d\d)"/g) || []).map(x => x.slice(5, 15)).sort(); return {n: '', asof: ds.length ? ds[ds.length - 1] : ''};
+  } catch (e) { return {n: 'không đọc được', asof: '', bad: true}; }
+}
+function refApply(id, src) {
+  const el = document.getElementById((REFS.find(r => r.id === id) || {}).el); if (!el || !src) return;
+  el.textContent = src;
+  if (id === 'tep') { TEP = null; TEPMAP = {}; TEPST = 'off'; }
+  if (id === 'cv') cvParse();
+  if (id === 'w7') { delete GZ['w7-src']; W7ST = 'off'; const h = document.getElementById('w7host'); if (h) h.remove(); }
+}
+async function refInit(db) {
+  for (const r of REFS) {
+    try { const s = await db.doc('ref/' + r.id).get(); const v = s.exists ? s.data() : null;
+      if (v && v.src) { REFI[r.id] = v; refApply(r.id, v.src); } } catch (e) { console.warn('ref', r.id, e); }
+  }
+  const y = window.scrollY; render(); window.scrollTo(0, y);
+}
+function refCard() {
+  const row = r => { const v = REFI[r.id], nw = REFNEW && REFNEW[r.id];
+    return `<tr><td class="l name" style="white-space:normal;min-width:200px">${esc(r.name)}<span class="def">${esc(r.what)}</span></td>
+      <td class="l" style="white-space:normal;font-size:12px">${esc(r.used)}</td>
+      <td class="l" style="white-space:normal">${v ? `<b style="color:var(--stable)">Bản nạp ${esc(v.at || '')}</b><span class="def">${esc(v.file || '')}${v.by ? ' · ' + esc(v.by) : ''}${v.n ? ' · ' + esc(v.n) : ''}${v.asof ? ' · dữ liệu đến ' + dmy(v.asof) : ''}</span>` : '<span class="lbl">Bản nhúng sẵn trong trang (file sếp 11/11)</span>'}</td>
+      <td class="l" style="white-space:normal">${nw ? (nw.meta.bad ? '<span class="pill p-critical">File lỗi</span>' : `<span class="pill p-high">Sẵn sàng thay</span><span class="def">${[nw.meta.n ? esc(nw.meta.n) : '', nw.meta.asof ? 'dữ liệu đến ' + dmy(nw.meta.asof) : ''].filter(Boolean).join(' · ')}</span>`) : '<span class="lbl">—</span>'}</td>
+      <td class="l">${v ? `<button class="btn" data-refdel="${r.id}" ${CANWRITE ? '' : 'disabled'}>Quay về bản nhúng</button>` : ''}</td></tr>`; };
+  const any = REFNEW && REFS.some(r => REFNEW[r.id] && !REFNEW[r.id].meta.bad);
+  return `<div class="card" id="refcard"><div class="hd"><div><div class="eyebrow">File tham chiếu · cập nhật theo tháng</div><h2 class="card-title">Nạp bản dashboard mới của sếp (.html) → cập nhật Tệp khách hàng, thẻ MCC, Action 7 ngày cho cả đội</h2></div>
+    <div class="card-note">Không cần nạp mỗi ngày: giao dịch, thẻ XPAY, PIC, cuộc gọi, meeting, ký đã tự cập nhật hằng ngày</div></div>
+    ${CANWRITE ? `<div class="drop" style="margin-bottom:12px"><b>Chọn file dashboard (.html) sếp gửi</b> <input type="file" id="frefhtml" accept=".html,.htm"><div class="hint">Trang tự tìm 3 bộ dữ liệu trong file, hiện số khách / ngày dữ liệu để kiểm tra trước. Bộ nào không có trong file thì giữ nguyên bản đang dùng.</div></div>` : '<div class="hint">Bạn đang ở chế độ chỉ xem.</div>'}
+    <div class="tw"><table><thead><tr><th class="l">Bộ dữ liệu</th><th class="l">Dùng ở</th><th class="l">Đang dùng</th><th class="l">File vừa chọn</th><th></th></tr></thead><tbody>${REFS.map(row).join('')}</tbody></table></div>
+    ${any ? `<div style="display:flex;gap:8px;margin-top:10px;align-items:center"><button class="btn pri" id="refsave">Lưu & áp dụng cho cả đội</button><button class="btn" id="refcancel">Huỷ</button><span class="lbl">File: ${esc(REFNEW.file)}</span></div>` : ''}
+    <div class="hint" style="margin-top:8px" id="refmsg"></div></div>`;
+}
+function bindRef() {
+  const re = () => { const y = window.scrollY; render(); window.scrollTo(0, y); };
+  if ($('frefhtml')) $('frefhtml').onchange = async e => { const f = e.target.files[0]; if (!f) return; const txt = await f.text(); const o = {file: f.name};
+    for (const r of REFS) { const m = txt.match(new RegExp('<script[^>]*id="' + r.el + '"[^>]*>([\\s\\S]*?)<\\/script>')); if (m && m[1].trim().length > 100) o[r.id] = {src: m[1].trim(), meta: await refMeta(r.id, m[1].trim())}; }
+    REFNEW = o; if (!REFS.some(r => o[r.id])) { REFNEW = null; re(); $('refmsg').textContent = 'Không tìm thấy dữ liệu tham chiếu nào trong file này (cần đúng file dashboard XPAY Mobility dạng .html).'; return; } re(); };
+  if ($('refcancel')) $('refcancel').onclick = () => { REFNEW = null; re(); };
+  if ($('refsave')) $('refsave').onclick = async () => { const db = window.claude ? await claude.use('db') : null; if (!db) { $('refmsg').textContent = 'Chưa kết nối được dữ liệu chung.'; return; }
+    $('refsave').disabled = true; $('refmsg').textContent = 'Đang lưu…'; const now = new Date(), at = `${dmy(TODAY)} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`; let me = ''; try { const u = await claude.use('user'); me = ((u && u.me ? await u.me() : u) || {}).email || ''; } catch (e) {}
+    try { for (const r of REFS) { const x = REFNEW[r.id]; if (!x || x.meta.bad) continue; const v = {src: x.src, at, by: me, file: REFNEW.file, n: x.meta.n || '', asof: x.meta.asof || ''};
+        await db.doc('ref/' + r.id).set(v); REFI[r.id] = v; refApply(r.id, x.src); }
+      REFNEW = null; re(); $('refmsg').innerHTML = '<b style="color:var(--stable)">Đã lưu. Cả đội sẽ dùng bản mới khi mở lại dashboard.</b>'; } catch (e) { $('refmsg').textContent = 'Lưu không được: ' + e.message; $('refsave').disabled = false; } };
+  document.querySelectorAll('[data-refdel]').forEach(b => b.onclick = async () => { const id = b.dataset.refdel; if (!confirm('Quay về bản nhúng sẵn cho "' + REFS.find(r => r.id === id).name + '"?')) return;
+    const db = window.claude ? await claude.use('db') : null; if (!db) return; await db.doc('ref/' + id).delete(); delete REFI[id]; location.reload(); });
+}
 const issOf = k => ((CARDS || {})[k] || {}).n || (CVK[k] || {}).iss || 0;
 
 function fxCards(R, t) {
@@ -1125,7 +1188,7 @@ function renderInner() {
   else if (TAB === 'kyp') body = renderKyProg();
   else if (TAB === 'act') body = renderAct();
   else if (TAB === 'w7') body = renderW7();
-  else body = renderUpload();
+  else body = renderUpload() + refCard();
   const prof = CR.open ? crmDrawer(crmRows(CR.day).find(r => r.key === CR.open), CR.day) : '';
   $('app').innerHTML = top + `<div class="page">${body}</div><div class="tt" id="tt"></div>` + prof;
   bind();
@@ -2052,7 +2115,7 @@ function crmInit() {
     const db = window.claude ? await claude.use('db') : null;
     if (!db) { DBST = 'off'; if (TAB === 'jr') crmRerender(); return; }
     try { const u = await claude.use('user'); const c = u ? await u.can('data.write') : null; DBW = c; } catch (e) { DBW = null; }
-    planInit(db);
+    planInit(db); refInit(db);
     db.collection('crm').onSnapshot(snap => { const o = {}; snap.docs.forEach(x => { const v = x.data() || {}; for (const [k, e] of Object.entries(v)) if (e && typeof e === 'object') o[k] = e; });
       mergeDbx(o); for (const k of Object.keys(NAMEOVR)) delete NAMEOVR[k]; for (const [k, e] of Object.entries(o)) if (e && e.name) NAMEOVR[k] = String(e.name); DBX = o; DBST = 'ok'; CRM_ = null; AUTOC_ = null; SIGN_ = null; computeActuals(); if (TAB === 'ov') render(); crmRerender(true); }, () => { DBST = 'off'; crmRerender(); });
     db.doc('cfg/main').onSnapshot(s => { CFG = s.exists ? (s.data() || {cats: []}) : {cats: []}; const before = PICS.join('|'); applyTeam(CFG.team); if (PICS.join('|') !== before) { CRM_ = null; AUTOC_ = null; crmRerender(true); } }, () => {});
@@ -3445,6 +3508,7 @@ function bindDrawer() {
   if ($('cat_ns')) $('cat_ns').onchange = e => { $('cat_nsnew').style.display = e.target.value === '__new' ? 'block' : 'none'; };
 }
 function bind() {
+  if (TAB === 'up') bindRef();
   /* khách Global (theo file Tệp khách hàng focus): tô vàng dòng khách ở mọi danh sách */
   if (TEPST === 'ok') document.querySelectorAll('tr[data-cropen]').forEach(tr => { if (isGlob(tr.dataset.cropen)) { tr.style.background = '#fff2b3'; tr.title = 'Khách Global (Tệp khách hàng focus)'; } });
   if (TAB === 'kyp' || TAB === 'act') bindFocus(fn => { const y = window.scrollY; fn(); render(); window.scrollTo(0, y); }); kyhdHide();
