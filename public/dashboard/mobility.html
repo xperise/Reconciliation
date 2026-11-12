@@ -622,7 +622,8 @@ async function tepLoad() {
     Object.entries(XPNS).forEach(([k, x]) => { if (!TEPMAP[k]) TEP.push(TEPMAP[k] = {g: 2, so: k, k, n: x[2] || k, rg: '', e: 0, gt: '', gw: '', t2: 0, t2l: 0, sg: 0, ini: 1, cd: 0, v: 0, r10: 0, lm: '', pic: '', sub: 'Thêm từ file Có XPAY – chưa ký', ex: 1}); });
     TEPST = 'ok';
   } catch (e) { TEPST = 'err'; console.warn('tep', e); }
-  if (TAB === 'tep' || TAB === 'kyp' || TAB === 'act' || CR.open) { const y = window.scrollY; render(); window.scrollTo(0, y); }
+  if (CR.open) { const el = document.getElementById('crteptag'); if (el && TEPMAP[CR.open]) { const r = crmRows(CR.day || TODAY).find(x => x.key === CR.open); if (r) el.outerHTML = tepTag(r); } CR.bgPending = true; return; }
+  if (TAB === 'tep' || TAB === 'kyp' || TAB === 'act') bgRender();
 }
 const tepIsG = t => t.gt === 'cao' || t.gt === 'trung bình';
 /* nhóm hiện tại: tính lại từ dữ liệu sống (giao dịch 30 ngày, thẻ / khởi tạo, ký); khách lapser chỉ đổi nhóm khi đã có XPAY */
@@ -635,9 +636,9 @@ function tepLive(t, r) {
 }
 function tepTag(r) {
   if (TEPST === 'off') setTimeout(tepLoad, 0);
-  const t = TEPMAP[r.key]; if (!t) return '';
+  const t = TEPMAP[r.key]; if (!t) return '<span id="crteptag"></span>';
   const L = tepLive(t, r);
-  return ` · <a href="#" data-tepgo="${esc(t.n)}" style="color:var(--accent);font-weight:600" title="Mở trong Tệp khách hàng mục tiêu">Tệp KH: ${L.liq ? 'Thanh lý' : `nhóm ${L.g}. ${TEPGN[L.g]}`}${tepIsG(t) ? ' · Global' : ''}${L.xpn ? ' · Có XPAY, chưa ký' : ''}</a>`;
+  return ` · <a href="#" id="crteptag" data-tepgo="${esc(t.n)}" style="color:var(--accent);font-weight:600" title="Mở trong Tệp khách hàng mục tiêu">Tệp KH: ${L.liq ? 'Thanh lý' : `nhóm ${L.g}. ${TEPGN[L.g]}`}${tepIsG(t) ? ' · Global' : ''}${L.xpn ? ' · Có XPAY, chưa ký' : ''}</a>`;
 }
 function tepRows() {
   const R = picFix(crmRows(TODAY)), byK = {}; R.forEach(r => byK[r.key] = r);
@@ -856,7 +857,7 @@ async function refInit(db) {
     try { const s = await db.doc('ref/' + r.id).get(); const v = s.exists ? s.data() : null;
       if (v && v.src) { REFI[r.id] = v; refApply(r.id, v.src); } } catch (e) { console.warn('ref', r.id, e); }
   }
-  const y = window.scrollY; render(); window.scrollTo(0, y);
+  bgRender();
 }
 function refCard() {
   const row = r => { const v = REFI[r.id], nw = REFNEW && REFNEW[r.id];
@@ -1144,7 +1145,7 @@ const W7INJ = `<script>(function(){
 })();<\/script>`;
 function renderW7() {
   if (!document.getElementById('w7-src')) return '<div class="card"><div class="hint">Trang này chưa nhúng dashboard Action 7 ngày.</div></div>';
-  if (W7ST !== 'ok') { if (W7ST === 'off') { W7ST = 'loading'; gzText('w7-src').then(() => { W7ST = 'ok'; if (TAB === 'w7') render(); }, () => { W7ST = 'err'; if (TAB === 'w7') render(); }); }
+  if (W7ST !== 'ok') { if (W7ST === 'off') { W7ST = 'loading'; gzText('w7-src').then(() => { W7ST = 'ok'; if (TAB === 'w7') bgRender(); }, () => { W7ST = 'err'; if (TAB === 'w7') render(); }); }
     return `<div class="card"><div class="hint">${W7ST === 'err' ? 'Trình duyệt không giải nén được (cần Chrome / Edge / Safari bản mới).' : 'Đang mở Action 7 ngày…'}</div></div>`; }
   const txMax = (S.tx || []).reduce((m, t) => t[0] > m ? t[0] : m, '');
   return `<div class="hint" style="margin-bottom:8px">Dashboard review GMV theo bảng kê · <b>số liệu tự cập nhật theo giao dịch XPAY trên dashboard</b>${txMax ? ` (đến <b>${dmy(txMax)}</b>, cộng dữ liệu gốc trong file đến 09/11)` : ''} — mỗi ngày chỉ cần nạp bảng kê ở tab Cập nhật số liệu. <b>PIC lấy theo phân công trên dashboard</b> (không dùng PIC cũ trong file). Bấm tên công ty (chữ xanh) để mở hồ sơ khách.</div>`;
@@ -2103,11 +2104,16 @@ function mergeDbx(o) {
       else if (v && typeof v === 'object' && typeof b[f] === 'object' && !Array.isArray(v)) { b[f] = Object.assign({}, v, b[f]); } }
     delete o[from]; }
 }
+/* Vẽ lại do dữ liệu nền vừa tải xong (Tệp, file tham chiếu, thẻ, dữ liệu người khác…): nếu đang mở hồ sơ khách thì KHÔNG vẽ lại
+   (vẽ lại làm mất nội dung sales đang gõ → bấm Lưu không lưu được); đánh dấu để vẽ lại khi đóng hồ sơ. */
+function bgRender() { if (CR.open) { CR.bgPending = true; return; } const y = window.scrollY; render(); window.scrollTo(0, y); }
 let DBQ = Promise.resolve();
 async function crmWrite(k, patch) {
   const db = await claude.use('db'); if (!db) throw {code: 'not_granted'};
-  const run = async () => { const ref = db.doc('crm/' + bucketOf(k)); const s = await ref.get();
-    if (!s.exists) await ref.set({[k]: patch}); else await ref.update({[k]: patch}); };
+  // update = upsert gộp ở máy chủ (mob_db_update), không cần đọc trước; mạng chập chờn thì thử lại 1 lần sau 1,5 giây
+  const run = async () => { const ref = db.doc('crm/' + bucketOf(k));
+    try { await ref.update({[k]: patch}); }
+    catch (e) { if (e && (e.code === 'not_writer' || e.code === 'not_granted' || e.code === 'not_signed_in')) throw e; await new Promise(r => setTimeout(r, 1500)); await ref.update({[k]: patch}); } };
   DBQ = DBQ.then(run, run); return DBQ;
 }
 function crmInit() {
@@ -2117,7 +2123,7 @@ function crmInit() {
     try { const u = await claude.use('user'); const c = u ? await u.can('data.write') : null; DBW = c; } catch (e) { DBW = null; }
     planInit(db); refInit(db);
     db.collection('crm').onSnapshot(snap => { const o = {}; snap.docs.forEach(x => { const v = x.data() || {}; for (const [k, e] of Object.entries(v)) if (e && typeof e === 'object') o[k] = e; });
-      mergeDbx(o); for (const k of Object.keys(NAMEOVR)) delete NAMEOVR[k]; for (const [k, e] of Object.entries(o)) if (e && e.name) NAMEOVR[k] = String(e.name); DBX = o; DBST = 'ok'; CRM_ = null; AUTOC_ = null; SIGN_ = null; computeActuals(); if (TAB === 'ov') render(); crmRerender(true); }, () => { DBST = 'off'; crmRerender(); });
+      mergeDbx(o); for (const k of Object.keys(NAMEOVR)) delete NAMEOVR[k]; for (const [k, e] of Object.entries(o)) if (e && e.name) NAMEOVR[k] = String(e.name); DBX = o; DBST = 'ok'; CRM_ = null; AUTOC_ = null; SIGN_ = null; computeActuals(); if (TAB === 'ov' && !CR.open) render(); crmRerender(true); }, () => { DBST = 'off'; crmRerender(); });
     db.doc('cfg/main').onSnapshot(s => { CFG = s.exists ? (s.data() || {cats: []}) : {cats: []}; const before = PICS.join('|'); applyTeam(CFG.team); if (PICS.join('|') !== before) { CRM_ = null; AUTOC_ = null; crmRerender(true); } }, () => {});
   })();
 }
@@ -2131,7 +2137,7 @@ async function cardsLoad() {
   // số Thẻ đã phát hành đếm theo thẻ: tính lại số thực tế khi dữ liệu thẻ tải xong (lần tính đầu chạy trước khi có dữ liệu thẻ)
   // có thẻ = đã khởi tạo XPAY: dữ liệu thẻ tải xong thì tính lại số tự động (thẻ phát hành, DN khởi tạo)
   if (CARDST === 'ok') { AUTOC_ = null; SIGN_ = null; computeActuals(); }
-  if (TAB === 'jr') crmRerender(); else if (TAB === 'ov' || TAB === 'zoom') render();
+  if (TAB === 'jr') crmRerender(); else if (TAB === 'ov' || TAB === 'zoom') bgRender();
   else if ($('mkm')) {   // tab Cập nhật số liệu: chỉ cập nhật ô chọn, không vẽ lại (giữ file đã chọn)
     const o = $('mkm').querySelector('option[value="auto"]'), n = cardsCount();
     if (o) { o.disabled = n == null; o.textContent = 'Đếm theo thẻ trên hệ thống' + (n == null ? ` (${CARDST === 'err' ? 'lỗi: ' + CARDMSG : 'chưa tải được dữ liệu thẻ'})` : ` (${n0(n)} thẻ${cardsCount.liq ? `, đã loại ${n0(cardsCount.liq)} thẻ DN thanh lý` : ''})`); }
@@ -3497,7 +3503,7 @@ function bindDrawer() {
     const btn = $('crsaveall'); if (btn) btn.disabled = true; sm('Đang lưu…');
     try {
       const add = {}; if (A.cat && !PICS.includes(A.cat) && !cats().includes(A.cat)) add.cats = [...new Set([...(CFG.cats || []), A.cat])]; if (A.ns && !nsList().includes(A.ns)) add.ns = [...new Set([...((CFG && CFG.ns) || []), A.ns])];
-      if (Object.keys(add).length) { try { const db = await claude.use('db'); const nc = Object.assign({}, CFG || {}, add); await db.doc('cfg/main').set(nc); CFG = nc; } catch (e) {} }
+      if (Object.keys(add).length) { try { const db = await claude.use('db'); await db.doc('cfg/main').update(add); CFG = Object.assign({}, CFG || {}, add); } catch (e) {} }
       if (Object.keys(patch).length) await crmWrite(k, patch);
       if ($('cosave')) $('cosave').click();   // đang sửa thông tin doanh nghiệp: lưu luôn
       if (CR.csDirty && $('bcs')) { $('bcs').click(); CR.csDirty = false; }   // pattern CS vừa thêm
