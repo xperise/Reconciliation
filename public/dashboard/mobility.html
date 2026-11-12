@@ -1059,15 +1059,18 @@ function w7Live() {
   const put = (name, k) => { const n = nk(name); if (n && byK[k] && !key[n]) { key[n] = k; pic[n] = PICS.includes(byK[k].pic) ? byK[k].pic : 'Chưa phân công'; if (isGlob(k)) glob[k] = 1; full.push([String(name), k]); } };
   (S.tx || []).forEach(t => put(t[7], t[2]));
   R.forEach(r => put(r.name, r.key));
-  return {key, pic, glob, full};
+  /* giao dịch XPAY hằng ngày trên dashboard (Cập nhật số liệu → bảng kê) đổi sang dạng dòng của Action 7 ngày */
+  const raw = (S.tx || []).filter(t => t[4] > 0).map(t => ({d: t[0], t: ((String(t[8] || '').match(/(\d{1,2}:\d{2})/) || [])[1]) || '', c: '**** **** **** ' + t[3], n: '', co: t[7] || '', a: +t[4] || 0, x: t[1], u: t[6] || '', km: +t[11] || 0}));
+  return {key, pic, glob, full, raw};
 }
 window.__w7live = () => w7Live();
 window.__openCust = k => { CR.open = k; const y = window.scrollY; render(); window.scrollTo(0, y); };
 const W7INJ = `<script>(function(){
   function go(){ var L = null; try { L = window.parent.__w7live && window.parent.__w7live(); } catch (e) {} if (!L) return;
     try { AEMAP = new Map(Object.entries(L.pic)); } catch (e) {}
+    try { if (L.raw && L.raw.length && typeof merge === 'function') RAW = merge(RAW.concat(L.raw)); } catch (e) { console.warn(e); }
     try { if (typeof CV !== 'undefined' && CV && CV.M) CV.M.forEach(function (d) { var p = L.pic[nk(d.nm)]; if (p) d.pic = p; }); } catch (e) {}
-    try { if (typeof build === 'function' && typeof RAW !== 'undefined' && RAW.length) build(); } catch (e) { console.warn(e); }
+    try { if (typeof build === 'function' && typeof RAW !== 'undefined' && RAW.length) { build(); var sd = document.getElementById('selDate'); if (sd && M && M.d1 && sd.value !== M.d1) { sd.value = M.d1; if (sd.value === M.d1) render(); } } } catch (e) { console.warn(e); }
     var C = {}, CK = []; var cn = typeof cnk === 'function' ? cnk : nk; L.full.forEach(function (x) { var c = cn(x[0]); if (c && !C[c]) { C[c] = x[1]; CK.push(c); } });
     var find = function (t) { t = String(t || '').trim(); if (t.length < 3) return ''; var k = L.key[nk(t)] || C[cn(t)]; if (k) return k;
       if (/…$/.test(t)) { var p = cn(t.replace(/…$/, '')); if (p.length >= 8) { for (var i = 0; i < CK.length; i++) if (CK[i].indexOf(p) === 0) return C[CK[i]]; } } return ''; };
@@ -1080,7 +1083,8 @@ function renderW7() {
   if (!document.getElementById('w7-src')) return '<div class="card"><div class="hint">Trang này chưa nhúng dashboard Action 7 ngày.</div></div>';
   if (W7ST !== 'ok') { if (W7ST === 'off') { W7ST = 'loading'; gzText('w7-src').then(() => { W7ST = 'ok'; if (TAB === 'w7') render(); }, () => { W7ST = 'err'; if (TAB === 'w7') render(); }); }
     return `<div class="card"><div class="hint">${W7ST === 'err' ? 'Trình duyệt không giải nén được (cần Chrome / Edge / Safari bản mới).' : 'Đang mở Action 7 ngày…'}</div></div>`; }
-  return `<div class="hint" style="margin-bottom:8px">Dashboard review GMV theo bảng kê (dữ liệu trong file đến 09/11/2026). <b>PIC lấy theo phân công trên dashboard</b> (không dùng PIC cũ trong file). Bấm tên công ty (chữ xanh) để mở hồ sơ khách.</div>`;
+  const txMax = (S.tx || []).reduce((m, t) => t[0] > m ? t[0] : m, '');
+  return `<div class="hint" style="margin-bottom:8px">Dashboard review GMV theo bảng kê · <b>số liệu tự cập nhật theo giao dịch XPAY trên dashboard</b>${txMax ? ` (đến <b>${dmy(txMax)}</b>, cộng dữ liệu gốc trong file đến 09/11)` : ''} — mỗi ngày chỉ cần nạp bảng kê ở tab Cập nhật số liệu. <b>PIC lấy theo phân công trên dashboard</b> (không dùng PIC cũ trong file). Bấm tên công ty (chữ xanh) để mở hồ sơ khách.</div>`;
 }
 function w7Host() {
   let h = document.getElementById('w7host'); const app = $('app'); if (app) app.style.minHeight = TAB === 'w7' ? '0' : '';
