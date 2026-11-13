@@ -2038,6 +2038,7 @@ function crmRows(d) {
     // 2 mốc ký riêng: Ký phụ lục (khách Mai Linh chuyển đổi) · Ký hợp đồng mới (khách mới)
     r.hd = ms.hd == null ? '' : ms.hd; r.signed = done(r.pl) || done(r.hd);
     r.vc = ms.vc == null ? '' : ms.vc;
+    r.meetT = e.meetT || '';   // giờ của mốc Meeting (đã xong)
     r.picM = e.picM || ''; r.picK = e.picK || '';   // PIC Call / Setup meeting · PIC ký PLHĐ / HĐ (PIC chính = người triển khai active XPAY)
     r.cts = ctOf(k); r.ct0 = r.cts[0] || null;   // khách đồng ý ký bằng lời (verbal confirm), chưa ký xong
     r.mtgs = mtgOf(acts, d);
@@ -2705,7 +2706,7 @@ function crmDrawer(r, d) {
   const ed = DBST === 'ok' && DBW !== false, dis = ed ? '' : 'disabled';
   const inp = 'font:13px var(--font-family-sans-serif);padding:6px 9px;border:1px solid var(--color-border-default);border-radius:8px';
   const ms = (f, l, auto) => `<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line-soft)"><span style="width:150px;font-weight:600">${l}</span>
-    <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-ms="${f}" ${done(r[f]) ? 'checked' : ''} ${dis}> đã xong</label><input type="date" data-msd="${f}" value="${isoOk(r[f]) ? r[f] : ''}" ${dis} style="${inp}"><span class="lbl">${auto || ''}</span></div>`;
+    <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-ms="${f}" ${done(r[f]) ? 'checked' : ''} ${dis}> đã xong</label><input type="date" data-msd="${f}" value="${isoOk(r[f]) ? r[f] : ''}" ${dis} style="${inp}">${f === 'meet' ? `<span class="lbl"><b>Giờ</b></span><input type="time" data-mst="meet" step="900" value="${esc(r.meetT || (r.meets[0] && r.meets[0].mt) || '')}" ${dis} style="${inp}">` : ''}<span class="lbl">${auto || ''}</span></div>`;
   const people = [...new Set([...PICS, ...r.acts.map(a => a.who).filter(Boolean)])];
   let h = `<div id="crmask" style="position:fixed;inset:0;background:#0006;z-index:30;display:flex;justify-content:flex-end"><div id="crpane" style="background:var(--surface-2);width:min(920px,100%);height:100%;overflow:auto;padding:20px 24px;border-radius:20px 0 0 20px">
     <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start"><div><div class="eyebrow">${r.grp === 9 ? '' : r.grp + '. '}${esc(GRP[r.grp])}${r.grpM ? ' (chọn tay)' : ''}</div><h2 class="card-title" style="font-size:19px">${esc(r.name)}</h2>
@@ -3472,6 +3473,7 @@ function bindDrawer() {
       ms[f] = v === auto[f] ? null : v; });
     const st = $('crf_st').value, stAuto = b.tl ? 'Thanh lý' : '';
     const patch = {ms, pic: $('crf_pic').value === (c[2] || '') ? null : $('crf_pic').value, grp: $('crf_grp').value || null, st: st === stAuto ? null : st, note: $('crf_note').value.trim()};
+    { const mt = document.querySelector('[data-mst="meet"]'); if (mt && mt.value !== (r.meetT || (r.meets[0] && r.meets[0].mt) || '')) patch.meetT = mt.value || null; }
     ['picM', 'picK'].forEach(f => { if ($('crf_' + f)) { const v = $('crf_' + f).value; if (v !== (r[f] || '')) patch[f] = v || null; } });
     const tc = $('crf_tconf') ? $('crf_tconf').value : ''; if (tc && tc !== confOf(k)) { patch.tconf = tc; patch.tconfAt = TODAY; }
     const tv = $('crf_tact') ? $('crf_tact').value : r.tact; if (tv !== r.tact) { patch.tact = tv || null; patch.tactSet = tv ? TODAY : null; }
