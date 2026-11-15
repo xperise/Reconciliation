@@ -27,7 +27,6 @@ const SECTIONS: [Sec, string, string][] = [
 const TABS: Record<Sec, [string, string, string][]> = {
   all: [
     ["home", "Điều hành", "ri-compass-3-line"],
-    ["cash", "Dòng tiền", "ri-wallet-3-line"],
     ["alerts", "Cảnh báo", "ri-alarm-warning-line"],
     ["data", "Dữ liệu", "ri-database-2-line"],
   ],
@@ -293,6 +292,8 @@ export default function DashboardPage() {
     {
       // Trong khung chi tiết chỉ nhận các liên kết chéo mảng / khách / NCC (ops:…)
       const hit = t.closest("[data-drill]") as HTMLElement | null;
+      // Cảnh báo: bấm lĩnh vực = lọc danh sách, không mở khung chi tiết
+      if (hit?.dataset.drill?.startsWith("alarea:")) { e.preventDefault(); setView("alArea", hit.dataset.drill.slice(7)); return; }
       if (hit?.dataset.drill && (!t.closest(".dp-box") || hit.dataset.drill.startsWith("ops"))) {
         e.preventDefault(); setDrillKey(hit.dataset.drill);
         if (hit.dataset.drill.startsWith("ops")) document.querySelector(".dp-wrap")?.scrollTo({ top: 0 });

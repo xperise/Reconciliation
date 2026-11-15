@@ -371,9 +371,13 @@ Phần quỹ không chia cho team thuộc về công ty.`;
 /* ---------- 8. Cảnh báo ---------- */
 function alertsView(v: VM): string {
   const AL = v.AL;
+  // Bấm một lĩnh vực để lọc danh sách cảnh báo bên cạnh; bấm lại / "Bỏ lọc" để xem tất cả
+  const sel = String((v.st as { alArea?: string }).alArea || "");
   const areas = Array.from(new Set(AL.map((a) => a.area)));
-  const chart = areas.length ? hStack(areas.map((ar) => { const f = (s: string) => AL.filter((a) => a.area === ar && a.sev === s).length; return { l: ar, parts: [[f("critical"), "critical", "Khẩn"], [f("high"), "high", "Cao"], [f("watch"), "watch", "Theo dõi"]] as [number, string, string][], txt: String(AL.filter((a) => a.area === ar).length) }; }).sort((a, b) => +b.txt - +a.txt), { ft: (x) => x + " cảnh báo", legend: [["Khẩn", "critical"], ["Cao", "high"], ["Theo dõi", "watch"]] }) : empty("Không có cảnh báo");
-  return sumAlerts(v) + `<div class="g57">${card("Phân bố", "Cảnh báo theo lĩnh vực", `${AL.length} cảnh báo · kỳ ${esc(v.ky)}`, chart)}${card("Theo dõi xử lý", "Giao việc, hạn xử lý và trạng thái", "bấm vào một cảnh báo để nhận việc", alertBoard(v))}</div>`;
+  const chart = areas.length ? hStack(areas.map((ar) => { const f = (s: string) => AL.filter((a) => a.area === ar && a.sev === s).length; return { l: ar + (ar === sel ? " ✓" : ""), bold: ar === sel, parts: [[f("critical"), "critical", "Khẩn"], [f("high"), "high", "Cao"], [f("watch"), "watch", "Theo dõi"]] as [number, string, string][], txt: String(AL.filter((a) => a.area === ar).length), dr: `alarea:${ar === sel ? "" : ar}` }; }).sort((a, b) => +b.txt - +a.txt), { ft: (x) => x + " cảnh báo", legend: [["Khẩn", "critical"], ["Cao", "high"], ["Theo dõi", "watch"]] }) : empty("Không có cảnh báo");
+  const shown = sel && areas.includes(sel) ? AL.filter((a) => a.area === sel) : AL;
+  const filt = shown !== AL ? `<div class="small" style="margin-bottom:8px">Đang lọc: <b>${esc(sel)}</b> · ${shown.length}/${AL.length} cảnh báo · <button type="button" class="lnk" data-st="alArea" data-v="">Bỏ lọc</button></div>` : "";
+  return sumAlerts(v) + `<div class="g57">${card("Phân bố", "Cảnh báo theo lĩnh vực", `${AL.length} cảnh báo · kỳ ${esc(v.ky)} · bấm một lĩnh vực để lọc`, chart)}${card("Theo dõi xử lý", sel && shown !== AL ? `Cảnh báo ${esc(sel)}` : "Giao việc, hạn xử lý và trạng thái", "bấm vào một cảnh báo để nhận việc", filt + alertBoard({ ...v, AL: shown }))}</div>`;
 }
 
 /* ==========================================================================
