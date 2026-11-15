@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DataSet } from "@/lib/dashboard/types";
 import { makeCtx, segCtx, Seg, Ctx } from "@/lib/dashboard/calc";
 import { hasAnyActual, latestActualKy, facts, dashCtx } from "@/lib/dashboard/ops";
-import { renderOps, opsStrip, opsAlertOk, OpsState } from "@/lib/dashboard/overview";
+import { renderOps, opsStrip, opsAlertOk, opsDrill, OpsState } from "@/lib/dashboard/overview";
 import { renderView, drillPanel, buildVM, VM, ViewState } from "@/lib/dashboard/views";
 import { kyIdx, kyAdd, todayIso, setUnit, UNITS, UnitKey } from "@/lib/dashboard/util";
 import DataTab from "@/components/dashboard/DataTab";
@@ -289,9 +289,14 @@ export default function DashboardPage() {
     const t = e.target as HTMLElement;
     if (t.closest("[data-dpclose]")) { e.preventDefault(); setDrillKey(null); return; }
     if (t.closest(".dp-wrap") && !t.closest(".dp-box")) { setDrillKey(null); return; }
-    if (!t.closest(".dp-box")) {
+    {
+      // Trong khung chi tiết chỉ nhận các liên kết chéo mảng / khách / NCC (ops:…)
       const hit = t.closest("[data-drill]") as HTMLElement | null;
-      if (hit?.dataset.drill) { e.preventDefault(); setDrillKey(hit.dataset.drill); return; }
+      if (hit?.dataset.drill && (!t.closest(".dp-box") || hit.dataset.drill.startsWith("ops:"))) {
+        e.preventDefault(); setDrillKey(hit.dataset.drill);
+        if (hit.dataset.drill.startsWith("ops:")) document.querySelector(".dp-wrap")?.scrollTo({ top: 0 });
+        return;
+      }
     }
     const sb = t.closest("button[data-st]") as HTMLElement | null;
     if (sb?.dataset.st) { e.preventDefault(); setView(sb.dataset.st, sb.dataset.v || ""); return; }
@@ -414,7 +419,7 @@ export default function DashboardPage() {
         {data && tab === "data" && <DataTab data={data} onDone={load} toast={toast} canEdit={canEdit} />}
         {data && tab === "data" && <div className="view" style={{ marginTop: 16 }}><MobCostConfig data={data} canEdit={canEdit} onDone={load} toast={toast} /></div>}
       </div>}
-      {vm && drillKey && <div dangerouslySetInnerHTML={{ __html: drillPanel(vm, drillKey) }} />}
+      {vm && drillKey && <div dangerouslySetInnerHTML={{ __html: drillKey.startsWith("ops:") ? opsDrill(vm, drillKey) : drillPanel(vm, drillKey) }} />}
       {toastMsg && <div className={"toast" + (toastMsg.err ? " err" : "")}>{toastMsg.m}</div>}
       {/* Gợi ý mã khi thêm dòng mới — dùng chung cho mọi form trên các tab */}
       {data && <datalist id="dl-kh">{data.customers.map((c) => <option key={c.ma_kh} value={c.ma_kh}>{c.ten_viet_tat || c.ten_kh} · {c.nhom}</option>)}</datalist>}

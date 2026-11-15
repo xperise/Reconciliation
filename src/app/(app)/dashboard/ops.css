@@ -11,3 +11,10 @@
 .xd .sh i { display: block; height: 4px; border-radius: 2px; background: var(--accent); max-width: 100%; }
 .xd .sec-h { margin: 8px 0 -4px; font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--color-content-subtle); }
 .xd input.cfg-in { width: 88px; text-align: right; }
+/* bảng Kết quả bán hàng & khung chi tiết: dòng bấm được */
+.xd table tr[data-drill]:hover td { background: var(--color-canvas-secondary); }
+.xd .lnk { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; }
+.xd .lnk:hover { text-decoration: underline; }
+.xd .dp-box .g2 { margin-top: var(--gap-medium); }
+.xd .dp-box > .card { margin-top: var(--gap-medium); }
+.xd .dp-box .stat-row { margin-bottom: var(--gap-small); }

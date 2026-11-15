@@ -205,11 +205,14 @@ export function block(C: Ctx, W: Win, seg: Seg | null): Block {
 
 /* ---------------- Chia theo mảng / khách / NCC ---------------- */
 export interface DimRow { k: string; ten: string; sub: string; cur: Sum; cmp: Sum }
-export function byDim(C: Ctx, W: Win, seg: Seg, dim: Dim): DimRow[] {
+/** Khóa của một dòng phát sinh theo chiều chia */
+export const dimKey = (f: Fact, dim: Dim) => (dim === "dv" ? f.dv : dim === "kh" ? f.kh : f.ncc || "—");
+/** flt: chỉ lấy các dòng thỏa điều kiện (vd. chi tiết một khách theo NCC) */
+export function byDim(C: Ctx, W: Win, seg: Seg, dim: Dim, flt?: (f: Fact) => boolean): DimRow[] {
   const F = facts(C), sup = new Map(C.D.suppliers.map((s) => [s.ma_ncc, s]));
-  const keyOf = (f: Fact) => (dim === "dv" ? f.dv : dim === "kh" ? f.kh : f.ncc || "—");
+  const keyOf = (f: Fact) => dimKey(f, dim);
   const g = new Map<string, { c: Fact[]; p: Fact[] }>();
-  const put = (fs: Fact[], w: "c" | "p") => fs.forEach((f) => { const k = keyOf(f), o = g.get(k) || { c: [], p: [] }; o[w].push(f); g.set(k, o); });
+  const put = (fs: Fact[], w: "c" | "p") => fs.forEach((f) => { if (flt && !flt(f)) return; const k = keyOf(f), o = g.get(k) || { c: [], p: [] }; o[w].push(f); g.set(k, o); });
   put(windowFacts(C, W, seg, "cur"), "c");
   put(windowFacts(C, W, seg, W.mode === "ngay" ? "avg" : "prev"), "p");
   const k7 = W.mode === "ngay" ? 1 / 7 : 1;
