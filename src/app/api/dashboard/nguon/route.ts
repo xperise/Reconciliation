@@ -13,7 +13,7 @@ export const maxDuration = 60;
      ar      { kys, rows, first }         thay công nợ phải thu Travel (giữ khách Mobility N2–N5)
      rebuild {}                           dựng lại GMV & giá vốn theo ngày vào fin_gmv (nguon 'bk') */
 type Body =
-  | { action: "kh"; loai: "hotel" | "flight"; kys: string[]; rows: KhRow[]; first: boolean; fileName?: string }
+  | { action: "kh"; loai: "hotel" | "flight" | "transport"; kys: string[]; rows: KhRow[]; first: boolean; fileName?: string; cty?: string }
   | { action: "ncc"; fileKey: string; fileName?: string; rows: NccRow[]; first: boolean }
   | { action: "dm"; rows: DmRow[] }
   | { action: "ar"; kys: string[]; rows: ArRow[]; first: boolean }
@@ -33,9 +33,15 @@ export async function POST(req: Request) {
     const now = new Date().toISOString();
 
     if (b.action === "kh") {
-      if (b.loai !== "hotel" && b.loai !== "flight") return fail("Loại bảng kê không hợp lệ");
+      if (!["hotel", "flight", "transport"].includes(b.loai)) return fail("Loại bảng kê không hợp lệ");
+      if (b.loai === "transport" && !b.cty) return fail("Bảng kê Be thiếu tên công ty (lấy từ tên file Be_statement_<tên công ty>_<ngày>)");
       const kys = (b.kys || []).filter((k) => KY.test(k));
-      if (b.first && kys.length) { const { error } = await sb.from("fin_src_kh").delete().eq("loai", b.loai).in("ky", kys); chk(error, "Xóa bảng kê cũ"); }
+      if (b.first && kys.length) {
+        // Be: mỗi file là một công ty — chỉ thay số của công ty đó
+        let q = sb.from("fin_src_kh").delete().eq("loai", b.loai).in("ky", kys);
+        if (b.loai === "transport") q = q.eq("ten_cong_ty", b.cty as string);
+        const { error } = await q; chk(error, "Xóa bảng kê cũ");
+      }
       const rows = (b.rows || []).filter((r) => KY.test(r.ky) && r.ngay).map((r) => ({ ...r, loai: b.loai, file_name: b.fileName || null, uploaded_at: now }));
       if (rows.length) { const { error } = await sb.from("fin_src_kh").insert(rows); chk(error, "Ghi bảng kê"); }
       return NextResponse.json({ ok: true, written: rows.length });
@@ -95,6 +101,7 @@ export async function POST(req: Request) {
     return fail("Thao tác không hợp lệ");
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
+    if (/loai_check/.test(m)) return fail("Chưa mở loại bảng kê Be — chạy supabase/migrations/31_dashboard_be.sql trong Supabase SQL Editor rồi nạp lại.", 500);
     if (missing(m)) return fail("Chưa tạo bảng nạp file nguồn — chạy supabase/migrations/30_dashboard_nguon.sql trong Supabase SQL Editor rồi nạp lại. (" + m + ")", 500);
     return fail(m, 500);
   }
@@ -119,6 +126,8 @@ const hdKey = (s: string | null | undefined) => String(s ?? "").replace(/\D/g, "
 const tokKey = (s: string | null | undefined) => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean).sort().join("|");
 /** GMV = Tổng thành tiền (sau chiết khấu, có phí dịch vụ); dòng không có thì lấy Thành tiền */
 const gmvOf = (r: KhRow) => (r.tong_tt != null ? Number(r.tong_tt) : Number(r.gmv));
+/** Transportation (Be): margin 6% → giá vốn = GMV × 94%, NCC = Be */
+const BE_MARGIN = 0.06;
 
 async function rebuild(sb: Sb) {
   const [kh, ncc, ar, cust] = await Promise.all([
@@ -153,14 +162,14 @@ async function rebuild(sb: Sb) {
   const put = (k: string, r: Kh) => { if (!k) return; const a = idx.get(k) || []; if (!a.includes(r)) a.push(r); idx.set(k, a); };
   kh.forEach((r) => {
     if (r.loai === "hotel") { put("H|" + nk(r.ma_gd), r); put("T|" + tokKey(r.ma_gd), r); }
-    else { put("F|" + nk(r.ma_gd), r); put("F|" + nk(r.ma_gd2), r); if (r.so_ve && !/^temp_/i.test(r.so_ve)) put("V|" + nk(r.so_ve), r); }
+    else if (r.loai === "flight") { put("F|" + nk(r.ma_gd), r); put("F|" + nk(r.ma_gd2), r); if (r.so_ve && !/^temp_/i.test(r.so_ve)) put("V|" + nk(r.so_ve), r); }
   });
   const gv = new Map<number, number>(), nccOf = new Map<number, string>();
   let nccHit = 0, nccMiss = 0, nccMissAmt = 0;
   // Thứ tự nguồn giá vốn: 0 đối soát NCC → 1 chi khách sạn trực tiếp B1 → 2 giá NCC trên hệ thống.
   // Dòng bảng kê đã có giá vốn từ nguồn đứng trước thì nguồn sau không cộng thêm.
   const tier = (n: Ncc) => (n.khop?.startsWith("HT:") ? 2 : n.khop?.startsWith("B1:") ? 1 : 0);
-  const TIER_L = ["Đối soát NCC", "Chi KS trực tiếp B1", "Giá NCC hệ thống"];
+  const TIER_L = ["Đối soát NCC", "Chi KS trực tiếp B1", "Giá NCC hệ thống", "Be (margin 6%)"];
   const coveredBy = new Map<number, number>();
   const srcOf = new Map<number, number>();
   let htHit = 0, htMiss = 0;
@@ -202,8 +211,10 @@ async function rebuild(sb: Sb) {
   const agg = new Map<string, { ky: string; ngay: string; ma_kh: string; ma_ncc: string | null; dich_vu: string; gmv: number; gia_von: number; gmv_co_gv: number }>();
   let gmvAll = 0, gmvCov = 0;
   const theoNguon: Record<string, number> = {};
+  // Be: giá vốn theo margin cố định
+  kh.forEach((r) => { if (r.loai === "transport") { gv.set(r.id, gmvOf(r) * (1 - BE_MARGIN)); nccOf.set(r.id, "Be"); srcOf.set(r.id, 3); } });
   kh.forEach((r) => {
-    const ma = khOf(r), n = nccOf.get(r.id) || null, dv = r.loai === "hotel" ? "Hotel" : "Flight";
+    const ma = khOf(r), n = nccOf.get(r.id) || null, dv = r.loai === "hotel" ? "Hotel" : r.loai === "flight" ? "Flight" : "Transportation";
     const key = `${r.ky}|${r.ngay}|${ma}|${n || ""}|${dv}`;
     const o = agg.get(key) || { ky: r.ky, ngay: r.ngay, ma_kh: ma, ma_ncc: n, dich_vu: dv, gmv: 0, gia_von: 0, gmv_co_gv: 0 };
     const G = gmvOf(r);
@@ -213,8 +224,8 @@ async function rebuild(sb: Sb) {
   });
   const rows = Array.from(agg.values()).map((o) => ({ ...o, gmv: Math.round(o.gmv), gia_von: Math.round(o.gia_von), gmv_co_gv: Math.round(o.gmv_co_gv), chiet_khau: null, nguon: "bk" }));
 
-  const { error: e1 } = await sb.from("fin_gmv").delete().in("ky", kys).in("dich_vu", ["Hotel", "Flight"]);
-  chk(e1, "Xóa GMV Hotel/Flight cũ");
+  const { error: e1 } = await sb.from("fin_gmv").delete().in("ky", kys).in("dich_vu", ["Hotel", "Flight", "Transportation"]);
+  chk(e1, "Xóa GMV Hotel/Flight/Transportation cũ");
   for (let i = 0; i < rows.length; i += 1000) { const { error } = await sb.from("fin_gmv").insert(rows.slice(i, i + 1000)); chk(error, "Ghi GMV theo ngày"); }
 
   return {

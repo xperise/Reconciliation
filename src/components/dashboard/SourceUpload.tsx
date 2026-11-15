@@ -8,7 +8,7 @@ import { readSource, SrcFile, KIND_LABEL } from "@/lib/dashboard/sources";
 import { n0, pc } from "@/lib/dashboard/util";
 
 const CHUNK = 1000;
-const ORDER = ["ar", "kh_hotel", "kh_flight", "ncc", "b1", "ht_hotel", "ht_flight"];
+const ORDER = ["ar", "kh_hotel", "kh_flight", "kh_be", "ncc", "b1", "ht_hotel", "ht_flight"];
 const vnd = (v: number) => new Intl.NumberFormat("vi-VN").format(Math.round(v));
 const dmy = (d: string | null) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : "—");
 interface Rebuild { kys: string[]; rows: number; gmv?: number; gmvCoGv?: number; ncc?: { noi: number; khongNoi: number; khongNoiTien: number }; ht?: { noi: number; khongNoi: number }; theoNguon?: Record<string, number>; khachChuaMap?: { ten: string; gmv: number }[]; note?: string }
@@ -54,8 +54,9 @@ export default function SourceUpload({ data, canEdit, onDone, toast }: { data: D
         if (f.kind === "ar") {
           await post({ action: "dm", rows: f.dm || [] }); tick();
           for (let i = 0; i < (f.ar || []).length; i += CHUNK) { await post({ action: "ar", kys: f.kys, rows: (f.ar || []).slice(i, i + CHUNK), first: i === 0 }); tick(); }
-        } else if (f.kind === "kh_hotel" || f.kind === "kh_flight") {
-          for (let i = 0; i < (f.kh || []).length; i += CHUNK) { await post({ action: "kh", loai: f.kind === "kh_hotel" ? "hotel" : "flight", kys: f.kys, rows: (f.kh || []).slice(i, i + CHUNK), first: i === 0, fileName: f.name }); tick(); }
+        } else if (f.kind === "kh_hotel" || f.kind === "kh_flight" || f.kind === "kh_be") {
+          const loai = f.kind === "kh_hotel" ? "hotel" : f.kind === "kh_flight" ? "flight" : "transport";
+          for (let i = 0; i < (f.kh || []).length; i += CHUNK) { await post({ action: "kh", loai, cty: f.cty, kys: f.kys, rows: (f.kh || []).slice(i, i + CHUNK), first: i === 0, fileName: f.name }); tick(); }
         } else if (f.kind === "ncc" || f.kind === "b1" || f.kind === "ht_hotel" || f.kind === "ht_flight") {
           for (let i = 0; i < (f.ncc || []).length; i += CHUNK) { await post({ action: "ncc", fileKey: f.fileKey, fileName: f.name, rows: (f.ncc || []).slice(i, i + CHUNK), first: i === 0 }); tick(); }
         }
@@ -90,7 +91,7 @@ export default function SourceUpload({ data, canEdit, onDone, toast }: { data: D
         <label className={"drop" + (over ? " over" : "")} onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={(e) => { e.preventDefault(); setOver(false); pick(e.dataTransfer.files); }}>
           <i className={busy ? "ri-loader-4-line" : "ri-upload-cloud-2-line"} aria-hidden="true" />
           <b>{busy || "Kéo thả các file Excel vào đây hoặc bấm để chọn"}</b>
-          xperise_hotel_statement · xperise_flight_statement · Doi_soat_… · hoa-don-ks-b1-… · Performance_Dashboard_…spending (.csv) · GOC_CONG_NO_PHAI_THU…
+          xperise_hotel_statement · xperise_flight_statement · Be_statement_… · Doi_soat_… · hoa-don-ks-b1-… · Performance_Dashboard_…spending (.csv) · GOC_CONG_NO_PHAI_THU…
           <input ref={inp} type="file" accept=".xlsx,.xls,.csv" multiple hidden onChange={(e) => pick(e.target.files)} />
         </label>
       )}
@@ -133,7 +134,7 @@ export default function SourceUpload({ data, canEdit, onDone, toast }: { data: D
           {canEdit && <div style={{ margin: "8px 0" }}><button className="btn" disabled={!!busy} onClick={rebuildOnly}>Dựng lại GMV & giá vốn từ file đã nạp</button></div>}
           <div className="tw" style={{ marginTop: 8 }}><table>
             <thead><tr><th>Bảng kê khách hàng</th><th>Kỳ</th><th>Khoảng ngày</th><th className="r">Số dòng</th><th className="r">GMV — Tổng thành tiền (VND)</th><th>Nạp lúc</th></tr></thead>
-            <tbody>{loaded.kh.slice().sort((a, b) => b.ky.localeCompare(a.ky)).map((k) => (<tr key={k.loai + k.ky}><td>{k.loai === "hotel" ? "Hotel" : "Flight"}</td><td className="num">{k.ky}</td><td className="num small">{dmy(k.from)} – {dmy(k.to)}</td><td className="r num">{n0(k.n)}</td><td className="r num">{vnd(k.gmv)}</td><td className="small">{new Date(k.at).toLocaleString("vi-VN")}</td></tr>))}</tbody>
+            <tbody>{loaded.kh.slice().sort((a, b) => b.ky.localeCompare(a.ky)).map((k) => (<tr key={k.loai + k.ky}><td>{k.loai === "hotel" ? "Hotel" : k.loai === "flight" ? "Flight" : "Transportation (Be)"}</td><td className="num">{k.ky}</td><td className="num small">{dmy(k.from)} – {dmy(k.to)}</td><td className="r num">{n0(k.n)}</td><td className="r num">{vnd(k.gmv)}</td><td className="small">{new Date(k.at).toLocaleString("vi-VN")}</td></tr>))}</tbody>
           </table></div>
           <div className="tw" style={{ marginTop: 8 }}><table>
             <thead><tr><th>File đối soát NCC / chi KS trực tiếp</th><th className="r">Số dòng</th><th className="r">Bảng kê NCC (VND)</th><th className="r">Ledger (VND)</th></tr></thead>

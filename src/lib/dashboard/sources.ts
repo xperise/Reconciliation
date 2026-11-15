@@ -1,5 +1,7 @@
 // Đọc thẳng file nguồn (không qua file template) — chạy trên trình duyệt.
 //   · Bảng kê khách hàng hotel / flight (xperise_hotel_statement / xperise_flight_statement)
+//   · Bảng kê Be (Be_statement_<tên công ty>_<ngày>): mảng Transportation, mỗi Session ID một chuyến,
+//     GMV = tổng "Total amount" các dòng của session (cước phí + phụ phí); tên khách lấy từ tên file
 //   · File đối soát NCC (Doi_soat_…): cột "Bảng kê" = số NCC (giá vốn), "Ledger" = số trên bảng kê khách hàng
 //   · Sổ công nợ phải thu (sheet CNO PTHU + danh mục KHACH HANG)
 //   · Danh sách chi khách sạn trực tiếp B1 (hoa-don-ks-b1-…): số tiền trả khách sạn theo từng booking = giá vốn
@@ -9,16 +11,18 @@
 import { loadSheetJS, norm } from "./parse";
 import type { Customer } from "./types";
 
-export type SrcKind = "kh_hotel" | "kh_flight" | "ncc" | "b1" | "ht_hotel" | "ht_flight" | "ar" | "unknown";
+export type SrcKind = "kh_hotel" | "kh_flight" | "kh_be" | "ncc" | "b1" | "ht_hotel" | "ht_flight" | "ar" | "unknown";
 export const KIND_LABEL: Record<SrcKind, string> = {
-  kh_hotel: "Bảng kê khách hàng · Hotel", kh_flight: "Bảng kê khách hàng · Flight", ncc: "Đối soát NCC", b1: "Chi khách sạn trực tiếp (B1)", ht_hotel: "Giá NCC trên hệ thống · Hotel", ht_flight: "Giá NCC trên hệ thống · Flight", ar: "Công nợ phải thu", unknown: "Không nhận diện được",
+  kh_hotel: "Bảng kê khách hàng · Hotel", kh_flight: "Bảng kê khách hàng · Flight", kh_be: "Bảng kê Be · Transportation", ncc: "Đối soát NCC", b1: "Chi khách sạn trực tiếp (B1)", ht_hotel: "Giá NCC trên hệ thống · Hotel", ht_flight: "Giá NCC trên hệ thống · Flight", ar: "Công nợ phải thu", unknown: "Không nhận diện được",
 };
-export interface KhRow { loai: "hotel" | "flight"; ky: string; ngay: string; ten_cong_ty: string | null; trang_thai: string | null; ma_gd: string | null; ma_gd2: string | null; so_ve: string | null; so_hd: string | null; gmv: number; tong_tt: number | null; chiet_khau: number | null; phi_dv: number | null; khach: string | null; mo_ta: string | null }
+export interface KhRow { loai: "hotel" | "flight" | "transport"; ky: string; ngay: string; ten_cong_ty: string | null; trang_thai: string | null; ma_gd: string | null; ma_gd2: string | null; so_ve: string | null; so_hd: string | null; gmv: number; tong_tt: number | null; chiet_khau: number | null; phi_dv: number | null; khach: string | null; mo_ta: string | null }
 export interface NccRow { ncc: string | null; nganh: string | null; ma_booking: string | null; so_ve: string | null; khach: string | null; ngay_dv: string | null; ky: string | null; bang_ke: number | null; ledger: number | null; khop: string | null; xu_ly: string | null; mo_ta: string | null; dong: string | null }
 export interface ArRow { ma_kh: string; ky: string; so_ct: string | null; ngay_hd: string | null; ngay_den_han: string; so_tien: number; da_thu: number | null; ngay_thu_du: string | null; ngay_thu_gan_nhat: string | null }
 export interface DmRow { ma_kh: string; ten_kh: string; ten_viet_tat: string; credit_term: number | null; moi: boolean }
 export interface SrcFile {
   name: string; kind: SrcKind; fileKey: string;
+  /** Bảng kê Be: tên công ty (lấy từ tên file) — nạp lại chỉ thay số của công ty này */
+  cty?: string;
   kh?: KhRow[]; ncc?: NccRow[]; ar?: ArRow[]; dm?: DmRow[];
   /** tóm tắt để xem trước */
   rows: number; from: string | null; to: string | null; kys: string[]; total: number; totalL: string;
@@ -96,6 +100,9 @@ export async function readSource(file: File, existing: Customer[]): Promise<SrcF
 
   for (const n of wb.SheetNames) {
     const rows = sheet(n);
+    // 2c. Bảng kê Be
+    const hbe = header(rows, ["Session ID", "Transaction type", "Total amount"]);
+    if (hbe) return readBe(base, rows, hbe);
     // 2b. Giá NCC trên hệ thống (Performance Dashboard)
     const hh = header(rows, ["Booking code", "Booking supplier", "Supplier total amount", "UTS total amount"]);
     if (hh) return readHt(base, rows, hh, "hotel");
@@ -194,6 +201,42 @@ function isoVN(v: Cell): string | null {
   if (v instanceof Date) return iso(new Date(v.getTime() + 7 * 3600e3));
   return iso(v);
 }
+/** Bảng kê Be: gộp các dòng cùng Session ID (cước phí + phụ phí), GMV = tổng Total amount */
+function readBe(f: SrcFile, rows: Cell[][], H: Hdr): SrcFile {
+  f.kind = "kh_be";
+  const cty = f.name.replace(/\.[^.]+$/, "").replace(/^Be_statement_/i, "").replace(/(__\d+_| \(\d+\))$/, "").replace(/_\d{8}$/, "").replace(/_/g, " ").trim();
+  f.cty = cty;
+  const c = { ss: H.col("Session ID"), ngay: H.starts("Ngày giao dịch"), tot: H.col("Total amount"), type: H.col("Transaction type"), st: H.starts("Trạng thái giao dịch"),
+    khach: H.starts("Họ tên khách"), di: H.starts("Điểm đi"), den: H.starts("Điểm đến"), fare: H.starts("Cước phí") };
+  const g = (r: Cell[], k: number) => (k >= 0 ? r[k] : null);
+  const by = new Map<string, KhRow & { n: number }>();
+  let skipFail = 0;
+  rows.slice(H.i + 1).forEach((r) => {
+    const ss = txt(g(r, c.ss)), d = iso(g(r, c.ngay));
+    if (!ss || !d) return;
+    const st = txt(g(r, c.st)) || "";
+    if (st && !/thành công|success/i.test(st)) { skipFail++; return; }
+    const tot = money(g(r, c.tot)) || 0, fare = money(g(r, c.fare)) || 0;
+    const o = by.get(ss) || { loai: "transport" as const, ky: kyOf(d), ngay: d, ten_cong_ty: cty, trang_thai: null, ma_gd: ss, ma_gd2: null, so_ve: null, so_hd: null,
+      gmv: 0, tong_tt: 0, chiet_khau: null, phi_dv: null, khach: txt(g(r, c.khach)), mo_ta: [txt(g(r, c.di)), txt(g(r, c.den))].filter(Boolean).join(" → ") || null, n: 0 };
+    o.tong_tt = (o.tong_tt || 0) + tot; o.gmv += tot; o.n++;
+    if (d < o.ngay) { o.ngay = d; o.ky = kyOf(d); }
+    o.trang_thai = [o.trang_thai, txt(g(r, c.type))].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).join(" + ") || null;
+    void fare;
+    by.set(ss, o);
+  });
+  const all = Array.from(by.values());
+  const out = all.filter((r) => r.gmv !== 0).map(({ n: _n, ...r }) => { void _n; return r; });
+  f.kh = out; f.rows = out.length;
+  summarize(f, out.map((r) => r.ngay), out.reduce((s, r) => s + r.gmv, 0));
+  f.totalL = `GMV ${fmtTien(f.total)} · ${cty}`;
+  const multi = all.filter((r) => r.n > 1).length, zero = all.length - out.length;
+  f.notes.push(`${all.length} session · ${multi} session gộp nhiều dòng (cước phí + phụ phí) · ${zero} session tổng 0 (hoàn tiền) — bỏ qua`);
+  f.notes.push(`Khách hàng lấy từ tên file: ${cty}. Giá vốn = GMV × 94% (margin 6%). Nạp lại cùng kỳ chỉ thay bảng kê Be của công ty này`);
+  if (skipFail) f.warns.push(`${skipFail} dòng trạng thái không thành công — bỏ qua`);
+  return f;
+}
+
 /** Giá NCC trên hệ thống. khop = "HT: <trạng thái>", ledger = UTS total amount (giá bán trên hệ thống).
  *  Flight: mã booking ghi "chiều đi / chiều về" khi hai mã khác nhau. */
 function readHt(f: SrcFile, rows: Cell[][], H: Hdr, loai: "hotel" | "flight"): SrcFile {

@@ -1323,7 +1323,7 @@ export function drill(s: DrillSrc, key: string): Drill | null {
    ========================================================================== */
 export type Seg = "ts" | "m";
 export const SEG_NAME: Record<Seg, string> = { ts: "Travel & SaaS", m: "Mobility" };
-export const SEG_DV: Record<Seg, string[]> = { ts: ["Hotel", "Flight", "SaaS Travel", "F&B"], m: ["Mobility", "SaaS Mobility"] };
+export const SEG_DV: Record<Seg, string[]> = { ts: ["Hotel", "Flight", "Transportation", "SaaS Travel", "F&B"], m: ["Mobility", "SaaS Mobility"] };
 export const SEG_GROUPS: Record<Seg, string[]> = { ts: ["N1"], m: ["N2", "N3", "N4", "N5"] };
 const TGT_FIELDS: Record<Seg, string[]> = {
   ts: ["gmv_hotel", "gmv_flight", "gmv_saas_t", "gmv_fnb", "kh_n1", "opex_budget"],

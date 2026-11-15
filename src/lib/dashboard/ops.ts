@@ -39,7 +39,7 @@ export function mobCfg(D: DataSet) {
 }
 
 /* ---------------- Dựng các dòng phát sinh ---------------- */
-const SVC_NAME: Record<string, string> = { Hotel: "Hotel", Flight: "Flight", "SaaS Travel": "SaaS", "SaaS Mobility": "SaaS Mobility", "F&B": "F&B", Mobility: "Mobility" };
+const SVC_NAME: Record<string, string> = { Hotel: "Hotel", Flight: "Flight", Transportation: "Transportation (Be)", "SaaS Travel": "SaaS", "SaaS Mobility": "SaaS Mobility", "F&B": "F&B", Mobility: "Mobility" };
 export interface Facts {
   all: Fact[]; mobTab: boolean; mobUpdated: string | null;
   /** mảng có số theo ngày */
