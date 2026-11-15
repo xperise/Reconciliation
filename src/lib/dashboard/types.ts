@@ -9,6 +9,8 @@ export interface Target {
   kh_n1: number | null; kh_n2: number | null; kh_n3: number | null; kh_n4: number | null; kh_n5: number | null; opex_budget: number | null;
 }
 export interface GmvRow { ky: string; ma_kh: string; ma_ncc: string | null; dich_vu: string; gmv: number; gia_von: number; chiet_khau: number | null;
+  /** Ngày phát sinh (yyyy-mm-dd) nếu nguồn có số theo ngày; không có = chỉ có số cả tháng */
+  ngay?: string | null;
   /** Dòng nhập tay trên web (không có trong file) */
   tay?: boolean }
 export interface ArRow { ma_kh: string; ky: string; so_ct: string | null; ngay_gui_bk: string | null; ngay_hd: string | null; ngay_den_han: string; so_tien: number; da_thu: number | null; ngay_thu_du: string | null; ngay_thu_gan_nhat: string | null;
@@ -38,10 +40,14 @@ export interface ApEdit {
   ghi_chu: string | null; tu_tao: boolean; xoa: boolean; updated_by: string | null; updated_at: string;
 }
 /** Một ô số tổng nhập thẳng trên dashboard, đắp lên số đọc từ file template */
-export interface ManualRow { nhom: "target" | "gmv" | "gmvkh" | "opex" | "cash"; ky: string; khoa: string; gia_tri: number | null; ghi_chu: string | null; updated_by: string | null; updated_at: string }
+export interface ManualRow { nhom: "target" | "gmv" | "gmvkh" | "opex" | "cash" | "cfg"; ky: string; khoa: string; gia_tri: number | null; ghi_chu: string | null; updated_by: string | null; updated_at: string }
 
 /** Tiến độ bảng kê lấy từ app Reconciliation (bảng tracking), khóa "maKH|kỳ" */
 export interface BangKe { gui: string | null; chot: string | null; status: string | null; nhom: string }
+
+/** Giao dịch Mobility đã gộp theo ngày × doanh nghiệp × đơn vị cung cấp: [ngày, mã DN, đơn vị, GMV, số giao dịch] */
+export type MobDay = [string, string, string, number, number];
+export interface MobAgg { rows: MobDay[]; names: Record<string, string>; units: string[]; updated_at: string | null }
 
 /** Theo dõi xử lý cảnh báo — người nhận việc, hạn, hành động, trạng thái */
 export interface AlertAction { id: string; ky: string; pic: string | null; han_xu_ly: string | null; hanh_dong: string | null; trang_thai: string; updated_at: string }
@@ -52,6 +58,8 @@ export interface DataSet {
   gmv: GmvRow[]; ar: ArRow[]; ap: ApRow[]; cash: CashRow[]; opex: OpexRow[]; contracts: Contract[];
   uploads: UploadLog[]; snapshots: Snapshot[]; alertActions: AlertAction[];
   arEdits: ArEdit[]; apEdits: ApEdit[]; manual: ManualRow[]; bangKe: Record<string, BangKe>;
+  /** GMV Mobility gộp từ giao dịch ở tab Mobility (dashboard XPAY) */
+  mob?: MobAgg | null;
   me?: { email: string; role: string; canEdit: boolean };
 }
 

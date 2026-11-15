@@ -1,0 +1,13 @@
+/* Dashboard 11/2026 — dải 5 ô, xem theo kỳ / ngày, bảng chia theo mảng / khách / NCC, cấu hình giá vốn Mobility */
+.xd .kpis.k5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .xd .kpis.k5 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .xd .kpis.k5 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.xd .ctl .seg { margin-right: var(--gap-xsmall); }
+.xd .ctl .seg-b { padding: 4px 10px; }
+.xd .ctl input[type="date"].fld { height: 32px; padding: 0 8px; }
+.xd table.dimt td { vertical-align: top; }
+.xd table.dimt td .t2 { white-space: nowrap; }
+.xd .sh { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; min-width: 88px; }
+.xd .sh i { display: block; height: 4px; border-radius: 2px; background: var(--accent); max-width: 100%; }
+.xd .sec-h { margin: 8px 0 -4px; font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--color-content-subtle); }
+.xd input.cfg-in { width: 88px; text-align: right; }

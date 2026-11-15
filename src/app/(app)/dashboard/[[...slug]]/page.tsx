@@ -2,13 +2,17 @@
 // Dashboard quản trị tài chính & KPI — /dashboard (tab thứ 3 cạnh Xperise | MLX)
 // Mỗi phần / tab có đường dẫn riêng: xem lib/dashboard/routes.ts
 import "../dashboard.css";
+import "../ops.css";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DataSet } from "@/lib/dashboard/types";
-import { makeCtx, hasActual, mergeEdits, segCtx, Seg } from "@/lib/dashboard/calc";
-import { renderView, kpiStrip, drillPanel, buildVM, VM, ViewState } from "@/lib/dashboard/views";
-import { kyIdx, kyAdd, tr, todayIso, setUnit, UNITS, UnitKey } from "@/lib/dashboard/util";
+import { makeCtx, segCtx, Seg, Ctx } from "@/lib/dashboard/calc";
+import { hasAnyActual, latestActualKy, facts, dashCtx } from "@/lib/dashboard/ops";
+import { renderOps, opsStrip, opsAlertOk, OpsState } from "@/lib/dashboard/overview";
+import { renderView, drillPanel, buildVM, VM, ViewState } from "@/lib/dashboard/views";
+import { kyIdx, kyAdd, todayIso, setUnit, UNITS, UnitKey } from "@/lib/dashboard/util";
 import DataTab from "@/components/dashboard/DataTab";
 import MobilityFrame from "@/components/dashboard/MobilityFrame";
+import MobCostConfig from "@/components/dashboard/MobCostConfig";
 import { parseRoute, routePath } from "@/lib/dashboard/routes";
 
 // Hai tầng điều hướng: PHẦN (Tổng quan · Travel & SaaS · Mobility) → TAB chỉ số trong phần đó.
@@ -23,24 +27,25 @@ const TABS: Record<Sec, [string, string, string][]> = {
   all: [
     ["home", "Điều hành", "ri-compass-3-line"],
     ["cash", "Dòng tiền", "ri-wallet-3-line"],
-    ["kpi", "KPI & Hoa hồng", "ri-award-line"],
     ["alerts", "Cảnh báo", "ri-alarm-warning-line"],
     ["data", "Dữ liệu", "ri-database-2-line"],
   ],
+  // Travel & SaaS: một tab tổng hợp + một tab nhập trực tiếp công nợ phải thu / phải trả
   ts: [
-    ["revenue", "Doanh thu & Margin", "ri-line-chart-line"],
-    ["customers", "Khách hàng", "ri-group-line"],
-    ["ar", "Công nợ phải thu", "ri-arrow-down-circle-line"],
-    ["ap", "Công nợ phải trả", "ri-arrow-up-circle-line"],
-    ["opex", "Chi phí", "ri-money-dollar-circle-line"],
-    ["kpiseg", "KPI & Hoa hồng", "ri-award-line"],
-    ["alerts", "Cảnh báo", "ri-alarm-warning-line"],
+    ["main", "Tổng hợp", "ri-dashboard-line"],
+    ["congno", "Công nợ", "ri-file-list-3-line"],
   ],
   // Mobility = dashboard XPAY (5 tab riêng bên trong khung: Tổng quan, Lộ trình 60 tỷ, Tiến độ khách hàng,
   // Pattern di chuyển, Cập nhật số liệu) — xem components/dashboard/MobilityFrame.tsx
   m: [],
 };
 type Acc = { all: boolean; ts: boolean; m: boolean; canEdit?: boolean };
+/** Dòng tiền ở Tổng quan chỉ gồm thu khách hàng và trả nhà cung cấp: bỏ lương, chi vận hành, hoa hồng */
+const CASH_KH_NCC = ["Thu công nợ KH", "Chi nhà cung cấp"];
+function khNccCtx(C: Ctx): Ctx {
+  const D = C.D;
+  return makeCtx({ ...D, opex: [], staff: [], alloc: [], contracts: [], cash: D.cash.filter((r) => CASH_KH_NCC.includes(r.khoan_muc)) });
+}
 const hasTab = (sec: Sec, t: string) => TABS[sec].some(([k]) => k === t);
 const firstTab = (sec: Sec) => TABS[sec][0]?.[0] ?? "";
 
@@ -62,7 +67,7 @@ export default function DashboardPage() {
   const [donVi, setDonVi] = useState<UnitKey>("ty");
   const [soLe, setSoLe] = useState(2);
   // Lựa chọn trên các tab Xu hướng / Góc nhìn CEO (khoảng thời gian, nhóm khách, kịch bản)
-  const [st, setSt] = useState<ViewState>({ gran: "m", cpG: "all", rate: null });
+  const [st, setSt] = useState<ViewState & OpsState>({ gran: "m", cpG: "all", rate: null, mode: "ky", dim: "dv" });
   // Mobility: tăng số này để tải lại khung dashboard sau khi nhập dữ liệu
   const [mobKey, setMobKey] = useState(0);
   // Phần Dashboard được xem (Tổng quan / Travel & SaaS / Mobility), admin cấp ở trang Người dùng
@@ -110,20 +115,23 @@ export default function DashboardPage() {
     return () => window.removeEventListener("popstate", on);
   }, []);
 
-  const ctx = useMemo(() => (data ? makeCtx(mergeEdits(data)) : null), [data]);
+  const ctx = useMemo(() => (data ? dashCtx(data) : null), [data]);
   useEffect(() => {
     if (!ctx || (ky && ctx.periods.includes(ky))) return;
     const now = kyIdx(`T${todayIso().slice(5, 7)}.${todayIso().slice(0, 4)}`);
-    const withAct = ctx.periods.filter((p) => hasActual(ctx, p));
-    setKy(withAct.slice(-1)[0] || ctx.periods.filter((p) => kyIdx(p) <= now).slice(-1)[0] || ctx.periods[0] || "");
+    setKy(latestActualKy(ctx) || ctx.periods.filter((p) => kyIdx(p) <= now).slice(-1)[0] || ctx.periods[0] || "");
   }, [ctx, ky, data]);
 
   // Tổng quan dùng số toàn công ty; hai phần còn lại dựng từ dữ liệu đã tách theo mảng
   const base: VM | null = useMemo(() => {
     if (!ctx || !ky || sec === "m") return null;
-    return sec === "all" ? buildVM(ctx, ky, data, {}) : buildVM(segCtx(ctx, sec), ky, data, {}, { seg: sec, Cc: ctx });
-  }, [ctx, ky, sec]);
-  const vm: VM | null = useMemo(() => (base ? { ...base, st } : null), [base, st]);
+    if (sec === "all") return tab === "cash" ? buildVM(khNccCtx(ctx), ky, data, {}, { Cc: ctx }) : buildVM(ctx, ky, data, {});
+    return buildVM(segCtx(ctx, sec), ky, data, {}, { seg: sec, Cc: ctx });
+  }, [ctx, ky, sec, tab === "cash"]);
+  /** Ngày mặc định khi xem theo ngày: ngày gần nhất có số */
+  const lastDay = useMemo(() => (ctx ? facts(ctx).lastDay : null), [ctx]);
+  // Cảnh báo chỉ giữ phần khách hàng / nhà cung cấp (bỏ chi phí quản lý)
+  const vm: VM | null = useMemo(() => (base ? { ...base, AL: base.AL.filter(opsAlertOk), st } : null), [base, st]);
 
   /** Đi tới một tab: "ar" (trong phần đang xem), hoặc "ts:revenue" (sang phần khác) */
   function go(target: string) {
@@ -187,11 +195,16 @@ export default function DashboardPage() {
     const moi = box.dataset.moi === "1";
     const khach = moi && loai === "ar" && val("__ten") ? { ten_kh: val("__ten"), nhom: val("__nhom"), pm: val("__pm"), sales: val("__sales"), credit_term: val("__term") } : undefined;
     const ncc = moi && loai === "ap" && val("__ten") ? { ten_ncc: val("__ten"), nganh: val("__nganh"), payment_term: val("__term"), partnership: val("__part") } : undefined;
+    // Sửa dòng có sẵn: chỉ gửi ô thực sự đổi, để bảng tổng và bảng chi tiết không ghi đè số của nhau —
+    // ô nào sửa sau cùng thì lấy số đó. Dòng thêm mới thì gửi đủ.
     const fields: Record<string, string> = {};
     box.querySelectorAll("[data-f]").forEach((el) => {
-      const f = (el as HTMLElement).dataset.f as string;
-      if (!f.startsWith("__")) fields[f] = (el as HTMLInputElement).value;
+      const f = (el as HTMLElement).dataset.f as string, inp = el as HTMLInputElement;
+      if (f.startsWith("__")) return;
+      if (!them && mode === "save" && inp.dataset.goc !== undefined && inp.value.trim() === inp.dataset.goc) return;
+      fields[f] = inp.value;
     });
+    if (!them && mode === "save" && !Object.keys(fields).length) return toast("Chưa có ô nào thay đổi");
     const ky = them ? val("__ky").toUpperCase() : box.dataset.ky || "";
     const so_ct = them ? val("__soct") : box.dataset.soct || "";
     if (them && loai === "ar" && !/^T\d{2}\.\d{4}$/.test(ky)) return toast("Kỳ nợ phải có dạng T09.2026", true);
@@ -325,23 +338,6 @@ export default function DashboardPage() {
     if ((e.key === "Enter" || e.key === " ") && t.dataset.go) { e.preventDefault(); go(t.dataset.go); }
   };
 
-  const snap = data?.snapshots.find((s) => s.ky === ky);
-  async function lock() {
-    if (!vm) return;
-    const P = vm.Pc; // luôn chốt số toàn công ty
-    const payload = { x: P.x, H: P.H, totAct: P.totAct, totTgt: P.totTgt, pT: P.pT.v, pM: P.pM.v, pm: P.pmPeople.map((p) => ({ name: p.name, total: Math.round(p.total), now: Math.round(p.now), laterMax: Math.round(p.laterMax) })), sales: P.sales.map((s) => ({ name: s.name, total: Math.round(s.total) })), partners: P.partners.map((s) => ({ name: s.name, total: Math.round(s.total) })), companyKeep: Math.round(P.companyKeep), comm: Math.round(P.comm) };
-    const r = await fetch("/api/dashboard/snapshot", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ky, data: payload }) });
-    const j = await r.json();
-    if (!r.ok || j.error) return toast(j.error || "Không chốt được", true);
-    toast(`Đã chốt hoa hồng kỳ ${ky}`); await load();
-  }
-  async function unlock() {
-    if (!window.confirm(`Mở khóa số chốt hoa hồng kỳ ${ky}?`)) return;
-    const r = await fetch(`/api/dashboard/snapshot?ky=${encodeURIComponent(ky)}`, { method: "DELETE" });
-    if (!r.ok) return toast("Không mở khóa được", true);
-    toast(`Đã mở khóa kỳ ${ky}`); await load();
-  }
-
   const canEdit = !!(data?.me?.canEdit || acc?.canEdit);
 
   /** Nạp file dữ liệu dashboard Mobility (JSON xuất từ bản claude.ai hoặc file Sao lưu) */
@@ -358,7 +354,6 @@ export default function DashboardPage() {
     } catch (e) { toast("Không nạp được: " + (e instanceof Error ? e.message : String(e)), true); }
   }
   const nCrit = vm ? vm.AL.filter((a) => a.sev === "critical").length : 0;
-  const snapComm = snap ? Number((snap.data as { comm?: number }).comm || 0) : 0;
 
   if (accErr) return <div className="xd"><div className="xd-page"><div className="card notice">{accErr}</div></div></div>;
   if (!acc) return <div className="xd"><div className="xd-page"><div className="empty">Đang tải…</div></div></div>;
@@ -384,10 +379,20 @@ export default function DashboardPage() {
             {[0, 1, 2, 3].map((n) => (<option key={n} value={n}>{n}</option>))}
           </select>
         </div>
-        <div className="ctl"><label htmlFor="xdKy">Kỳ</label>
-          <select id="xdKy" value={ky} onChange={(e) => setKy(e.target.value)}>
-            {(ctx?.periods || []).map((p) => (<option key={p} value={p}>{p}{ctx && !hasActual(ctx, p) ? " (chưa có thực tế)" : ""}</option>))}
-          </select>
+        <div className="ctl">
+          <div className="seg" role="group" aria-label="Xem theo">
+            <button type="button" className={"seg-b" + (st.mode !== "ngay" ? " on" : "")} onClick={() => setSt((s) => ({ ...s, mode: "ky" }))}>Theo kỳ</button>
+            <button type="button" className={"seg-b" + (st.mode === "ngay" ? " on" : "")} onClick={() => setSt((s) => ({ ...s, mode: "ngay", ngay: s.ngay || lastDay || todayIso() }))}>Theo ngày</button>
+          </div>
+          {st.mode === "ngay" ? (<>
+            <label htmlFor="xdNgay">Ngày</label>
+            <input id="xdNgay" type="date" className="fld" value={st.ngay || lastDay || todayIso()} max={todayIso()} onChange={(e) => e.target.value && setSt((s) => ({ ...s, ngay: e.target.value }))} />
+          </>) : (<>
+            <label htmlFor="xdKy">Kỳ</label>
+            <select id="xdKy" value={ky} onChange={(e) => setKy(e.target.value)}>
+              {(ctx?.periods || []).map((p) => (<option key={p} value={p}>{p}{ctx && !hasAnyActual(ctx, p) ? " (chưa có thực tế)" : ""}</option>))}
+            </select>
+          </>)}
           <button className="btn" onClick={() => { load(); toast("Đã tải lại dữ liệu"); }}>Tải lại</button></div>
         </>)}
       </div>
@@ -402,21 +407,10 @@ export default function DashboardPage() {
         {data && !ctx?.periods.length && tab !== "data" && (
           <div className="card notice">Chưa có dữ liệu. Vào tab <a href="#" data-go="data">Dữ liệu</a> để tải template và upload file đầu tiên.</div>
         )}
-        {vm && tab !== "data" && <section className="kpis" dangerouslySetInnerHTML={{ __html: kpiStrip(vm) }} />}
-        {vm && sec === "all" && tab === "kpi" && vm.Pc.hasActual && (snap || canEdit) && (
-          <div className="card lockbar">
-            {snap ? (<>
-              <span className="pill dot p-stable">Đã chốt {new Date(snap.locked_at).toLocaleString("vi-VN")}</span>
-              <span className="small">Tổng chi hoa hồng đã chốt <b className="num">{tr(snapComm)}</b> · theo dữ liệu hiện tại <b className="num">{tr(vm.Pc.comm)}</b>{Math.abs(snapComm - vm.Pc.comm) > 1000 ? " — dữ liệu đã thay đổi sau khi chốt" : ""}</span>
-              <span className="spacer" />{canEdit && <button className="btn danger" onClick={unlock}>Mở khóa</button>}
-            </>) : (<>
-              <span className="small">Số hoa hồng kỳ {ky} đang tính theo dữ liệu hiện tại và sẽ thay đổi nếu upload lại. Chốt để lưu lại số đã duyệt.</span>
-              <span className="spacer" /><button className="btn primary" onClick={lock}>Chốt hoa hồng kỳ {ky}</button>
-            </>)}
-          </div>
-        )}
-        {vm && tab !== "data" && <div className="view" dangerouslySetInnerHTML={{ __html: renderView(tab, vm) }} />}
+        {vm && tab !== "data" && <section className="kpis k5" dangerouslySetInnerHTML={{ __html: opsStrip(vm) }} />}
+        {vm && tab !== "data" && <div className="view" dangerouslySetInnerHTML={{ __html: renderOps(tab, vm) ?? renderView(tab, vm) }} />}
         {data && tab === "data" && <DataTab data={data} onDone={load} toast={toast} canEdit={canEdit} />}
+        {data && tab === "data" && <div className="view" style={{ marginTop: 16 }}><MobCostConfig data={data} canEdit={canEdit} onDone={load} toast={toast} /></div>}
       </div>}
       {vm && drillKey && <div dangerouslySetInnerHTML={{ __html: drillPanel(vm, drillKey) }} />}
       {toastMsg && <div className={"toast" + (toastMsg.err ? " err" : "")}>{toastMsg.m}</div>}

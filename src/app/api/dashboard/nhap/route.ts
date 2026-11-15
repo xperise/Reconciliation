@@ -10,7 +10,15 @@ export const dynamic = "force-dynamic";
 type O = { nhom: string; ky: string; khoa: string; gia_tri?: string | number | null; ghi_chu?: string | null };
 type Body = O | { rows: O[]; khach?: Record<string, unknown> };
 
-const NHOM = new Set(["target", "gmv", "gmvkh", "opex", "cash"]);
+const NHOM = new Set(["target", "gmv", "gmvkh", "opex", "cash", "cfg"]);
+/* Cấu hình (nhom 'cfg', ky 'CFG'): tỷ lệ thập phân, không làm tròn.
+   mob_ck|<đơn vị>  % chiết khấu đơn vị cung cấp Mobility trả lại (giá vốn = GMV × (1 − %)), '*' = mặc định */
+const CFG_KHOA = /^mob_ck\|.{1,120}$/;
+function ratio(raw: unknown): number | null {
+  if (raw === "" || raw === null || raw === undefined) return null;
+  const n = Number(String(raw).replace(",", "."));
+  return isFinite(n) && n >= 0 && n < 1 ? n : NaN;
+}
 
 function money(raw: unknown): number | null {
   if (raw === "" || raw === null || raw === undefined) return null;
@@ -45,6 +53,14 @@ export async function POST(req: Request) {
       const khoa = String(r.khoa || "").trim();
       if (!NHOM.has(nhom)) return NextResponse.json({ error: `Nhóm số liệu không hợp lệ: ${nhom}` }, { status: 400 });
       if (!ky || !khoa) return NextResponse.json({ error: "Thiếu kỳ hoặc khoản mục" }, { status: 400 });
+      if (nhom === "cfg") {
+        if (ky !== "CFG" || !CFG_KHOA.test(khoa)) return NextResponse.json({ error: `Cấu hình không hợp lệ: ${khoa}` }, { status: 400 });
+        const x = ratio(r.gia_tri);
+        if (Number.isNaN(x)) return NextResponse.json({ error: `Tỷ lệ phải từ 0% tới dưới 100% (${khoa})` }, { status: 400 });
+        if (x == null) xoa.push({ nhom, ky, khoa });
+        else them.push({ nhom, ky, khoa, gia_tri: x, ghi_chu: null, updated_by: g.user.email, updated_at: now });
+        continue;
+      }
       const re = nhom === "cash" ? /^T\d{2}\.\d{4}-H[12]$/ : /^T\d{2}\.\d{4}$/;
       if (!re.test(ky)) return NextResponse.json({ error: `Kỳ phải có dạng ${nhom === "cash" ? "T09.2026-H1" : "T09.2026"}` }, { status: 400 });
       const v = money(r.gia_tri);
