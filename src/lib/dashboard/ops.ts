@@ -128,12 +128,13 @@ export function makeWin(C: Ctx, mode: Mode, ky: string, ngay?: string): Win {
   const day = ngay || F.lastDay || todayIso();
   const yday = addDays(day, -1), last7 = Array.from({ length: 7 }, (_, i) => addDays(day, -7 + i));
   if (mode === "ngay") return { mode, ky: kyOfDate(day), ngay: day, curL: "hôm nay", prevL: "hôm qua", avgL: "TB 7 ngày", cutDom: null, yday, last7 };
-  // Kỳ đang chạy vẫn so với CẢ kỳ trước (không so cùng kỳ); nhãn ghi số tới ngày nào
+  // Kỳ đang chạy (ngày có số gần nhất chưa tới cuối kỳ): so cùng số ngày với kỳ trước
   const lastIn = F.all.reduce<string | null>((m, f) => (f.ky === ky && f.ngay && (!m || f.ngay > m) ? f.ngay : m), null);
   const running = !!lastIn && lastIn < kyEnd(ky) && kyOfDate(todayIso()) === ky;
+  const cutDom = running ? dom(lastIn as string) : null;
   const p = kyAdd(ky, -1);
   return { mode, ky, ngay: day, curL: running ? `${ky} tới ${(lastIn as string).slice(8, 10)}/${(lastIn as string).slice(5, 7)}` : ky,
-    prevL: `kỳ ${p}`, avgL: "", cutDom: null, yday, last7 };
+    prevL: running ? `cùng kỳ ${p}` : `kỳ ${p}`, avgL: "", cutDom, yday, last7 };
 }
 
 /** Các dòng của một mảng trong cửa sổ: cur = hiện tại, prev = kỳ trước / hôm qua, avg = 7 ngày (chưa chia) */
