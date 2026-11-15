@@ -65,8 +65,9 @@ export default function DashboardPage() {
   // Mã tra cứu đang mở khi bấm vào một phần của biểu đồ
   const [drillKey, setDrillKey] = useState<string | null>(null);
   // Đơn vị hiển thị tiền, áp cho cả dashboard. "vnd" là số gốc không làm tròn.
-  const [donVi, setDonVi] = useState<UnitKey>("ty");
-  const [soLe, setSoLe] = useState(2);
+  const [donVi, setDonVi] = useState<UnitKey>("trieu");
+  const [soLe, setSoLe] = useState(1);
+  const [xuat, setXuat] = useState(false);
   // Lựa chọn trên các tab Xu hướng / Góc nhìn CEO (khoảng thời gian, nhóm khách, kịch bản)
   const [st, setSt] = useState<ViewState & OpsState>({ gran: "m", cpG: "all", rate: null, mode: "ky", dim: "dv" });
   // Mobility: tăng số này để tải lại khung dashboard sau khi nhập dữ liệu
@@ -399,6 +400,16 @@ export default function DashboardPage() {
               {(ctx?.periods || []).map((p) => (<option key={p} value={p}>{p}{ctx && !hasAnyActual(ctx, p) ? " (chưa có thực tế)" : ""}</option>))}
             </select>
           </>)}
+          {sec === "ts" && ctx && <button className="btn" disabled={xuat} title="Tải toàn bộ dữ liệu Travel & SaaS về Excel: GMV theo ngày, bảng kê, giá vốn NCC, công nợ, danh mục, kế hoạch" onClick={async () => {
+            setXuat(true);
+            try {
+              const r = await fetch("/api/dashboard/xuat"); const j = await r.json();
+              if (!r.ok || j.error) throw new Error(j.error || `Lỗi ${r.status}`);
+              const { exportTravel } = await import("@/lib/dashboard/exportTs");
+              toast(`Đã tải ${await exportTravel(ctx, { kh: j.kh || [], ncc: j.ncc || [] })}`);
+            } catch (e) { toast(e instanceof Error ? e.message : String(e), true); }
+            finally { setXuat(false); }
+          }}><i className="ri-download-2-line" aria-hidden="true" /> {xuat ? "Đang xuất…" : "Tải master data"}</button>}
           <button className="btn" onClick={() => { load(); toast("Đã tải lại dữ liệu"); }}>Tải lại</button></div>
         </>)}
       </div>

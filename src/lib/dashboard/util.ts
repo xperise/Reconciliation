@@ -17,7 +17,7 @@ export const UNITS: Record<UnitKey, Omit<UnitDef, "le">> = {
   ty: { key: "ty", ten: "Tỷ VND", nhan: "tỷ", chia: 1e9 },
 };
 const LE_MAC_DINH: Record<UnitKey, number> = { vnd: 0, nghin: 0, trieu: 1, ty: 2 };
-let U: UnitDef = { ...UNITS.ty, le: 2 };
+let U: UnitDef = { ...UNITS.trieu, le: 1 };   // mặc định: triệu VND
 export function setUnit(key: UnitKey, le?: number) {
   U = { ...UNITS[key], le: le ?? LE_MAC_DINH[key] };
 }
