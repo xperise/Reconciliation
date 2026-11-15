@@ -104,7 +104,7 @@ async function srcSum(): Promise<SrcSum | null> {
     ]);
     const K = new Map<string, SrcSum["kh"][number]>();
     kh.forEach((r) => { const k = r.loai + "|" + r.ky, o = K.get(k) || { loai: r.loai, ky: r.ky, n: 0, gmv: 0, from: r.ngay, to: r.ngay, at: r.uploaded_at };
-      o.n++; o.gmv += r.tong_tt ?? r.gmv; if (r.ngay < o.from) o.from = r.ngay; if (r.ngay > o.to) o.to = r.ngay; if (r.uploaded_at > o.at) o.at = r.uploaded_at; K.set(k, o); });
+      o.n++; o.gmv += r.tong_tt && r.tong_tt !== 0 ? r.tong_tt : r.gmv; if (r.ngay < o.from) o.from = r.ngay; if (r.ngay > o.to) o.to = r.ngay; if (r.uploaded_at > o.at) o.at = r.uploaded_at; K.set(k, o); });
     const N = new Map<string, SrcSum["ncc"][number]>();
     ncc.forEach((r) => { const k = [r.ncc, r.ky, r.khop, r.file_name].join("|"), o = N.get(k) || { ncc: r.ncc, nganh: r.nganh, ky: r.ky, khop: r.khop, n: 0, bang_ke: 0, ledger: 0, at: r.uploaded_at, file: r.file_name || "" };
       o.n++; o.bang_ke += r.bang_ke || 0; o.ledger += r.ledger || 0; N.set(k, o); });
@@ -128,12 +128,12 @@ export async function GET() {
     const [bangKe, mob, src, md] = await Promise.all([bangKeMap(customers), mobAgg(), srcSum(), masterInfo(customers)]);
     // PM phụ trách lấy theo Master Data (tab Xperise): pháp nhân → nhóm
     customers.forEach((c) => { const p = md.pm.get(c.ma_kh); if (p) c.pm = p; });
-    const grp = md.grp;
+    const grp = md.grp, alias = md.alias;
     return NextResponse.json({
       params: Object.fromEntries(params.map((p) => [p.key, p.value ?? ""])),
       customers, suppliers, staff, alloc, targets, gmv, ar, ap, cash, opex, contracts,
       uploads: (uploads as { id: number }[]).slice(-30).reverse(), snapshots, alertActions,
-      arEdits, apEdits, manual, bangKe, mob, src, grp,
+      arEdits, apEdits, manual, bangKe, mob, src, grp, alias,
       me: { email: g.user.email, role: g.user.role, canEdit: EDIT_ROLES.includes(g.user.role) },
     });
   } catch (e) {

@@ -5,23 +5,27 @@
 //     (vào nhóm trùng mã / tên nếu có, không thì tạo nhóm mới chưa có lịch gửi — workflow gửi thư không chạy cho nhóm này).
 import { adminClient, fetchAll } from "./server";
 
-const nk = (s: string | null | undefined) => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").toUpperCase().replace(/[^A-Z0-9]/g, "");
+export const nk = (s: string | null | undefined) => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").toUpperCase().replace(/[^A-Z0-9]/g, "");
 interface Grp { id: string; ma_he_thong: string; ten_nhom: string; pm?: string | null }
-interface Pn { id: string; group_id: string; code: string | null; ten_khach_hang: string; ten_viet_tat: string | null; pm?: string | null }
+interface Pn { id: string; group_id: string; code: string | null; ten_khach_hang: string; ten_viet_tat: string | null; pm?: string | null; ten_khac?: string | null }
+/** Tên gọi khác mặc định (khi Master Data chưa khai cột "Tên gọi khác"): mã KH trong Dashboard → các tên trên hệ thống khác */
+const ALIAS_MAC_DINH: Record<string, string[]> = {
+  "SAO THUY": ["MASTERISE", "CTCP TẬP ĐOÀN MASTERISE", "CÔNG TY CỔ PHẦN TẬP ĐOÀN MASTERISE", "TECHCOMBANK", "TCB", "MARI01"],
+};
 interface Kh { ma_kh: string; ten_kh: string; ten_viet_tat: string | null; nhom: string; pm: string | null; ma_he_thong?: string | null }
 
-async function master(withPm: boolean) {
+async function master(withPm: boolean, withAlias = withPm) {
   const sb = adminClient();
   const [g, p] = await Promise.all([
     sb.from("billing_groups").select(withPm ? "id,ma_he_thong,ten_nhom,pm" : "id,ma_he_thong,ten_nhom"),
-    sb.from("customers").select(withPm ? "id,group_id,code,ten_khach_hang,ten_viet_tat,pm" : "id,group_id,code,ten_khach_hang,ten_viet_tat"),
+    sb.from("customers").select("id,group_id,code,ten_khach_hang,ten_viet_tat" + (withPm ? ",pm" : "") + (withAlias ? ",ten_khac" : "")),
   ]);
   if (g.error || p.error) throw new Error((g.error || p.error)!.message);
   return { groups: (g.data || []) as unknown as Grp[], pns: (p.data || []) as unknown as Pn[] };
 }
 function index(groups: Grp[], pns: Pn[]) {
   const pnBy = new Map<string, Pn>(), grpBy = new Map<string, Grp>(), grpId = new Map(groups.map((x) => [x.id, x]));
-  pns.forEach((p) => [p.code, p.ten_viet_tat, p.ten_khach_hang].forEach((k) => { const x = nk(k); if (x && !pnBy.has(x)) pnBy.set(x, p); }));
+  pns.forEach((p) => [p.code, p.ten_viet_tat, p.ten_khach_hang, ...String(p.ten_khac || "").split(/[,;\n]/)].forEach((k) => { const x = nk(k); if (x && !pnBy.has(x)) pnBy.set(x, p); }));
   groups.forEach((x) => [x.ma_he_thong, x.ten_nhom].forEach((k) => { const y = nk(k); if (y && !grpBy.has(y)) grpBy.set(y, x); }));
   const findPn = (c: Kh) => [c.ma_kh, c.ten_viet_tat, c.ten_kh].map(nk).map((k) => (k ? pnBy.get(k) : undefined)).find(Boolean);
   const findGrp = (c: Kh) => [c.ma_he_thong, c.ma_kh, c.ten_viet_tat].map(nk).map((k) => (k ? grpBy.get(k) : undefined)).find(Boolean);
@@ -32,10 +36,17 @@ const isTravel = (c: Kh) => !["N2", "N3", "N4", "N5"].includes(c.nhom);
 /** Theo Master Data, cho từng khách của Dashboard (mã KH = pháp nhân):
  *  pm: PM phụ trách (pháp nhân → nhóm); grp: nhóm đối soát để Tổng quan / Travel & SaaS hiển thị theo nhóm.
  *  Chưa chạy migration 33 thì vẫn có nhóm, không có PM. */
-export async function masterInfo(customers: Kh[]): Promise<{ pm: Map<string, string>; grp: Record<string, { k: string; ten: string; pm: string | null }> }> {
+export async function masterInfo(customers: Kh[]): Promise<{ pm: Map<string, string>; grp: Record<string, { k: string; ten: string; pm: string | null }>; alias: Record<string, string> }> {
   const pm = new Map<string, string>(), grp: Record<string, { k: string; ten: string; pm: string | null }> = {};
+  const alias = aliasMacDinh(customers);
   let M: Awaited<ReturnType<typeof master>>;
-  try { M = await master(true); } catch { try { M = await master(false); } catch { return { pm, grp }; } }
+  try { M = await master(true, true); } catch { try { M = await master(true, false); } catch { try { M = await master(false, false); } catch { return { pm, grp, alias }; } } }
+  // tên gọi khác khai ở Master Data → mã KH của Dashboard khớp với pháp nhân đó
+  const pnToKh = new Map<string, string>();
+  { const { findPn } = index(M.groups, M.pns); customers.filter(isTravel).forEach((c) => { const p = findPn(c); if (p && !pnToKh.has(p.id)) pnToKh.set(p.id, c.ma_kh); }); }
+  // pháp nhân đã khai "Tên gọi khác" thì bỏ danh sách mặc định của khách đó, dùng đúng danh sách đã khai
+  M.pns.forEach((p) => { const ma = pnToKh.get(p.id); if (ma && String(p.ten_khac || "").trim()) Object.keys(alias).forEach((k) => { if (alias[k] === ma) delete alias[k]; }); });
+  M.pns.forEach((p) => { const ma = pnToKh.get(p.id); if (!ma) return; String(p.ten_khac || "").split(/[,;\n]/).forEach((n) => { const x = nk(n); if (x) alias[x] = ma; }); });
   const { findPn, findGrp, grpId } = index(M.groups, M.pns);
   customers.filter(isTravel).forEach((c) => {
     const p = findPn(c), g = p ? grpId.get(p.group_id) : findGrp(c);
@@ -43,7 +54,13 @@ export async function masterInfo(customers: Kh[]): Promise<{ pm: Map<string, str
     if (x) pm.set(c.ma_kh, x);
     if (g) grp[c.ma_kh] = { k: `G:${g.ma_he_thong}`, ten: g.ten_nhom, pm: (g.pm || "").trim() || null };
   });
-  return { pm, grp };
+  return { pm, grp, alias };
+}
+/** Tên gọi khác mặc định, chỉ khi Dashboard có khách đó */
+function aliasMacDinh(customers: Kh[]): Record<string, string> {
+  const out: Record<string, string> = {}, co = new Set(customers.map((c) => c.ma_kh));
+  Object.entries(ALIAS_MAC_DINH).forEach(([ma, ns]) => { if (co.has(ma)) ns.forEach((n) => { out[nk(n)] = ma; }); });
+  return out;
 }
 
 /** Thêm vào Master Data các khách Travel của Dashboard chưa có ở đó. */

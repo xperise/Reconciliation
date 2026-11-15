@@ -4,9 +4,9 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { luuPhapNhan, xoaPhapNhan } from '@/app/actions';
 
-type Draft = { id?: string; ten: string; vietTat: string; code: string; ngung: boolean; ghiChu: string; pm: string };
+type Draft = { id?: string; ten: string; vietTat: string; code: string; ngung: boolean; ghiChu: string; pm: string; tenKhac: string };
 
-const TRONG: Draft = { ten: '', vietTat: '', code: '', ngung: false, ghiChu: '', pm: '' };
+const TRONG: Draft = { ten: '', vietTat: '', code: '', ngung: false, ghiChu: '', pm: '', tenKhac: '' };
 
 /**
  * Pháp nhân trực thuộc một nhóm đối soát.
@@ -39,7 +39,7 @@ export function PhapNhan({ groupId, tenNhom, danhSach, pmNhom }: {
         const kq = await luuPhapNhan({
           id: sua.id, groupId,
           tenKhachHang: sua.ten, tenVietTat: sua.vietTat,
-          code: sua.code, ngungHopTac: sua.ngung, ghiChu: sua.ghiChu, pm: sua.pm,
+          code: sua.code, ngungHopTac: sua.ngung, ghiChu: sua.ghiChu, pm: sua.pm, tenKhac: sua.tenKhac,
         });
         if (kq && kq.error) throw new Error(kq.error);
         setSua(null);
@@ -96,7 +96,7 @@ export function PhapNhan({ groupId, tenNhom, danhSach, pmNhom }: {
               {hien.map((c) => (
                 <tr key={c.id} style={c.ngung_hop_tac ? { opacity: 0.55 } : undefined}>
                   <td className="text-[12.5px]">{c.ten_khach_hang}</td>
-                  <td className="text-[12.5px]">{c.ten_viet_tat || '—'}</td>
+                  <td className="text-[12.5px]">{c.ten_viet_tat || '—'}{c.ten_khac ? <div className="text-[11px] text-[var(--ink-3)]">còn gọi: {c.ten_khac}</div> : null}</td>
                   <td className="mono text-[12px]">{c.code || '—'}</td>
                   <td className="text-[12.5px]" title={c.pm ? 'PM riêng của pháp nhân' : 'Theo PM của nhóm'}>{c.pm || <span className="text-[var(--ink-3)]">{pmNhom || '—'}</span>}</td>
                   <td>
@@ -108,7 +108,7 @@ export function PhapNhan({ groupId, tenNhom, danhSach, pmNhom }: {
                     <div className="flex gap-1.5 justify-end">
                       <button className="btn btn-sm" onClick={() => setSua({
                         id: c.id, ten: c.ten_khach_hang, vietTat: c.ten_viet_tat ?? '',
-                        code: c.code ?? '', ngung: c.ngung_hop_tac, ghiChu: c.ghi_chu ?? '', pm: c.pm ?? '',
+                        code: c.code ?? '', ngung: c.ngung_hop_tac, ghiChu: c.ghi_chu ?? '', pm: c.pm ?? '', tenKhac: c.ten_khac ?? '',
                       })}>Sửa</button>
                       <button className="btn btn-sm btn-danger" onClick={() => xoa(c)}>Xoá</button>
                     </div>
@@ -151,6 +151,12 @@ export function PhapNhan({ groupId, tenNhom, danhSach, pmNhom }: {
                   <input id="pn-code" className="field mono" value={sua.code}
                          onChange={(e) => setSua({ ...sua, code: e.target.value })} />
                 </div>
+              </div>
+              <div>
+                <label className="label" htmlFor="pn-tk">Tên gọi khác trên hệ thống</label>
+                <input id="pn-tk" className="field" value={sua.tenKhac} placeholder="vd. MASTERISE, TECHCOMBANK — cách nhau bằng dấu phẩy"
+                       onChange={(e) => setSua({ ...sua, tenKhac: e.target.value })} />
+                <p className="card-note m-0 mt-1">Tên công ty trên hệ thống đặt chỗ / sổ phải thu khác tên pháp nhân. Dashboard gộp các tên này về pháp nhân này.</p>
               </div>
               <div>
                 <label className="label" htmlFor="pn-pm">PM phụ trách</label>

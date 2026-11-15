@@ -392,7 +392,7 @@ export type OMasterData = keyof typeof O_SUA_DUOC;
 
 /** Bản production của Next.js giấu nội dung lỗi ném ra từ server action — trả lỗi về dạng giá trị để người dùng đọc được */
 const LOI_PM = 'Chưa có cột PM — chạy supabase/migrations/33_master_pm.sql trong Supabase SQL Editor rồi thử lại.';
-const docLoi = (e: unknown) => { const m = e instanceof Error ? e.message : String(e); return /column .*pm.* does not exist|\bpm\b.*schema cache/i.test(m) ? LOI_PM : m; };
+const docLoi = (e: unknown) => { const m = e instanceof Error ? e.message : String(e); return /ten_khac/.test(m) ? 'Chưa có cột Tên gọi khác — chạy supabase/migrations/34_master_ten_khac.sql trong Supabase SQL Editor rồi thử lại.' : /column .*pm.* does not exist|\bpm\b.*schema cache/i.test(m) ? LOI_PM : m; };
 export async function capNhatO(groupId: string, cot: OMasterData, giaTri: unknown): Promise<{ error?: string; ok?: boolean; giaTri?: unknown; lanToa?: string[] }> {
   try { return await capNhatOGoc(groupId, cot, giaTri); } catch (e) { return { error: docLoi(e) }; }
 }
@@ -1227,6 +1227,8 @@ async function luuPhapNhanGoc(input: {
   ghiChu?: string;
   /** PM riêng của pháp nhân; để trống = theo PM của nhóm */
   pm?: string;
+  /** Tên gọi khác trên hệ thống, cách nhau dấu phẩy */
+  tenKhac?: string;
 }) {
   const user = await requireRole('admin', 'ke_toan');
   const sb = supabaseAdmin();
@@ -1242,6 +1244,7 @@ async function luuPhapNhanGoc(input: {
     ghi_chu: input.ghiChu?.trim() || null,
   };
   if (input.pm !== undefined) payload.pm = input.pm.trim() || null;
+  if (input.tenKhac !== undefined) payload.ten_khac = input.tenKhac.trim() || null;
 
   if (input.id) {
     const { data: before } = await sb.from('customers').select('*').eq('id', input.id).single();

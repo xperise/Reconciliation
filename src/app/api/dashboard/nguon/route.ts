@@ -3,7 +3,7 @@ import { adminClient, guard, fetchAll } from "@/lib/dashboard/server";
 import type { KhRow, NccRow, ArRow, DmRow } from "@/lib/dashboard/sources";
 import { inferNcc } from "@/lib/dashboard/sources";
 import { kyEnd, addDays } from "@/lib/dashboard/util";
-import { syncTravelToMaster } from "@/lib/dashboard/masterSync";
+import { syncTravelToMaster, masterInfo } from "@/lib/dashboard/masterSync";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -142,8 +142,9 @@ const nk = (s: string | null | undefined) => String(s ?? "").normalize("NFD").re
 const hdKey = (s: string | null | undefined) => String(s ?? "").replace(/\D/g, "").replace(/^0+/, "");
 /** Mã booking bỏ thứ tự các phần: "UTSNE261001 - 422785" ≡ "422785_UTSNE261001" */
 const tokKey = (s: string | null | undefined) => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean).sort().join("|");
-/** GMV = Tổng thành tiền (sau chiết khấu, có phí dịch vụ); dòng không có thì lấy Thành tiền */
-const gmvOf = (r: KhRow) => (r.tong_tt != null ? Number(r.tong_tt) : Number(r.gmv));
+/** GMV = Tổng thành tiền (sau chiết khấu, có phí dịch vụ). Dòng không có — hoặc hệ thống xuất 0 trong khi Thành tiền
+ *  khác 0 (vd. các booking của Masterise) — thì lấy Thành tiền + phí dịch vụ − chiết khấu */
+const gmvOf = (r: KhRow) => (r.tong_tt != null && !(Number(r.tong_tt) === 0 && Number(r.gmv) !== 0) ? Number(r.tong_tt) : Number(r.gmv) + Number(r.phi_dv || 0) - Number(r.chiet_khau || 0));
 /** Transportation (Be): margin 6% → giá vốn = GMV × 94%, NCC = Be */
 const BE_MARGIN = 0.06;
 
@@ -164,6 +165,16 @@ async function rebuild(sb: Sb) {
   }
   if (!kh.length) return { ok: true, kys: [], rows: 0, note: "Chưa có bảng kê khách hàng nào" };
 
+  /* --- tên gọi khác (Master Data + mặc định): gộp về đúng mã KH, kể cả số phải thu đã nạp dưới mã khác --- */
+  const { alias } = await masterInfo(cust.map((c) => ({ ma_kh: c.ma_kh, ten_kh: c.ten_kh, ten_viet_tat: c.ten_viet_tat, nhom: "N1", pm: null })));
+  const gop: { tu: string; ve: string }[] = [];
+  cust.forEach((c) => { const ve = [c.ma_kh, c.ten_viet_tat, c.ten_kh].map((x) => alias[nk(x)]).find(Boolean); if (ve && ve !== c.ma_kh) gop.push({ tu: c.ma_kh, ve }); });
+  for (const g of gop) {
+    const { error } = await sb.from("fin_ar").update({ ma_kh: g.ve }).eq("ma_kh", g.tu);
+    chk(error, `Gộp phải thu ${g.tu} → ${g.ve}`);
+    ar.forEach((r) => { if (r.ma_kh === g.tu) r.ma_kh = g.ve; });
+  }
+
   /* --- khách hàng --- */
   const byHd = new Map<string, string>();
   ar.forEach((r) => { const k = hdKey(r.so_ct); if (k && !byHd.has(k)) byHd.set(k, r.ma_kh); });
@@ -178,6 +189,7 @@ async function rebuild(sb: Sb) {
     const viaHd = byHd.get(hdKey(r.so_hd));
     if (viaHd) return viaHd;
     const k = nk(r.ten_cong_ty);
+    if (alias[k]) return alias[k];
     const m = byCompany.get(k) || byName.get(k);
     if (m) return m;
     const ten = (r.ten_cong_ty || "CHƯA RÕ").trim().toUpperCase();
@@ -262,6 +274,7 @@ async function rebuild(sb: Sb) {
     ok: true, kys: kys.sort(), rows: rows.length, ap,
     gmv: Math.round(gmvAll), gmvCoGv: Math.round(gmvCov),
     ncc: { noi: nccHit, khongNoi: nccMiss, khongNoiTien: Math.round(nccMissAmt) },
+    gopKhach: gop.map((g) => `${g.tu} → ${g.ve}`),
     ht: { noi: htHit, khongNoi: htMiss },
     theoNguon: Object.fromEntries(Object.entries(theoNguon).map(([k, v]) => [k, Math.round(v)])),
     khachChuaMap: Array.from(chuaMap.entries()).sort((a, b) => b[1] - a[1]).map(([ten, v]) => ({ ten, gmv: Math.round(v) })),

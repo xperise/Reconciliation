@@ -96,7 +96,7 @@ export async function exportTravel(C: Ctx, src: SrcLines): Promise<string> {
     { h: "Mã giao dịch / Session", w: 22 }, { h: "Mã chiều về", w: 12 }, { h: "Số vé", w: 16 }, { h: "Số hóa đơn", w: 12 },
     { h: "Thành tiền", t: "money", w: 14 }, { h: "Tổng thành tiền (GMV)", t: "money", w: 16 }, { h: "Chiết khấu", t: "money", w: 12 }, { h: "Phí dịch vụ", t: "money", w: 12 },
     { h: "Khách", w: 24 }, { h: "Mô tả", w: 36 }, { h: "File", w: 30 },
-  ], kh.map((r) => [LOAI[String(r.loai)] || r.loai, r.ky, r.ngay, r.ten_cong_ty, r.trang_thai, r.ma_gd, r.ma_gd2, r.so_ve, r.so_hd, r.gmv, r.tong_tt ?? r.gmv, r.chiet_khau, r.phi_dv, r.khach, r.mo_ta, r.file_name])), "Bang_ke_KH");
+  ], kh.map((r) => [LOAI[String(r.loai)] || r.loai, r.ky, r.ngay, r.ten_cong_ty, r.trang_thai, r.ma_gd, r.ma_gd2, r.so_ve, r.so_hd, r.gmv, r.tong_tt ? r.tong_tt : Number(r.gmv || 0) + Number(r.phi_dv || 0) - Number(r.chiet_khau || 0), r.chiet_khau, r.phi_dv, r.khach, r.mo_ta, r.file_name])), "Bang_ke_KH");
 
   /* Nguồn giá vốn */
   const nguon = (k: unknown) => { const s = String(k || ""); return s.startsWith("HT:") ? "Giá NCC hệ thống" : s.startsWith("B1:") ? "Chi KS trực tiếp B1" : "Đối soát NCC"; };

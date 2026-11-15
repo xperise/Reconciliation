@@ -86,7 +86,7 @@ function header(rows: Cell[][], must: string[], scan = 15) {
 }
 
 /* ---------------- đọc một file ---------------- */
-export async function readSource(file: File, existing: Customer[]): Promise<SrcFile> {
+export async function readSource(file: File, existing: Customer[], alias: Record<string, string> = {}): Promise<SrcFile> {
   const X = await loadSheetJS();
   SSF = X.SSF;
   // CSV: đọc dạng chữ UTF-8 và giữ nguyên chữ (không để thư viện tự đoán ngày kiểu Mỹ)
@@ -96,7 +96,7 @@ export async function readSource(file: File, existing: Customer[]): Promise<SrcF
 
   // 1. Sổ công nợ phải thu: sheet CNO PTHU
   const arSheet = wb.SheetNames.find((n) => norm(n) === "cnopthu");
-  if (arSheet) return readAR(base, sheet(arSheet), wb.SheetNames.find((n) => norm(n) === "khachhang") ? sheet(wb.SheetNames.find((n) => norm(n) === "khachhang") as string) : [], existing);
+  if (arSheet) return readAR(base, sheet(arSheet), wb.SheetNames.find((n) => norm(n) === "khachhang") ? sheet(wb.SheetNames.find((n) => norm(n) === "khachhang") as string) : [], existing, alias);
 
   for (const n of wb.SheetNames) {
     const rows = sheet(n);
@@ -156,7 +156,7 @@ function readKh(f: SrcFile, rows: Cell[][], H: Hdr): SrcFile {
     });
   });
   f.kh = out; f.rows = out.length;
-  summarize(f, out.map((r) => r.ngay), out.reduce((s, r) => s + (r.tong_tt ?? r.gmv), 0));
+  summarize(f, out.map((r) => r.ngay), out.reduce((s, r) => s + (r.tong_tt ? r.tong_tt : r.gmv), 0));
   f.totalL = `GMV (Tổng thành tiền) ${fmtTien(f.total)}`;
   if (noAmt) f.notes.push(`${noAmt} dòng không có số tiền (khách ở chung phòng / dòng phụ) — bỏ qua`);
   if (noDate) f.warns.push(`${noDate} dòng không đọc được ngày giao dịch — bỏ qua`);
@@ -297,7 +297,7 @@ function readB1(f: SrcFile, rows: Cell[][], H: Hdr): SrcFile {
   return f;
 }
 
-function readAR(f: SrcFile, rows: Cell[][], kh: Cell[][], existing: Customer[]): SrcFile {
+function readAR(f: SrcFile, rows: Cell[][], kh: Cell[][], existing: Customer[], alias: Record<string, string>): SrcFile {
   f.kind = "ar";
   const H = header(rows, ["Tên khách hàng", "Tên viết tắt khách hàng", "Công nợ phải thu", "Kỳ nợ phát sinh"]);
   if (!H) { f.warns.push("Sheet CNO PTHU thiếu dòng tiêu đề (Tên khách hàng, Tên viết tắt khách hàng, Công nợ phải thu, Kỳ nợ phát sinh)"); return f; }
@@ -316,7 +316,11 @@ function readAR(f: SrcFile, rows: Cell[][], kh: Cell[][], existing: Customer[]):
   const ex = new Map<string, Customer>();
   existing.forEach((x) => { [x.ten_viet_tat, x.ten_kh, x.ma_kh].forEach((k) => { if (k && !ex.has(norm(k))) ex.set(norm(k), x); }); });
   const dm = new Map<string, DmRow>();
+  // tên gọi khác (vd. MASTERISE → SAO THUY): khóa của alias viết hoa không dấu, không ký tự đặc biệt
+  const aka = (s: string | null) => alias[String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").toUpperCase().replace(/[^A-Z0-9]/g, "")];
   const resolve = (vt: string, ten: string | null): string => {
+    const a = aka(vt);
+    if (a && ex.get(norm(a))) return a;
     const k = norm(vt), e = ex.get(k), m = master.get(k);
     const ma = e?.ma_kh || m?.ma || vt.toUpperCase().replace(/\s+/g, " ").trim();
     if (!dm.has(ma)) dm.set(ma, { ma_kh: ma, ten_kh: e?.ten_kh || m?.ten || ten || vt, ten_viet_tat: e?.ten_viet_tat || vt, credit_term: m?.term ?? e?.credit_term ?? null, moi: !e });

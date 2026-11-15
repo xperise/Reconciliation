@@ -75,6 +75,8 @@ export interface DataSet {
   mob?: MobAgg | null;
   /** Nhóm đối soát (Master Data) của từng khách Travel: mã KH → nhóm. Tổng quan / Travel & SaaS hiển thị theo nhóm */
   grp?: Record<string, { k: string; ten: string; pm: string | null }>;
+  /** Tên gọi khác → mã KH (Master Data "Tên gọi khác" + mặc định) — dùng khi đọc sổ phải thu */
+  alias?: Record<string, string>;
   /** File nguồn đã nạp: bảng kê khách hàng & đối soát NCC (tổng hợp) */
   src?: SrcSum | null;
   me?: { email: string; role: string; canEdit: boolean };
