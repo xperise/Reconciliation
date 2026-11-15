@@ -104,7 +104,7 @@ export async function POST(req: Request) {
    Dựng lại GMV & giá vốn theo ngày từ bảng kê khách hàng + đối soát NCC.
    · Khách hàng: theo số hóa đơn trong sổ phải thu → tên công ty (đa số các dòng cùng công ty đã nối được
      hóa đơn) → tên viết tắt / tên trong danh mục → giữ nguyên tên công ty (báo lại để bổ sung danh mục).
-   · Giá vốn: dòng đối soát NCC (bỏ dòng "Trùng") nối với dòng bảng kê bằng mã booking (hotel: mã giao dịch;
+   · Giá vốn: dòng đối soát NCC (bỏ dòng "Trùng"), rồi file chi khách sạn trực tiếp B1, nối với dòng bảng kê bằng mã booking (hotel: mã giao dịch;
      flight: mã giao dịch chiều đi / về) hoặc số vé. Một booking NCC ứng nhiều dòng bảng kê thì chia giá vốn
      theo tỷ trọng GMV. Dòng bảng kê không nối được NCC thì chưa có giá vốn (gmv_co_gv không tính dòng đó).
    · GMV = Tổng thành tiền (sau chiết khấu, có phí dịch vụ); dòng không có thì lấy Thành tiền.
@@ -157,7 +157,10 @@ async function rebuild(sb: Sb) {
   });
   const gv = new Map<number, number>(), nccOf = new Map<number, string>();
   let nccHit = 0, nccMiss = 0, nccMissAmt = 0;
-  ncc.forEach((n) => {
+  // File đối soát NCC trước, file chi khách sạn trực tiếp B1 sau: dòng bảng kê đã có giá vốn từ đối soát thì không cộng thêm B1
+  const isB1 = (n: Ncc) => !!n.khop?.startsWith("B1:");
+  const covered = new Set<number>();
+  [...ncc.filter((n) => !isB1(n)), ...ncc.filter(isB1)].forEach((n) => {
     if (n.khop?.startsWith("Trùng") || n.bang_ke == null) return;
     const flight = n.nganh === "Flight" || n.ncc?.startsWith("flight:");
     const hits = new Set<Kh>();
@@ -166,8 +169,9 @@ async function rebuild(sb: Sb) {
       (idx.get("H|" + nk(n.ma_booking)) || []).forEach((r) => hits.add(r));
       if (!hits.size && tokKey(n.ma_booking).includes("|")) (idx.get("T|" + tokKey(n.ma_booking)) || []).forEach((r) => hits.add(r));
     }
-    const rs = Array.from(hits);
-    if (!rs.length) { nccMiss++; nccMissAmt += n.bang_ke; return; }
+    const rs = Array.from(hits).filter((r) => !(isB1(n) && covered.has(r.id)));
+    if (!rs.length) { if (!hits.size) { nccMiss++; nccMissAmt += n.bang_ke; } return; }
+    if (!isB1(n)) rs.forEach((r) => covered.add(r.id));
     nccHit++;
     // chia giá vốn theo tỷ trọng GMV (có dấu: dòng hoàn vé / hủy phòng nhận phần âm)
     const tot = rs.reduce((s, r) => s + gmvOf(r), 0), totAbs = rs.reduce((s, r) => s + Math.abs(gmvOf(r)), 0);

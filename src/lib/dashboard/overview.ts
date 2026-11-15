@@ -486,18 +486,25 @@ function apDsCard(v: VM, W: Win): string {
   if (!src || !src.ncc.length) return "";
   const ky = W.ky, rows = src.ncc.filter((r) => r.ky === ky && r.nganh !== "Mobility" && !(r.khop || "").startsWith("Trùng"));
   if (!rows.length) return card("Đối soát NCC", `Phải trả phát sinh kỳ ${ky}`, "", empty(`Chưa có file đối soát NCC cho kỳ ${ky}`));
-  const by = new Map<string, { ncc: string; nganh: string; bk: number; led: number; khop: number; lech: number; thieu: number; n: number }>();
+  // Khách sạn trực tiếp (file B1) gộp thành một nhóm; các NCC đối soát giữ riêng
+  type G = { ncc: string; nganh: string; bk: number; led: number; khop: number; lech: number; thieu: number; daChi: number; chuaChi: number; n: number; ks: Set<string> };
+  const by = new Map<string, G>();
   rows.forEach((r: SrcNccSum) => {
-    const k = r.ncc || "Chưa rõ NCC", o = by.get(k) || { ncc: k.replace(/^(hotel|flight):/, ""), nganh: r.nganh || "—", bk: 0, led: 0, khop: 0, lech: 0, thieu: 0, n: 0 };
+    const b1 = (r.khop || "").startsWith("B1:");
+    const k = b1 ? "__B1" : r.ncc || "Chưa rõ NCC";
+    const o = by.get(k) || { ncc: b1 ? "Khách sạn trực tiếp (B1)" : k.replace(/^(hotel|flight):/, ""), nganh: r.nganh || "—", bk: 0, led: 0, khop: 0, lech: 0, thieu: 0, daChi: 0, chuaChi: 0, n: 0, ks: new Set<string>() };
     o.bk += r.bang_ke; o.led += r.ledger; o.n += r.n;
-    if (r.khop === "Khớp") o.khop += r.bang_ke; else if (r.khop === "Thiếu trong hệ thống") o.thieu += r.bang_ke; else o.lech += r.bang_ke;
+    if (b1) { if (r.khop === "B1: Đã chi") o.daChi += r.bang_ke; else o.chuaChi += r.bang_ke; if (r.ncc) o.ks.add(r.ncc); }
+    else if (r.khop === "Khớp") o.khop += r.bang_ke; else if (r.khop === "Thiếu trong hệ thống") o.thieu += r.bang_ke; else o.lech += r.bang_ke;
     by.set(k, o);
   });
   const list = Array.from(by.values()).sort((a, b) => b.bk - a.bk);
-  const T = list.reduce((s, x) => ({ bk: s.bk + x.bk, led: s.led + x.led, khop: s.khop + x.khop, lech: s.lech + x.lech, thieu: s.thieu + x.thieu, n: s.n + x.n }), { bk: 0, led: 0, khop: 0, lech: 0, thieu: 0, n: 0 });
-  const stack = hStack(list.map((x) => ({ l: x.ncc, sub: `${x.nganh} · ${n0(x.n)} dòng · ledger ${tyN(x.led)}`, parts: [[x.khop, D("green"), "Khớp"], [x.lech, D("yellow"), "Lệch tiền"], [x.thieu, D("red"), "Thiếu trong hệ thống"]] as [number, string, string][], txt: tyN(x.bk) })),
-    { ft: tr, legend: [["Khớp", D("green")], ["Lệch tiền", D("yellow")], ["Thiếu trong hệ thống", D("red")]] });
-  const stats = `<div class="stat-row">${stat("Phải trả theo bảng kê NCC", ty(T.bk))}${stat("Số trên bảng kê khách (ledger)", ty(T.led))}${stat("Thiếu trong hệ thống", ty(T.thieu), T.thieu ? "critical" : "")}</div>`;
+  const T = list.reduce((s, x) => ({ bk: s.bk + x.bk, led: s.led + x.led, thieu: s.thieu + x.thieu, daChi: s.daChi + x.daChi, chuaChi: s.chuaChi + x.chuaChi }), { bk: 0, led: 0, thieu: 0, daChi: 0, chuaChi: 0 });
+  const LG: LegendItem[] = [["Khớp", D("green")], ["Lệch tiền", D("yellow")], ["Thiếu trong hệ thống", D("red")], ["B1 đã chi", D("blue")], ["B1 chờ chi", D("orange")]];
+  const stack = hStack(list.map((x) => ({ l: x.ncc, sub: x.ks.size ? `${n0(x.ks.size)} khách sạn · ${n0(x.n)} booking` : `${x.nganh} · ${n0(x.n)} dòng · ledger ${tyN(x.led)}`,
+    parts: [[x.khop, D("green"), "Khớp"], [x.lech, D("yellow"), "Lệch tiền"], [x.thieu, D("red"), "Thiếu trong hệ thống"], [x.daChi, D("blue"), "B1 đã chi"], [x.chuaChi, D("orange"), "B1 chờ chi"]] as [number, string, string][], txt: tyN(x.bk) })),
+    { ft: tr, legend: LG });
+  const stats = `<div class="stat-row">${stat("Phải trả phát sinh", ty(T.bk))}${stat("Thiếu trong hệ thống", ty(T.thieu), T.thieu ? "critical" : "")}${T.daChi + T.chuaChi ? stat("KS trực tiếp đã chi / chờ chi", `${tyN(T.daChi)} / ${tyN(T.chuaChi)}`) : ""}</div>`;
   return card("Đối soát NCC", `Phải trả phát sinh theo NCC — kỳ dịch vụ ${ky}`, unitLabel(), stats + stack +
-    `<div class="small" style="margin-top:6px">Từ file đối soát NCC (bỏ dòng trùng). Chưa có ngày hóa đơn NCC, payment term và số đã trả nên các bảng tuổi nợ / lịch trả bên dưới vẫn lấy từ sổ phải trả cũ.</div>`);
+    `<div class="small" style="margin-top:6px">Từ file đối soát NCC (bỏ dòng trùng) và file chi khách sạn trực tiếp B1 (theo ngày check-in). Đối soát NCC chưa có ngày hóa đơn, payment term và số đã trả nên các bảng tuổi nợ / lịch trả bên dưới vẫn lấy từ sổ phải trả cũ.</div>`);
 }

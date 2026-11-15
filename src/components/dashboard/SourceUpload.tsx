@@ -8,7 +8,7 @@ import { readSource, SrcFile, KIND_LABEL } from "@/lib/dashboard/sources";
 import { n0, pc } from "@/lib/dashboard/util";
 
 const CHUNK = 1000;
-const ORDER = ["ar", "kh_hotel", "kh_flight", "ncc"];
+const ORDER = ["ar", "kh_hotel", "kh_flight", "ncc", "b1"];
 const vnd = (v: number) => new Intl.NumberFormat("vi-VN").format(Math.round(v));
 const dmy = (d: string | null) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : "—");
 interface Rebuild { kys: string[]; rows: number; gmv?: number; gmvCoGv?: number; ncc?: { noi: number; khongNoi: number; khongNoiTien: number }; khachChuaMap?: { ten: string; gmv: number }[]; note?: string }
@@ -56,7 +56,7 @@ export default function SourceUpload({ data, canEdit, onDone, toast }: { data: D
           for (let i = 0; i < (f.ar || []).length; i += CHUNK) { await post({ action: "ar", kys: f.kys, rows: (f.ar || []).slice(i, i + CHUNK), first: i === 0 }); tick(); }
         } else if (f.kind === "kh_hotel" || f.kind === "kh_flight") {
           for (let i = 0; i < (f.kh || []).length; i += CHUNK) { await post({ action: "kh", loai: f.kind === "kh_hotel" ? "hotel" : "flight", kys: f.kys, rows: (f.kh || []).slice(i, i + CHUNK), first: i === 0, fileName: f.name }); tick(); }
-        } else if (f.kind === "ncc") {
+        } else if (f.kind === "ncc" || f.kind === "b1") {
           for (let i = 0; i < (f.ncc || []).length; i += CHUNK) { await post({ action: "ncc", fileKey: f.fileKey, fileName: f.name, rows: (f.ncc || []).slice(i, i + CHUNK), first: i === 0 }); tick(); }
         }
       }
@@ -84,13 +84,13 @@ export default function SourceUpload({ data, canEdit, onDone, toast }: { data: D
   const loaded = data.src;
   return (
     <div className="card">
-      <div className="card-h"><div><div className="eyebrow">Nạp file nguồn</div><div className="card-title">Bảng kê khách hàng · Đối soát NCC · Công nợ phải thu</div></div>
+      <div className="card-h"><div><div className="eyebrow">Nạp file nguồn</div><div className="card-title">Bảng kê khách hàng · Đối soát NCC · Chi KS trực tiếp · Công nợ phải thu</div></div>
         <div className="card-note">thả nhiều file một lần — web tự nhận loại file</div></div>
       {!canEdit ? <div className="empty">Chỉ Quản trị và Kế toán được nạp dữ liệu.</div> : (
         <label className={"drop" + (over ? " over" : "")} onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={(e) => { e.preventDefault(); setOver(false); pick(e.dataTransfer.files); }}>
           <i className={busy ? "ri-loader-4-line" : "ri-upload-cloud-2-line"} aria-hidden="true" />
           <b>{busy || "Kéo thả các file Excel vào đây hoặc bấm để chọn"}</b>
-          xperise_hotel_statement · xperise_flight_statement · Doi_soat_… · GOC_CONG_NO_PHAI_THU…
+          xperise_hotel_statement · xperise_flight_statement · Doi_soat_… · hoa-don-ks-b1-… · GOC_CONG_NO_PHAI_THU…
           <input ref={inp} type="file" accept=".xlsx,.xls" multiple hidden onChange={(e) => pick(e.target.files)} />
         </label>
       )}
@@ -134,7 +134,7 @@ export default function SourceUpload({ data, canEdit, onDone, toast }: { data: D
             <tbody>{loaded.kh.slice().sort((a, b) => b.ky.localeCompare(a.ky)).map((k) => (<tr key={k.loai + k.ky}><td>{k.loai === "hotel" ? "Hotel" : "Flight"}</td><td className="num">{k.ky}</td><td className="num small">{dmy(k.from)} – {dmy(k.to)}</td><td className="r num">{n0(k.n)}</td><td className="r num">{vnd(k.gmv)}</td><td className="small">{new Date(k.at).toLocaleString("vi-VN")}</td></tr>))}</tbody>
           </table></div>
           <div className="tw" style={{ marginTop: 8 }}><table>
-            <thead><tr><th>File đối soát NCC</th><th className="r">Số dòng</th><th className="r">Bảng kê NCC (VND)</th><th className="r">Ledger (VND)</th></tr></thead>
+            <thead><tr><th>File đối soát NCC / chi KS trực tiếp</th><th className="r">Số dòng</th><th className="r">Bảng kê NCC (VND)</th><th className="r">Ledger (VND)</th></tr></thead>
             <tbody>{Array.from(loaded.ncc.reduce((m, r) => { const o = m.get(r.file) || { n: 0, bk: 0, led: 0 }; o.n += r.n; o.bk += r.bang_ke; o.led += r.ledger; m.set(r.file, o); return m; }, new Map<string, { n: number; bk: number; led: number }>()).entries())
               .map(([f, o]) => (<tr key={f}><td className="small" style={{ wordBreak: "break-all" }}>{f}</td><td className="r num">{n0(o.n)}</td><td className="r num">{vnd(o.bk)}</td><td className="r num">{vnd(o.led)}</td></tr>))}</tbody>
           </table></div>
