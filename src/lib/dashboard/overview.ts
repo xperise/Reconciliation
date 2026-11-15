@@ -495,10 +495,56 @@ function guiBkCard(v: VM): string {
     `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><label class="small" for="guibkKy">Đến hết kỳ</label><select id="guibkKy" class="fld">${opts}</select>` +
     `<button type="button" class="btn primary" data-guibk="1">Đánh dấu đã gửi</button></div>`);
 }
+/** Phải trả & đã trả theo NCC trong một kỳ — kế toán nhập đã trả / ngày trả (giống "Bảng kê & tiền thu" bên phải thu).
+ *  Phải trả dựng từ file đối soát NCC (cột Bảng kê) và file chi khách sạn trực tiếp B1; lưu ở mức kỳ (fin_ap_edit). */
+function apPayCard(v: VM): string {
+  const { C, canEdit } = v;
+  const sup = new Map(C.D.suppliers.map((s) => [s.ma_ncc, s]));
+  const ap = C.D.ap.filter((r) => sup.get(r.ma_ncc)?.nganh !== "Mobility");
+  const kys = Array.from(new Set(ap.map((r) => r.ky || "").filter((k) => ok(kyIdx(k))))).sort((a, b) => kyIdx(b) - kyIdx(a));
+  if (!kys.length) return "";
+  const ky = kys.includes(v.ky) ? v.ky : kys[0];
+  type G = { ma: string; ten: string; nganh: string; term: number | null; tien: number; tra: number; han: string; ngayTra: string | null; sua: boolean; ds: boolean };
+  const by = new Map<string, G>();
+  ap.filter((r) => r.ky === ky).forEach((r) => {
+    const s = sup.get(r.ma_ncc);
+    const o = by.get(r.ma_ncc) || { ma: r.ma_ncc, ten: s?.ten_ncc || r.ma_ncc, nganh: s?.nganh || "Khác", term: s?.payment_term ?? null, tien: 0, tra: 0, han: r.ngay_den_han, ngayTra: null, sua: false, ds: false };
+    o.tien += r.so_tien; o.tra += r.da_tra || 0;
+    if (r.ngay_den_han > o.han) o.han = r.ngay_den_han;
+    if (r.ngay_tra && (!o.ngayTra || r.ngay_tra > o.ngayTra)) o.ngayTra = r.ngay_tra;
+    if (r.suaTay) o.sua = true;
+    if ((r.so_ct || "").startsWith("DS ")) o.ds = true;
+    by.set(r.ma_ncc, o);
+  });
+  const list = Array.from(by.values()).sort((a, b) => (b.tien - b.tra) - (a.tien - a.tra) || b.tien - a.tien);
+  const asOf = C.asOf;
+  const T = list.reduce((s, x) => ({ tien: s.tien + x.tien, tra: s.tra + x.tra }), { tien: 0, tra: 0 });
+  const rows = list.map((x) => {
+    const con = x.tien - x.tra;
+    const st: [string, string] = con <= 1 ? ["Đã trả đủ", "stable"] : x.han < asOf ? ["Quá hạn", "critical"] : x.han === asOf ? ["Đến hạn", "high"] : ["Chưa đến hạn", "watch"];
+    const ip = (f: string, t: string, val: string, cls = "") => `<input type="${t}" class="fld bk-in${cls}" data-f="${f}" value="${esc(val)}" data-goc="${esc(val)}"${t === "number" ? ` step="1000" inputmode="numeric" placeholder="0"` : ""}>`;
+    const o = canEdit
+      ? `<td class="r">${ip("da_tra", "number", x.tra ? String(Math.round(x.tra)) : "", " money")}</td><td>${ip("ngay_tra", "date", x.ngayTra || "")}</td>` +
+        `<td class="r nowrap"><button type="button" class="btn cn-save" title="Lưu dòng này">Lưu</button></td>`
+      : `<td class="r num">${tyN(x.tra)}</td><td class="num">${fmtDate(x.ngayTra)}</td><td></td>`;
+    return `<tr class="cn-form ${x.sua ? "r-edited" : ""}" data-loai="ap" data-ma="${esc(x.ma)}" data-ky="${esc(ky)}" data-soct="">` +
+      `<td><b>${esc(x.ten)}</b><div class="t2">${esc(x.nganh)} · term ${x.term != null ? n0(x.term) + " ngày" : "—"}${x.ds ? " · từ file đối soát" : ""}</div></td>` +
+      `<td class="r num">${tyN(x.tien)}</td><td class="r num${con > 1 && x.han < asOf ? " c-critical" : ""}">${con > 1 ? tyN(con) : "–"}</td>` +
+      `<td class="num">${fmtDate(x.han)}</td><td>${pill(st[0], st[1])}</td>${o}</tr>`;
+  }).join("");
+  const note = `${list.length} NCC · phải trả ${tyN(T.tien)} · đã trả ${tyN(T.tra)} · còn ${tyN(T.tien - T.tra)} ${unit().nhan}` + (ky !== v.ky ? ` · kỳ ${esc(v.ky)} chưa có phải trả — đang hiện kỳ ${esc(ky)}` : "");
+  const tbl = `<div class="tw bk-tbl"><table class="bk"><thead><tr><th>Nhà cung cấp</th><th class="r">Phải trả (${unit().nhan})</th><th class="r">Còn lại (${unit().nhan})</th><th>Đến hạn</th><th>Trạng thái</th>` +
+    `<th class="r">Đã trả (VND)</th><th>Ngày trả</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  const huong = canEdit
+    ? `Phải trả = tổng cột "Bảng kê" (số NCC tính) trong file đối soát NCC của kỳ dịch vụ; khách sạn trực tiếp lấy theo file B1 (đã chi điền sẵn). Nhập <b>đã trả</b> (VND nguyên, tổng đã trả cho kỳ này) và <b>ngày trả</b> rồi bấm Lưu. Đến hạn = cuối kỳ + payment term trong danh mục NCC (NCC mới thêm có term 0 — cập nhật term ở danh mục NCC). Số nhập tay giữ nguyên khi nạp lại file đối soát. Đổi kỳ bằng ô Kỳ ở thanh trên.`
+    : `Chỉ Quản trị và Kế toán mới sửa được các ô này.`;
+  return card("Cập nhật trực tiếp", `Phải trả & đã trả — kỳ dịch vụ ${esc(ky)}`, note, tbl + `<div class="small" style="margin-top:8px">${huong}</div>`);
+}
+
 function tsCongNo(v: VM): string {
   const { APS } = apTs(v);
   const apAdd = v.canEdit ? card("Cập nhật trực tiếp", "Thêm công nợ phải trả", "upload file sổ phải trả sẽ ghi đè số nhập tay của cùng kỳ", addApForm(v.ky)) : "";
-  return guiBkCard(v) + bangKeCard(v) + apAdd + apSupplierCards({ ...v, APS });
+  return guiBkCard(v) + bangKeCard(v) + apPayCard(v) + apAdd + apSupplierCards({ ...v, APS });
 }
 
 /* ---------- Phải trả NCC phát sinh theo file đối soát ----------

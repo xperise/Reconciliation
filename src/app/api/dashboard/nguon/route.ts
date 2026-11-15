@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminClient, guard, fetchAll } from "@/lib/dashboard/server";
 import type { KhRow, NccRow, ArRow, DmRow } from "@/lib/dashboard/sources";
+import { kyEnd, addDays } from "@/lib/dashboard/util";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -240,12 +241,59 @@ async function rebuild(sb: Sb) {
   chk(e1, "Xóa GMV Hotel/Flight/Transportation cũ");
   for (let i = 0; i < rows.length; i += 1000) { const { error } = await sb.from("fin_gmv").insert(rows.slice(i, i + 1000)); chk(error, "Ghi GMV theo ngày"); }
 
+  const ap = await rebuildAP(sb, ncc);
+
   return {
-    ok: true, kys: kys.sort(), rows: rows.length,
+    ok: true, kys: kys.sort(), rows: rows.length, ap,
     gmv: Math.round(gmvAll), gmvCoGv: Math.round(gmvCov),
     ncc: { noi: nccHit, khongNoi: nccMiss, khongNoiTien: Math.round(nccMissAmt) },
     ht: { noi: htHit, khongNoi: htMiss },
     theoNguon: Object.fromEntries(Object.entries(theoNguon).map(([k, v]) => [k, Math.round(v)])),
     khachChuaMap: Array.from(chuaMap.entries()).sort((a, b) => b[1] - a[1]).map(([ten, v]) => ({ ten, gmv: Math.round(v) })),
   };
+}
+
+/* --------------------------------------------------------------------------
+   Công nợ phải trả dựng từ file nguồn — mỗi NCC × kỳ dịch vụ một dòng trong fin_ap (so_ct "DS <kỳ>"):
+   · Phải trả = tổng cột "Bảng kê" (số NCC tính) của các file đối soát NCC, bỏ dòng "Trùng".
+   · Khách sạn trực tiếp (file B1) gộp thành một NCC; đã trả = các booking "Đã chi", ngày trả = ngày chi muộn nhất.
+   · Giá NCC trên hệ thống không tính (không phải số NCC đòi).
+   · Ngày ghi nhận = ngày cuối kỳ dịch vụ; đến hạn = ngày cuối kỳ + payment term trong danh mục NCC (chưa có = 0).
+   · Đã trả của các NCC khác: kế toán nhập ở bảng "Phải trả & đã trả" (tab Công nợ) — lưu ở fin_ap_edit nên dựng lại không mất.
+   -------------------------------------------------------------------------- */
+const KS_B1 = "KS_TRUC_TIEP", CHUA_RO = "CHUA_RO_NCC";
+async function rebuildAP(sb: Sb, ncc: Ncc[]) {
+  const sup = new Map((await fetchAll<{ ma_ncc: string; payment_term: number | null }>("fin_suppliers")).map((s) => [s.ma_ncc, s]));
+  const agg = new Map<string, { ma: string; ky: string; nganh: string; tien: number; tra: number; ngayTra: string | null }>();
+  ncc.forEach((n) => {
+    const k = n.khop || "";
+    if (k.startsWith("Trùng") || k.startsWith("HT:") || n.bang_ke == null || !n.ky || !KY.test(n.ky)) return;
+    const b1 = k.startsWith("B1:");
+    const ma = b1 ? KS_B1 : String(n.ncc || "").replace(/^(hotel|flight):/, "") || CHUA_RO;
+    const key = `${ma}|${n.ky}`;
+    const o = agg.get(key) || { ma, ky: n.ky, nganh: n.nganh || "Khác", tien: 0, tra: 0, ngayTra: null };
+    o.tien += n.bang_ke;
+    if (b1 && k === "B1: Đã chi") {
+      o.tra += n.bang_ke;
+      const d = /chi (\d{4}-\d{2}-\d{2})/.exec(n.mo_ta || "")?.[1] || null;
+      if (d && (!o.ngayTra || d > o.ngayTra)) o.ngayTra = d;
+    }
+    agg.set(key, o);
+  });
+  const rows = Array.from(agg.values()).map((o) => {
+    const end = kyEnd(o.ky), term = Number(sup.get(o.ma)?.payment_term ?? 0) || 0;
+    const b1 = o.ma === KS_B1;
+    return { ma_ncc: o.ma, ky: o.ky, so_ct: `DS ${o.ky}`, ngay_hd: end, ngay_den_han: addDays(end, term), so_tien: Math.round(o.tien),
+      da_tra: b1 ? Math.round(o.tra) : null, ngay_tra: b1 && o.tra > 0 ? o.ngayTra : null };
+  });
+  const { error: e1 } = await sb.from("fin_ap").delete().like("so_ct", "DS %");
+  chk(e1, "Xóa phải trả dựng từ đối soát cũ");
+  for (let i = 0; i < rows.length; i += 1000) { const { error } = await sb.from("fin_ap").insert(rows.slice(i, i + 1000)); chk(error, "Ghi công nợ phải trả"); }
+  // NCC chưa có trong danh mục: thêm với payment term 0 (sửa ở danh mục NCC)
+  const moi = Array.from(new Map(Array.from(agg.values()).filter((o) => !sup.has(o.ma)).map((o) => [o.ma, o])).values()).map((o) => ({
+    ma_ncc: o.ma, ten_ncc: o.ma === KS_B1 ? "Khách sạn trực tiếp (B1)" : o.ma === CHUA_RO ? "Chưa rõ NCC (thiếu trong hệ thống)" : o.ma,
+    nganh: o.nganh === "Flight" || o.nganh === "Hotel" ? o.nganh : "Khác", payment_term: 0, partnership: null,
+  }));
+  if (moi.length) { const { error } = await sb.from("fin_suppliers").upsert(moi, { onConflict: "ma_ncc", ignoreDuplicates: true }); chk(error, "Thêm NCC vào danh mục"); }
+  return { dong: rows.length, nccMoi: moi.map((m) => m.ma_ncc), tong: Math.round(rows.reduce((s, r) => s + r.so_tien, 0)) };
 }
