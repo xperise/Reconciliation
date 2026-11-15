@@ -3,13 +3,15 @@
 //   · File đối soát NCC (Doi_soat_…): cột "Bảng kê" = số NCC (giá vốn), "Ledger" = số trên bảng kê khách hàng
 //   · Sổ công nợ phải thu (sheet CNO PTHU + danh mục KHACH HANG)
 //   · Danh sách chi khách sạn trực tiếp B1 (hoa-don-ks-b1-…): số tiền trả khách sạn theo từng booking = giá vốn
+//   · Giá NCC trên hệ thống (Performance Dashboard · Hotel / Flight spending, .csv): Supplier total amount theo booking.
+//     Chỉ dùng cho dòng bảng kê chưa có giá vốn từ đối soát NCC hay B1; mã booking không có trên bảng kê thì không tính.
 // Nhận diện file theo dòng tiêu đề, không theo tên file.
 import { loadSheetJS, norm } from "./parse";
 import type { Customer } from "./types";
 
-export type SrcKind = "kh_hotel" | "kh_flight" | "ncc" | "b1" | "ar" | "unknown";
+export type SrcKind = "kh_hotel" | "kh_flight" | "ncc" | "b1" | "ht_hotel" | "ht_flight" | "ar" | "unknown";
 export const KIND_LABEL: Record<SrcKind, string> = {
-  kh_hotel: "Bảng kê khách hàng · Hotel", kh_flight: "Bảng kê khách hàng · Flight", ncc: "Đối soát NCC", b1: "Chi khách sạn trực tiếp (B1)", ar: "Công nợ phải thu", unknown: "Không nhận diện được",
+  kh_hotel: "Bảng kê khách hàng · Hotel", kh_flight: "Bảng kê khách hàng · Flight", ncc: "Đối soát NCC", b1: "Chi khách sạn trực tiếp (B1)", ht_hotel: "Giá NCC trên hệ thống · Hotel", ht_flight: "Giá NCC trên hệ thống · Flight", ar: "Công nợ phải thu", unknown: "Không nhận diện được",
 };
 export interface KhRow { loai: "hotel" | "flight"; ky: string; ngay: string; ten_cong_ty: string | null; trang_thai: string | null; ma_gd: string | null; ma_gd2: string | null; so_ve: string | null; so_hd: string | null; gmv: number; tong_tt: number | null; chiet_khau: number | null; phi_dv: number | null; khach: string | null; mo_ta: string | null }
 export interface NccRow { ncc: string | null; nganh: string | null; ma_booking: string | null; so_ve: string | null; khach: string | null; ngay_dv: string | null; ky: string | null; bang_ke: number | null; ledger: number | null; khop: string | null; xu_ly: string | null; mo_ta: string | null; dong: string | null }
@@ -46,6 +48,8 @@ function iso(v: Cell): string | null {
   if (m) return p(+m[1], +m[2], +m[3]);
   m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(s);
   if (m) return p(+m[3], +m[2], +m[1]);
+  m = /^([A-Za-z]{3})[a-z]*\.? (\d{1,2}),? (\d{4})/.exec(s);   // "Oct 31, 2026"
+  if (m) { const mo = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"].indexOf(m[1].toLowerCase()); return mo >= 0 ? p(+m[3], mo + 1, +m[2]) : null; }
   return null;
 }
 const kyOf = (d: string) => `T${d.slice(5, 7)}.${d.slice(0, 4)}`;
@@ -81,7 +85,8 @@ function header(rows: Cell[][], must: string[], scan = 15) {
 export async function readSource(file: File, existing: Customer[]): Promise<SrcFile> {
   const X = await loadSheetJS();
   SSF = X.SSF;
-  const wb = X.read(await file.arrayBuffer(), { type: "array" });
+  // CSV: đọc dạng chữ UTF-8 và giữ nguyên chữ (không để thư viện tự đoán ngày kiểu Mỹ)
+  const wb = /\.csv$/i.test(file.name) ? (X.read as unknown as (d: string, o: object) => ReturnType<typeof X.read>)((await file.text()).replace(/^\uFEFF/, ""), { type: "string", raw: true }) : X.read(await file.arrayBuffer(), { type: "array" });
   const sheet = (n: string) => X.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: null, blankrows: false }) as Cell[][];
   const base: SrcFile = { name: file.name, kind: "unknown", fileKey: fileKeyOf(file.name), rows: 0, from: null, to: null, kys: [], total: 0, totalL: "", notes: [], warns: [] };
 
@@ -91,6 +96,11 @@ export async function readSource(file: File, existing: Customer[]): Promise<SrcF
 
   for (const n of wb.SheetNames) {
     const rows = sheet(n);
+    // 2b. Giá NCC trên hệ thống (Performance Dashboard)
+    const hh = header(rows, ["Booking code", "Booking supplier", "Supplier total amount", "UTS total amount"]);
+    if (hh) return readHt(base, rows, hh, "hotel");
+    const hf = header(rows, ["Departure: Booking code", "Supplier", "Supplier total amount", "UTS total amount"]);
+    if (hf) return readHt(base, rows, hf, "flight");
     // 2a. Chi khách sạn trực tiếp B1
     const hb = header(rows, ["Mã đề xuất", "Khách sạn", "Mã booking", "Số tiền", "Trạng thái chi"]);
     if (hb) return readB1(base, rows, hb);
@@ -184,6 +194,38 @@ function isoVN(v: Cell): string | null {
   if (v instanceof Date) return iso(new Date(v.getTime() + 7 * 3600e3));
   return iso(v);
 }
+/** Giá NCC trên hệ thống. khop = "HT: <trạng thái>", ledger = UTS total amount (giá bán trên hệ thống).
+ *  Flight: mã booking ghi "chiều đi / chiều về" khi hai mã khác nhau. */
+function readHt(f: SrcFile, rows: Cell[][], H: Hdr, loai: "hotel" | "flight"): SrcFile {
+  f.kind = loai === "hotel" ? "ht_hotel" : "ht_flight";
+  const c = loai === "hotel"
+    ? { bk: H.col("Booking code"), bk2: -1, ncc: H.col("Booking supplier"), khach: H.col("Traveler name"), ngay: H.col("Check in"), bd: H.col("Booking date"), cty: H.col("Company name"), mo: H.col("Hotel name") }
+    : { bk: H.col("Departure: Booking code"), bk2: H.col("Return: Booking code"), ncc: H.col("Supplier"), khach: H.col("Traveler name"), ngay: -1, bd: H.col("Booking date"), cty: H.col("Company name"), mo: H.col("Airline name") };
+  const tt = H.col("Booking status"), sup = H.col("Supplier total amount"), uts = H.col("UTS total amount");
+  const g = (r: Cell[], k: number) => (k >= 0 ? r[k] : null);
+  const out: NccRow[] = [];
+  const bds: string[] = [];
+  rows.slice(H.i + 1).forEach((r) => {
+    const bk = txt(g(r, c.bk)), amt = money(g(r, sup));
+    if (!bk || /^null$/i.test(bk) || amt == null) return;
+    const bk2 = txt(g(r, c.bk2)), st = txt(g(r, tt)) || "";
+    const d = iso(g(r, c.ngay)) || iso(g(r, c.bd)), bd = iso(g(r, c.bd));
+    if (bd) bds.push(bd);
+    out.push({ ncc: `${loai}:${txt(g(r, c.ncc)) || "?"}`, nganh: loai === "hotel" ? "Hotel" : "Flight",
+      ma_booking: bk2 && !/^null$/i.test(bk2) && bk2 !== bk ? `${bk} / ${bk2}` : bk, so_ve: null, khach: txt(g(r, c.khach)), ngay_dv: d, ky: d ? kyOf(d) : null,
+      bang_ke: amt, ledger: money(g(r, uts)), khop: `HT: ${st}`, xu_ly: st || null, mo_ta: [txt(g(r, c.cty)), txt(g(r, c.mo))].filter(Boolean).join(" · "), dong: null });
+  });
+  f.ncc = out; f.rows = out.length;
+  summarize(f, bds, out.reduce((s, r) => s + (r.bang_ke || 0), 0));
+  // khóa theo loại + khoảng ngày đặt: xuất lại cùng khoảng thì thay; hai file hotel / flight cùng tên không đè nhau
+  f.fileKey = `ht_${loai}|${f.from}|${f.to}`;
+  const huy = out.filter((r) => /cancel/i.test(r.xu_ly || ""));
+  f.totalL = `Supplier total ${fmtTien(f.total)} · UTS total ${fmtTien(out.reduce((s, r) => s + (r.ledger || 0), 0))} · ${Array.from(new Set(out.map((r) => r.ncc?.split(":")[1]))).join(", ")}`;
+  f.notes.push("Chỉ dùng làm giá vốn cho dòng bảng kê chưa có số từ đối soát NCC / B1; mã booking không có trên bảng kê thì không tính vào đâu");
+  if (huy.length) f.notes.push(`${huy.length} booking đã hủy: giá vốn tính theo phần khách vẫn bị thu trên bảng kê (hủy hoàn tiền thì giá vốn = 0)`);
+  return f;
+}
+
 function readB1(f: SrcFile, rows: Cell[][], H: Hdr): SrcFile {
   f.kind = "b1";
   const c = { de: H.col("Mã đề xuất"), ks: H.col("Khách sạn"), bk: H.col("Mã booking"), khach: H.col("Khách"), ci: H.col("Check-in"), tien: H.col("Số tiền"),

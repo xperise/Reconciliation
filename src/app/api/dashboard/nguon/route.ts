@@ -104,7 +104,7 @@ export async function POST(req: Request) {
    Dựng lại GMV & giá vốn theo ngày từ bảng kê khách hàng + đối soát NCC.
    · Khách hàng: theo số hóa đơn trong sổ phải thu → tên công ty (đa số các dòng cùng công ty đã nối được
      hóa đơn) → tên viết tắt / tên trong danh mục → giữ nguyên tên công ty (báo lại để bổ sung danh mục).
-   · Giá vốn: dòng đối soát NCC (bỏ dòng "Trùng"), rồi file chi khách sạn trực tiếp B1, nối với dòng bảng kê bằng mã booking (hotel: mã giao dịch;
+   · Giá vốn: dòng đối soát NCC (bỏ dòng "Trùng") → file chi khách sạn trực tiếp B1 → giá NCC trên hệ thống, nối với dòng bảng kê bằng mã booking (hotel: mã giao dịch;
      flight: mã giao dịch chiều đi / về) hoặc số vé. Một booking NCC ứng nhiều dòng bảng kê thì chia giá vốn
      theo tỷ trọng GMV. Dòng bảng kê không nối được NCC thì chưa có giá vốn (gmv_co_gv không tính dòng đó).
    · GMV = Tổng thành tiền (sau chiết khấu, có phí dịch vụ); dòng không có thì lấy Thành tiền.
@@ -157,26 +157,40 @@ async function rebuild(sb: Sb) {
   });
   const gv = new Map<number, number>(), nccOf = new Map<number, string>();
   let nccHit = 0, nccMiss = 0, nccMissAmt = 0;
-  // File đối soát NCC trước, file chi khách sạn trực tiếp B1 sau: dòng bảng kê đã có giá vốn từ đối soát thì không cộng thêm B1
-  const isB1 = (n: Ncc) => !!n.khop?.startsWith("B1:");
-  const covered = new Set<number>();
-  [...ncc.filter((n) => !isB1(n)), ...ncc.filter(isB1)].forEach((n) => {
+  // Thứ tự nguồn giá vốn: 0 đối soát NCC → 1 chi khách sạn trực tiếp B1 → 2 giá NCC trên hệ thống.
+  // Dòng bảng kê đã có giá vốn từ nguồn đứng trước thì nguồn sau không cộng thêm.
+  const tier = (n: Ncc) => (n.khop?.startsWith("HT:") ? 2 : n.khop?.startsWith("B1:") ? 1 : 0);
+  const TIER_L = ["Đối soát NCC", "Chi KS trực tiếp B1", "Giá NCC hệ thống"];
+  const coveredBy = new Map<number, number>();
+  const srcOf = new Map<number, number>();
+  let htHit = 0, htMiss = 0;
+  ncc.slice().sort((a, b) => tier(a) - tier(b)).forEach((n) => {
     if (n.khop?.startsWith("Trùng") || n.bang_ke == null) return;
+    const t = tier(n);
     const flight = n.nganh === "Flight" || n.ncc?.startsWith("flight:");
     const hits = new Set<Kh>();
-    if (flight) { (idx.get("F|" + nk(n.ma_booking)) || []).forEach((r) => hits.add(r)); if (n.so_ve) (idx.get("V|" + nk(n.so_ve)) || []).forEach((r) => hits.add(r)); }
+    if (flight) {
+      String(n.ma_booking || "").split(/\s*\/\s*/).forEach((code) => (idx.get("F|" + nk(code)) || []).forEach((r) => hits.add(r)));
+      if (n.so_ve) (idx.get("V|" + nk(n.so_ve)) || []).forEach((r) => hits.add(r));
+    }
     else {
       (idx.get("H|" + nk(n.ma_booking)) || []).forEach((r) => hits.add(r));
       if (!hits.size && tokKey(n.ma_booking).includes("|")) (idx.get("T|" + tokKey(n.ma_booking)) || []).forEach((r) => hits.add(r));
     }
-    const rs = Array.from(hits).filter((r) => !(isB1(n) && covered.has(r.id)));
-    if (!rs.length) { if (!hits.size) { nccMiss++; nccMissAmt += n.bang_ke; } return; }
-    if (!isB1(n)) rs.forEach((r) => covered.add(r.id));
-    nccHit++;
+    const rs = Array.from(hits).filter((r) => (coveredBy.get(r.id) ?? t) >= t);
+    if (!rs.length) { if (t === 2) htMiss++; else if (!hits.size) { nccMiss++; nccMissAmt += n.bang_ke; } return; }
+    rs.forEach((r) => { coveredBy.set(r.id, t); srcOf.set(r.id, t); });
+    if (t === 2) htHit++; else nccHit++;
+    // Booking đã hủy trên hệ thống: giá vốn theo phần khách vẫn bị thu trên bảng kê (hoàn hết thì 0)
+    let bkAmt = n.bang_ke;
+    if (t === 2 && /cancel/i.test(n.xu_ly || "")) {
+      const net = rs.reduce((s, r) => s + gmvOf(r), 0), sold = Number(n.ledger || 0);
+      bkAmt = sold > 0 ? n.bang_ke * Math.max(0, Math.min(1, net / sold)) : 0;
+    }
     // chia giá vốn theo tỷ trọng GMV (có dấu: dòng hoàn vé / hủy phòng nhận phần âm)
     const tot = rs.reduce((s, r) => s + gmvOf(r), 0), totAbs = rs.reduce((s, r) => s + Math.abs(gmvOf(r)), 0);
     rs.forEach((r) => {
-      const bk = n.bang_ke as number;
+      const bk = bkAmt;
       const part = tot !== 0 ? bk * gmvOf(r) / tot : totAbs > 0 ? bk * Math.abs(gmvOf(r)) / totAbs : bk / rs.length;
       gv.set(r.id, (gv.get(r.id) || 0) + part);
       if (!nccOf.has(r.id) && n.ncc) nccOf.set(r.id, n.ncc.replace(/^(hotel|flight):/, ""));
@@ -187,13 +201,14 @@ async function rebuild(sb: Sb) {
   const kys = Array.from(new Set(kh.map((r) => r.ky)));
   const agg = new Map<string, { ky: string; ngay: string; ma_kh: string; ma_ncc: string | null; dich_vu: string; gmv: number; gia_von: number; gmv_co_gv: number }>();
   let gmvAll = 0, gmvCov = 0;
+  const theoNguon: Record<string, number> = {};
   kh.forEach((r) => {
     const ma = khOf(r), n = nccOf.get(r.id) || null, dv = r.loai === "hotel" ? "Hotel" : "Flight";
     const key = `${r.ky}|${r.ngay}|${ma}|${n || ""}|${dv}`;
     const o = agg.get(key) || { ky: r.ky, ngay: r.ngay, ma_kh: ma, ma_ncc: n, dich_vu: dv, gmv: 0, gia_von: 0, gmv_co_gv: 0 };
     const G = gmvOf(r);
     o.gmv += G; gmvAll += G;
-    if (gv.has(r.id)) { o.gia_von += gv.get(r.id) as number; o.gmv_co_gv += G; gmvCov += G; }
+    if (gv.has(r.id)) { o.gia_von += gv.get(r.id) as number; o.gmv_co_gv += G; gmvCov += G; const l = TIER_L[srcOf.get(r.id) ?? 0]; theoNguon[l] = (theoNguon[l] || 0) + G; }
     agg.set(key, o);
   });
   const rows = Array.from(agg.values()).map((o) => ({ ...o, gmv: Math.round(o.gmv), gia_von: Math.round(o.gia_von), gmv_co_gv: Math.round(o.gmv_co_gv), chiet_khau: null, nguon: "bk" }));
@@ -206,6 +221,8 @@ async function rebuild(sb: Sb) {
     ok: true, kys: kys.sort(), rows: rows.length,
     gmv: Math.round(gmvAll), gmvCoGv: Math.round(gmvCov),
     ncc: { noi: nccHit, khongNoi: nccMiss, khongNoiTien: Math.round(nccMissAmt) },
+    ht: { noi: htHit, khongNoi: htMiss },
+    theoNguon: Object.fromEntries(Object.entries(theoNguon).map(([k, v]) => [k, Math.round(v)])),
     khachChuaMap: Array.from(chuaMap.entries()).sort((a, b) => b[1] - a[1]).map(([ten, v]) => ({ ten, gmv: Math.round(v) })),
   };
 }

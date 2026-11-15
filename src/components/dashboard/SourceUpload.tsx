@@ -8,10 +8,10 @@ import { readSource, SrcFile, KIND_LABEL } from "@/lib/dashboard/sources";
 import { n0, pc } from "@/lib/dashboard/util";
 
 const CHUNK = 1000;
-const ORDER = ["ar", "kh_hotel", "kh_flight", "ncc", "b1"];
+const ORDER = ["ar", "kh_hotel", "kh_flight", "ncc", "b1", "ht_hotel", "ht_flight"];
 const vnd = (v: number) => new Intl.NumberFormat("vi-VN").format(Math.round(v));
 const dmy = (d: string | null) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : "—");
-interface Rebuild { kys: string[]; rows: number; gmv?: number; gmvCoGv?: number; ncc?: { noi: number; khongNoi: number; khongNoiTien: number }; khachChuaMap?: { ten: string; gmv: number }[]; note?: string }
+interface Rebuild { kys: string[]; rows: number; gmv?: number; gmvCoGv?: number; ncc?: { noi: number; khongNoi: number; khongNoiTien: number }; ht?: { noi: number; khongNoi: number }; theoNguon?: Record<string, number>; khachChuaMap?: { ten: string; gmv: number }[]; note?: string }
 
 export default function SourceUpload({ data, canEdit, onDone, toast }: { data: DataSet; canEdit: boolean; onDone: () => Promise<void>; toast: (m: string, err?: boolean) => void }) {
   const [files, setFiles] = useState<SrcFile[]>([]);
@@ -56,7 +56,7 @@ export default function SourceUpload({ data, canEdit, onDone, toast }: { data: D
           for (let i = 0; i < (f.ar || []).length; i += CHUNK) { await post({ action: "ar", kys: f.kys, rows: (f.ar || []).slice(i, i + CHUNK), first: i === 0 }); tick(); }
         } else if (f.kind === "kh_hotel" || f.kind === "kh_flight") {
           for (let i = 0; i < (f.kh || []).length; i += CHUNK) { await post({ action: "kh", loai: f.kind === "kh_hotel" ? "hotel" : "flight", kys: f.kys, rows: (f.kh || []).slice(i, i + CHUNK), first: i === 0, fileName: f.name }); tick(); }
-        } else if (f.kind === "ncc" || f.kind === "b1") {
+        } else if (f.kind === "ncc" || f.kind === "b1" || f.kind === "ht_hotel" || f.kind === "ht_flight") {
           for (let i = 0; i < (f.ncc || []).length; i += CHUNK) { await post({ action: "ncc", fileKey: f.fileKey, fileName: f.name, rows: (f.ncc || []).slice(i, i + CHUNK), first: i === 0 }); tick(); }
         }
       }
@@ -90,8 +90,8 @@ export default function SourceUpload({ data, canEdit, onDone, toast }: { data: D
         <label className={"drop" + (over ? " over" : "")} onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={(e) => { e.preventDefault(); setOver(false); pick(e.dataTransfer.files); }}>
           <i className={busy ? "ri-loader-4-line" : "ri-upload-cloud-2-line"} aria-hidden="true" />
           <b>{busy || "Kéo thả các file Excel vào đây hoặc bấm để chọn"}</b>
-          xperise_hotel_statement · xperise_flight_statement · Doi_soat_… · hoa-don-ks-b1-… · GOC_CONG_NO_PHAI_THU…
-          <input ref={inp} type="file" accept=".xlsx,.xls" multiple hidden onChange={(e) => pick(e.target.files)} />
+          xperise_hotel_statement · xperise_flight_statement · Doi_soat_… · hoa-don-ks-b1-… · Performance_Dashboard_…spending (.csv) · GOC_CONG_NO_PHAI_THU…
+          <input ref={inp} type="file" accept=".xlsx,.xls,.csv" multiple hidden onChange={(e) => pick(e.target.files)} />
         </label>
       )}
       {files.length > 0 && (
@@ -122,7 +122,9 @@ export default function SourceUpload({ data, canEdit, onDone, toast }: { data: D
         <div className="card notice" style={{ marginTop: 14 }}>
           <b>Đã dựng lại GMV {res.kys.join(", ")}</b>: {n0(res.rows)} dòng theo ngày × khách × NCC.
           {res.gmv != null && <> GMV {vnd(res.gmv)}, trong đó đã có giá vốn {vnd(res.gmvCoGv || 0)} ({pc(res.gmv ? (res.gmvCoGv || 0) / res.gmv : null, 0)}).</>}
-          {res.ncc && <> Dòng đối soát NCC nối được bảng kê: {n0(res.ncc.noi)}; không nối được: {n0(res.ncc.khongNoi)} ({vnd(res.ncc.khongNoiTien)}).</>}
+          {res.ncc && <> Dòng đối soát NCC / B1 nối được bảng kê: {n0(res.ncc.noi)}; không nối được: {n0(res.ncc.khongNoi)} ({vnd(res.ncc.khongNoiTien)}).</>}
+          {res.ht && <> Giá NCC trên hệ thống: {n0(res.ht.noi)} booking dùng làm giá vốn; {n0(res.ht.khongNoi)} booking không có trên bảng kê hoặc dòng bảng kê đã có giá vốn từ đối soát / B1 — không tính.</>}
+          {res.theoNguon && <div className="small" style={{ marginTop: 6 }}>GMV có giá vốn theo nguồn: {Object.entries(res.theoNguon).map(([k, v]) => `${k} ${vnd(v)}`).join(" · ")}</div>}
           {!!res.khachChuaMap?.length && <div className="small" style={{ marginTop: 6 }}>Chưa nhận được mã khách (giữ theo tên công ty — thêm vào danh mục khách hàng để gộp đúng): {res.khachChuaMap.map((x) => `${x.ten} (${vnd(x.gmv)})`).join(" · ")}</div>}
         </div>
       )}

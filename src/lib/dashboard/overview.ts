@@ -484,7 +484,8 @@ function tsCongNo(v: VM): string {
 function apDsCard(v: VM, W: Win): string {
   const src = v.Cc.D.src;
   if (!src || !src.ncc.length) return "";
-  const ky = W.ky, rows = src.ncc.filter((r) => r.ky === ky && r.nganh !== "Mobility" && !(r.khop || "").startsWith("Trùng"));
+  // giá NCC trên hệ thống (HT:) chỉ để làm giá vốn, không phải số NCC đòi — không đưa vào phải trả
+  const ky = W.ky, rows = src.ncc.filter((r) => r.ky === ky && r.nganh !== "Mobility" && !(r.khop || "").startsWith("Trùng") && !(r.khop || "").startsWith("HT:"));
   if (!rows.length) return card("Đối soát NCC", `Phải trả phát sinh kỳ ${ky}`, "", empty(`Chưa có file đối soát NCC cho kỳ ${ky}`));
   // Khách sạn trực tiếp (file B1) gộp thành một nhóm; các NCC đối soát giữ riêng
   type G = { ncc: string; nganh: string; bk: number; led: number; khop: number; lech: number; thieu: number; daChi: number; chuaChi: number; n: number; ks: Set<string> };
