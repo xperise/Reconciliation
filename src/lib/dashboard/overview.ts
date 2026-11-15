@@ -475,10 +475,32 @@ function tsMain(v: VM): string {
 }
 
 /* ---------- Travel & SaaS › Công nợ (nhập trực tiếp) ---------- */
+/** Kỳ nợ chưa có ngày gửi bảng kê, tới kỳ `den` (gồm cả kỳ đó). Ngày gửi đánh dấu = ngày hóa đơn sớm nhất của kỳ, không có thì ngày đầu tháng sau kỳ */
+export function chuaGuiBK(v: VM, den: string): { ma_kh: string; ky: string; ngay: string }[] {
+  const out: { ma_kh: string; ky: string; ngay: string }[] = [];
+  v.ARC.forEach((c) => c.kys.forEach((k) => {
+    if (k.guiBK || k.tuTao || !(kyIdx(k.ky) <= kyIdx(den))) return;
+    const hd = c.lines.filter((l) => l.ky === k.ky && l.ngay_hd).map((l) => l.ngay_hd as string).sort()[0];
+    const end = kyEnd(k.ky), next = new Date(Date.parse(end + "T00:00:00Z") + 864e5).toISOString().slice(0, 10);
+    out.push({ ma_kh: c.ma_kh, ky: k.ky, ngay: hd || next });
+  }));
+  return out;
+}
+function guiBkCard(v: VM): string {
+  if (!v.canEdit) return "";
+  const kys = Array.from(new Set(v.ARC.flatMap((c) => c.kys.filter((k) => !k.guiBK && !k.tuTao).map((k) => k.ky)))).sort((a, b) => kyIdx(b) - kyIdx(a));
+  if (!kys.length) return "";
+  const def = kys.includes("T10.2026") ? "T10.2026" : kys[0];
+  const opts = kys.map((k) => `<option value="${k}"${k === def ? " selected" : ""}>${k} — ${n0(chuaGuiBK(v, k).length)} kỳ khách chưa đánh dấu</option>`).join("");
+  return card("Cập nhật trực tiếp", "Đánh dấu đã gửi bảng kê", "cho các kỳ đang chưa có ngày gửi",
+    `<div class="small" style="margin-bottom:8px">Mọi kỳ nợ từ kỳ chọn trở về trước đang chưa có ngày gửi bảng kê sẽ được đánh dấu đã gửi. Ngày gửi ghi theo ngày hóa đơn sớm nhất của kỳ (không có hóa đơn thì ngày đầu tháng sau kỳ). Kỳ đã có ngày gửi giữ nguyên; sửa từng kỳ ở bảng bên dưới.</div>` +
+    `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><label class="small" for="guibkKy">Đến hết kỳ</label><select id="guibkKy" class="fld">${opts}</select>` +
+    `<button type="button" class="btn primary" data-guibk="1">Đánh dấu đã gửi</button></div>`);
+}
 function tsCongNo(v: VM): string {
   const { APS } = apTs(v);
   const apAdd = v.canEdit ? card("Cập nhật trực tiếp", "Thêm công nợ phải trả", "upload file sổ phải trả sẽ ghi đè số nhập tay của cùng kỳ", addApForm(v.ky)) : "";
-  return bangKeCard(v) + apAdd + apSupplierCards({ ...v, APS });
+  return guiBkCard(v) + bangKeCard(v) + apAdd + apSupplierCards({ ...v, APS });
 }
 
 /* ---------- Phải trả NCC phát sinh theo file đối soát ----------

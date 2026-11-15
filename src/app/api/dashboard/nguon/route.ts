@@ -17,7 +17,8 @@ type Body =
   | { action: "ncc"; fileKey: string; fileName?: string; rows: NccRow[]; first: boolean }
   | { action: "dm"; rows: DmRow[] }
   | { action: "ar"; kys: string[]; rows: ArRow[]; first: boolean }
-  | { action: "rebuild" };
+  | { action: "rebuild" }
+  | { action: "guibk"; rows: { ma_kh: string; ky: string; ngay: string }[] };
 
 const KY = /^T\d{2}\.\d{4}$/;
 const fail = (error: string, status = 400) => NextResponse.json({ error }, { status });
@@ -97,6 +98,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, written: rows.length, suaTay });
     }
 
+    if (b.action === "guibk") {
+      // Đánh dấu đã gửi bảng kê: ghi ngày gửi ở mức kỳ (như sửa ở bảng "Bảng kê & tiền thu"), không đụng các ô khác
+      const rows = (b.rows || []).filter((r) => r.ma_kh && KY.test(r.ky) && /^\d{4}-\d{2}-\d{2}$/.test(r.ngay))
+        .map((r) => ({ ma_kh: r.ma_kh, ky: r.ky, so_ct: "", ngay_gui_bk: r.ngay, updated_by: g.user.email, updated_at: now }));
+      for (let i = 0; i < rows.length; i += 500) { const { error } = await sb.from("fin_ar_edit").upsert(rows.slice(i, i + 500), { onConflict: "ma_kh,ky,so_ct" }); chk(error, "Ghi ngày gửi bảng kê"); }
+      return NextResponse.json({ ok: true, written: rows.length });
+    }
     if (b.action === "rebuild") return NextResponse.json(await rebuild(sb));
     return fail("Thao tác không hợp lệ");
   } catch (e) {

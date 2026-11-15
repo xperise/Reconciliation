@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DataSet } from "@/lib/dashboard/types";
 import { makeCtx, segCtx, Seg, Ctx } from "@/lib/dashboard/calc";
 import { hasAnyActual, latestActualKy, facts, dashCtx } from "@/lib/dashboard/ops";
-import { renderOps, opsStrip, opsAlertOk, opsDrill, OpsState } from "@/lib/dashboard/overview";
+import { renderOps, opsStrip, opsAlertOk, opsDrill, chuaGuiBK, OpsState } from "@/lib/dashboard/overview";
 import { renderView, drillPanel, buildVM, VM, ViewState } from "@/lib/dashboard/views";
 import { kyIdx, kyAdd, todayIso, setUnit, UNITS, UnitKey } from "@/lib/dashboard/util";
 import DataTab from "@/components/dashboard/DataTab";
@@ -298,6 +298,19 @@ export default function DashboardPage() {
         if (hit.dataset.drill.startsWith("ops:")) document.querySelector(".dp-wrap")?.scrollTo({ top: 0 });
         return;
       }
+    }
+    const gb = t.closest("button[data-guibk]") as HTMLButtonElement | null;
+    if (gb && vm) {
+      e.preventDefault();
+      const den = (document.getElementById("guibkKy") as HTMLSelectElement | null)?.value || "";
+      const rows = den ? chuaGuiBK(vm, den) : [];
+      if (!rows.length) { toast("Không còn kỳ nào chưa đánh dấu"); return; }
+      if (!window.confirm(`Đánh dấu đã gửi bảng kê cho ${rows.length} kỳ nợ (từ ${den} trở về trước)?`)) return;
+      gb.disabled = true; gb.textContent = "Đang ghi…";
+      fetch("/api/dashboard/nguon", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "guibk", rows }) })
+        .then(async (r) => { const j = await r.json().catch(() => ({})); if (!r.ok || j.error) throw new Error(j.error || `Lỗi ${r.status}`); toast(`Đã đánh dấu ${j.written} kỳ nợ đã gửi bảng kê`); await load(); })
+        .catch((err) => { toast(err instanceof Error ? err.message : String(err), true); gb.disabled = false; gb.textContent = "Đánh dấu đã gửi"; });
+      return;
     }
     const sb = t.closest("button[data-st]") as HTMLElement | null;
     if (sb?.dataset.st) { e.preventDefault(); setView(sb.dataset.st, sb.dataset.v || ""); return; }
