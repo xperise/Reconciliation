@@ -73,6 +73,14 @@ export default function SourceUpload({ data, canEdit, onDone, toast }: { data: D
     } finally { setBusy(""); }
   }
 
+  /** Dựng lại GMV & giá vốn từ file đã nạp (không cần nạp lại file) */
+  async function rebuildOnly() {
+    if (busy) return;
+    setBusy("Đang dựng lại GMV & giá vốn theo ngày…"); setRes(null);
+    try { const rb = (await post({ action: "rebuild" })) as Rebuild; setRes(rb); toast(`Đã dựng lại GMV ${rb.kys?.join(", ") || ""}`); await onDone(); }
+    catch (e) { toast(e instanceof Error ? e.message : String(e), true); }
+    finally { setBusy(""); }
+  }
   const loaded = data.src;
   return (
     <div className="card">
@@ -120,8 +128,9 @@ export default function SourceUpload({ data, canEdit, onDone, toast }: { data: D
       )}
       {loaded && (loaded.kh.length > 0 || loaded.ncc.length > 0) && (
         <details style={{ marginTop: 14 }}><summary>File nguồn đang có trong dashboard</summary>
+          {canEdit && <div style={{ margin: "8px 0" }}><button className="btn" disabled={!!busy} onClick={rebuildOnly}>Dựng lại GMV & giá vốn từ file đã nạp</button></div>}
           <div className="tw" style={{ marginTop: 8 }}><table>
-            <thead><tr><th>Bảng kê khách hàng</th><th>Kỳ</th><th>Khoảng ngày</th><th className="r">Số dòng</th><th className="r">GMV (VND)</th><th>Nạp lúc</th></tr></thead>
+            <thead><tr><th>Bảng kê khách hàng</th><th>Kỳ</th><th>Khoảng ngày</th><th className="r">Số dòng</th><th className="r">GMV — Tổng thành tiền (VND)</th><th>Nạp lúc</th></tr></thead>
             <tbody>{loaded.kh.slice().sort((a, b) => b.ky.localeCompare(a.ky)).map((k) => (<tr key={k.loai + k.ky}><td>{k.loai === "hotel" ? "Hotel" : "Flight"}</td><td className="num">{k.ky}</td><td className="num small">{dmy(k.from)} – {dmy(k.to)}</td><td className="r num">{n0(k.n)}</td><td className="r num">{vnd(k.gmv)}</td><td className="small">{new Date(k.at).toLocaleString("vi-VN")}</td></tr>))}</tbody>
           </table></div>
           <div className="tw" style={{ marginTop: 8 }}><table>

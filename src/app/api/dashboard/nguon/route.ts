@@ -107,6 +107,7 @@ export async function POST(req: Request) {
    · Giá vốn: dòng đối soát NCC (bỏ dòng "Trùng") nối với dòng bảng kê bằng mã booking (hotel: mã giao dịch;
      flight: mã giao dịch chiều đi / về) hoặc số vé. Một booking NCC ứng nhiều dòng bảng kê thì chia giá vốn
      theo tỷ trọng GMV. Dòng bảng kê không nối được NCC thì chưa có giá vốn (gmv_co_gv không tính dòng đó).
+   · GMV = Tổng thành tiền (sau chiết khấu, có phí dịch vụ); dòng không có thì lấy Thành tiền.
    · Ghi vào fin_gmv (nguon 'bk'), thay mọi dòng Hotel / Flight của các kỳ có bảng kê.
    -------------------------------------------------------------------------- */
 type Sb = ReturnType<typeof adminClient>;
@@ -114,6 +115,10 @@ interface Kh extends KhRow { id: number }
 interface Ncc extends NccRow { id: number }
 const nk = (s: string | null | undefined) => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").toUpperCase().replace(/[^A-Z0-9]/g, "");
 const hdKey = (s: string | null | undefined) => String(s ?? "").replace(/\D/g, "").replace(/^0+/, "");
+/** Mã booking bỏ thứ tự các phần: "UTSNE261001 - 422785" ≡ "422785_UTSNE261001" */
+const tokKey = (s: string | null | undefined) => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean).sort().join("|");
+/** GMV = Tổng thành tiền (sau chiết khấu, có phí dịch vụ); dòng không có thì lấy Thành tiền */
+const gmvOf = (r: KhRow) => (r.tong_tt != null ? Number(r.tong_tt) : Number(r.gmv));
 
 async function rebuild(sb: Sb) {
   const [kh, ncc, ar, cust] = await Promise.all([
@@ -128,7 +133,7 @@ async function rebuild(sb: Sb) {
   const byName = new Map<string, string>();
   cust.forEach((c) => { [c.ten_viet_tat, c.ten_kh, c.ma_kh].forEach((x) => { const k = nk(x); if (k && !byName.has(k)) byName.set(k, c.ma_kh); }); });
   const vote = new Map<string, Map<string, number>>();
-  kh.forEach((r) => { const m = byHd.get(hdKey(r.so_hd)); if (!m) return; const k = nk(r.ten_cong_ty), v = vote.get(k) || new Map(); v.set(m, (v.get(m) || 0) + Math.abs(r.gmv)); vote.set(k, v); });
+  kh.forEach((r) => { const m = byHd.get(hdKey(r.so_hd)); if (!m) return; const k = nk(r.ten_cong_ty), v = vote.get(k) || new Map(); v.set(m, (v.get(m) || 0) + Math.abs(gmvOf(r))); vote.set(k, v); });
   const byCompany = new Map<string, string>();
   vote.forEach((v, k) => byCompany.set(k, Array.from(v.entries()).sort((a, b) => b[1] - a[1])[0][0]));
   const chuaMap = new Map<string, number>();
@@ -139,7 +144,7 @@ async function rebuild(sb: Sb) {
     const m = byCompany.get(k) || byName.get(k);
     if (m) return m;
     const ten = (r.ten_cong_ty || "CHƯA RÕ").trim().toUpperCase();
-    chuaMap.set(ten, (chuaMap.get(ten) || 0) + r.gmv);
+    chuaMap.set(ten, (chuaMap.get(ten) || 0) + gmvOf(r));
     return ten;
   };
 
@@ -147,7 +152,7 @@ async function rebuild(sb: Sb) {
   const idx = new Map<string, Kh[]>();
   const put = (k: string, r: Kh) => { if (!k) return; const a = idx.get(k) || []; if (!a.includes(r)) a.push(r); idx.set(k, a); };
   kh.forEach((r) => {
-    if (r.loai === "hotel") put("H|" + nk(r.ma_gd), r);
+    if (r.loai === "hotel") { put("H|" + nk(r.ma_gd), r); put("T|" + tokKey(r.ma_gd), r); }
     else { put("F|" + nk(r.ma_gd), r); put("F|" + nk(r.ma_gd2), r); if (r.so_ve && !/^temp_/i.test(r.so_ve)) put("V|" + nk(r.so_ve), r); }
   });
   const gv = new Map<number, number>(), nccOf = new Map<number, string>();
@@ -157,15 +162,18 @@ async function rebuild(sb: Sb) {
     const flight = n.nganh === "Flight" || n.ncc?.startsWith("flight:");
     const hits = new Set<Kh>();
     if (flight) { (idx.get("F|" + nk(n.ma_booking)) || []).forEach((r) => hits.add(r)); if (n.so_ve) (idx.get("V|" + nk(n.so_ve)) || []).forEach((r) => hits.add(r)); }
-    else (idx.get("H|" + nk(n.ma_booking)) || []).forEach((r) => hits.add(r));
+    else {
+      (idx.get("H|" + nk(n.ma_booking)) || []).forEach((r) => hits.add(r));
+      if (!hits.size && tokKey(n.ma_booking).includes("|")) (idx.get("T|" + tokKey(n.ma_booking)) || []).forEach((r) => hits.add(r));
+    }
     const rs = Array.from(hits);
     if (!rs.length) { nccMiss++; nccMissAmt += n.bang_ke; return; }
     nccHit++;
     // chia giá vốn theo tỷ trọng GMV (có dấu: dòng hoàn vé / hủy phòng nhận phần âm)
-    const tot = rs.reduce((s, r) => s + r.gmv, 0), totAbs = rs.reduce((s, r) => s + Math.abs(r.gmv), 0);
+    const tot = rs.reduce((s, r) => s + gmvOf(r), 0), totAbs = rs.reduce((s, r) => s + Math.abs(gmvOf(r)), 0);
     rs.forEach((r) => {
       const bk = n.bang_ke as number;
-      const part = tot !== 0 ? bk * r.gmv / tot : totAbs > 0 ? bk * Math.abs(r.gmv) / totAbs : bk / rs.length;
+      const part = tot !== 0 ? bk * gmvOf(r) / tot : totAbs > 0 ? bk * Math.abs(gmvOf(r)) / totAbs : bk / rs.length;
       gv.set(r.id, (gv.get(r.id) || 0) + part);
       if (!nccOf.has(r.id) && n.ncc) nccOf.set(r.id, n.ncc.replace(/^(hotel|flight):/, ""));
     });
@@ -179,8 +187,9 @@ async function rebuild(sb: Sb) {
     const ma = khOf(r), n = nccOf.get(r.id) || null, dv = r.loai === "hotel" ? "Hotel" : "Flight";
     const key = `${r.ky}|${r.ngay}|${ma}|${n || ""}|${dv}`;
     const o = agg.get(key) || { ky: r.ky, ngay: r.ngay, ma_kh: ma, ma_ncc: n, dich_vu: dv, gmv: 0, gia_von: 0, gmv_co_gv: 0 };
-    o.gmv += r.gmv; gmvAll += r.gmv;
-    if (gv.has(r.id)) { o.gia_von += gv.get(r.id) as number; o.gmv_co_gv += r.gmv; gmvCov += r.gmv; }
+    const G = gmvOf(r);
+    o.gmv += G; gmvAll += G;
+    if (gv.has(r.id)) { o.gia_von += gv.get(r.id) as number; o.gmv_co_gv += G; gmvCov += G; }
     agg.set(key, o);
   });
   const rows = Array.from(agg.values()).map((o) => ({ ...o, gmv: Math.round(o.gmv), gia_von: Math.round(o.gia_von), gmv_co_gv: Math.round(o.gmv_co_gv), chiet_khau: null, nguon: "bk" }));

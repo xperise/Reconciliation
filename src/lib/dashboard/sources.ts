@@ -135,8 +135,8 @@ function readKh(f: SrcFile, rows: Cell[][], H: Hdr): SrcFile {
     });
   });
   f.kh = out; f.rows = out.length;
-  summarize(f, out.map((r) => r.ngay), out.reduce((s, r) => s + r.gmv, 0));
-  f.totalL = `GMV ${fmtTien(f.total)}`;
+  summarize(f, out.map((r) => r.ngay), out.reduce((s, r) => s + (r.tong_tt ?? r.gmv), 0));
+  f.totalL = `GMV (Tổng thành tiền) ${fmtTien(f.total)}`;
   if (noAmt) f.notes.push(`${noAmt} dòng không có số tiền (khách ở chung phòng / dòng phụ) — bỏ qua`);
   if (noDate) f.warns.push(`${noDate} dòng không đọc được ngày giao dịch — bỏ qua`);
   const chua = out.filter((r) => !r.so_hd).length;
