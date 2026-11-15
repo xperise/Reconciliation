@@ -4,9 +4,9 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { luuPhapNhan, xoaPhapNhan } from '@/app/actions';
 
-type Draft = { id?: string; ten: string; vietTat: string; code: string; ngung: boolean; ghiChu: string };
+type Draft = { id?: string; ten: string; vietTat: string; code: string; ngung: boolean; ghiChu: string; pm: string };
 
-const TRONG: Draft = { ten: '', vietTat: '', code: '', ngung: false, ghiChu: '' };
+const TRONG: Draft = { ten: '', vietTat: '', code: '', ngung: false, ghiChu: '', pm: '' };
 
 /**
  * Pháp nhân trực thuộc một nhóm đối soát.
@@ -15,8 +15,8 @@ const TRONG: Draft = { ten: '', vietTat: '', code: '', ngung: false, ghiChu: '' 
  * hơn bốn mươi. Danh sách này phục vụ tra cứu và xuất hoá đơn, không ảnh hưởng
  * tới việc gửi thư: workflow chỉ làm việc ở cấp nhóm.
  */
-export function PhapNhan({ groupId, tenNhom, danhSach }: {
-  groupId: string; tenNhom: string; danhSach: any[];
+export function PhapNhan({ groupId, tenNhom, danhSach, pmNhom }: {
+  groupId: string; tenNhom: string; danhSach: any[]; pmNhom?: string | null;
 }) {
   const router = useRouter();
   const [sua, setSua] = useState<Draft | null>(null);
@@ -39,7 +39,7 @@ export function PhapNhan({ groupId, tenNhom, danhSach }: {
         await luuPhapNhan({
           id: sua.id, groupId,
           tenKhachHang: sua.ten, tenVietTat: sua.vietTat,
-          code: sua.code, ngungHopTac: sua.ngung, ghiChu: sua.ghiChu,
+          code: sua.code, ngungHopTac: sua.ngung, ghiChu: sua.ghiChu, pm: sua.pm,
         });
         setSua(null);
         router.refresh();
@@ -87,7 +87,7 @@ export function PhapNhan({ groupId, tenNhom, danhSach }: {
             <thead>
               <tr>
                 <th>Tên khách hàng</th><th style={{ width: 150 }}>Tên viết tắt</th>
-                <th style={{ width: 110 }}>Mã</th><th style={{ width: 90 }}>Trạng thái</th>
+                <th style={{ width: 110 }}>Mã</th><th style={{ width: 110 }}>PM</th><th style={{ width: 90 }}>Trạng thái</th>
                 <th style={{ width: 120 }} className="no-print"></th>
               </tr>
             </thead>
@@ -97,6 +97,7 @@ export function PhapNhan({ groupId, tenNhom, danhSach }: {
                   <td className="text-[12.5px]">{c.ten_khach_hang}</td>
                   <td className="text-[12.5px]">{c.ten_viet_tat || '—'}</td>
                   <td className="mono text-[12px]">{c.code || '—'}</td>
+                  <td className="text-[12.5px]" title={c.pm ? 'PM riêng của pháp nhân' : 'Theo PM của nhóm'}>{c.pm || <span className="text-[var(--ink-3)]">{pmNhom || '—'}</span>}</td>
                   <td>
                     <span className={`pill ${c.ngung_hop_tac ? 'pill-neutral' : 'pill-stable'}`}>
                       {c.ngung_hop_tac ? 'Ngưng' : 'Đang chạy'}
@@ -106,7 +107,7 @@ export function PhapNhan({ groupId, tenNhom, danhSach }: {
                     <div className="flex gap-1.5 justify-end">
                       <button className="btn btn-sm" onClick={() => setSua({
                         id: c.id, ten: c.ten_khach_hang, vietTat: c.ten_viet_tat ?? '',
-                        code: c.code ?? '', ngung: c.ngung_hop_tac, ghiChu: c.ghi_chu ?? '',
+                        code: c.code ?? '', ngung: c.ngung_hop_tac, ghiChu: c.ghi_chu ?? '', pm: c.pm ?? '',
                       })}>Sửa</button>
                       <button className="btn btn-sm btn-danger" onClick={() => xoa(c)}>Xoá</button>
                     </div>
@@ -149,6 +150,11 @@ export function PhapNhan({ groupId, tenNhom, danhSach }: {
                   <input id="pn-code" className="field mono" value={sua.code}
                          onChange={(e) => setSua({ ...sua, code: e.target.value })} />
                 </div>
+              </div>
+              <div>
+                <label className="label" htmlFor="pn-pm">PM phụ trách</label>
+                <input id="pn-pm" className="field" value={sua.pm} placeholder={pmNhom ? `Để trống = theo nhóm (${pmNhom})` : 'Để trống = theo PM của nhóm'}
+                       onChange={(e) => setSua({ ...sua, pm: e.target.value })} />
               </div>
               <div>
                 <label className="label" htmlFor="pn-gc">Ghi chú</label>

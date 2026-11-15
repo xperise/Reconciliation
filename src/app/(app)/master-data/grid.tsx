@@ -25,6 +25,7 @@ type Cot = {
 const COT: Cot[] = [
   { k: 'ma_he_thong', ten: 'Mã hệ thống', kieu: 'text', w: 150, nhom: 'Định danh' },
   { k: 'ten_nhom', ten: 'Tên nhóm', kieu: 'text', w: 160, nhom: 'Định danh' },
+  { k: 'pm', ten: 'PM phụ trách', kieu: 'text', w: 120, nhom: 'Định danh' },
   { k: 'ngung_hop_tac', ten: 'Ngưng', kieu: 'bool', w: 62, nhom: 'Định danh' },
   { k: 'so_dot', ten: 'Số đợt/tháng', kieu: 'int', w: 88, chiDoc: true, nhom: 'Định danh' },
   { k: 'so_phap_nhan', ten: 'Pháp nhân', kieu: 'int', w: 78, chiDoc: true, nhom: 'Định danh' },

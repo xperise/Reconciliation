@@ -17,6 +17,7 @@ import {
 import { pushNotify } from '@/lib/notify';
 import { guiTepChoKhach, guiLoChoKhach } from '@/workflows/wf3-gui-tep';
 import { tabAccess } from '@/lib/access';
+import { syncTravelToMaster } from '@/lib/dashboard/masterSync';
 
 async function requireRole(...roles: string[]) {
   const user = await currentUser();
@@ -384,6 +385,7 @@ const O_SUA_DUOC = {
   email_l1: 'text', email_l2: 'text', email_l3: 'text',
   email_ke_toan: 'text', email_pm: 'text', email_high_level: 'text', email_cc: 'text',
   ho_so_thanh_toan: 'text', ghi_chu: 'text',
+  pm: 'text',
 } as const;
 
 export type OMasterData = keyof typeof O_SUA_DUOC;
@@ -1214,13 +1216,15 @@ export async function luuPhapNhan(input: {
   code?: string;
   ngungHopTac?: boolean;
   ghiChu?: string;
+  /** PM riêng của pháp nhân; để trống = theo PM của nhóm */
+  pm?: string;
 }) {
   const user = await requireRole('admin', 'ke_toan');
   const sb = supabaseAdmin();
 
   if (!input.tenKhachHang.trim()) throw new Error('Tên khách hàng không được để trống.');
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     group_id: input.groupId,
     ten_khach_hang: input.tenKhachHang.trim(),
     ten_viet_tat: input.tenVietTat?.trim() || null,
@@ -1228,6 +1232,7 @@ export async function luuPhapNhan(input: {
     ngung_hop_tac: input.ngungHopTac ?? false,
     ghi_chu: input.ghiChu?.trim() || null,
   };
+  if (input.pm !== undefined) payload.pm = input.pm.trim() || null;
 
   if (input.id) {
     const { data: before } = await sb.from('customers').select('*').eq('id', input.id).single();
@@ -1447,4 +1452,15 @@ export async function donKhoTep(maHeThong?: string) {
   revalidatePath('/files');
   revalidatePath('/settings');
   return { soTep };
+}
+
+/** Master Data: thêm các khách Travel có trong Dashboard mà Master Data chưa có */
+export async function dongBoKhachTuDashboard() {
+  const user = await requireRole('admin', 'ke_toan');
+  const r = await syncTravelToMaster();
+  if (r.nhomMoi.length || r.phapNhanMoi.length) {
+    await writeAudit({ actorId: user.id, actorEmail: user.email, action: 'customer.sync_dashboard', entity: 'customers', after: r });
+  }
+  revalidatePath('/master-data');
+  return r;
 }

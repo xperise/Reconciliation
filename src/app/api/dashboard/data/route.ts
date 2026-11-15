@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { fetchAll, guard, EDIT_ROLES, adminClient } from "@/lib/dashboard/server";
 import type { BangKe, Customer, MobAgg, MobDay, SrcSum } from "@/lib/dashboard/types";
 import { mobEffectivePlan } from "@/lib/dashboard/mobPlan";
+import { pmFromMaster } from "@/lib/dashboard/masterSync";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -124,7 +125,9 @@ export async function GET() {
       fetchAll("fin_uploads", "id"), fetchAll("fin_snapshots"), fetchAll("fin_alert_actions"),
       fetchAll("fin_ar_edit"), fetchAll("fin_ap_edit"), fetchAll("fin_manual").catch(() => []),
     ]);
-    const [bangKe, mob, src] = await Promise.all([bangKeMap(customers), mobAgg(), srcSum()]);
+    const [bangKe, mob, src, pmMd] = await Promise.all([bangKeMap(customers), mobAgg(), srcSum(), pmFromMaster(customers)]);
+    // PM phụ trách lấy theo Master Data (tab Xperise): pháp nhân → nhóm
+    customers.forEach((c) => { const p = pmMd.get(c.ma_kh); if (p) c.pm = p; });
     return NextResponse.json({
       params: Object.fromEntries(params.map((p) => [p.key, p.value ?? ""])),
       customers, suppliers, staff, alloc, targets, gmv, ar, ap, cash, opex, contracts,

@@ -4,6 +4,8 @@ import { MasterGrid } from './grid';
 import { Schedules } from './schedules';
 import { PhapNhan } from './phap-nhan';
 import { BillingSchedule } from '@/lib/types';
+import { useRouter } from 'next/navigation';
+import { dongBoKhachTuDashboard } from '@/app/actions';
 
 /**
  * Ba khu của Master Data dùng chung một nhóm đang chọn: lưới ở trên, lịch gửi
@@ -18,6 +20,18 @@ export function MasterBoard({ rows, lichs, phapNhan, laKeToan, chonBanDau }: {
   chonBanDau?: string;
 }) {
   const [groupId, setGroupId] = useState(chonBanDau ?? rows[0]?.id ?? '');
+  const router = useRouter();
+  const [dongBo, setDongBo] = useState<{ chay: boolean; msg: string; loi?: boolean }>({ chay: false, msg: '' });
+  async function chayDongBo() {
+    setDongBo({ chay: true, msg: '' });
+    try {
+      const r = await dongBoKhachTuDashboard();
+      setDongBo({ chay: false, msg: r.phapNhanMoi.length
+        ? `Đã thêm ${r.phapNhanMoi.length} khách (${r.nhomMoi.length} nhóm mới, chưa có lịch gửi): ${r.phapNhanMoi.slice(0, 12).join(', ')}${r.phapNhanMoi.length > 12 ? '…' : ''}`
+        : 'Master Data đã có đủ khách Travel của Dashboard.' });
+      router.refresh();
+    } catch (e) { setDongBo({ chay: false, msg: e instanceof Error ? e.message : 'Không đồng bộ được.', loi: true }); }
+  }
   const nhom = rows.find((r) => r.id === groupId);
 
   const chon = (id: string) => {
@@ -27,6 +41,17 @@ export function MasterBoard({ rows, lichs, phapNhan, laKeToan, chonBanDau }: {
 
   return (
     <>
+      {laKeToan && (
+        <div className="card card-pad no-print mb-3 flex flex-wrap items-center gap-3">
+          <button className="btn btn-sm" onClick={chayDongBo} disabled={dongBo.chay}>
+            {dongBo.chay ? 'Đang đồng bộ…' : 'Đồng bộ khách từ Dashboard'}
+          </button>
+          <p className="card-note m-0">
+            Thêm các khách Travel có trong Dashboard mà Master Data chưa có. Cột <b>PM phụ trách</b> ở đây (nhóm, hoặc riêng từng pháp nhân) là PM Dashboard dùng.
+          </p>
+          {dongBo.msg && <p role="status" className={`callout ${dongBo.loi ? 'callout-critical' : ''} m-0 w-full`}>{dongBo.msg}</p>}
+        </div>
+      )}
       <MasterGrid rows={rows} laKeToan={laKeToan} onChonNhom={chon} />
 
       <div id="khu-chi-tiet" className="mt-4 flex flex-col gap-3">
@@ -59,6 +84,7 @@ export function MasterBoard({ rows, lichs, phapNhan, laKeToan, chonBanDau }: {
             <PhapNhan
               groupId={nhom.id}
               tenNhom={nhom.ten_nhom}
+              pmNhom={nhom.pm}
               danhSach={phapNhan.filter((c) => c.group_id === nhom.id)}
             />
           </>

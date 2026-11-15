@@ -3,6 +3,7 @@ import { adminClient, guard, fetchAll } from "@/lib/dashboard/server";
 import type { KhRow, NccRow, ArRow, DmRow } from "@/lib/dashboard/sources";
 import { inferNcc } from "@/lib/dashboard/sources";
 import { kyEnd, addDays } from "@/lib/dashboard/util";
+import { syncTravelToMaster } from "@/lib/dashboard/masterSync";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -70,7 +71,10 @@ export async function POST(req: Request) {
           credit_term: r.credit_term ?? (o?.credit_term as number | null) ?? null, updated_at: now };
       });
       for (let i = 0; i < rows.length; i += 500) { const { error } = await sb.from("fin_customers").upsert(rows.slice(i, i + 500), { onConflict: "ma_kh" }); chk(error, "Ghi danh mục khách hàng"); }
-      return NextResponse.json({ ok: true, written: rows.length, moi });
+      // khách Travel chưa có ở Master Data (tab Xperise) thì thêm vào đó
+      let master: unknown = null;
+      try { master = await syncTravelToMaster(); } catch (e) { master = { loi: e instanceof Error ? e.message : String(e) }; }
+      return NextResponse.json({ ok: true, written: rows.length, moi, master });
     }
 
     if (b.action === "ar") {
