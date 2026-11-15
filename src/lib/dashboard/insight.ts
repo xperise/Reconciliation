@@ -565,7 +565,7 @@ export function whyOnTime(C: Ctx, ky: string, g: string, F: Fmt): WhyBlock {
   // phân loại nguyên nhân cho từng khoản trễ
   const cause = (r: (typeof rs)[number]) => {
     const c = C.cust.get(r.ma_kh);
-    const bkLate = !r.ngay_gui_bk || days(r.ngay_gui_bk, kyEnd(r.ky)) > lag;
+    const bkLate = r.ngay_gui_bk ? days(r.ngay_gui_bk, kyEnd(r.ky)) > lag : !r.daGui;
     const loose = (c?.credit_term ?? 0) > chuan || (r.ngay_hd != null && days(r.ngay_den_han, r.ngay_hd) > chuan);
     return bkLate ? "bk" : loose ? "term" : "kh";
   };

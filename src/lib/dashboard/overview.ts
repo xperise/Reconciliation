@@ -95,7 +95,7 @@ function arDetailCard(v: VM): string {
         { f: "ngay_thu_gan_nhat", l: "Ngày thu gần nhất", t: "date", v: k.thu_gan_nhat },
         { f: "ghi_chu", l: "Ghi chú", t: "text", v: k.ghiChu, w: "wide" },
       ], { suaTay: k.suaTay, note: (k.n > 1 ? `Kỳ này có ${k.n} hóa đơn trong file. Số sửa ở đây là của cả kỳ: phải thu rải theo tỷ trọng từng hóa đơn, đã thu rải lần lượt từ hóa đơn cũ nhất. ` : "") + "Ngày gửi bảng kê sửa ở bảng Bảng kê & tiền thu (tab Công nợ)." })}</td></tr>` : "";
-      return `<tr class="${k.suaTay ? "r-edited" : ""}"><td class="num">${esc(k.ky)}</td><td class="num">${fmtDate(k.guiBK)}${src}</td><td class="num">${fmtDate(k.den_han)}</td><td class="r num">${tyN(k.so_tien)}</td><td class="r num">${k.da_thu ? tyN(k.da_thu) : "–"}</td><td class="r num ${k.con_lai > 0 && k.tt === "qua_han" ? "c-critical" : ""}">${k.con_lai > 0 ? tyN(k.con_lai) : "–"}</td><td class="num">${fmtDate(k.thu_du || (k.thu_gan_nhat && k.thu_gan_nhat <= C.asOf ? k.thu_gan_nhat : null))}</td><td class="r num ${k.tt === "qua_han" ? "c-critical" : ""}">${k.tt === "qua_han" ? n0(k.late) : "–"}</td><td>${pill(lab, cls)}${k.n > 1 ? ` <span class="small">${k.n} HĐ</span>` : ""}</td><td class="r">${canEdit ? `<button type="button" class="icon-btn cn-toggle" title="Cập nhật công nợ kỳ ${esc(k.ky)}"><i class="ri-edit-line"></i></button>` : ""}</td></tr>${form}`;
+      return `<tr class="${k.suaTay ? "r-edited" : ""}"><td class="num">${esc(k.ky)}</td><td class="num">${k.guiBK ? fmtDate(k.guiBK) : k.daGui ? "đã gửi" : "—"}${src}</td><td class="num">${fmtDate(k.den_han)}</td><td class="r num">${tyN(k.so_tien)}</td><td class="r num">${k.da_thu ? tyN(k.da_thu) : "–"}</td><td class="r num ${k.con_lai > 0 && k.tt === "qua_han" ? "c-critical" : ""}">${k.con_lai > 0 ? tyN(k.con_lai) : "–"}</td><td class="num">${fmtDate(k.thu_du || (k.thu_gan_nhat && k.thu_gan_nhat <= C.asOf ? k.thu_gan_nhat : null))}</td><td class="r num ${k.tt === "qua_han" ? "c-critical" : ""}">${k.tt === "qua_han" ? n0(k.late) : "–"}</td><td>${pill(lab, cls)}${k.n > 1 ? ` <span class="small">${k.n} HĐ</span>` : ""}</td><td class="r">${canEdit ? `<button type="button" class="icon-btn cn-toggle" title="Cập nhật công nợ kỳ ${esc(k.ky)}"><i class="ri-edit-line"></i></button>` : ""}</td></tr>${form}`;
     }).join("");
     // Chi tiết từng hóa đơn — chỉ để xem
     // tối đa 25 hóa đơn mỗi khách: còn nợ nhiều nhất trước, rồi mới nhất
@@ -178,19 +178,19 @@ function bangKeCard(v: VM): string {
   const ds = ARC.map((c) => ({ c, k: c.kys.find((x) => x.ky === ky) })).filter((x) => x.k) as { c: ArCust; k: ArCust["kys"][number] }[];
   if (!ds.length && !canEdit) return "";
   ds.sort((a, b) => b.k.con_lai - a.k.con_lai || b.k.so_tien - a.k.so_tien);
-  const daGui = ds.filter((x) => x.k.guiBK).length, daThuDu = ds.filter((x) => x.k.con_lai <= 0).length;
+  const daGui = ds.filter((x) => x.k.daGui).length, daThuDu = ds.filter((x) => x.k.con_lai <= 0).length;
   const note = `${ds.length} khách có bảng kê kỳ ${esc(ky)} · đã gửi ${daGui} · đã thu đủ ${daThuDu}` + (ky !== v.ky ? ` · kỳ ${esc(v.ky)} chưa có bảng kê nào` : "");
   const dt = (x: string | null) => (x ? esc(x) : "");
   const rows = ds.map(({ c, k }) => {
     const [lab, cls] = TT_AR[k.tt];
     const src = k.nguonBK === "recon" ? ` <span class="src" title="Lấy từ app Reconciliation">↩</span>` : k.nguonBK === "web" ? ` <span class="src web" title="Sửa tay trên web">✎</span>` : "";
     const o = canEdit
-      ? `<td><input type="date" class="fld bk-in" data-f="ngay_gui_bk" value="${dt(k.guiBK)}" data-goc="${dt(k.guiBK)}"></td>
+      ? `<td><input type="date" class="fld bk-in" data-f="ngay_gui_bk" value="${dt(k.guiBK)}" data-goc="${dt(k.guiBK)}">${!k.guiBK && k.daGui ? `<div class="t2 c-stable">đã gửi · chưa có ngày</div>` : ""}</td>
          <td class="r"><input type="number" step="1000" inputmode="numeric" class="fld bk-in money" data-f="da_thu" value="${k.da_thu ? Math.round(k.da_thu) : ""}" data-goc="${k.da_thu ? Math.round(k.da_thu) : ""}" placeholder="0"></td>
          <td><input type="date" class="fld bk-in" data-f="ngay_thu_gan_nhat" value="${dt(k.thu_gan_nhat)}" data-goc="${dt(k.thu_gan_nhat)}"></td>
          <td><input type="date" class="fld bk-in" data-f="ngay_thu_du" value="${dt(k.thu_du)}" data-goc="${dt(k.thu_du)}"></td>
          <td class="r nowrap"><button type="button" class="btn cn-save" title="Lưu dòng này">Lưu</button>${k.tuTao ? ` <button type="button" class="icon-btn cn-reset" title="Xóa dòng thêm tay này"><i class="ri-delete-bin-line"></i></button>` : ""}</td>`
-      : `<td class="num">${fmtDate(k.guiBK)}</td><td class="r num">${tyN(k.da_thu)}</td><td class="num">${fmtDate(k.thu_gan_nhat)}</td><td class="num">${fmtDate(k.thu_du)}</td><td></td>`;
+      : `<td class="num">${k.guiBK ? fmtDate(k.guiBK) : k.daGui ? "đã gửi" : "—"}</td><td class="r num">${tyN(k.da_thu)}</td><td class="num">${fmtDate(k.thu_gan_nhat)}</td><td class="num">${fmtDate(k.thu_du)}</td><td></td>`;
     return `<tr class="cn-form ${k.suaTay ? "r-edited" : ""}" data-loai="ar" data-ma="${esc(c.ma_kh)}" data-ky="${esc(ky)}" data-soct="">
       <td><b>${esc(c.ten)}</b><div class="t2">${esc(c.nhom)} · PM ${esc(c.pm)}${src}</div></td>
       <td class="r num">${tyN(k.so_tien)}</td>
@@ -475,25 +475,23 @@ function tsMain(v: VM): string {
 }
 
 /* ---------- Travel & SaaS › Công nợ (nhập trực tiếp) ---------- */
-/** Kỳ nợ chưa có ngày gửi bảng kê, tới kỳ `den` (gồm cả kỳ đó). Ngày gửi đánh dấu = ngày hóa đơn sớm nhất của kỳ, không có thì ngày đầu tháng sau kỳ */
-export function chuaGuiBK(v: VM, den: string): { ma_kh: string; ky: string; ngay: string }[] {
-  const out: { ma_kh: string; ky: string; ngay: string }[] = [];
+/** Kỳ nợ chưa gửi / chưa đánh dấu gửi bảng kê, tới kỳ `den` (gồm cả kỳ đó) */
+export function chuaGuiBK(v: VM, den: string): { ma_kh: string; ky: string }[] {
+  const out: { ma_kh: string; ky: string }[] = [];
   v.ARC.forEach((c) => c.kys.forEach((k) => {
-    if (k.guiBK || k.tuTao || !(kyIdx(k.ky) <= kyIdx(den))) return;
-    const hd = c.lines.filter((l) => l.ky === k.ky && l.ngay_hd).map((l) => l.ngay_hd as string).sort()[0];
-    const end = kyEnd(k.ky), next = new Date(Date.parse(end + "T00:00:00Z") + 864e5).toISOString().slice(0, 10);
-    out.push({ ma_kh: c.ma_kh, ky: k.ky, ngay: hd || next });
+    if (k.daGui || k.tuTao || !(kyIdx(k.ky) <= kyIdx(den))) return;
+    out.push({ ma_kh: c.ma_kh, ky: k.ky });
   }));
   return out;
 }
 function guiBkCard(v: VM): string {
   if (!v.canEdit) return "";
-  const kys = Array.from(new Set(v.ARC.flatMap((c) => c.kys.filter((k) => !k.guiBK && !k.tuTao).map((k) => k.ky)))).sort((a, b) => kyIdx(b) - kyIdx(a));
+  const kys = Array.from(new Set(v.ARC.flatMap((c) => c.kys.filter((k) => !k.daGui && !k.tuTao).map((k) => k.ky)))).sort((a, b) => kyIdx(b) - kyIdx(a));
   if (!kys.length) return "";
   const def = kys.includes("T10.2026") ? "T10.2026" : kys[0];
   const opts = kys.map((k) => `<option value="${k}"${k === def ? " selected" : ""}>${k} — ${n0(chuaGuiBK(v, k).length)} kỳ khách chưa đánh dấu</option>`).join("");
-  return card("Cập nhật trực tiếp", "Đánh dấu đã gửi bảng kê", "cho các kỳ đang chưa có ngày gửi",
-    `<div class="small" style="margin-bottom:8px">Mọi kỳ nợ từ kỳ chọn trở về trước đang chưa có ngày gửi bảng kê sẽ được đánh dấu đã gửi. Ngày gửi ghi theo ngày hóa đơn sớm nhất của kỳ (không có hóa đơn thì ngày đầu tháng sau kỳ). Kỳ đã có ngày gửi giữ nguyên; sửa từng kỳ ở bảng bên dưới.</div>` +
+  return card("Cập nhật trực tiếp", "Đánh dấu đã gửi bảng kê", "chỉ đánh dấu, không ghi ngày gửi",
+    `<div class="small" style="margin-bottom:8px">Mọi kỳ nợ từ kỳ chọn trở về trước chưa gửi bảng kê sẽ được đánh dấu <b>đã gửi</b>. Không ghi ngày gửi — ngày gửi thực tế nhập tay ở bảng "Bảng kê & tiền thu" bên dưới. Kỳ đã có ngày gửi giữ nguyên.</div>` +
     `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><label class="small" for="guibkKy">Đến hết kỳ</label><select id="guibkKy" class="fld">${opts}</select>` +
     `<button type="button" class="btn primary" data-guibk="1">Đánh dấu đã gửi</button></div>`);
 }
@@ -621,7 +619,7 @@ export function opsDrill(v: VM, key: string): string {
         if (x.tt === "da_thu") { const d = x.thu_du ? Math.round((Date.parse(x.thu_du) - Date.parse(x.den_han)) / 864e5) : null; return d != null && d > 0 ? ` · trả trễ ${n0(d)} ngày` : d != null ? " · đúng hạn" : ""; }
         return x.late > 0 ? ` · trễ ${n0(x.late)} ngày` : "";
       };
-      const body = kys.map((x) => `<tr><td class="num">${esc(x.ky)}</td><td class="num">${x.guiBK ? fmtDate(x.guiBK) : "—"}</td><td class="num">${fmtDate(x.den_han)}</td>` +
+      const body = kys.map((x) => `<tr><td class="num">${esc(x.ky)}</td><td class="num">${x.guiBK ? fmtDate(x.guiBK) : x.daGui ? "đã gửi" : "—"}</td><td class="num">${fmtDate(x.den_han)}</td>` +
         `<td class="r num">${tyN(x.so_tien)}</td><td class="r num">${tyN(x.da_thu)}</td><td class="r num${x.con_lai > 0 && x.tt === "qua_han" ? " c-critical" : ""}">${tyN(x.con_lai)}</td>` +
         `<td>${esc(TT[x.tt] || x.tt)}${lateTxt(x)}</td><td class="num">${x.thu_du ? fmtDate(x.thu_du) : x.thu_gan_nhat ? "gần nhất " + fmtDate(x.thu_gan_nhat) : "—"}</td></tr>`).join("");
       debt = card("Công nợ phải thu", `${esc(ten)} — kỳ còn nợ và 6 kỳ gần nhất`, asOfTxt(v.C),

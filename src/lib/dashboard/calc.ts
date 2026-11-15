@@ -648,7 +648,7 @@ export function customersByGroup(C: Ctx, ky: string, rows: CustRow[]): GroupBloc
 
 /* ---------------- Công nợ phải thu theo khách và theo kỳ ---------------- */
 export interface ArLine {
-  ky: string; so_ct: string | null; guiBK: string | null; ngay_hd: string | null; den_han: string;
+  ky: string; so_ct: string | null; guiBK: string | null; /** đã gửi bảng kê (có ngày gửi hoặc đã đánh dấu) */ daGui: boolean; ngay_hd: string | null; den_han: string;
   so_tien: number; da_thu: number; con_lai: number; thu_du: string | null; thu_gan_nhat: string | null;
   late: number; tt: "da_thu" | "qua_han" | "den_han" | "chua_den_han";
   ngayThuSauHan: number | null;
@@ -656,7 +656,7 @@ export interface ArLine {
 }
 /** Một kỳ nợ của một khách — mức để cập nhật công nợ trên web (không cần xuống từng hóa đơn). */
 export interface ArKy {
-  ky: string; n: number; guiBK: string | null; den_han: string;
+  ky: string; n: number; guiBK: string | null; daGui: boolean; den_han: string;
   so_tien: number; da_thu: number; con_lai: number; thu_du: string | null; thu_gan_nhat: string | null;
   late: number; tt: ArLine["tt"]; nguonBK?: "file" | "web" | "recon"; suaTay: boolean; suaKy: boolean; ghiChu: string | null;
   soCts: string[];
@@ -684,7 +684,7 @@ export function arByCustomer(C: Ctx): ArCust[] {
     const full = r.ngay_thu_du != null && da_thu >= r.so_tien - 1;
     const tt: ArLine["tt"] = full ? "da_thu" : con_lai <= 0 ? "da_thu" : late > 0 ? "qua_han" : late === 0 ? "den_han" : "chua_den_han";
     o.lines.push({
-      ky: r.ky, so_ct: r.so_ct, guiBK: r.ngay_gui_bk ?? null, ngay_hd: r.ngay_hd, den_han: r.ngay_den_han,
+      ky: r.ky, so_ct: r.so_ct, guiBK: r.ngay_gui_bk ?? null, daGui: !!(r.ngay_gui_bk || r.daGui), ngay_hd: r.ngay_hd, den_han: r.ngay_den_han,
       so_tien: r.so_tien, da_thu, con_lai, thu_du: r.ngay_thu_du, thu_gan_nhat: r.ngay_thu_gan_nhat ?? null,
       late, tt, ngayThuSauHan: r.ngay_thu_du ? days(r.ngay_thu_du, r.ngay_den_han) : null,
       nguonBK: r.nguonBK, suaTay: r.suaTay, suaKy: r.suaKy, ghiChu: r.ghi_chu ?? null, tuTao: r.tuTao,
@@ -705,13 +705,14 @@ export function arByCustomer(C: Ctx): ArCust[] {
     const by = new Map<string, ArKy>();
     o.lines.forEach((l) => {
       const k = by.get(l.ky) || {
-        ky: l.ky, n: 0, guiBK: l.guiBK, den_han: l.den_han, so_tien: 0, da_thu: 0, con_lai: 0,
+        ky: l.ky, n: 0, guiBK: l.guiBK, daGui: l.daGui, den_han: l.den_han, so_tien: 0, da_thu: 0, con_lai: 0,
         thu_du: null, thu_gan_nhat: null, late: 0, tt: "chua_den_han" as ArLine["tt"],
         nguonBK: l.nguonBK, suaTay: false, suaKy: false, ghiChu: null, soCts: [], tuTao: true,
       };
       if (!l.tuTao) k.tuTao = false;
       k.n++; k.so_tien += l.so_tien; k.da_thu += l.da_thu; k.con_lai += l.con_lai;
       if (l.guiBK && (!k.guiBK || l.guiBK < k.guiBK)) k.guiBK = l.guiBK;
+      if (l.daGui) k.daGui = true;
       if (l.den_han && (!k.den_han || l.den_han > k.den_han)) k.den_han = l.den_han;
       if (l.thu_gan_nhat && (!k.thu_gan_nhat || l.thu_gan_nhat > k.thu_gan_nhat)) k.thu_gan_nhat = l.thu_gan_nhat;
       if (l.thu_du && (!k.thu_du || l.thu_du > k.thu_du)) k.thu_du = l.thu_du;

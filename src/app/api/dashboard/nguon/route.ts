@@ -18,7 +18,7 @@ type Body =
   | { action: "dm"; rows: DmRow[] }
   | { action: "ar"; kys: string[]; rows: ArRow[]; first: boolean }
   | { action: "rebuild" }
-  | { action: "guibk"; rows: { ma_kh: string; ky: string; ngay: string }[] };
+  | { action: "guibk"; rows: { ma_kh: string; ky: string }[] };
 
 const KY = /^T\d{2}\.\d{4}$/;
 const fail = (error: string, status = 400) => NextResponse.json({ error }, { status });
@@ -89,7 +89,10 @@ export async function POST(req: Request) {
           const r2 = await sb.from("fin_ar_edit").update({ so_tien: null, da_thu: null, ngay_thu_du: null, ngay_thu_gan_nhat: null, ngay_den_han: null, ngay_hd: null, updated_at: now })
             .in("ky", kys).eq("so_ct", "").eq("tu_tao", false);
           chk(r2.error, "Bỏ số tiền sửa tay");
-          const r3 = await sb.from("fin_ar_edit").delete({ count: "exact" }).in("ky", kys).eq("so_ct", "").eq("tu_tao", false).eq("xoa", false).is("ngay_gui_bk", null).is("ghi_chu", null);
+          // dòng rỗng (không còn ngày gửi, ghi chú, cờ đã gửi) thì xóa; chưa chạy migration 32 thì bỏ điều kiện cờ
+          const del = (flag: boolean) => { let q = sb.from("fin_ar_edit").delete({ count: "exact" }).in("ky", kys).eq("so_ct", "").eq("tu_tao", false).eq("xoa", false).is("ngay_gui_bk", null).is("ghi_chu", null); if (flag) q = q.eq("da_gui_bk", false); return q; };
+          let r3 = await del(true);
+          if (r3.error && /da_gui_bk/.test(r3.error.message)) r3 = await del(false);
           chk(r3.error, "Dọn dòng sửa tay rỗng"); suaTay += r3.count || 0;
         }
       }
@@ -99,9 +102,9 @@ export async function POST(req: Request) {
     }
 
     if (b.action === "guibk") {
-      // Đánh dấu đã gửi bảng kê: ghi ngày gửi ở mức kỳ (như sửa ở bảng "Bảng kê & tiền thu"), không đụng các ô khác
-      const rows = (b.rows || []).filter((r) => r.ma_kh && KY.test(r.ky) && /^\d{4}-\d{2}-\d{2}$/.test(r.ngay))
-        .map((r) => ({ ma_kh: r.ma_kh, ky: r.ky, so_ct: "", ngay_gui_bk: r.ngay, updated_by: g.user.email, updated_at: now }));
+      // Đánh dấu đã gửi bảng kê ở mức kỳ — chỉ bật cờ, không ghi ngày gửi, không đụng các ô khác
+      const rows = (b.rows || []).filter((r) => r.ma_kh && KY.test(r.ky))
+        .map((r) => ({ ma_kh: r.ma_kh, ky: r.ky, so_ct: "", da_gui_bk: true, updated_by: g.user.email, updated_at: now }));
       for (let i = 0; i < rows.length; i += 500) { const { error } = await sb.from("fin_ar_edit").upsert(rows.slice(i, i + 500), { onConflict: "ma_kh,ky,so_ct" }); chk(error, "Ghi ngày gửi bảng kê"); }
       return NextResponse.json({ ok: true, written: rows.length });
     }
@@ -109,6 +112,7 @@ export async function POST(req: Request) {
     return fail("Thao tác không hợp lệ");
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
+    if (/da_gui_bk/.test(m)) return fail("Chưa có cột đánh dấu đã gửi bảng kê — chạy supabase/migrations/32_dashboard_da_gui_bk.sql trong Supabase SQL Editor rồi bấm lại.", 500);
     if (/loai_check/.test(m)) return fail("Chưa mở loại bảng kê Be — chạy supabase/migrations/31_dashboard_be.sql trong Supabase SQL Editor rồi nạp lại.", 500);
     if (missing(m)) return fail("Chưa tạo bảng nạp file nguồn — chạy supabase/migrations/30_dashboard_nguon.sql trong Supabase SQL Editor rồi nạp lại. (" + m + ")", 500);
     return fail(m, 500);

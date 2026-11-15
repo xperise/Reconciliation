@@ -17,7 +17,7 @@ export interface GmvRow { ky: string; ma_kh: string; ma_ncc: string | null; dich
   nguon?: string | null;
   /** Dòng nhập tay trên web (không có trong file) */
   tay?: boolean }
-export interface ArRow { ma_kh: string; ky: string; so_ct: string | null; ngay_gui_bk: string | null; ngay_hd: string | null; ngay_den_han: string; so_tien: number; da_thu: number | null; ngay_thu_du: string | null; ngay_thu_gan_nhat: string | null;
+export interface ArRow { ma_kh: string; ky: string; so_ct: string | null; ngay_gui_bk: string | null; /** đã gửi bảng kê (có thể chưa có ngày) */ daGui?: boolean; ngay_hd: string | null; ngay_den_han: string; so_tien: number; da_thu: number | null; ngay_thu_du: string | null; ngay_thu_gan_nhat: string | null;
   /** Nguồn của dòng: file template, sửa tay trên web, hay lấy từ app Reconciliation */
   nguonBK?: "file" | "web" | "recon"; suaTay?: boolean; ghi_chu?: string | null;
   /** Dòng này đang nhận số sửa ở mức KỲ (không phải sửa riêng từng hóa đơn) */
@@ -36,6 +36,8 @@ export interface ArEdit {
   ngay_gui_bk: string | null; ngay_hd: string | null; ngay_den_han: string | null;
   so_tien: number | null; da_thu: number | null; ngay_thu_du: string | null; ngay_thu_gan_nhat: string | null;
   ghi_chu: string | null; tu_tao: boolean; xoa: boolean; updated_by: string | null; updated_at: string;
+  /** Đã gửi bảng kê nhưng chưa nhập ngày gửi */
+  da_gui_bk?: boolean;
 }
 export interface ApEdit {
   ma_ncc: string; ky: string; so_ct: string;

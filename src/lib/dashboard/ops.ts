@@ -342,7 +342,13 @@ export function latestActualKy(C: Ctx): string | null {
 export function dashCtx(D0: DataSet): Ctx {
   const D = mergeEdits(D0);
   const kyLevel = new Map(D0.arEdits.filter((e) => !e.so_ct && !e.tu_tao && !e.xoa && e.ngay_gui_bk).map((e) => [`${e.ma_kh}|${e.ky}`, e.ngay_gui_bk as string]));
-  const ar = kyLevel.size ? D.ar.map((r) => { const g = kyLevel.get(`${r.ma_kh}|${r.ky}`); return g && g !== r.ngay_gui_bk ? { ...r, ngay_gui_bk: g, nguonBK: "web" as const } : r; }) : D.ar;
+  // 3. Kỳ đã đánh dấu "đã gửi bảng kê" (chưa có ngày gửi)
+  const daGui = new Set(D0.arEdits.filter((e) => e.da_gui_bk && !e.xoa).map((e) => `${e.ma_kh}|${e.ky}`));
+  const ar = kyLevel.size || daGui.size ? D.ar.map((r) => {
+    const k = `${r.ma_kh}|${r.ky}`, g = kyLevel.get(k);
+    const o = g && g !== r.ngay_gui_bk ? { ...r, ngay_gui_bk: g, nguonBK: "web" as const } : r;
+    return daGui.has(k) ? { ...o, daGui: true } : o;
+  }) : D.ar;
   const C = makeCtx({ ...D, ar });
   const mobKys = Array.from(new Set((D0.mob?.rows || []).map((r) => kyOfDate(r[0]))));
   const periods = Array.from(new Set([...C.periods, ...mobKys])).filter((k) => ok(kyIdx(k))).sort((a, b) => kyIdx(a) - kyIdx(b));
