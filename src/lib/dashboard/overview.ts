@@ -452,12 +452,12 @@ function tsMain(v: VM): string {
   const restB = [0, 1, 2, 3, 4].map((k) => sum(rest, (c) => c.b[k])), restT = sum(rest, (c) => c.tot), restO = sum(rest, (c) => c.od);
   const custRows = [
     ...top.map((c) => ({ l: c.ten, sub: `${c.g} · PM ${c.pm}`, parts: c.b.map((x, k): [number, string, string] => [x, BCLS[k], AR_BUCKETS[k]]), txt: tyN(c.tot), txt2: `quá hạn ${pc(c.tot ? c.od / c.tot : null, 0)}`, dr: `arcust:${c.ma_kh}` })),
-    ...(rest.length ? [{ l: `Còn lại (${rest.length} khách)`, sub: `${pc(A.tot ? restT / A.tot : null, 0)} tổng dư nợ`, parts: restB.map((x, k): [number, string, string] => [x, BCLS[k], AR_BUCKETS[k]]), txt: tyN(restT), txt2: `quá hạn ${pc(restT ? restO / restT : null, 0)}` }] : []),
+    ...(rest.length ? [{ l: `Còn lại (${rest.length} khách)`, sub: `${pc(A.tot ? restT / A.tot : null, 0)} tổng dư nợ`, parts: restB.map((x, k): [number, string, string] => [x, BCLS[k], AR_BUCKETS[k]]), txt: tyN(restT), txt2: `quá hạn ${pc(restT ? restO / restT : null, 0)}`, dr: "ops-arall:ts:5" }] : []),
   ];
   const custCard = card("Tuổi nợ theo ngày đến hạn", "Dư nợ theo từng khách hàng", unitLabel() + " · 5 khách lớn nhất và còn lại",
     custRows.length ? hStack(custRows, { ft: tr, legend: AR_BUCKETS.map((b, k): LegendItem => [b, BCLS[k]]) }) : empty("Không còn dư nợ"));
   const arPart = !A.count && !v.C.D.ar.length ? `<div class="card notice">Chưa có công nợ phải thu. Upload ở tab Dữ liệu (Tổng quan), hoặc thêm ở tab <a href="#" data-go="congno">Công nợ</a>.</div>` :
-    `<div class="g57">${agingCard}${invCard}</div>${custCard}${arDetailCard(v)}`;
+    `<div class="g57">${agingCard}${invCard}</div>${custCard}<div class="small">Chi tiết từng khách (kỳ nào chưa trả, còn bao nhiêu, trễ mấy ngày) ở tab <a href="#" data-go="congno">Công nợ</a>.</div>`;
 
   /* 3. Công nợ phải trả */
   const { B: P } = apTs(v);
@@ -546,7 +546,7 @@ function apPayCard(v: VM): string {
 function tsCongNo(v: VM): string {
   const { APS } = apTs(v);
   const apAdd = v.canEdit ? card("Cập nhật trực tiếp", "Thêm công nợ phải trả", "upload file sổ phải trả sẽ ghi đè số nhập tay của cùng kỳ", addApForm(v.ky)) : "";
-  return guiBkCard(v) + bangKeCard(v) + apPayCard(v) + apAdd + apSupplierCards({ ...v, APS });
+  return guiBkCard(v) + bangKeCard(v) + arDetailCard(v) + apPayCard(v) + apAdd + apSupplierCards({ ...v, APS });
 }
 
 /* ---------- Phải trả NCC phát sinh theo file đối soát ----------
@@ -593,6 +593,7 @@ const nccBare = (s: string | null | undefined) => String(s || "").replace(/^(hot
 export function opsDrill(v: VM, key: string): string {
   if (key.startsWith("ops-br:")) return opsBridgeDrill(v, key);
   // Tổng quan › tuổi nợ phải thu của từng mảng: cùng khung chi tiết như ở Travel & SaaS, chỉ lấy khách của mảng đó
+  if (key.startsWith("ops-arall:")) return opsArAll(v, key);
   if (key.startsWith("ops-ar:")) { const [, sg, k] = key.split(":"); return drillPanel({ ...v, A: calcAR(segCtx(v.Cc, sg === "m" ? "m" : "ts")) }, `ar:${k}`); }
   const [, segS, dimS, enc] = key.split(":");
   const seg = (segS === "m" ? "m" : "ts") as Seg, dim = (["dv", "kh", "ncc"].includes(dimS) ? dimS : "kh") as Dim;
@@ -723,4 +724,22 @@ export function opsBridgeDrill(v: VM, key: string): string {
   const tbl = pick.length ? `<div class="tw dp-tbl"><table class="cmp"><thead><tr><th>Khách hàng</th><th class="r">${esc(pl)}</th><th class="r">${esc(cl)}</th><th class="r">Thay đổi</th><th class="r">%</th><th>Loại</th></tr></thead><tbody>${body}</tbody></table></div>` : empty("Không có khách nào");
   return `<div class="dp-wrap"><div class="dp-box">${close}<div class="dp-h"><div class="eyebrow">Cầu nối GMV · ${SEG_NAME[seg]}${kind === "g" ? ` · theo ${grpL.toLowerCase()}` : ""}</div><div class="card-title">${esc(title)}</div><div class="small">${winNote(W)} · ${unitLabel()}</div></div>` +
     stats + tbl + `<div class="small" style="margin-top:8px">Bấm một khách để xem GMV theo mảng / NCC và công nợ của khách đó.</div></div></div>`;
+}
+
+/* ---------- Dư nợ theo từng khách: bấm "Còn lại" ra toàn bộ khách (bỏ n khách đầu đã hiện) ---------- */
+function opsArAll(v: VM, key: string): string {
+  const [, sg, skipS] = key.split(":");
+  const seg = (sg === "m" ? "m" : "ts") as Seg, skip = Number(skipS) || 0;
+  const A = seg === "ts" && v.seg === "ts" ? v.A : calcAR(segCtx(v.Cc, seg));
+  const list = A.customers.slice(skip);
+  const close = `<button class="dp-x" data-dpclose="1" aria-label="Đóng"><i class="ri-close-line"></i></button>`;
+  const T = [0, 1, 2, 3, 4].map((k) => sum(list, (c) => c.b[k])), tot = sum(list, (c) => c.tot), od = sum(list, (c) => c.od);
+  const body = list.map((c, i) => `<tr data-drill="${esc(drillKey(seg, "kh", c.ma_kh))}" title="Bấm để xem chi tiết khách"><td class="num">${i + 1 + skip}</td><td>${esc(c.ten)}<div class="t2">${esc(c.g)} · PM ${esc(c.pm)}</div></td>` +
+    c.b.map((x) => `<td class="r num">${x ? tyN(x) : "–"}</td>`).join("") +
+    `<td class="r num"><b>${tyN(c.tot)}</b></td><td class="r num${c.tot && c.od / c.tot > 0.5 ? " c-critical" : ""}">${pc(c.tot ? c.od / c.tot : null, 0)}</td></tr>`).join("");
+  const tbl = `<div class="tw dp-tbl"><table class="cmp"><thead><tr><th>#</th><th>Khách hàng</th>${AR_BUCKETS.map((b) => `<th class="r">${esc(b)}</th>`).join("")}<th class="r">Tổng dư nợ</th><th class="r">Quá hạn</th></tr></thead><tbody>${body}` +
+    `<tr class="tot"><td></td><td>Tổng ${list.length} khách</td>${T.map((x) => `<td class="r num">${tyN(x)}</td>`).join("")}<td class="r num">${tyN(tot)}</td><td class="r num">${pc(tot ? od / tot : null, 0)}</td></tr></tbody></table></div>`;
+  return `<div class="dp-wrap"><div class="dp-box">${close}<div class="dp-h"><div class="eyebrow">Dư nợ theo từng khách · ${SEG_NAME[seg]}</div><div class="card-title">${skip ? `Các khách còn lại (ngoài ${skip} khách lớn nhất)` : "Tất cả khách"}</div><div class="small">${asOfTxt(v.C)} · ${unitLabel()}</div></div>` +
+    `<div class="stat-row">${stat("Số khách", n0(list.length))}${stat("Tổng dư nợ", ty(tot))}${stat("Quá hạn", ty(od), od ? "critical" : "")}</div>` + tbl +
+    `<div class="small" style="margin-top:8px">Bấm một khách để xem chi tiết GMV, kỳ nợ còn lại và ngày thu.</div></div></div>`;
 }
