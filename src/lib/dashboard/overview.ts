@@ -356,7 +356,8 @@ function homeOps(v: VM): string {
 
   /* Cầu nối GMV, Net revenue theo khách, tuổi nợ — mỗi thứ tách Travel & SaaS / Mobility */
   const bridgeCard = (seg: Seg) => {
-    const b = bridgeOf(C, W, seg, seg === "ts" ? (f) => C.cust.get(f.kh)?.pm || "—" : (f) => f.ncc || "—");
+    const b = bridgeOf(C, W, seg, brGroup(C, seg));
+    const br = (x: string) => `ops-br:${seg}:${encodeURIComponent(x)}`;
     const pl = day ? "Hôm qua" : `GMV ${kyShort(kyAdd(W.ky, -1))}`, cl = day ? "Hôm nay" : `GMV ${kyShort(W.ky)}`;
     const title = `Cầu nối GMV ${day ? "hôm qua → hôm nay" : `${kyAdd(W.ky, -1)} → ${W.ky}`}`;
     if (BS[seg].noDaily) return card(`Vì sao GMV ${SEG_NAME[seg]} thay đổi`, title, "", empty(NO_DAILY));
@@ -364,9 +365,9 @@ function homeOps(v: VM): string {
     const grpL = seg === "ts" ? "PM phụ trách" : "đơn vị cung cấp";
     const bars = b.by.filter((x) => Math.abs(x.d) > 0).sort((x, y) => Math.abs(y.d) - Math.abs(x.d)).slice(0, 6).sort((x, y) => x.d - y.d);
     return card(`Vì sao GMV ${SEG_NAME[seg]} thay đổi`, title, unitLabel(), waterfall([
-      { l: pl, v: b.prev, kind: "total" }, { l: `Khách mới (${b.nNew})`, v: b.nw }, { l: `Khách tăng (${b.nUp})`, v: b.up },
-      { l: `Khách giảm (${b.nDown})`, v: b.down }, { l: `Khách ngừng (${b.nLost})`, v: b.lost }, { l: cl, v: b.cur, kind: "total" },
-    ]) + (bars.length ? `<div class="small" style="margin:10px 0 2px">Thay đổi GMV theo ${grpL}</div>` + divBars(bars.map((p) => ({ l: seg === "ts" ? "PM " + p.k : p.k, sub: `${tien(p.a)} → ${tien(p.b)} · ${p.n} khách`, v: p.d, c: p.d < 0 ? "critical" : D("green"), txt: (p.d >= 0 ? "+" : "−") + tien(Math.abs(p.d)) })), Math.max(...bars.map((p) => Math.abs(p.d)), 1)) : ""));
+      { l: pl, v: b.prev, kind: "total", dr: br("c:prev") }, { l: `Khách mới (${b.nNew})`, v: b.nw, dr: br("c:new") }, { l: `Khách tăng (${b.nUp})`, v: b.up, dr: br("c:up") },
+      { l: `Khách giảm (${b.nDown})`, v: b.down, dr: br("c:down") }, { l: `Khách ngừng (${b.nLost})`, v: b.lost, dr: br("c:lost") }, { l: cl, v: b.cur, kind: "total", dr: br("c:cur") },
+    ]) + `<div class="small" style="margin-top:2px">Bấm vào từng cột hoặc từng dòng để xem khách nào.</div>` + (bars.length ? `<div class="small" style="margin:10px 0 2px">Thay đổi GMV theo ${grpL}</div>` + divBars(bars.map((p) => ({ l: seg === "ts" ? "PM " + p.k : p.k, sub: `${tien(p.a)} → ${tien(p.b)} · ${p.n} khách`, v: p.d, c: p.d < 0 ? "critical" : D("green"), txt: (p.d >= 0 ? "+" : "−") + tien(Math.abs(p.d)), dr: br("g:" + p.k) })), Math.max(...bars.map((p) => Math.abs(p.d)), 1)) : ""));
   };
   const nrCard = (seg: Seg) => {
     if (BS[seg].noDaily) return card(`Net revenue theo khách · ${SEG_NAME[seg]}`, "Khách nào mang lại nhiều nhất", "", empty(NO_DAILY));
@@ -374,7 +375,7 @@ function homeOps(v: VM): string {
     const neg = rs.filter((r) => r.nr < 0).slice(-6).reverse(), pos = rs.filter((r) => r.nr >= 0).slice(0, neg.length ? 6 : 10);
     const pick = [...pos, ...neg], rng = Math.max(...pick.map((r) => Math.abs(r.nr)), 1);
     return card(`Net revenue theo khách · ${SEG_NAME[seg]}`, "Khách nào mang lại nhiều nhất", `${unitLabel()} · ${rs.length} khách phát sinh`,
-      pick.length ? divBars(pick.map((r) => ({ l: r.ten, sub: `${r.sub ? r.sub + " · " : ""}GMV ${tien(r.gmv)} · margin ${pc(r.gmvC ? r.nr / r.gmvC : null, 1)}${r.gmv && r.gmvC / r.gmv < 0.995 ? ` · có giá vốn ${pc(r.gmvC / r.gmv, 0)}` : ""}`, v: r.nr, c: r.nr < 0 ? "critical" : D("green"), txt: (r.nr < 0 ? "−" : "") + tien(Math.abs(r.nr)), dr: seg === "ts" ? `cust:${r.k}` : undefined })), rng) : empty("Chưa có GMV trong khoảng đang xem"));
+      pick.length ? divBars(pick.map((r) => ({ l: r.ten, sub: `${r.sub ? r.sub + " · " : ""}GMV ${tien(r.gmv)} · margin ${pc(r.gmvC ? r.nr / r.gmvC : null, 1)}${r.gmv && r.gmvC / r.gmv < 0.995 ? ` · có giá vốn ${pc(r.gmvC / r.gmv, 0)}` : ""}`, v: r.nr, c: r.nr < 0 ? "critical" : D("green"), txt: (r.nr < 0 ? "−" : "") + tien(Math.abs(r.nr)), dr: drillKey(seg, "kh", r.k) })), rng) : empty("Chưa có GMV trong khoảng đang xem"));
   };
   const agingCard = (seg: Seg) => {
     const A = AS[seg];
@@ -589,6 +590,7 @@ const DIM_NAME: Record<Dim, string> = { dv: "Mảng", kh: "Khách hàng", ncc: "
 const nccBare = (s: string | null | undefined) => String(s || "").replace(/^(hotel|flight):/, "");
 
 export function opsDrill(v: VM, key: string): string {
+  if (key.startsWith("ops-br:")) return opsBridgeDrill(v, key);
   const [, segS, dimS, enc] = key.split(":");
   const seg = (segS === "m" ? "m" : "ts") as Seg, dim = (["dv", "kh", "ncc"].includes(dimS) ? dimS : "kh") as Dim;
   const k = decodeURIComponent(enc || "");
@@ -688,4 +690,34 @@ export function opsDrill(v: VM, key: string): string {
   return `<div class="dp-wrap"><div class="dp-box">${close}<div class="dp-h"><div class="eyebrow">${DIM_NAME[dim]} · ${seg === "ts" ? "Travel & SaaS" : "Mobility"}</div><div class="card-title">${esc(ten)}</div><div class="small">${esc(self?.sub || "")}${self?.sub ? " · " : ""}${winNote(W)} · ${unitLabel()}</div></div>` +
     stats + `<div class="g2">${other.map(cross).join("")}</div>` + debt +
     `<div class="small" style="margin-top:8px">Bấm một dòng trong các bảng để chuyển sang chi tiết của khách / NCC / mảng đó.</div></div></div>`;
+}
+
+/* ---------- Bấm cầu nối GMV: danh sách khách của từng cột / nhóm ---------- */
+/** Nhóm của cầu nối: Travel & SaaS theo PM phụ trách, Mobility theo đơn vị cung cấp */
+const brGroup = (C: Ctx, seg: Seg) => (seg === "ts" ? (f: { kh: string }) => C.cust.get(f.kh)?.pm || "—" : (f: { ncc: string }) => f.ncc || "—");
+const BR_L: Record<string, string> = { prev: "GMV kỳ trước", cur: "GMV kỳ này", new: "Khách mới", up: "Khách tăng", down: "Khách giảm", lost: "Khách ngừng" };
+export function opsBridgeDrill(v: VM, key: string): string {
+  const [, segS, enc] = key.split(":");
+  const seg = (segS === "m" ? "m" : "ts") as Seg, sel = decodeURIComponent(enc || "");
+  const C = v.Cc, W = winOf(v), day = W.mode === "ngay", F = facts(C);
+  const b = bridgeOf(C, W, seg, brGroup(C, seg) as never);
+  const [kind, val] = [sel.slice(0, 1), sel.slice(2)];
+  const pick = b.list.filter((x) => (kind === "g" ? x.grp === val : val === "prev" ? x.a !== 0 : val === "cur" ? x.b !== 0 : x.cat === val));
+  pick.sort((x, y) => (val === "prev" ? y.a - x.a : val === "cur" ? y.b - x.b : Math.abs(y.d) - Math.abs(x.d)));
+  const pl = day ? "Hôm qua" : `Kỳ ${kyAdd(W.ky, -1)}`, cl = day ? "Hôm nay" : `Kỳ ${W.ky}`;
+  const grpL = seg === "ts" ? "PM" : "Đơn vị cung cấp";
+  const title = kind === "g" ? `${seg === "ts" ? "PM " : ""}${val}` : BR_L[val] || val;
+  const CAT: Record<string, string> = { new: "Mới", up: "Tăng", down: "Giảm", lost: "Ngừng", same: "Không đổi" };
+  const close = `<button class="dp-x" data-dpclose="1" aria-label="Đóng"><i class="ri-close-line"></i></button>`;
+  const A = sum(pick, (x) => x.a), B = sum(pick, (x) => x.b);
+  const body = pick.map((x) => {
+    const c = C.cust.get(x.k);
+    return `<tr data-drill="${esc(drillKey(seg, "kh", x.k))}" title="Bấm để xem chi tiết khách"><td>${esc(F.names.get(x.k) || x.k)}<div class="t2">${esc([c?.nhom, seg === "ts" ? (c?.pm ? "PM " + c.pm : "") : x.grp].filter(Boolean).join(" · "))}</div></td>` +
+      `<td class="r num">${tyN(x.a)}</td><td class="r num">${tyN(x.b)}</td><td class="r num c-${x.d < 0 ? "critical" : x.d > 0 ? "stable" : "muted"}">${x.d >= 0 ? "+" : "−"}${tyN(Math.abs(x.d))}</td>` +
+      `<td class="r num">${x.a ? dPctTxt(dPct(x.b, x.a)) : "—"}</td><td>${CAT[x.cat]}</td></tr>`;
+  }).join("");
+  const stats = `<div class="stat-row">${stat("Số khách", n0(pick.length))}${stat(pl, ty(A))}${stat(cl, ty(B))}${stat("Thay đổi", `${B - A >= 0 ? "+" : "−"}${tyN(Math.abs(B - A))} ${unit().nhan}`, B - A < 0 ? "critical" : "")}</div>`;
+  const tbl = pick.length ? `<div class="tw dp-tbl"><table class="cmp"><thead><tr><th>Khách hàng</th><th class="r">${esc(pl)}</th><th class="r">${esc(cl)}</th><th class="r">Thay đổi</th><th class="r">%</th><th>Loại</th></tr></thead><tbody>${body}</tbody></table></div>` : empty("Không có khách nào");
+  return `<div class="dp-wrap"><div class="dp-box">${close}<div class="dp-h"><div class="eyebrow">Cầu nối GMV · ${SEG_NAME[seg]}${kind === "g" ? ` · theo ${grpL.toLowerCase()}` : ""}</div><div class="card-title">${esc(title)}</div><div class="small">${winNote(W)} · ${unitLabel()}</div></div>` +
+    stats + tbl + `<div class="small" style="margin-top:8px">Bấm một khách để xem GMV theo mảng / NCC và công nợ của khách đó.</div></div></div>`;
 }

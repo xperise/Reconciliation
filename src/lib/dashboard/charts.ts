@@ -84,7 +84,7 @@ export function lineChart(o: { labels: string[]; series: LineSeries[]; h?: numbe
   return s + `</svg>` + legend(o.series.map((se): LegendItem => [se.name, se.c, 1, true, se.dash]));
 }
 
-export function waterfall(items: { l: string; v: number; kind?: "total" }[]): string {
+export function waterfall(items: { l: string; v: number; kind?: "total"; dr?: string }[]): string {
   const W = 640, H = 250, pl = 50, pr = 8, pt = 14, pb = 44, n = items.length;
   let run = 0;
   const bars = items.map((it) => { if (it.kind === "total") { run = it.v; return { ...it, a: 0, b: it.v }; } const a = run; run += it.v; return { ...it, a, b: run }; });
@@ -95,11 +95,13 @@ export function waterfall(items: { l: string; v: number; kind?: "total" }[]): st
   for (let t = 0; t <= 4; t++) { const v = mn + ((max - mn) * t) / 4; s += `<line class="grid" x1="${pl}" x2="${W - pr}" y1="${y(v)}" y2="${y(v)}"/><text x="${pl - 6}" y="${y(v) + 3}" text-anchor="end">${tm(v)}</text>`; }
   bars.forEach((b, j) => {
     const x = pl + gw * j + (gw - bw) / 2, top = y(Math.max(b.a, b.b)), h = Math.abs(y(b.a) - y(b.b));
+    if (b.dr) s += `<g data-drill="${esc(b.dr)}" class="hit" style="cursor:pointer"><rect x="${pl + gw * j}" y="${pt}" width="${gw}" height="${H - pt}" style="fill:transparent"/>`;
     const c = b.kind === "total" ? (b.b < 0 ? "critical" : "accent") : b.v < 0 ? "critical" : "stable";
     s += `<rect x="${x}" y="${top}" width="${bw}" height="${Math.max(1, h)}" rx="3" style="fill:${col(c)};opacity:${b.kind === "total" ? 1 : 0.75}"><title>${esc(b.l)}: ${tm(b.v)} tr</title></rect>`;
     s += `<text x="${x + bw / 2}" y="${top - 4}" text-anchor="middle" style="fill:var(--ink)">${b.kind === "total" ? tm(b.v) : (b.v < 0 ? "−" : "+") + tm(Math.abs(b.v))}</text>`;
     const words = b.l.split(" "), mid = Math.ceil(words.length / 2);
     s += `<text class="lbl" x="${x + bw / 2}" y="${H - 26}" text-anchor="middle">${esc(words.slice(0, mid).join(" "))}</text><text class="lbl" x="${x + bw / 2}" y="${H - 13}" text-anchor="middle">${esc(words.slice(mid).join(" "))}</text>`;
+    if (b.dr) s += `</g>`;
   });
   return s + `</svg>`;
 }

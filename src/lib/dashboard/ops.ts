@@ -254,22 +254,27 @@ export function topRest(rows: DimRow[], n: number, label = "Còn lại"): DimRow
 }
 
 /* ---------------- Cầu nối GMV theo khách (kỳ trước → kỳ này) ---------------- */
+export type BrCat = "new" | "up" | "down" | "lost" | "same";
 export interface FBridge { prev: number; cur: number; nw: number; up: number; down: number; lost: number; nNew: number; nUp: number; nDown: number; nLost: number;
-  by: { k: string; a: number; b: number; d: number; n: number }[] }
+  by: { k: string; a: number; b: number; d: number; n: number }[];
+  /** từng khách: GMV kỳ trước (a), kỳ này (b), nhóm (PM / đơn vị), loại thay đổi */
+  list: { k: string; a: number; b: number; d: number; grp: string; cat: BrCat }[] }
 export function bridgeOf(C: Ctx, W: Win, seg: Seg, groupBy: (f: Fact) => string): FBridge {
   const per = (fs: Fact[]) => { const m = new Map<string, number>(); fs.forEach((f) => { if (!laTong(f.kh)) m.set(f.kh, (m.get(f.kh) || 0) + f.gmv); }); return m; };
   const cf = windowFacts(C, W, seg, "cur"), pf = windowFacts(C, W, seg, "prev");
   const cur = per(cf), prv = per(pf);
   const grp = new Map<string, string>();
   [...cf, ...pf].forEach((f) => { if (!grp.has(f.kh)) grp.set(f.kh, groupBy(f)); });
-  const o: FBridge = { prev: 0, cur: 0, nw: 0, up: 0, down: 0, lost: 0, nNew: 0, nUp: 0, nDown: 0, nLost: 0, by: [] };
+  const o: FBridge = { prev: 0, cur: 0, nw: 0, up: 0, down: 0, lost: 0, nNew: 0, nUp: 0, nDown: 0, nLost: 0, by: [], list: [] };
   const by = new Map<string, { k: string; a: number; b: number; d: number; n: number }>();
   new Set([...Array.from(cur.keys()), ...Array.from(prv.keys())]).forEach((k) => {
     const a = prv.get(k) || 0, b = cur.get(k) || 0, d = b - a;
     o.prev += a; o.cur += b;
-    if (a <= 0 && b > 0) { o.nw += b; o.nNew++; } else if (a > 0 && b <= 0) { o.lost += d; o.nLost++; }
-    else if (d > 0) { o.up += d; o.nUp++; } else if (d < 0) { o.down += d; o.nDown++; }
+    let cat: BrCat = "same";
+    if (a <= 0 && b > 0) { o.nw += b; o.nNew++; cat = "new"; } else if (a > 0 && b <= 0) { o.lost += d; o.nLost++; cat = "lost"; }
+    else if (d > 0) { o.up += d; o.nUp++; cat = "up"; } else if (d < 0) { o.down += d; o.nDown++; cat = "down"; }
     const gk = grp.get(k) || "—", x = by.get(gk) || { k: gk, a: 0, b: 0, d: 0, n: 0 };
+    o.list.push({ k, a, b, d, grp: gk, cat });
     x.a += a; x.b += b; x.d += d; x.n += b > 0 ? 1 : 0; by.set(gk, x);
   });
   o.by = Array.from(by.values()).sort((x, y) => x.d - y.d);
