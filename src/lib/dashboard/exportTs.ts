@@ -67,7 +67,7 @@ export async function exportTravel(C: Ctx, src: SrcLines): Promise<string> {
     ["GMV_theo_ngay", "GMV, giá vốn theo ngày × khách × NCC × mảng — số dashboard dùng. Net revenue = GMV có giá vốn − giá vốn; Margin = Net revenue ÷ GMV có giá vốn (công thức)"],
     ["Bang_ke_KH", "Dòng gốc bảng kê khách hàng đã nạp: hotel, flight, Transportation (Be). GMV = Tổng thành tiền"],
     ["Gia_von_NCC", "Dòng gốc nguồn giá vốn: đối soát NCC, chi khách sạn trực tiếp B1, giá NCC trên hệ thống. Thứ tự ưu tiên khi nối bảng kê: đối soát → B1 → hệ thống"],
-    ["Cong_no_phai_thu", "Công nợ phải thu khách Travel & SaaS theo hóa đơn, đã gộp số sửa trên web. Còn lại là công thức"],
+    ["Cong_no_phai_thu", "Công nợ phải thu khách Travel & SaaS theo hóa đơn, đã gộp số sửa trên web. Ở kỳ đã có bảng kê: phải thu = GMV bảng kê (quy theo tỷ trọng từng hóa đơn; chưa có hóa đơn thì một dòng không số HĐ), đã thu theo sổ phải thu. Còn lại là công thức"],
     ["Cong_no_phai_tra", "Sổ công nợ phải trả NCC Travel & SaaS (không gồm NCC Mobility)"],
     ["DM_Khach_hang", "Danh mục khách hàng Travel & SaaS"], ["DM_NCC", "Danh mục nhà cung cấp + mã NCC có phát sinh nhưng chưa có trong danh mục"],
     ["Ke_hoach", "Kế hoạch GMV và số khách Travel & SaaS theo kỳ"], ["", ""], ["Tiền", "VND, số gốc không làm tròn"],

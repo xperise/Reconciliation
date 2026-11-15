@@ -444,7 +444,7 @@ function tsMain(v: VM): string {
   ], showVal: true, fv: axisNum, ft: (x) => axisNum(x) + " " + unit().nhan, fy: axisNum, h: 240, W: 560, bw: 34 });
   const balLine = `<div class="small" style="margin-top:6px"><b>Dư nợ cuối tháng:</b> ${IC.months.map((m, i) => `<span class="num${i === IC.months.length - 1 ? " c-critical" : ""}">${fmtDate(kyEnd(m.ky)).slice(0, 5)} ${tyN(m.bal)}</span>`).join(" → ")}${IC.noDate ? ` · ${tien(IC.noDate)} đã thu chưa có ngày thu, chỉ tính vào dồn tích` : ""}</div>`;
   const invCard = card("Xuất hóa đơn & thu tiền", "Đã thu so với đã xuất hóa đơn", unitLabel() + " · theo tháng xuất HĐ / tháng thu", invStats + invChart + balLine);
-  const agingCard = card("Tổng quan", "Công nợ phải thu theo tuổi nợ", asOfTxt(v.C),
+  const agingCard = card("Tổng quan", "Công nợ phải thu theo tuổi nợ", asOfTxt(v.C) + (v.C.D.ar.some((r) => r.theoGmv) ? " · phải thu = GMV bảng kê, đã thu theo sổ phải thu" : ""),
     `<div class="stat-row">${stat("Quá hạn", pc(A.tot ? A.od / A.tot : null), "critical")}${stat("> 60 ngày", ty(A.o60), A.o60 ? "critical" : "")}${stat("DSO", ok(A.dso) ? n0(A.dso) + " ngày" : "—")}${stat("Thu nợ đến hạn", pc(A.collectRate))}</div>` +
     donut(A.bk.map((x, k): [number, string, string, string] => [x, BCLS[k], AR_BUCKETS[k], `ar:${k}`]), ty(A.tot), "tổng phải thu", { ft: ty }) +
     (A.neg ? `<div class="small" style="margin-top:8px">Số dư âm ${tr(A.neg)} (khách trả thừa / chờ cấn trừ) tách riêng, không trừ vào tuổi nợ.</div>` : ""));

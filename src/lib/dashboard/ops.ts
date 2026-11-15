@@ -10,7 +10,8 @@
 //   · Mobility: giao dịch ở tab Mobility (dashboard XPAY). Giá vốn = GMV × (1 − % chiết khấu đơn vị
 //     cung cấp), % cấu hình theo từng đơn vị ở tab Dữ liệu. Chưa có giao dịch thì dùng fin_gmv.
 import type { DataSet } from "./types";
-import { Ctx, num, SEG_DV, Seg, hasActual, laTong, onTimeByGroup, SEG_GROUPS, makeCtx, mergeEdits } from "./calc";
+import { Ctx, num, SEG_DV, Seg, hasActual, laTong, onTimeByGroup, SEG_GROUPS, makeCtx, mergeEdits, segOfCustomer } from "./calc";
+import type { ArRow } from "./types";
 import { kyIdx, kyAdd, kyOfDate, kyEnd, addDays, todayIso, sum, ok } from "./util";
 
 export type Mode = "ky" | "ngay";
@@ -354,8 +355,40 @@ export function dashCtx(D0: DataSet): Ctx {
     const o = g && g !== r.ngay_gui_bk ? { ...r, ngay_gui_bk: g, nguonBK: "web" as const } : r;
     return daGui.has(k) ? { ...o, daGui: true } : o;
   }) : D.ar;
-  const C = makeCtx({ ...D, ar });
+  const C = makeCtx({ ...D, ar: arTheoGmv(D0, { ...D, ar }) });
   const mobKys = Array.from(new Set((D0.mob?.rows || []).map((r) => kyOfDate(r[0]))));
   const periods = Array.from(new Set([...C.periods, ...mobKys])).filter((k) => ok(kyIdx(k))).sort((a, b) => kyIdx(a) - kyIdx(b));
   return { ...C, periods };
+}
+
+/* ---------------- Phải thu Travel theo GMV ----------------
+   Với khách Travel & SaaS, ở các kỳ đã có bảng kê khách hàng (fin_gmv nguon 'bk'):
+     · phải thu của khách × kỳ = GMV bảng kê (Tổng thành tiền) các mảng Travel & SaaS của kỳ đó;
+     · đã thu, ngày thu, số hóa đơn, ngày hóa đơn, ngày đến hạn vẫn theo sổ công nợ phải thu.
+   Có hóa đơn trong sổ: phải thu từng hóa đơn quy theo tỷ trọng để tổng bằng GMV.
+   Chưa có hóa đơn (vd. kỳ chưa xuất): thêm một dòng phải thu, đến hạn = cuối kỳ + credit term.
+   Kỳ có số phải thu sửa tay trên web thì giữ số sửa tay. Kỳ chưa có bảng kê thì giữ số trong sổ. */
+function arTheoGmv(D0: DataSet, D: DataSet): ArRow[] {
+  const bkKy = new Set(D.gmv.filter((r) => r.nguon === "bk").map((r) => r.ky));
+  if (!bkKy.size) return D.ar;
+  const isTs = (ma: string) => segOfCustomer(D, ma) === "ts";
+  const gmv = new Map<string, number>();
+  D.gmv.forEach((r) => { if (bkKy.has(r.ky) && SEG_DV.ts.includes(r.dich_vu) && isTs(r.ma_kh)) { const k = `${r.ma_kh}|${r.ky}`; gmv.set(k, (gmv.get(k) || 0) + r.gmv); } });
+  const suaTien = new Set(D0.arEdits.filter((e) => e.so_tien != null && !e.xoa).map((e) => `${e.ma_kh}|${e.ky}`));
+  const fileTot = new Map<string, number>();
+  D.ar.forEach((r) => { const k = `${r.ma_kh}|${r.ky}`; if (gmv.has(k)) fileTot.set(k, (fileTot.get(k) || 0) + r.so_tien); });
+  const out: ArRow[] = D.ar.map((r) => {
+    const k = `${r.ma_kh}|${r.ky}`, g = gmv.get(k), t = fileTot.get(k);
+    if (g == null || suaTien.has(k) || !t) return r;
+    const so_tien = Math.round((r.so_tien * g) / t), da = r.da_thu || 0;
+    return { ...r, so_tien, theoGmv: true, ngay_thu_du: da >= so_tien - 1 ? r.ngay_thu_du || r.ngay_thu_gan_nhat : null };
+  });
+  const cust = new Map(D.customers.map((c) => [c.ma_kh, c]));
+  gmv.forEach((g, k) => {
+    if (fileTot.get(k) || suaTien.has(k) || Math.abs(g) < 1) return;
+    const [ma_kh, ky] = k.split("|");
+    const term = Number(cust.get(ma_kh)?.credit_term ?? 0) || 0;
+    out.push({ ma_kh, ky, so_ct: null, ngay_gui_bk: null, ngay_hd: null, ngay_den_han: addDays(kyEnd(ky), term), so_tien: Math.round(g), da_thu: 0, ngay_thu_du: null, ngay_thu_gan_nhat: null, theoGmv: true } as ArRow);
+  });
+  return out;
 }
