@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminClient, guard, fetchAll } from "@/lib/dashboard/server";
 import type { KhRow, NccRow, ArRow, DmRow } from "@/lib/dashboard/sources";
+import { inferNcc } from "@/lib/dashboard/sources";
 import { kyEnd, addDays } from "@/lib/dashboard/util";
 
 export const dynamic = "force-dynamic";
@@ -147,6 +148,16 @@ async function rebuild(sb: Sb) {
     fetchAll<Kh>("fin_src_kh", "id"), fetchAll<Ncc>("fin_src_ncc", "id"),
     fetchAll<{ ma_kh: string; so_ct: string | null }>("fin_ar", "id"), fetchAll<{ ma_kh: string; ten_kh: string; ten_viet_tat: string | null }>("fin_customers"),
   ]);
+  // Dòng đối soát chưa có NCC (thiếu trong hệ thống): suy NCC theo sheet bảng kê NCC trong cùng file, lưu lại vào bảng
+  const inf = inferNcc(ncc.filter((n) => !(n.khop || "").startsWith("HT:") && !(n.khop || "").startsWith("B1:")), (n) => (n as Ncc & { file_key?: string }).file_key || "");
+  const nccSuy = new Map<string, number[]>();
+  inf.forEach((v, n) => { n.ncc = v; const a = nccSuy.get(v) || []; a.push(n.id); nccSuy.set(v, a); });
+  for (const [v, ids] of Array.from(nccSuy.entries())) {
+    for (let i = 0; i < ids.length; i += 500) {
+      const { error } = await sb.from("fin_src_ncc").update({ ncc: v, nganh: v.startsWith("hotel:") ? "Hotel" : v.startsWith("flight:") ? "Flight" : null }).in("id", ids.slice(i, i + 500));
+      chk(error, "Gán NCC cho dòng thiếu trong hệ thống");
+    }
+  }
   if (!kh.length) return { ok: true, kys: [], rows: 0, note: "Chưa có bảng kê khách hàng nào" };
 
   /* --- khách hàng --- */

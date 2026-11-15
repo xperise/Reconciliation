@@ -183,6 +183,9 @@ function readNcc(f: SrcFile, rows: Cell[][], H: Hdr): SrcFile {
     out.push({ ncc, nganh, ma_booking: txt(g(r, c.bk)), so_ve: ve ? ve.split(/[\r\n]+/)[0].trim() || null : null, khach: txt(g(r, c.khach)), ngay_dv: d, ky: d ? kyOf(d) : null,
       bang_ke: bke, ledger: led, khop: txt(g(r, c.khop)), xu_ly: txt(g(r, c.xl)), mo_ta: txt(g(r, c.mo)), dong: txt(g(r, c.dong)) });
   });
+  // NCC trống (dòng thiếu trong hệ thống): suy theo sheet bảng kê NCC
+  const inf = inferNcc(out, () => "");
+  inf.forEach((n, r) => { r.ncc = n; r.nganh = n.startsWith("hotel:") ? "Hotel" : n.startsWith("flight:") ? "Flight" : r.nganh; r.mo_ta = [r.mo_ta, `NCC suy theo sheet bảng kê ${String(r.dong || "").split("!")[0]}`].filter(Boolean).join(" · "); });
   f.ncc = out; f.rows = out.length;
   summarize(f, out.map((r) => r.ngay_dv), out.reduce((s, r) => s + (r.khop?.startsWith("Trùng") ? 0 : r.bang_ke || 0), 0));
   const nccs = Array.from(new Set(out.map((r) => r.ncc).filter(Boolean)));
@@ -190,7 +193,8 @@ function readNcc(f: SrcFile, rows: Cell[][], H: Hdr): SrcFile {
   const cnt = (k: string) => out.filter((r) => r.khop === k).length;
   f.notes.push(`Khớp ${cnt("Khớp")} · lệch tiền ${cnt("Lệch tiền")} · thiếu trong hệ thống ${cnt("Thiếu trong hệ thống")} · trùng ${out.filter((r) => r.khop?.startsWith("Trùng")).length}`);
   const noNcc = out.filter((r) => !r.ncc);
-  if (noNcc.length) f.warns.push(`${noNcc.length} dòng chưa có NCC (thường là dòng "Thiếu trong hệ thống") — tính vào phải trả nhóm "Chưa rõ NCC"`);
+  if (inf.size) f.notes.push(`${inf.size} dòng thiếu NCC đã gán NCC theo sheet bảng kê NCC`);
+  if (noNcc.length) f.warns.push(`${noNcc.length} dòng không suy được NCC (sheet bảng kê không có dòng nào đã gán NCC) — tính vào phải trả nhóm "Chưa rõ NCC"`);
   f.notes.push(`Nạp lại file cùng kỳ đối soát sẽ thay dữ liệu cũ của file này`);
   return f;
 }
@@ -349,4 +353,27 @@ function readAR(f: SrcFile, rows: Cell[][], kh: Cell[][], existing: Customer[]):
   if (noKy) f.warns.push(`${noKy} dòng không đọc được kỳ nợ phát sinh — bỏ qua`);
   if (bad) f.warns.push(`${bad} dòng thiếu ngày đến hạn — bỏ qua`);
   return f;
+}
+
+/** Dòng "Thiếu trong hệ thống" thường để trống cột NCC. Suy NCC theo sheet của bảng kê NCC ghi ở cột "Dòng bảng kê"
+ *  (vd. "HOTEL-DOM!57"): trong cùng một file, sheet đó thuộc NCC nào ở các dòng đã có NCC thì gán NCC đó
+ *  (lấy NCC chiếm đa số, chỉ khi chiếm ≥ 60%). Trả về id/chỉ số dòng → NCC suy ra. */
+export function inferNcc<T extends { ncc: string | null; dong: string | null }>(rows: T[], fileOf: (r: T) => string): Map<T, string> {
+  const sheet = (r: T) => String(r.dong || "").split(",")[0].split("!")[0].trim();
+  const vote = new Map<string, Map<string, number>>();
+  rows.forEach((r) => {
+    if (!r.ncc) return;
+    const k = fileOf(r) + "|" + sheet(r), v = vote.get(k) || new Map<string, number>();
+    r.ncc.split(",").forEach((n) => { const x = n.trim(); if (x) v.set(x, (v.get(x) || 0) + 1); });
+    vote.set(k, v);
+  });
+  const out = new Map<T, string>();
+  rows.forEach((r) => {
+    if (r.ncc || !sheet(r)) return;
+    const v = vote.get(fileOf(r) + "|" + sheet(r));
+    if (!v) return;
+    const tot = Array.from(v.values()).reduce((a, b) => a + b, 0), best = Array.from(v.entries()).sort((a, b) => b[1] - a[1])[0];
+    if (best && best[1] / tot >= 0.6) out.set(r, best[0]);
+  });
+  return out;
 }
