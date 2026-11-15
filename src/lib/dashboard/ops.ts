@@ -157,19 +157,40 @@ function avgSum(C: Ctx, W: Win, seg: Seg): Sum {
 
 /* ---------------- Kế hoạch ---------------- */
 export interface Plan { gmv: number; nr: number; kh: number }
-export function planOf(C: Ctx, seg: Seg | null, ky: string): Plan {
+/** Tỷ lệ chiết khấu NCC Mobility bình quân theo cơ cấu đơn vị đã phát sinh trong kỳ (chưa có thì lấy mặc định) */
+function mobRate(C: Ctx, ky: string): number {
+  const cfg = mobCfg(C.D), fs = facts(C).all.filter((f) => f.seg === "m" && f.dv === "Mobility" && f.ky === ky && f.gmv > 0);
+  const g = sum(fs, (f) => f.gmv);
+  return g ? sum(fs, (f) => f.gmv - f.gv) / g : cfg.def;
+}
+/** Kế hoạch Mobility lấy theo tab Mobility (kế hoạch ngày đã thay theo lộ trình). day: chỉ một ngày; không có: cả kỳ.
+ *  GMV = tổng kế hoạch các ngày; khách active = DN active 30 ngày kế hoạch ở ngày cuối kỳ. Không có kế hoạch tab → null */
+function mobTabPlan(C: Ctx, ky: string, day?: string): { gmv: number; kh: number } | null {
+  const P = C.D.mob?.plan;
+  if (!P || !P.length) return null;
+  const ds = P.filter(([d]) => (day ? d === day : kyOfDate(d) === ky));
+  if (!ds.length) return null;
+  return { gmv: sum(ds, (p) => p[1]), kh: ds[ds.length - 1][2] };
+}
+export function planOf(C: Ctx, seg: Seg | null, ky: string, day?: string): Plan {
   const D = C.D, T = D.targets.find((t) => t.ky === ky);
-  if (!T) return { gmv: 0, nr: 0, kh: 0 };
+  const mp = seg !== "ts" ? mobTabPlan(C, ky, day) : null;
+  if (!T && !mp) return { gmv: 0, nr: 0, kh: 0 };
+  const nd = day ? daysIn(ky) : 1;
+  if (!T) { const m: Plan = { gmv: mp!.gmv, nr: mp!.gmv * mobRate(C, ky), kh: day ? 0 : mp!.kh }; return m; }
   const n = (v: number | null | undefined) => Number(v || 0), tm = (k: string) => num(D, k);
   const ts: Plan = { gmv: n(T.gmv_hotel) + n(T.gmv_flight) + n(T.gmv_saas_t) + n(T.gmv_fnb),
     nr: n(T.gmv_hotel) * tm("target_margin_hotel") + n(T.gmv_flight) * tm("target_margin_flight") + n(T.gmv_saas_t) * tm("target_margin_saas") + n(T.gmv_fnb) * tm("target_margin_fnb"),
     kh: n(T.kh_n1) };
-  const mobG = n(T.gmv_n2) + n(T.gmv_n3) + n(T.gmv_n4) + n(T.gmv_n5);
-  const m: Plan = { gmv: mobG + n(T.gmv_saas_m), nr: mobG * tm("target_margin_mobility") + n(T.gmv_saas_m) * tm("target_margin_saas"),
-    kh: n(T.kh_n2) + n(T.kh_n3) + n(T.kh_n4) + n(T.kh_n5) };
-  if (seg === "ts") return ts;
+  // Mobility: kế hoạch tab Mobility nếu có; SaaS Mobility vẫn theo kế hoạch trong file
+  const mobG = mp ? mp.gmv : (n(T.gmv_n2) + n(T.gmv_n3) + n(T.gmv_n4) + n(T.gmv_n5)) / nd;
+  const saasM = n(T.gmv_saas_m) / nd;
+  const m: Plan = { gmv: mobG + saasM, nr: mobG * (mp ? mobRate(C, ky) : tm("target_margin_mobility")) + saasM * tm("target_margin_saas"),
+    kh: day ? 0 : mp ? mp.kh : n(T.kh_n2) + n(T.kh_n3) + n(T.kh_n4) + n(T.kh_n5) };
+  const tsP: Plan = day ? { gmv: ts.gmv / nd, nr: ts.nr / nd, kh: 0 } : ts;
+  if (seg === "ts") return tsP;
   if (seg === "m") return m;
-  return { gmv: ts.gmv + m.gmv, nr: ts.nr + m.nr, kh: ts.kh + m.kh };
+  return { gmv: tsP.gmv + m.gmv, nr: tsP.nr + m.nr, kh: tsP.kh + m.kh };
 }
 export const daysIn = (ky: string) => Number(kyEnd(ky).slice(8, 10));
 
@@ -195,8 +216,8 @@ export function block(C: Ctx, W: Win, seg: Seg | null): Block {
     const kh = (w: "cur" | "prev") => new Set(segs.flatMap((s) => windowFacts(C, W, s, w)).filter((f) => f.gmv > 0 && !laTong(f.kh)).map((f) => f.kh)).size;
     cur = { ...cur, kh: kh("cur") }; prev = { ...prev, kh: kh("prev") };
   }
-  const pk = planOf(C, seg, W.ky);
-  const plan = W.mode === "ngay" ? { gmv: pk.gmv / daysIn(W.ky), nr: pk.nr / daysIn(W.ky), kh: 0 } : pk;
+  // chế độ ngày: Travel & SaaS chia đều kế hoạch tháng; Mobility lấy đúng kế hoạch của ngày đó ở tab Mobility
+  const plan = planOf(C, seg, W.ky, W.mode === "ngay" ? W.ngay : undefined);
   const noDaily = W.mode === "ngay" && !segs.some((s) => F.daily[s]);
   let carried: string | null = null;
   if (W.mode === "ngay" && segs.includes("ts") && F.daily.ts) { const d = dayFacts(C, "ts", W.ngay).from; if (d && d !== W.ngay) carried = d; }

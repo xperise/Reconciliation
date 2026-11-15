@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { fetchAll, guard, EDIT_ROLES, adminClient } from "@/lib/dashboard/server";
 import type { BangKe, Customer, MobAgg, MobDay, SrcSum } from "@/lib/dashboard/types";
+import { mobEffectivePlan } from "@/lib/dashboard/mobPlan";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -67,9 +68,9 @@ const MOB_MERGE: Record<string, string> = { "26000055": "20000020", "26000034": 
 const MOB_UNK = "(Chưa rõ đơn vị)";
 async function mobAgg(): Promise<MobAgg | null> {
   try {
-    const { data, error } = await adminClient().from("mob_state").select("tx:data->tx, merge:data->merge, updated_at").eq("id", "main").maybeSingle();
+    const { data, error } = await adminClient().from("mob_state").select("tx:data->tx, merge:data->merge, plan:data->plan, updated_at").eq("id", "main").maybeSingle();
     if (error || !data) return null;
-    const d = data as { tx: unknown; merge: unknown; updated_at: string | null };
+    const d = data as { tx: unknown; merge: unknown; plan: unknown; updated_at: string | null };
     const tx = Array.isArray(d.tx) ? (d.tx as unknown[][]) : [];
     const merge: Record<string, string> = { ...MOB_MERGE };
     if (d.merge && typeof d.merge === "object") for (const [a, b] of Object.entries(d.merge as Record<string, unknown>)) if (typeof b === "string" && a !== b) merge[a] = b;
@@ -87,7 +88,7 @@ async function mobAgg(): Promise<MobAgg | null> {
       const k = `${day}|${key}|${u}`, r = by.get(k);
       if (r) { r[3] += amt; r[4]++; } else by.set(k, [day, key, u, amt, 1]);
     }
-    return { rows: Array.from(by.values()), names, units: Array.from(units).sort(), updated_at: d.updated_at };
+    return { rows: Array.from(by.values()), names, units: Array.from(units).sort(), updated_at: d.updated_at, plan: mobEffectivePlan(d.plan) };
   } catch {
     return null; // chưa có bảng mob_state → Tổng quan dùng số Mobility trong fin_gmv
   }

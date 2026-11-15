@@ -51,7 +51,9 @@ export interface BangKe { gui: string | null; chot: string | null; status: strin
 
 /** Giao dịch Mobility đã gộp theo ngày × doanh nghiệp × đơn vị cung cấp: [ngày, mã DN, đơn vị, GMV, số giao dịch] */
 export type MobDay = [string, string, string, number, number];
-export interface MobAgg { rows: MobDay[]; names: Record<string, string>; units: string[]; updated_at: string | null }
+export interface MobAgg { rows: MobDay[]; names: Record<string, string>; units: string[]; updated_at: string | null;
+  /** Kế hoạch theo ngày của tab Mobility (đã thay theo lộ trình): [ngày, GMV, DN active 30 ngày] */
+  plan?: [string, number, number][] }
 
 /** Tổng hợp file nguồn đã nạp (fin_src_kh, fin_src_ncc) */
 export interface SrcKhSum { loai: string; ky: string; n: number; gmv: number; from: string; to: string; at: string }
