@@ -384,7 +384,7 @@ function homeOps(v: VM): string {
       `<div class="stat-row">${stat("Quá hạn", pc(A.tot ? A.od / A.tot : null, 0), A.tot && A.od / A.tot > 0.25 ? "critical" : "")}${stat("> 60 ngày", ty(A.o60), A.o60 ? "critical" : "")}${stat("DSO", ok(A.dso) ? n0(A.dso) + " ngày" : "—")}</div>` +
       donut(A.bk.map((x, k): [number, string, string, string] => [x, BCLS[k], AR_BUCKETS[k], `ops-ar:${seg}:${k}`]), ty(A.tot), "tổng phải thu", { ft: ty, size: 140 }));
   };
-  return cmpCard +
+  return sumHome(v) + cmpCard +
     `<div class="g2">${bridgeCard("ts")}${bridgeCard("m")}</div>` +
     `<div class="g2">${nrCard("ts")}${nrCard("m")}</div>` +
     `<div class="g2">${agingCard("ts")}${agingCard("m")}</div>`;
@@ -474,7 +474,7 @@ function tsMain(v: VM): string {
     card("Kỳ hạn thực hưởng", "DPO thực tế so với payment term hợp đồng", "vạch = term HĐ", term + legend([["Trả sớm hơn HĐ > 4 ngày", "watch"], ["Đúng lịch", "stable"], ["Trễ hạn", "high"], ["Term hợp đồng", "ink", 1, true]]));
 
   const sec = (t: string) => `<div class="sec-h">${esc(t)}</div>`;
-  return sales + sec("Công nợ khách hàng") + arPart + sec("Công nợ phải trả") + apDsCard(v, W) + apPart;
+  return sumTs(v) + sales + sec("Công nợ khách hàng") + arPart + sec("Công nợ phải trả") + apDsCard(v, W) + apPart;
 }
 
 /* ---------- Travel & SaaS › Công nợ (nhập trực tiếp) ---------- */
@@ -547,7 +547,7 @@ function apPayCard(v: VM): string {
 function tsCongNo(v: VM): string {
   const { APS } = apTs(v);
   const apAdd = v.canEdit ? card("Cập nhật trực tiếp", "Thêm công nợ phải trả", "upload file sổ phải trả sẽ ghi đè số nhập tay của cùng kỳ", addApForm(v.ky)) : "";
-  return guiBkCard(v) + bangKeCard(v) + arDetailCard(v) + apPayCard(v) + apAdd + apSupplierCards({ ...v, APS });
+  return sumCongNo(v) + guiBkCard(v) + bangKeCard(v) + arDetailCard(v) + apPayCard(v) + apAdd + apSupplierCards({ ...v, APS });
 }
 
 /* ---------- Phải trả NCC phát sinh theo file đối soát ----------
@@ -761,3 +761,120 @@ function opsArAll(v: VM, key: string): string {
     `<div class="stat-row">${stat("Số khách", n0(list.length))}${stat("Tổng dư nợ", ty(tot))}${stat("Quá hạn", ty(od), od ? "critical" : "")}</div>` + tbl +
     `<div class="small" style="margin-top:8px">Bấm một khách để xem chi tiết GMV, kỳ nợ còn lại và ngày thu.</div></div></div>`;
 }
+
+/* ==========================================================================
+   TÓM TẮT ĐIỀU HÀNH — đầu mỗi tab. Câu chữ sinh từ số liệu: chỉ số chính, và rủi ro công nợ
+   nằm ở đâu (nhóm khách, PM, nhà cung cấp).
+   ========================================================================== */
+type Pt = [string, string];
+function band(eyebrow: string, lead: string, pts: Pt[]): string {
+  if (!lead && !pts.length) return "";
+  return `<div class="card banner sub"><div class="eyebrow">${esc(eyebrow)}</div>` + (lead ? `<p>${esc(lead)}</p>` : "") +
+    (pts.length ? `<ul class="band-list">${pts.map(([t, c]) => `<li class="bl-${c}">${esc(t)}</li>`).join("")}</ul>` : "") + `</div>`;
+}
+const tt = (x: number) => `${tyN(x)} ${unit().nhan}`;
+const sevPlan = (x: number | null) => (x == null ? "neutral" : x >= 1 ? "stable" : x >= 0.9 ? "watch" : x >= 0.7 ? "high" : "critical");
+const dWord = (a: number, b: number) => (b ? `${a >= b ? "tăng" : "giảm"} ${pc(Math.abs(a - b) / Math.abs(b), 0)}` : "");
+
+/** Câu GMV / Net revenue / margin của một khối số liệu */
+function leadOf(name: string, B: Block, W: Win): string {
+  if (B.noDaily) return `${name}: chưa có số theo ngày.`;
+  const cmp = W.mode === "ngay" ? B.avg : B.prev, cmpL = W.mode === "ngay" ? "TB 7 ngày" : W.prevL;
+  const parts = [`GMV ${tt(B.cur.gmv)}`];
+  if (B.plan.gmv) parts.push(`đạt ${pc(B.cur.gmv / B.plan.gmv, 0)} kế hoạch`);
+  if (cmp && cmp.gmv) parts.push(`${dWord(B.cur.gmv, cmp.gmv)} so ${cmpL}`);
+  const m = mgOf(B.cur);
+  return `${name}: ${parts.join(", ")}; Net revenue ${tt(B.cur.nr)}, margin ${pc(m, 2)}.`;
+}
+
+/** Rủi ro phải thu: quá hạn tập trung ở nhóm khách nào, PM nào */
+function arRisk(C: Ctx, A: ReturnType<typeof calcAR>, label: string, byGroup: boolean): Pt[] {
+  const out: Pt[] = [];
+  if (!A.tot) return out;
+  const odPct = A.od / A.tot;
+  out.push([`${label}: còn phải thu ${tt(A.tot)}, quá hạn ${tt(A.od)} (${pc(odPct, 0)})${A.o60 ? `, trong đó trên 60 ngày ${tt(A.o60)}` : ""}${ok(A.dso) ? ` · DSO ${n0(A.dso)} ngày` : ""}.`, odPct > 0.4 ? "critical" : odPct > 0.25 ? "high" : "watch"]);
+  const cs = (byGroup ? groupArCustomers(C, A.customers) : A.customers).filter((c) => c.od > 0).sort((a, b) => b.od - a.od);
+  if (cs.length && A.od) {
+    const top = cs.slice(0, 3), share = sum(top, (c) => c.od) / A.od;
+    out.push([`Quá hạn tập trung ở ${top.map((c) => `${c.ten} ${tt(c.od)}${c.pm && c.pm !== "—" ? ` (PM ${c.pm})` : ""}`).join(", ")} — ${pc(share, 0)} số quá hạn.`, share > 0.6 ? "critical" : "high"]);
+    // PM theo nhóm (Master Data) khi hiển thị theo nhóm
+    const byPm = new Map<string, number>();
+    cs.forEach((c) => { const k = c.pm && c.pm !== "—" ? c.pm : "Chưa có PM"; byPm.set(k, (byPm.get(k) || 0) + c.od); });
+    const pms = Array.from(byPm.entries()).sort((a, b) => b[1] - a[1]);
+    if (pms.length) out.push([`Theo PM: ${pms.slice(0, 4).map(([k, x]) => `${k} ${tt(x)} (${pc(x / A.od, 0)})`).join(" · ")}.`, "neutral"]);
+  }
+  return out;
+}
+/** Rủi ro phải trả: còn phải trả, quá hạn, NCC nào */
+function apRisk(v: VM): Pt[] {
+  const { B } = apTs(v);
+  if (!B.out) return [];
+  const top = B.rows.filter((r) => r.od > 0).sort((a, b) => b.od - a.od).slice(0, 3);
+  const out: Pt[] = [[`Phải trả NCC: còn ${tt(B.out)}, quá hạn ${tt(B.od)}${B.d7 + B.d15 ? `, đến hạn trong 15 ngày ${tt(B.d7 + B.d15)}` : ""}.`, B.od > B.out * 0.3 ? "high" : "watch"]];
+  if (top.length) out.push([`Quá hạn trả nhiều nhất: ${top.map((r) => `${r.ten} ${tt(r.od)}`).join(", ")}${B.rows.some((r) => !r.term) ? " (một số NCC chưa có payment term nên đến hạn tính ngay cuối kỳ)" : ""}.`, "high"]);
+  return out;
+}
+
+function sumHome(v: VM): string {
+  const C = v.Cc, W = winOf(v);
+  const BA = block(C, W, null), BT = block(C, W, "ts"), BM = block(C, W, "m");
+  const pts: Pt[] = [];
+  const pTs = BT.plan.gmv ? BT.cur.gmv / BT.plan.gmv : null, pM = BM.plan.gmv ? BM.cur.gmv / BM.plan.gmv : null;
+  if (!BT.noDaily) pts.push([`Travel & SaaS: GMV ${tt(BT.cur.gmv)}${pTs != null ? ` (${pc(pTs, 0)} kế hoạch)` : ""}, margin ${pc(mgOf(BT.cur), 2)}, ${n0(BT.cur.kh)} khách.`, sevPlan(pTs)]);
+  if (!BM.noDaily && (BM.cur.gmv || BM.plan.gmv)) pts.push([`Mobility: GMV ${tt(BM.cur.gmv)}${pM != null ? ` (${pc(pM, 0)} kế hoạch)` : ""}, margin ${pc(mgOf(BM.cur), 2)}, ${n0(BM.cur.kh)} khách.`, sevPlan(pM)]);
+  // biến động lớn nhất theo khách
+  if (W.mode === "ky") {
+    const b = bridgeOf(C, W, "ts", (f) => custInfo(C, f.kh).pm || "—");
+    const down = b.list.filter((x) => x.d < 0).sort((a, b2) => a.d - b2.d).slice(0, 2);
+    if (down.length && b.cur < b.prev) pts.push([`GMV Travel & SaaS giảm ${tt(b.prev - b.cur)} so ${W.prevL}, giảm nhiều nhất ở ${down.map((x) => `${custInfo(C, x.k).ten} (−${tt(-x.d)})`).join(", ")}.`, "high"]);
+  }
+  const cv = covOf(BT.cur);
+  if (!BT.noDaily && cv != null && cv < 0.95) pts.push([`Giá vốn Travel & SaaS mới có cho ${pc(cv, 0)} GMV — Net revenue / margin còn thiếu phần chưa có giá vốn.`, "watch"]);
+  pts.push(...arRisk(C, calcAR(segCtx(C, "ts")), "Phải thu Travel & SaaS", true));
+  const AM = calcAR(segCtx(C, "m"));
+  if (AM.tot) pts.push(...arRisk(C, AM, "Phải thu Mobility", false).slice(0, 2));
+  pts.push(...apRisk(v));
+  return band("Tóm tắt điều hành", leadOf(W.mode === "ngay" ? `Ngày ${fmtDate(W.ngay)}` : `Kỳ ${W.curL}`, BA, W), pts);
+}
+
+function sumTs(v: VM): string {
+  const C = v.Cc, W = winOf(v), B = block(C, W, "ts");
+  const pts: Pt[] = [];
+  if (!B.noDaily) {
+    // theo mảng: đạt kế hoạch, thay đổi
+    const T = C.D.targets.find((t) => t.ky === W.ky);
+    const planDv: Record<string, number> = T ? { Hotel: Number(T.gmv_hotel || 0), Flight: Number(T.gmv_flight || 0), SaaS: Number(T.gmv_saas_t || 0), "F&B": Number(T.gmv_fnb || 0) } : {};
+    const dvs = byDim(C, W, "ts", "dv");
+    if (dvs.length) pts.push([`Theo mảng: ${dvs.map((r) => { const p = W.mode === "ky" ? planDv[r.k] : 0; return `${r.ten} ${tt(r.cur.gmv)}${p ? ` (${pc(r.cur.gmv / p, 0)} KH)` : ""}, margin ${pc(mgOf(r.cur), 1)}`; }).join(" · ")}.`, "neutral"]);
+    const ks = byDim(C, W, "ts", "kh"), tot = sum(ks, (r) => r.cur.gmv);
+    if (ks.length && tot) {
+      const t3 = sum(ks.slice(0, 3), (r) => r.cur.gmv) / tot;
+      pts.push([`${n0(ks.filter((r) => r.cur.gmv > 0).length)} khách phát sinh; 3 khách lớn nhất (${ks.slice(0, 3).map((r) => r.ten).join(", ")}) chiếm ${pc(t3, 0)} GMV.`, t3 > 0.6 ? "high" : "neutral"]);
+      const neg = ks.filter((r) => r.cur.nr < 0).sort((a, b) => a.cur.nr - b.cur.nr).slice(0, 3);
+      if (neg.length) pts.push([`Net revenue âm: ${neg.map((r) => `${r.ten} (${tt(r.cur.nr)})`).join(", ")}.`, "high"]);
+    }
+    const cv = covOf(B.cur);
+    if (cv != null && cv < 0.95) pts.push([`Giá vốn mới có cho ${pc(cv, 0)} GMV — nạp thêm đối soát NCC / giá NCC hệ thống ở tab Dữ liệu.`, "watch"]);
+  }
+  pts.push(...arRisk(C, v.A, "Phải thu", true));
+  const IC = invCol(v.C, W.ky, 6, W);
+  if (IC.totInv) pts.push([`Dồn tích đã thu ${pc(IC.totCol / IC.totInv, 0)} số đã xuất hóa đơn; còn ${tt(IC.totInv - IC.totCol)}.`, IC.totCol / IC.totInv < 0.8 ? "high" : "neutral"]);
+  pts.push(...apRisk(v));
+  return band("Tóm tắt điều hành", leadOf(W.mode === "ngay" ? `Travel & SaaS ngày ${fmtDate(W.ngay)}` : `Travel & SaaS kỳ ${W.curL}`, B, W), pts);
+}
+
+function sumCongNo(v: VM): string {
+  const A = v.A, pts: Pt[] = [];
+  // bảng kê chưa gửi / chưa thu theo pháp nhân
+  const prev = kyAdd(kyOf(v.C.asOf), -1);
+  const chuaGui = v.ARC.flatMap((c) => c.kys.filter((k) => !k.daGui && !k.tuTao && kyIdx(k.ky) <= kyIdx(prev) && k.con_lai > 0).map((k) => ({ c, k })));
+  if (chuaGui.length) pts.push([`${n0(chuaGui.length)} kỳ nợ tới ${prev} còn dư nợ nhưng chưa ghi nhận gửi bảng kê (${tt(sum(chuaGui, (x) => x.k.con_lai))}) — đánh dấu hoặc nhập ngày gửi ở bên dưới.`, "watch"]);
+  const qh = v.ARC.filter((c) => c.overdue > 0).sort((a, b) => b.overdue - a.overdue);
+  if (qh.length) pts.push([`Pháp nhân quá hạn nhiều nhất: ${qh.slice(0, 4).map((c) => `${c.ten} ${tt(c.overdue)} (trễ ${n0(c.maxLate)} ngày)`).join(", ")}.`, "critical"]);
+  const { B } = apTs(v);
+  const chuaTra = B.rows.filter((r) => r.od > 0 && r.out > 0).sort((a, b) => b.od - a.od);
+  if (chuaTra.length) pts.push([`NCC quá hạn chưa ghi nhận đã trả: ${chuaTra.slice(0, 4).map((r) => `${r.ten} ${tt(r.od)}`).join(", ")} — nhập đã trả ở bảng "Phải trả & đã trả".`, "high"]);
+  const lead = A.tot ? `Phải thu còn ${tt(A.tot)}, quá hạn ${pc(A.od / A.tot, 0)} (${tt(A.od)}); phải trả còn ${tt(B.out)}, quá hạn ${tt(B.od)}. Công nợ ở tab này cập nhật theo pháp nhân.` : "";
+  return band("Tóm tắt công nợ", lead, pts);
+}
+const kyOf = (d: string) => `T${d.slice(5, 7)}.${d.slice(0, 4)}`;
