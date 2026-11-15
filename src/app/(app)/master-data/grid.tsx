@@ -212,7 +212,8 @@ export function MasterGrid({ rows, laKeToan, onChonNhom }: {
 
     start(async () => {
       try {
-        await capNhatO(r.id, cot.k as OMasterData, v);
+        const kq = await capNhatO(r.id, cot.k as OMasterData, v);
+        if (kq && kq.error) throw new Error(kq.error);
         setToast({ kind: 'ok', msg: `Đã lưu ${cot.ten} của ${r.ten_nhom}` });
         router.refresh();
       } catch (e) {

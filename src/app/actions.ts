@@ -390,7 +390,13 @@ const O_SUA_DUOC = {
 
 export type OMasterData = keyof typeof O_SUA_DUOC;
 
-export async function capNhatO(groupId: string, cot: OMasterData, giaTri: unknown) {
+/** Bản production của Next.js giấu nội dung lỗi ném ra từ server action — trả lỗi về dạng giá trị để người dùng đọc được */
+const LOI_PM = 'Chưa có cột PM — chạy supabase/migrations/33_master_pm.sql trong Supabase SQL Editor rồi thử lại.';
+const docLoi = (e: unknown) => { const m = e instanceof Error ? e.message : String(e); return /column .*pm.* does not exist|\bpm\b.*schema cache/i.test(m) ? LOI_PM : m; };
+export async function capNhatO(groupId: string, cot: OMasterData, giaTri: unknown): Promise<{ error?: string; ok?: boolean; giaTri?: unknown; lanToa?: string[] }> {
+  try { return await capNhatOGoc(groupId, cot, giaTri); } catch (e) { return { error: docLoi(e) }; }
+}
+async function capNhatOGoc(groupId: string, cot: OMasterData, giaTri: unknown) {
   const user = await requireRole('admin', 'ke_toan');
   const kieu = O_SUA_DUOC[cot];
   if (!kieu) throw new Error(`Không sửa được cột "${cot}".`);
@@ -1208,7 +1214,10 @@ export async function xoaLichGui(id: string) {
 // Pháp nhân trực thuộc
 // =====================================================================
 
-export async function luuPhapNhan(input: {
+export async function luuPhapNhan(input: Parameters<typeof luuPhapNhanGoc>[0]): Promise<{ error?: string } | void> {
+  try { await luuPhapNhanGoc(input); } catch (e) { return { error: docLoi(e) }; }
+}
+async function luuPhapNhanGoc(input: {
   id?: string;
   groupId: string;
   tenKhachHang: string;
@@ -1455,9 +1464,10 @@ export async function donKhoTep(maHeThong?: string) {
 }
 
 /** Master Data: thêm các khách Travel có trong Dashboard mà Master Data chưa có */
-export async function dongBoKhachTuDashboard() {
+export async function dongBoKhachTuDashboard(): Promise<{ nhomMoi: string[]; phapNhanMoi: string[]; error?: string }> {
   const user = await requireRole('admin', 'ke_toan');
-  const r = await syncTravelToMaster();
+  let r: { nhomMoi: string[]; phapNhanMoi: string[] };
+  try { r = await syncTravelToMaster(); } catch (e) { return { nhomMoi: [], phapNhanMoi: [], error: docLoi(e) }; }
   if (r.nhomMoi.length || r.phapNhanMoi.length) {
     await writeAudit({ actorId: user.id, actorEmail: user.email, action: 'customer.sync_dashboard', entity: 'customers', after: r });
   }

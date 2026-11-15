@@ -36,11 +36,12 @@ export function PhapNhan({ groupId, tenNhom, danhSach, pmNhom }: {
     setLoi('');
     start(async () => {
       try {
-        await luuPhapNhan({
+        const kq = await luuPhapNhan({
           id: sua.id, groupId,
           tenKhachHang: sua.ten, tenVietTat: sua.vietTat,
           code: sua.code, ngungHopTac: sua.ngung, ghiChu: sua.ghiChu, pm: sua.pm,
         });
+        if (kq && kq.error) throw new Error(kq.error);
         setSua(null);
         router.refresh();
       } catch (e) { setLoi(e instanceof Error ? e.message : 'Không lưu được.'); }

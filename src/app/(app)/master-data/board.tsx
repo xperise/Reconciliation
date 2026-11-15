@@ -26,6 +26,7 @@ export function MasterBoard({ rows, lichs, phapNhan, laKeToan, chonBanDau }: {
     setDongBo({ chay: true, msg: '' });
     try {
       const r = await dongBoKhachTuDashboard();
+      if (r.error) throw new Error(r.error);
       setDongBo({ chay: false, msg: r.phapNhanMoi.length
         ? `Đã thêm ${r.phapNhanMoi.length} khách (${r.nhomMoi.length} nhóm mới, chưa có lịch gửi): ${r.phapNhanMoi.slice(0, 12).join(', ')}${r.phapNhanMoi.length > 12 ? '…' : ''}`
         : 'Master Data đã có đủ khách Travel của Dashboard.' });

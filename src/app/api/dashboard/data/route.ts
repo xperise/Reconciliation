@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { fetchAll, guard, EDIT_ROLES, adminClient } from "@/lib/dashboard/server";
 import type { BangKe, Customer, MobAgg, MobDay, SrcSum } from "@/lib/dashboard/types";
 import { mobEffectivePlan } from "@/lib/dashboard/mobPlan";
-import { pmFromMaster } from "@/lib/dashboard/masterSync";
+import { masterInfo } from "@/lib/dashboard/masterSync";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -125,14 +125,15 @@ export async function GET() {
       fetchAll("fin_uploads", "id"), fetchAll("fin_snapshots"), fetchAll("fin_alert_actions"),
       fetchAll("fin_ar_edit"), fetchAll("fin_ap_edit"), fetchAll("fin_manual").catch(() => []),
     ]);
-    const [bangKe, mob, src, pmMd] = await Promise.all([bangKeMap(customers), mobAgg(), srcSum(), pmFromMaster(customers)]);
+    const [bangKe, mob, src, md] = await Promise.all([bangKeMap(customers), mobAgg(), srcSum(), masterInfo(customers)]);
     // PM phụ trách lấy theo Master Data (tab Xperise): pháp nhân → nhóm
-    customers.forEach((c) => { const p = pmMd.get(c.ma_kh); if (p) c.pm = p; });
+    customers.forEach((c) => { const p = md.pm.get(c.ma_kh); if (p) c.pm = p; });
+    const grp = md.grp;
     return NextResponse.json({
       params: Object.fromEntries(params.map((p) => [p.key, p.value ?? ""])),
       customers, suppliers, staff, alloc, targets, gmv, ar, ap, cash, opex, contracts,
       uploads: (uploads as { id: number }[]).slice(-30).reverse(), snapshots, alertActions,
-      arEdits, apEdits, manual, bangKe, mob, src,
+      arEdits, apEdits, manual, bangKe, mob, src, grp,
       me: { email: g.user.email, role: g.user.role, canEdit: EDIT_ROLES.includes(g.user.role) },
     });
   } catch (e) {

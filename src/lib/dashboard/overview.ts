@@ -11,7 +11,7 @@ import { GROUPS } from "./insight";
 import type { VM } from "./views";
 import { drillPanel } from "./views";
 import type { SrcNccSum } from "./types";
-import { dimKey, makeWin, block, facts, mgOf, covOf, byDim, topRest, bridgeOf, nrByCustomer, onTimeSeg, invCol, Win, Dim, Block, Sum, Mode } from "./ops";
+import { dimKey, grpKey, custInfo, groupArCustomers, makeWin, block, facts, mgOf, covOf, byDim, topRest, bridgeOf, nrByCustomer, onTimeSeg, invCol, Win, Dim, Block, Sum, Mode } from "./ops";
 
 /** Lựa chọn của người xem dành cho các màn hình này (nằm chung trong VM.st) */
 export interface OpsState { mode?: Mode; ngay?: string; dim?: string; dimAll?: string }
@@ -448,10 +448,11 @@ function tsMain(v: VM): string {
     `<div class="stat-row">${stat("Quá hạn", pc(A.tot ? A.od / A.tot : null), "critical")}${stat("> 60 ngày", ty(A.o60), A.o60 ? "critical" : "")}${stat("DSO", ok(A.dso) ? n0(A.dso) + " ngày" : "—")}${stat("Thu nợ đến hạn", pc(A.collectRate))}</div>` +
     donut(A.bk.map((x, k): [number, string, string, string] => [x, BCLS[k], AR_BUCKETS[k], `ar:${k}`]), ty(A.tot), "tổng phải thu", { ft: ty }) +
     (A.neg ? `<div class="small" style="margin-top:8px">Số dư âm ${tr(A.neg)} (khách trả thừa / chờ cấn trừ) tách riêng, không trừ vào tuổi nợ.</div>` : ""));
-  const top = A.customers.slice(0, 5), rest = A.customers.slice(5);
+  const AG = groupArCustomers(v.Cc, A.customers);
+  const top = AG.slice(0, 5), rest = AG.slice(5);
   const restB = [0, 1, 2, 3, 4].map((k) => sum(rest, (c) => c.b[k])), restT = sum(rest, (c) => c.tot), restO = sum(rest, (c) => c.od);
   const custRows = [
-    ...top.map((c) => ({ l: c.ten, sub: `${c.g} · PM ${c.pm}`, parts: c.b.map((x, k): [number, string, string] => [x, BCLS[k], AR_BUCKETS[k]]), txt: tyN(c.tot), txt2: `quá hạn ${pc(c.tot ? c.od / c.tot : null, 0)}`, dr: `arcust:${c.ma_kh}` })),
+    ...top.map((c) => ({ l: c.ten, sub: `${c.g} · PM ${c.pm}`, parts: c.b.map((x, k): [number, string, string] => [x, BCLS[k], AR_BUCKETS[k]]), txt: tyN(c.tot), txt2: `quá hạn ${pc(c.tot ? c.od / c.tot : null, 0)}`, dr: drillKey("ts", "kh", c.ma_kh) })),
     ...(rest.length ? [{ l: `Còn lại (${rest.length} khách)`, sub: `${pc(A.tot ? restT / A.tot : null, 0)} tổng dư nợ`, parts: restB.map((x, k): [number, string, string] => [x, BCLS[k], AR_BUCKETS[k]]), txt: tyN(restT), txt2: `quá hạn ${pc(restT ? restO / restT : null, 0)}`, dr: "ops-arall:ts:5" }] : []),
   ];
   const custCard = card("Tuổi nợ theo ngày đến hạn", "Dư nợ theo từng khách hàng", unitLabel() + " · 5 khách lớn nhất và còn lại",
@@ -594,7 +595,7 @@ export function opsDrill(v: VM, key: string): string {
   if (key.startsWith("ops-br:")) return opsBridgeDrill(v, key);
   // Tổng quan › tuổi nợ phải thu của từng mảng: cùng khung chi tiết như ở Travel & SaaS, chỉ lấy khách của mảng đó
   if (key.startsWith("ops-arall:")) return opsArAll(v, key);
-  if (key.startsWith("ops-ar:")) { const [, sg, k] = key.split(":"); return drillPanel({ ...v, A: calcAR(segCtx(v.Cc, sg === "m" ? "m" : "ts")) }, `ar:${k}`); }
+  if (key.startsWith("ops-ar:")) { const [, sg, k] = key.split(":"); const A0 = calcAR(segCtx(v.Cc, sg === "m" ? "m" : "ts")); return drillPanel({ ...v, A: sg === "m" ? A0 : { ...A0, customers: groupArCustomers(v.Cc, A0.customers) } }, `ar:${k}`); }
   const [, segS, dimS, enc] = key.split(":");
   const seg = (segS === "m" ? "m" : "ts") as Seg, dim = (["dv", "kh", "ncc"].includes(dimS) ? dimS : "kh") as Dim;
   const k = decodeURIComponent(enc || "");
@@ -660,7 +661,15 @@ export function opsDrill(v: VM, key: string): string {
   };
   let debt = "";
   if (dim === "kh") {
-    const c = ARC.find((x) => x.ma_kh === k);
+    // khóa có thể là nhóm (G:…) gồm nhiều pháp nhân — gộp công nợ của các pháp nhân trong nhóm
+    const ms = facts(C).members.get(k) || [k], css = ARC.filter((x) => ms.includes(x.ma_kh));
+    const many = css.length > 1;
+    const c = !css.length ? null : {
+      billed: sum(css, (x) => x.billed), paid: sum(css, (x) => x.paid), open: sum(css, (x) => x.open), overdue: sum(css, (x) => x.overdue),
+      maxLate: Math.max(...css.map((x) => x.maxLate)), term: css[0].term,
+      onTimeRate: (() => { const w = css.filter((x) => x.onTimeRate != null); const b = sum(w, (x) => x.billed); return b ? sum(w, (x) => (x.onTimeRate as number) * x.billed) / b : null; })(),
+      kys: css.flatMap((x) => x.kys.map((y) => ({ ...y, pn: x.ten }))).sort((a, b) => kyIdx(a.ky) - kyIdx(b.ky) || a.pn.localeCompare(b.pn)),
+    };
     if (!c) debt = card("Công nợ phải thu", `${esc(ten)}`, "", empty("Không có công nợ phải thu"));
     else {
       const lim = kyIdx(v.ky) - 5;
@@ -671,12 +680,12 @@ export function opsDrill(v: VM, key: string): string {
         if (x.tt === "da_thu") { const d = x.thu_du ? Math.round((Date.parse(x.thu_du) - Date.parse(x.den_han)) / 864e5) : null; return d != null && d > 0 ? ` · trả trễ ${n0(d)} ngày` : d != null ? " · đúng hạn" : ""; }
         return x.late > 0 ? ` · trễ ${n0(x.late)} ngày` : "";
       };
-      const body = kys.map((x) => `<tr><td class="num">${esc(x.ky)}</td><td class="num">${x.guiBK ? fmtDate(x.guiBK) : x.daGui ? "đã gửi" : "—"}</td><td class="num">${fmtDate(x.den_han)}</td>` +
+      const body = kys.map((x) => `<tr><td class="num">${esc(x.ky)}</td>${many ? `<td class="small">${esc(x.pn)}</td>` : ""}<td class="num">${x.guiBK ? fmtDate(x.guiBK) : x.daGui ? "đã gửi" : "—"}</td><td class="num">${fmtDate(x.den_han)}</td>` +
         `<td class="r num">${tyN(x.so_tien)}</td><td class="r num">${tyN(x.da_thu)}</td><td class="r num${x.con_lai > 0 && x.tt === "qua_han" ? " c-critical" : ""}">${tyN(x.con_lai)}</td>` +
         `<td>${esc(TT[x.tt] || x.tt)}${lateTxt(x)}</td><td class="num">${x.thu_du ? fmtDate(x.thu_du) : x.thu_gan_nhat ? "gần nhất " + fmtDate(x.thu_gan_nhat) : "—"}</td></tr>`).join("");
-      debt = card("Công nợ phải thu", `${esc(ten)} — kỳ còn nợ và 6 kỳ gần nhất`, asOfTxt(v.C),
+      debt = card("Công nợ phải thu", `${esc(ten)} — kỳ còn nợ và 6 kỳ gần nhất`, asOfTxt(v.C) + (many ? ` · ${css.length} pháp nhân` : ""),
         `<div class="stat-row">${stat("Đã xuất HĐ", ty(c.billed))}${stat("Đã thu", ty(c.paid))}${stat("Còn phải thu", ty(c.open))}${stat("Quá hạn", ty(c.overdue), c.overdue ? "critical" : "")}${stat("Trễ lâu nhất", c.maxLate > 0 ? n0(c.maxLate) + " ngày" : "—")}${stat("Thu đúng hạn", pc(c.onTimeRate, 0))}${stat("Credit term", c.term != null ? n0(c.term) + " ngày" : "—")}</div>` +
-        (kys.length ? `<div class="tw dp-tbl"><table class="cmp"><thead><tr><th>Kỳ nợ</th><th>Gửi bảng kê</th><th>Đến hạn</th><th class="r">Phải thu</th><th class="r">Đã thu</th><th class="r">Còn lại</th><th>Tình trạng</th><th>Ngày thu</th></tr></thead><tbody>${body}</tbody></table></div>` : empty("Không còn kỳ nợ")));
+        (kys.length ? `<div class="tw dp-tbl"><table class="cmp"><thead><tr><th>Kỳ nợ</th>${many ? "<th>Pháp nhân</th>" : ""}<th>Gửi bảng kê</th><th>Đến hạn</th><th class="r">Phải thu</th><th class="r">Đã thu</th><th class="r">Còn lại</th><th>Tình trạng</th><th>Ngày thu</th></tr></thead><tbody>${body}</tbody></table></div>` : empty("Không còn kỳ nợ")));
     }
   } else if (dim === "ncc") {
     const ap = calcAP(v.C, null).rows.find((r) => r.ma_ncc === k || nccBare(r.ten).toUpperCase() === k.toUpperCase());
@@ -686,7 +695,16 @@ export function opsDrill(v: VM, key: string): string {
       `<div class="small" style="margin-top:6px">${ap ? "" : "Chưa có trong sổ phải trả nên chưa có tuổi nợ / quá hạn. "}Đối soát NCC chưa có ngày hóa đơn, payment term và số đã trả.</div>`);
   } else {
     const gm = new Map(byDim(C, W, seg, "kh", flt as never).map((r) => [r.k, r.cur.gmv] as [string, number]));
-    const cs = ARC.filter((c) => gm.has(c.ma_kh) && c.open !== 0).sort((a, b) => b.open - a.open);
+    // gộp theo nhóm cho khớp khóa ở bảng GMV
+    const byG = new Map<string, (typeof ARC)[number]>();
+    ARC.forEach((c) => {
+      const gk = seg === "ts" ? grpKey(C.D, c.ma_kh) : c.ma_kh;
+      if (!gm.has(gk)) return;
+      const o = byG.get(gk);
+      if (!o) { const info = gk === c.ma_kh ? null : custInfo(C, gk); byG.set(gk, { ...c, ma_kh: gk, ten: info?.ten || c.ten, pm: info?.pm || c.pm }); return; }
+      o.open += c.open; o.overdue += c.overdue; o.maxLate = Math.max(o.maxLate, c.maxLate);
+    });
+    const cs = Array.from(byG.values()).filter((c) => c.open !== 0).sort((a, b) => b.open - a.open);
     debt = card("Công nợ phải thu", `Khách có phát sinh ${esc(ten)}`, `${asOfTxt(v.C)} · dư nợ của cả khách, không tách theo mảng`, arTable(cs, gm)) +
       card("Công nợ phải trả", `NCC ${esc(ten)} — phát sinh theo đối soát / chi trực tiếp`, unitLabel(), apSrc((r) => (r.nganh || "") === k));
   }
@@ -698,7 +716,7 @@ export function opsDrill(v: VM, key: string): string {
 
 /* ---------- Bấm cầu nối GMV: danh sách khách của từng cột / nhóm ---------- */
 /** Nhóm của cầu nối: Travel & SaaS theo PM phụ trách, Mobility theo đơn vị cung cấp */
-const brGroup = (C: Ctx, seg: Seg) => (seg === "ts" ? (f: { kh: string }) => C.cust.get(f.kh)?.pm || "—" : (f: { ncc: string }) => f.ncc || "—");
+const brGroup = (C: Ctx, seg: Seg) => (seg === "ts" ? (f: { kh: string }) => custInfo(C, f.kh).pm || "—" : (f: { ncc: string }) => f.ncc || "—");
 const BR_L: Record<string, string> = { prev: "GMV kỳ trước", cur: "GMV kỳ này", new: "Khách mới", up: "Khách tăng", down: "Khách giảm", lost: "Khách ngừng" };
 export function opsBridgeDrill(v: VM, key: string): string {
   const [, segS, enc] = key.split(":");
@@ -715,8 +733,8 @@ export function opsBridgeDrill(v: VM, key: string): string {
   const close = `<button class="dp-x" data-dpclose="1" aria-label="Đóng"><i class="ri-close-line"></i></button>`;
   const A = sum(pick, (x) => x.a), B = sum(pick, (x) => x.b);
   const body = pick.map((x) => {
-    const c = C.cust.get(x.k);
-    return `<tr data-drill="${esc(drillKey(seg, "kh", x.k))}" title="Bấm để xem chi tiết khách"><td>${esc(F.names.get(x.k) || x.k)}<div class="t2">${esc([c?.nhom, seg === "ts" ? (c?.pm ? "PM " + c.pm : "") : x.grp].filter(Boolean).join(" · "))}</div></td>` +
+    const c = seg === "ts" ? custInfo(C, x.k) : { ten: F.names.get(x.k) || x.k, nhom: C.cust.get(x.k)?.nhom || "", pm: "" };
+    return `<tr data-drill="${esc(drillKey(seg, "kh", x.k))}" title="Bấm để xem chi tiết khách"><td>${esc(c.ten)}<div class="t2">${esc([c.nhom, seg === "ts" ? (c.pm ? "PM " + c.pm : "") : x.grp].filter(Boolean).join(" · "))}</div></td>` +
       `<td class="r num">${tyN(x.a)}</td><td class="r num">${tyN(x.b)}</td><td class="r num c-${x.d < 0 ? "critical" : x.d > 0 ? "stable" : "muted"}">${x.d >= 0 ? "+" : "−"}${tyN(Math.abs(x.d))}</td>` +
       `<td class="r num">${x.a ? dPctTxt(dPct(x.b, x.a)) : "—"}</td><td>${CAT[x.cat]}</td></tr>`;
   }).join("");
@@ -731,7 +749,7 @@ function opsArAll(v: VM, key: string): string {
   const [, sg, skipS] = key.split(":");
   const seg = (sg === "m" ? "m" : "ts") as Seg, skip = Number(skipS) || 0;
   const A = seg === "ts" && v.seg === "ts" ? v.A : calcAR(segCtx(v.Cc, seg));
-  const list = A.customers.slice(skip);
+  const list = (seg === "ts" ? groupArCustomers(v.Cc, A.customers) : A.customers).slice(skip);
   const close = `<button class="dp-x" data-dpclose="1" aria-label="Đóng"><i class="ri-close-line"></i></button>`;
   const T = [0, 1, 2, 3, 4].map((k) => sum(list, (c) => c.b[k])), tot = sum(list, (c) => c.tot), od = sum(list, (c) => c.od);
   const body = list.map((c, i) => `<tr data-drill="${esc(drillKey(seg, "kh", c.ma_kh))}" title="Bấm để xem chi tiết khách"><td class="num">${i + 1 + skip}</td><td>${esc(c.ten)}<div class="t2">${esc(c.g)} · PM ${esc(c.pm)}</div></td>` +

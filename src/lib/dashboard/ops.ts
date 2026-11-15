@@ -51,6 +51,19 @@ export interface Facts {
   lastDay: string | null;
   names: Map<string, string>;
   byDay: Map<string, Fact[]>;
+  /** khóa nhóm (G:…) → các mã KH (pháp nhân) trong nhóm */
+  members: Map<string, string[]>;
+}
+/** Khóa hiển thị của một khách Travel: nhóm đối soát nếu Master Data có, không thì chính mã KH */
+export const grpKey = (D: DataSet, ma: string) => D.grp?.[ma]?.k || ma;
+/** Tên / nhóm KH / PM của một khóa hiển thị (nhóm hoặc pháp nhân) */
+export function custInfo(C: Ctx, k: string): { ten: string; nhom: string; pm: string } {
+  const F = facts(C), ms = F.members.get(k);
+  if (!ms) { const c = C.cust.get(k); return { ten: F.names.get(k) || c?.ten_viet_tat || c?.ten_kh || k, nhom: c?.nhom || "", pm: c?.pm || "" }; }
+  const g = C.D.grp?.[ms[0]];
+  const pms = ms.map((m) => C.cust.get(m)?.pm).filter(Boolean) as string[];
+  const pm = g?.pm || pms.sort((a, b) => pms.filter((x) => x === b).length - pms.filter((x) => x === a).length)[0] || "";
+  return { ten: F.names.get(k) || k, nhom: C.cust.get(ms[0])?.nhom || "N1", pm };
 }
 const cache = new WeakMap<Ctx, Facts>();
 export function facts(C: Ctx): Facts {
@@ -60,6 +73,8 @@ export function facts(C: Ctx): Facts {
   const all: Fact[] = [];
   const names = new Map<string, string>();
   D.customers.forEach((c) => names.set(c.ma_kh, c.ten_viet_tat || c.ten_kh));
+  const members = new Map<string, string[]>();
+  Object.entries(D.grp || {}).forEach(([ma, g]) => { names.set(g.k, g.ten); const a = members.get(g.k) || []; a.push(ma); members.set(g.k, a); });
   const mob = D.mob && D.mob.rows.length ? D.mob : null;
   D.gmv.forEach((r) => {
     const seg: Seg | null = SEG_DV.ts.includes(r.dich_vu) ? "ts" : SEG_DV.m.includes(r.dich_vu) ? "m" : null;
@@ -68,7 +83,7 @@ export function facts(C: Ctx): Facts {
     if (seg === "m" && mob && r.dich_vu === "Mobility") return;
     const ngay = r.ngay && /^\d{4}-\d{2}-\d{2}$/.test(r.ngay) ? r.ngay : null;
     const gmvC = r.gmv_co_gv == null ? r.gmv : Number(r.gmv_co_gv);
-    all.push({ seg, ky: ngay ? kyOfDate(ngay) : r.ky, ngay, kh: r.ma_kh, ncc: r.ma_ncc || "", dv: SVC_NAME[r.dich_vu] || r.dich_vu, gmv: r.gmv, gv: r.gia_von, gmvC });
+    all.push({ seg, ky: ngay ? kyOfDate(ngay) : r.ky, ngay, kh: seg === "ts" ? grpKey(D, r.ma_kh) : r.ma_kh, ncc: r.ma_ncc || "", dv: SVC_NAME[r.dich_vu] || r.dich_vu, gmv: r.gmv, gv: r.gia_von, gmvC });
   });
   if (mob) {
     Object.entries(mob.names).forEach(([k, n]) => { if (!names.has(k)) names.set(k, n); });
@@ -80,7 +95,7 @@ export function facts(C: Ctx): Facts {
   const days = { ts: dset("ts"), m: dset("m") };
   const today = todayIso();
   const lastDay = [...days.ts, ...days.m].filter((d) => d <= today).sort().slice(-1)[0] || null;
-  const out: Facts = { all, mobTab: !!mob, mobUpdated: D.mob?.updated_at ?? null, daily: { ts: days.ts.length > 0, m: days.m.length > 0 }, days, lastDay, names, byDay };
+  const out: Facts = { members, all, mobTab: !!mob, mobUpdated: D.mob?.updated_at ?? null, daily: { ts: days.ts.length > 0, m: days.m.length > 0 }, days, lastDay, names, byDay };
   cache.set(C, out);
   return out;
 }
@@ -239,9 +254,10 @@ export function byDim(C: Ctx, W: Win, seg: Seg, dim: Dim, flt?: (f: Fact) => boo
   put(windowFacts(C, W, seg, W.mode === "ngay" ? "avg" : "prev"), "p");
   const k7 = W.mode === "ngay" ? 1 / 7 : 1;
   return Array.from(g.entries()).map(([k, o]) => {
-    const c = C.cust.get(k), s = sup.get(k);
-    const ten = dim === "dv" ? k : dim === "kh" ? F.names.get(k) || k : k === "—" ? "Chưa gán NCC" : s?.ten_ncc || k;
-    const sub = dim === "kh" ? [c?.nhom, c?.pm ? "PM " + c.pm : ""].filter(Boolean).join(" · ") : dim === "ncc" ? s?.nganh || "" : "";
+    const c = dim === "kh" ? custInfo(C, k) : null, s = sup.get(k);
+    const ten = dim === "dv" ? k : dim === "kh" ? c!.ten : k === "—" ? "Chưa gán NCC" : s?.ten_ncc || k;
+    const nm = F.members.get(k)?.length || 0;
+    const sub = dim === "kh" ? [c!.nhom, c!.pm ? "PM " + c!.pm : "", nm > 1 ? `${nm} pháp nhân` : ""].filter(Boolean).join(" · ") : dim === "ncc" ? s?.nganh || "" : "";
     const cmp = scale(sumOf(o.p), k7);
     if (W.mode === "ngay") cmp.kh = sumOf(o.p).kh / 7;
     return { k, ten, sub, cur: sumOf(o.c), cmp };
@@ -286,7 +302,7 @@ export function bridgeOf(C: Ctx, W: Win, seg: Seg, groupBy: (f: Fact) => string)
 export function nrByCustomer(C: Ctx, W: Win, seg: Seg): { k: string; ten: string; sub: string; gmv: number; gmvC: number; nr: number }[] {
   const F = facts(C), m = new Map<string, { gmv: number; gmvC: number; nr: number }>();
   windowFacts(C, W, seg, "cur").forEach((f) => { if (laTong(f.kh)) return; const o = m.get(f.kh) || { gmv: 0, gmvC: 0, nr: 0 }; o.gmv += f.gmv; o.gmvC += f.gmvC; o.nr += f.gmvC - f.gv; m.set(f.kh, o); });
-  return Array.from(m.entries()).map(([k, o]) => { const c = C.cust.get(k); return { k, ten: F.names.get(k) || k, sub: [c?.nhom, c?.pm ? "PM " + c.pm : ""].filter(Boolean).join(" · "), ...o }; })
+  return Array.from(m.entries()).map(([k, o]) => { const c = seg === "ts" ? custInfo(C, k) : { ten: F.names.get(k) || k, nhom: C.cust.get(k)?.nhom || "", pm: C.cust.get(k)?.pm || "" }; return { k, ten: c.ten, sub: [c.nhom, c.pm ? "PM " + c.pm : ""].filter(Boolean).join(" · "), ...o }; })
     .sort((a, b) => b.nr - a.nr);
 }
 
@@ -391,4 +407,18 @@ function arTheoGmv(D0: DataSet, D: DataSet): ArRow[] {
     out.push({ ma_kh, ky, so_ct: null, ngay_gui_bk: null, ngay_hd: null, ngay_den_han: addDays(kyEnd(ky), term), so_tien: Math.round(g), da_thu: 0, ngay_thu_du: null, ngay_thu_gan_nhat: null, theoGmv: true } as ArRow);
   });
   return out;
+}
+
+/* ---------------- Gộp công nợ phải thu theo nhóm (để hiển thị) ---------------- */
+type ArC = { ma_kh: string; ten: string; g: string; pm: string; b: number[]; tot: number; od: number };
+/** A.customers (theo pháp nhân) → theo nhóm Master Data; ma_kh của dòng gộp là khóa nhóm */
+export function groupArCustomers(C: Ctx, list: ArC[]): ArC[] {
+  const by = new Map<string, ArC & { n: number }>();
+  list.forEach((c) => {
+    const k = grpKey(C.D, c.ma_kh), info = k === c.ma_kh ? null : custInfo(C, k);
+    const o = by.get(k) || { ma_kh: k, ten: info?.ten || c.ten, g: info?.nhom || c.g, pm: info?.pm || c.pm, b: [0, 0, 0, 0, 0], tot: 0, od: 0, n: 0 };
+    c.b.forEach((x, i) => (o.b[i] += x)); o.tot += c.tot; o.od += c.od; o.n++;
+    by.set(k, o);
+  });
+  return Array.from(by.values()).sort((a, b) => b.tot - a.tot);
 }

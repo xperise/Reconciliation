@@ -77,14 +77,14 @@ export async function exportTravel(C: Ctx, src: SrcLines): Promise<string> {
   /* GMV theo ngày */
   const gmv = D.gmv.filter((r) => SEG_DV.ts.includes(r.dich_vu)).slice().sort((a, b) => byKy(a, b) || String(a.ngay || "").localeCompare(String(b.ngay || "")) || a.ma_kh.localeCompare(b.ma_kh));
   X.utils.book_append_sheet(wb, sheet(X, [
-    { h: "Kỳ", w: 10 }, { h: "Ngày", t: "date", w: 12 }, { h: "Mã KH", w: 14 }, { h: "Tên KH", w: 30 }, { h: "Nhóm", w: 7 }, { h: "PM", w: 12 },
+    { h: "Kỳ", w: 10 }, { h: "Ngày", t: "date", w: 12 }, { h: "Mã KH", w: 14 }, { h: "Tên KH", w: 30 }, { h: "Nhóm đối soát", w: 18 }, { h: "Nhóm", w: 7 }, { h: "PM", w: 12 },
     { h: "Mã NCC", w: 18 }, { h: "Mảng", w: 15 }, { h: "Nguồn", w: 12 },
     { h: "GMV", t: "money", w: 16 }, { h: "GMV có giá vốn", t: "money", w: 16 }, { h: "Giá vốn", t: "money", w: 16 },
     { h: "Net revenue", t: "money", w: 15, f: (r, c) => `${c("GMV có giá vốn")}${r}-${c("Giá vốn")}${r}` },
     { h: "Margin", t: "pct", w: 10, f: (r, c) => `IF(${c("GMV có giá vốn")}${r}=0,"",${c("Net revenue")}${r}/${c("GMV có giá vốn")}${r})` },
   ], gmv.map((r) => {
     const c = cust(r.ma_kh);
-    return [r.ky, r.ngay || null, r.ma_kh, c?.ten_viet_tat || c?.ten_kh || r.ma_kh, c?.nhom || "", c?.pm || "", r.ma_ncc || "", r.dich_vu === "Transportation" ? "Transportation (Be)" : r.dich_vu,
+    return [r.ky, r.ngay || null, r.ma_kh, c?.ten_viet_tat || c?.ten_kh || r.ma_kh, D.grp?.[r.ma_kh]?.ten || "", c?.nhom || "", c?.pm || "", r.ma_ncc || "", r.dich_vu === "Transportation" ? "Transportation (Be)" : r.dich_vu,
       r.nguon === "bk" ? "Bảng kê" : r.tay ? "Nhập tay" : "File template", r.gmv, r.gmv_co_gv == null ? r.gmv : r.gmv_co_gv, r.gia_von, null, null];
   })), "GMV_theo_ngay");
 
@@ -111,13 +111,13 @@ export async function exportTravel(C: Ctx, src: SrcLines): Promise<string> {
   /* Công nợ phải thu */
   const ar = D.ar.filter((r) => isTs(r.ma_kh)).slice().sort((a, b) => a.ma_kh.localeCompare(b.ma_kh) || byKy(a, b));
   X.utils.book_append_sheet(wb, sheet(X, [
-    { h: "Mã KH", w: 14 }, { h: "Tên KH", w: 28 }, { h: "Nhóm", w: 7 }, { h: "PM", w: 12 }, { h: "Kỳ nợ", w: 10 }, { h: "Số hóa đơn", w: 12 },
+    { h: "Mã KH", w: 14 }, { h: "Tên KH", w: 28 }, { h: "Nhóm đối soát", w: 18 }, { h: "Nhóm", w: 7 }, { h: "PM", w: 12 }, { h: "Kỳ nợ", w: 10 }, { h: "Số hóa đơn", w: 12 },
     { h: "Ngày hóa đơn", t: "date", w: 12 }, { h: "Ngày gửi bảng kê", t: "date", w: 14 }, { h: "Ngày đến hạn", t: "date", w: 12 },
     { h: "Phải thu", t: "money", w: 15 }, { h: "Đã thu", t: "money", w: 15 }, { h: "Còn lại", t: "money", w: 15, f: (r, c) => `${c("Phải thu")}${r}-${c("Đã thu")}${r}` },
     { h: "Ngày thu đủ", t: "date", w: 12 }, { h: "Ngày thu gần nhất", t: "date", w: 14 },
     { h: "Số ngày quá hạn", t: "int", w: 12, f: (r, c) => `IF(${c("Còn lại")}${r}<=0,"",MAX(0,DATE(${C.asOf.slice(0, 4)},${+C.asOf.slice(5, 7)},${+C.asOf.slice(8, 10)})-${c("Ngày đến hạn")}${r}))` },
     { h: "Sửa trên web", w: 10 }, { h: "Ghi chú", w: 30 },
-  ], ar.map((r) => { const c = cust(r.ma_kh); return [r.ma_kh, c?.ten_viet_tat || c?.ten_kh || r.ma_kh, c?.nhom || "", c?.pm || "", r.ky, r.so_ct, r.ngay_hd, r.ngay_gui_bk, r.ngay_den_han,
+  ], ar.map((r) => { const c = cust(r.ma_kh); return [r.ma_kh, c?.ten_viet_tat || c?.ten_kh || r.ma_kh, D.grp?.[r.ma_kh]?.ten || "", c?.nhom || "", c?.pm || "", r.ky, r.so_ct, r.ngay_hd, r.ngay_gui_bk, r.ngay_den_han,
     r.so_tien, r.da_thu || 0, null, r.ngay_thu_du, r.ngay_thu_gan_nhat, null, r.suaTay || r.suaKy ? "Có" : "", r.ghi_chu || ""]; })), "Cong_no_phai_thu");
 
   /* Công nợ phải trả */
@@ -133,9 +133,9 @@ export async function exportTravel(C: Ctx, src: SrcLines): Promise<string> {
   const khSet = new Set(khTs.map((c) => c.ma_kh));
   const extra = Array.from(new Set(gmv.map((r) => r.ma_kh))).filter((m) => !khSet.has(m));
   X.utils.book_append_sheet(wb, sheet(X, [
-    { h: "Mã KH", w: 16 }, { h: "Tên khách hàng", w: 44 }, { h: "Tên viết tắt", w: 22 }, { h: "Nhóm", w: 7 }, { h: "PM", w: 12 }, { h: "Sales", w: 12 }, { h: "Credit term", t: "int", w: 11 }, { h: "Ghi chú", w: 34 },
-  ], [...khTs.map((c) => [c.ma_kh, c.ten_kh, c.ten_viet_tat || "", c.nhom, c.pm || "", c.sales || "", c.credit_term ?? null, ""]),
-    ...extra.map((m) => [m, m, "", "", "", "", null, "Có GMV nhưng chưa có trong danh mục"])]), "DM_Khach_hang");
+    { h: "Mã KH", w: 16 }, { h: "Tên khách hàng", w: 44 }, { h: "Tên viết tắt", w: 22 }, { h: "Nhóm đối soát", w: 18 }, { h: "Nhóm", w: 7 }, { h: "PM", w: 12 }, { h: "Sales", w: 12 }, { h: "Credit term", t: "int", w: 11 }, { h: "Ghi chú", w: 34 },
+  ], [...khTs.map((c) => [c.ma_kh, c.ten_kh, c.ten_viet_tat || "", D.grp?.[c.ma_kh]?.ten || "", c.nhom, c.pm || "", c.sales || "", c.credit_term ?? null, ""]),
+    ...extra.map((m) => [m, m, "", "", "", "", "", null, "Có GMV nhưng chưa có trong danh mục"])]), "DM_Khach_hang");
 
   /* Danh mục NCC */
   const nccCodes = new Set<string>([...gmv.map((r) => r.ma_ncc || "").filter(Boolean), ...src.ncc.map((r) => String(r.ncc || "").replace(/^(hotel|flight):/, "")).filter(Boolean)]);

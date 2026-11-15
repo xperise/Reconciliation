@@ -29,19 +29,21 @@ function index(groups: Grp[], pns: Pn[]) {
 }
 const isTravel = (c: Kh) => !["N2", "N3", "N4", "N5"].includes(c.nhom);
 
-/** PM theo Master Data cho từng khách của Dashboard (mã KH → PM). Chưa chạy migration 33 thì trả về rỗng. */
-export async function pmFromMaster(customers: Kh[]): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
-  try {
-    const { groups, pns } = await master(true);
-    const { findPn, findGrp, grpId } = index(groups, pns);
-    customers.forEach((c) => {
-      const p = findPn(c), g = p ? grpId.get(p.group_id) : findGrp(c);
-      const pm = (p?.pm || g?.pm || "").trim();
-      if (pm) out.set(c.ma_kh, pm);
-    });
-  } catch { /* chưa có cột pm */ }
-  return out;
+/** Theo Master Data, cho từng khách của Dashboard (mã KH = pháp nhân):
+ *  pm: PM phụ trách (pháp nhân → nhóm); grp: nhóm đối soát để Tổng quan / Travel & SaaS hiển thị theo nhóm.
+ *  Chưa chạy migration 33 thì vẫn có nhóm, không có PM. */
+export async function masterInfo(customers: Kh[]): Promise<{ pm: Map<string, string>; grp: Record<string, { k: string; ten: string; pm: string | null }> }> {
+  const pm = new Map<string, string>(), grp: Record<string, { k: string; ten: string; pm: string | null }> = {};
+  let M: Awaited<ReturnType<typeof master>>;
+  try { M = await master(true); } catch { try { M = await master(false); } catch { return { pm, grp }; } }
+  const { findPn, findGrp, grpId } = index(M.groups, M.pns);
+  customers.filter(isTravel).forEach((c) => {
+    const p = findPn(c), g = p ? grpId.get(p.group_id) : findGrp(c);
+    const x = (p?.pm || g?.pm || "").trim();
+    if (x) pm.set(c.ma_kh, x);
+    if (g) grp[c.ma_kh] = { k: `G:${g.ma_he_thong}`, ten: g.ten_nhom, pm: (g.pm || "").trim() || null };
+  });
+  return { pm, grp };
 }
 
 /** Thêm vào Master Data các khách Travel của Dashboard chưa có ở đó. */

@@ -73,6 +73,8 @@ export interface DataSet {
   arEdits: ArEdit[]; apEdits: ApEdit[]; manual: ManualRow[]; bangKe: Record<string, BangKe>;
   /** GMV Mobility gộp từ giao dịch ở tab Mobility (dashboard XPAY) */
   mob?: MobAgg | null;
+  /** Nhóm đối soát (Master Data) của từng khách Travel: mã KH → nhóm. Tổng quan / Travel & SaaS hiển thị theo nhóm */
+  grp?: Record<string, { k: string; ten: string; pm: string | null }>;
   /** File nguồn đã nạp: bảng kê khách hàng & đối soát NCC (tổng hợp) */
   src?: SrcSum | null;
   me?: { email: string; role: string; canEdit: boolean };
