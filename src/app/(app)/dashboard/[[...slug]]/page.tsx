@@ -13,6 +13,7 @@ import { kyIdx, kyAdd, todayIso, setUnit, UNITS, UnitKey } from "@/lib/dashboard
 import DataTab from "@/components/dashboard/DataTab";
 import MobilityFrame from "@/components/dashboard/MobilityFrame";
 import MobCostConfig from "@/components/dashboard/MobCostConfig";
+import SourceUpload from "@/components/dashboard/SourceUpload";
 import { parseRoute, routePath } from "@/lib/dashboard/routes";
 
 // Hai tầng điều hướng: PHẦN (Tổng quan · Travel & SaaS · Mobility) → TAB chỉ số trong phần đó.
@@ -409,6 +410,7 @@ export default function DashboardPage() {
         )}
         {vm && tab !== "data" && <section className="kpis k5" dangerouslySetInnerHTML={{ __html: opsStrip(vm) }} />}
         {vm && tab !== "data" && <div className="view" dangerouslySetInnerHTML={{ __html: renderOps(tab, vm) ?? renderView(tab, vm) }} />}
+        {data && tab === "data" && <div className="view" style={{ marginBottom: 16 }}><SourceUpload data={data} canEdit={canEdit} onDone={load} toast={toast} /></div>}
         {data && tab === "data" && <DataTab data={data} onDone={load} toast={toast} canEdit={canEdit} />}
         {data && tab === "data" && <div className="view" style={{ marginTop: 16 }}><MobCostConfig data={data} canEdit={canEdit} onDone={load} toast={toast} /></div>}
       </div>}

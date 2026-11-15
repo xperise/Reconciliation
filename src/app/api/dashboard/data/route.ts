@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { fetchAll, guard, EDIT_ROLES, adminClient } from "@/lib/dashboard/server";
-import type { BangKe, Customer, MobAgg, MobDay } from "@/lib/dashboard/types";
+import type { BangKe, Customer, MobAgg, MobDay, SrcSum } from "@/lib/dashboard/types";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -93,6 +93,25 @@ async function mobAgg(): Promise<MobAgg | null> {
   }
 }
 
+/** Tổng hợp file nguồn đã nạp — để xem độ phủ và phải trả NCC phát sinh theo đối soát */
+async function srcSum(): Promise<SrcSum | null> {
+  try {
+    const [kh, ncc] = await Promise.all([
+      fetchAll<{ loai: string; ky: string; ngay: string; gmv: number; uploaded_at: string }>("fin_src_kh", "id"),
+      fetchAll<{ ncc: string | null; nganh: string | null; ky: string | null; khop: string | null; bang_ke: number | null; ledger: number | null; uploaded_at: string; file_name: string | null }>("fin_src_ncc", "id"),
+    ]);
+    const K = new Map<string, SrcSum["kh"][number]>();
+    kh.forEach((r) => { const k = r.loai + "|" + r.ky, o = K.get(k) || { loai: r.loai, ky: r.ky, n: 0, gmv: 0, from: r.ngay, to: r.ngay, at: r.uploaded_at };
+      o.n++; o.gmv += r.gmv; if (r.ngay < o.from) o.from = r.ngay; if (r.ngay > o.to) o.to = r.ngay; if (r.uploaded_at > o.at) o.at = r.uploaded_at; K.set(k, o); });
+    const N = new Map<string, SrcSum["ncc"][number]>();
+    ncc.forEach((r) => { const k = [r.ncc, r.ky, r.khop, r.file_name].join("|"), o = N.get(k) || { ncc: r.ncc, nganh: r.nganh, ky: r.ky, khop: r.khop, n: 0, bang_ke: 0, ledger: 0, at: r.uploaded_at, file: r.file_name || "" };
+      o.n++; o.bang_ke += r.bang_ke || 0; o.ledger += r.ledger || 0; N.set(k, o); });
+    return { kh: Array.from(K.values()), ncc: Array.from(N.values()) };
+  } catch {
+    return null; // chưa chạy migration 30
+  }
+}
+
 export async function GET() {
   try {
     const g = await guard(false, "fin");
@@ -104,12 +123,12 @@ export async function GET() {
       fetchAll("fin_uploads", "id"), fetchAll("fin_snapshots"), fetchAll("fin_alert_actions"),
       fetchAll("fin_ar_edit"), fetchAll("fin_ap_edit"), fetchAll("fin_manual").catch(() => []),
     ]);
-    const [bangKe, mob] = await Promise.all([bangKeMap(customers), mobAgg()]);
+    const [bangKe, mob, src] = await Promise.all([bangKeMap(customers), mobAgg(), srcSum()]);
     return NextResponse.json({
       params: Object.fromEntries(params.map((p) => [p.key, p.value ?? ""])),
       customers, suppliers, staff, alloc, targets, gmv, ar, ap, cash, opex, contracts,
       uploads: (uploads as { id: number }[]).slice(-30).reverse(), snapshots, alertActions,
-      arEdits, apEdits, manual, bangKe, mob,
+      arEdits, apEdits, manual, bangKe, mob, src,
       me: { email: g.user.email, role: g.user.role, canEdit: EDIT_ROLES.includes(g.user.role) },
     });
   } catch (e) {

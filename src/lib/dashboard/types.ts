@@ -11,6 +11,10 @@ export interface Target {
 export interface GmvRow { ky: string; ma_kh: string; ma_ncc: string | null; dich_vu: string; gmv: number; gia_von: number; chiet_khau: number | null;
   /** Ngày phát sinh (yyyy-mm-dd) nếu nguồn có số theo ngày; không có = chỉ có số cả tháng */
   ngay?: string | null;
+  /** Phần GMV đã có giá vốn (dựng từ bảng kê + đối soát NCC); null = toàn bộ GMV đã có giá vốn */
+  gmv_co_gv?: number | null;
+  /** 'bk' = dựng từ bảng kê khách hàng */
+  nguon?: string | null;
   /** Dòng nhập tay trên web (không có trong file) */
   tay?: boolean }
 export interface ArRow { ma_kh: string; ky: string; so_ct: string | null; ngay_gui_bk: string | null; ngay_hd: string | null; ngay_den_han: string; so_tien: number; da_thu: number | null; ngay_thu_du: string | null; ngay_thu_gan_nhat: string | null;
@@ -49,6 +53,11 @@ export interface BangKe { gui: string | null; chot: string | null; status: strin
 export type MobDay = [string, string, string, number, number];
 export interface MobAgg { rows: MobDay[]; names: Record<string, string>; units: string[]; updated_at: string | null }
 
+/** Tổng hợp file nguồn đã nạp (fin_src_kh, fin_src_ncc) */
+export interface SrcKhSum { loai: string; ky: string; n: number; gmv: number; from: string; to: string; at: string }
+export interface SrcNccSum { ncc: string | null; nganh: string | null; ky: string | null; khop: string | null; n: number; bang_ke: number; ledger: number; at: string; file: string }
+export interface SrcSum { kh: SrcKhSum[]; ncc: SrcNccSum[] }
+
 /** Theo dõi xử lý cảnh báo — người nhận việc, hạn, hành động, trạng thái */
 export interface AlertAction { id: string; ky: string; pic: string | null; han_xu_ly: string | null; hanh_dong: string | null; trang_thai: string; updated_at: string }
 
@@ -60,6 +69,8 @@ export interface DataSet {
   arEdits: ArEdit[]; apEdits: ApEdit[]; manual: ManualRow[]; bangKe: Record<string, BangKe>;
   /** GMV Mobility gộp từ giao dịch ở tab Mobility (dashboard XPAY) */
   mob?: MobAgg | null;
+  /** File nguồn đã nạp: bảng kê khách hàng & đối soát NCC (tổng hợp) */
+  src?: SrcSum | null;
   me?: { email: string; role: string; canEdit: boolean };
 }
 

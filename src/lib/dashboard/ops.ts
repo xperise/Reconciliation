@@ -16,11 +16,15 @@ import { kyIdx, kyAdd, kyOfDate, kyEnd, addDays, todayIso, sum, ok } from "./uti
 export type Mode = "ky" | "ngay";
 export type Dim = "dv" | "kh" | "ncc";
 /** Một dòng phát sinh đã chuẩn hoá. ngay = null khi nguồn chỉ có số cả tháng. */
-export interface Fact { seg: Seg; ky: string; ngay: string | null; kh: string; ncc: string; dv: string; gmv: number; gv: number }
-export interface Sum { gmv: number; gv: number; nr: number; kh: number }
-export const ZERO: Sum = { gmv: 0, gv: 0, nr: 0, kh: 0 };
-/** Margin = Net revenue ÷ GMV */
-export const mgOf = (s: { gmv: number; nr: number }) => (s.gmv ? s.nr / s.gmv : null);
+/** gmvC = phần GMV đã có giá vốn (bảng kê chưa nối được đối soát NCC thì chưa có giá vốn) */
+export interface Fact { seg: Seg; ky: string; ngay: string | null; kh: string; ncc: string; dv: string; gmv: number; gv: number; gmvC: number }
+/** nr (Net revenue) = GMV đã có giá vốn − giá vốn */
+export interface Sum { gmv: number; gv: number; gmvC: number; nr: number; kh: number }
+export const ZERO: Sum = { gmv: 0, gv: 0, gmvC: 0, nr: 0, kh: 0 };
+/** Margin = Net revenue ÷ GMV — tính trên phần GMV đã có giá vốn */
+export const mgOf = (s: { gmvC: number; nr: number }) => (s.gmvC ? s.nr / s.gmvC : null);
+/** Tỷ lệ GMV đã có giá vốn */
+export const covOf = (s: { gmv: number; gmvC: number }) => (s.gmv ? s.gmvC / s.gmv : null);
 
 /* ---------------- Cấu hình giá vốn Mobility ---------------- */
 export const CFG_KY = "CFG";
@@ -62,11 +66,12 @@ export function facts(C: Ctx): Facts {
     // Mobility lấy từ tab Mobility; riêng SaaS Mobility vẫn ở fin_gmv
     if (seg === "m" && mob && r.dich_vu === "Mobility") return;
     const ngay = r.ngay && /^\d{4}-\d{2}-\d{2}$/.test(r.ngay) ? r.ngay : null;
-    all.push({ seg, ky: ngay ? kyOfDate(ngay) : r.ky, ngay, kh: r.ma_kh, ncc: r.ma_ncc || "", dv: SVC_NAME[r.dich_vu] || r.dich_vu, gmv: r.gmv, gv: r.gia_von });
+    const gmvC = r.gmv_co_gv == null ? r.gmv : Number(r.gmv_co_gv);
+    all.push({ seg, ky: ngay ? kyOfDate(ngay) : r.ky, ngay, kh: r.ma_kh, ncc: r.ma_ncc || "", dv: SVC_NAME[r.dich_vu] || r.dich_vu, gmv: r.gmv, gv: r.gia_von, gmvC });
   });
   if (mob) {
     Object.entries(mob.names).forEach(([k, n]) => { if (!names.has(k)) names.set(k, n); });
-    mob.rows.forEach(([d, key, u, g]) => all.push({ seg: "m", ky: kyOfDate(d), ngay: d, kh: key, ncc: u, dv: "Mobility", gmv: g, gv: g * (1 - cfg.rate(u)) }));
+    mob.rows.forEach(([d, key, u, g]) => all.push({ seg: "m", ky: kyOfDate(d), ngay: d, kh: key, ncc: u, dv: "Mobility", gmv: g, gv: g * (1 - cfg.rate(u)), gmvC: g }));
   }
   const byDay = new Map<string, Fact[]>();
   all.forEach((f) => { if (!f.ngay) return; const k = `${f.seg}|${f.ngay}`; const a = byDay.get(k) || []; a.push(f); byDay.set(k, a); });
@@ -84,7 +89,8 @@ export function hasAnyActual(C: Ctx, ky: string): boolean {
 }
 
 /** Số phát sinh của một mảng trong một ngày.
- *  Travel & SaaS: ngày chưa up số → lấy số của ngày có số gần nhất trước đó (from = ngày lấy số).
+ *  Travel & SaaS: ngày SAU ngày cuối cùng đã up số → lấy số của ngày có số gần nhất (from = ngày lấy số);
+ *  ngày nằm trong khoảng đã up mà không có giao dịch là 0.
  *  Mobility: giao dịch thật, ngày không có giao dịch là 0. */
 export function dayFacts(C: Ctx, seg: Seg, day: string): { fs: Fact[]; from: string | null } {
   const F = facts(C);
@@ -92,6 +98,7 @@ export function dayFacts(C: Ctx, seg: Seg, day: string): { fs: Fact[]; from: str
   if (own) return { fs: own, from: day };
   if (seg !== "ts") return { fs: [], from: null };
   const ds = F.days.ts;
+  if (!ds.length || day <= ds[ds.length - 1]) return { fs: [], from: day };
   let lo = 0, hi = ds.length - 1, best = -1;
   while (lo <= hi) { const mid = (lo + hi) >> 1; if (ds[mid] < day) { best = mid; lo = mid + 1; } else hi = mid - 1; }
   if (best < 0) return { fs: [], from: null };
@@ -99,12 +106,12 @@ export function dayFacts(C: Ctx, seg: Seg, day: string): { fs: Fact[]; from: str
 }
 
 export function sumOf(fs: Fact[]): Sum {
-  const gmv = sum(fs, (f) => f.gmv), gv = sum(fs, (f) => f.gv);
+  const gmv = sum(fs, (f) => f.gmv), gv = sum(fs, (f) => f.gv), gmvC = sum(fs, (f) => f.gmvC);
   const kh = new Set(fs.filter((f) => f.gmv > 0 && !laTong(f.kh)).map((f) => f.kh)).size;
-  return { gmv, gv, nr: gmv - gv, kh };
+  return { gmv, gv, gmvC, nr: gmvC - gv, kh };
 }
-const add = (a: Sum, b: Sum): Sum => ({ gmv: a.gmv + b.gmv, gv: a.gv + b.gv, nr: a.nr + b.nr, kh: a.kh + b.kh });
-const scale = (s: Sum, k: number): Sum => ({ gmv: s.gmv * k, gv: s.gv * k, nr: s.nr * k, kh: s.kh * k });
+const add = (a: Sum, b: Sum): Sum => ({ gmv: a.gmv + b.gmv, gv: a.gv + b.gv, gmvC: a.gmvC + b.gmvC, nr: a.nr + b.nr, kh: a.kh + b.kh });
+const scale = (s: Sum, k: number): Sum => ({ gmv: s.gmv * k, gv: s.gv * k, gmvC: s.gmvC * k, nr: s.nr * k, kh: s.kh * k });
 
 /* ---------------- Cửa sổ thời gian ---------------- */
 export interface Win {
@@ -246,9 +253,9 @@ export function bridgeOf(C: Ctx, W: Win, seg: Seg, groupBy: (f: Fact) => string)
 }
 
 /* ---------------- Net revenue theo khách trong cửa sổ hiện tại ---------------- */
-export function nrByCustomer(C: Ctx, W: Win, seg: Seg): { k: string; ten: string; sub: string; gmv: number; nr: number }[] {
-  const F = facts(C), m = new Map<string, { gmv: number; nr: number }>();
-  windowFacts(C, W, seg, "cur").forEach((f) => { if (laTong(f.kh)) return; const o = m.get(f.kh) || { gmv: 0, nr: 0 }; o.gmv += f.gmv; o.nr += f.gmv - f.gv; m.set(f.kh, o); });
+export function nrByCustomer(C: Ctx, W: Win, seg: Seg): { k: string; ten: string; sub: string; gmv: number; gmvC: number; nr: number }[] {
+  const F = facts(C), m = new Map<string, { gmv: number; gmvC: number; nr: number }>();
+  windowFacts(C, W, seg, "cur").forEach((f) => { if (laTong(f.kh)) return; const o = m.get(f.kh) || { gmv: 0, gmvC: 0, nr: 0 }; o.gmv += f.gmv; o.gmvC += f.gmvC; o.nr += f.gmvC - f.gv; m.set(f.kh, o); });
   return Array.from(m.entries()).map(([k, o]) => { const c = C.cust.get(k); return { k, ten: F.names.get(k) || k, sub: [c?.nhom, c?.pm ? "PM " + c.pm : ""].filter(Boolean).join(" · "), ...o }; })
     .sort((a, b) => b.nr - a.nr);
 }

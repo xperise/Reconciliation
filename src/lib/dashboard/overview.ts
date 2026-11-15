@@ -5,10 +5,12 @@
 //   · ngày gửi bảng kê chỉ sửa ở bảng tổng "Bảng kê & tiền thu"
 import { Ctx, Seg, SEG_NAME, segCtx, calcAR, calcAP, AR_BUCKETS, num, ArCust } from "./calc";
 import { waterfall, divBars, donut, hStack, hBullet, barChart, legend, pill, stCls, empty, LegendItem } from "./charts";
+import { kyFromIdx } from "./util";
 import { esc, ty, tyN, tr, n0, pc, sum, ok, N1, kyShort, fmtDate, kyIdx, days, unit, unitLabel, axisNum, leVua, tyLe, kyAdd, kyEnd } from "./util";
 import { GROUPS } from "./insight";
 import type { VM } from "./views";
-import { makeWin, block, facts, mgOf, byDim, topRest, bridgeOf, nrByCustomer, onTimeSeg, invCol, Win, Dim, Block, Sum, Mode } from "./ops";
+import type { SrcNccSum } from "./types";
+import { makeWin, block, facts, mgOf, covOf, byDim, topRest, bridgeOf, nrByCustomer, onTimeSeg, invCol, Win, Dim, Block, Sum, Mode } from "./ops";
 
 /** Lựa chọn của người xem dành cho các màn hình này (nằm chung trong VM.st) */
 export interface OpsState { mode?: Mode; ngay?: string; dim?: string }
@@ -78,7 +80,11 @@ function arDetailCard(v: VM): string {
   if (!ARC.length) return "";
   const detail = ARC.slice(0, 60).map((c) => {
     // Bảng chính là theo KỲ — đây cũng là mức cập nhật công nợ trên web
-    const kyRows = c.kys.map((k) => {
+    // Chỉ hiện kỳ còn nợ và 6 kỳ gần nhất — sổ phải thu có lịch sử nhiều năm, hiện hết thì trang rất nặng
+    const lim = kyIdx(v.ky) - 5, show = (ky: string, open: number) => open > 0 || !(kyIdx(ky) < lim);
+    const kysShow = c.kys.filter((k) => show(k.ky, k.con_lai)), linesShow = c.lines.filter((l) => show(l.ky, l.con_lai));
+    const an = c.kys.length - kysShow.length;
+    const kyRows = kysShow.map((k) => {
       const [lab, cls] = TT_AR[k.tt];
       const src = k.nguonBK === "recon" ? ` <span class="src" title="Lấy từ app Reconciliation">↩</span>` : k.nguonBK === "web" ? ` <span class="src web" title="Sửa tay trên web">✎</span>` : "";
       const form = canEdit ? `<tr class="ed-row" hidden><td colspan="10">${edForm("ar", c.ma_kh, k.ky, "", [
@@ -92,7 +98,9 @@ function arDetailCard(v: VM): string {
       return `<tr class="${k.suaTay ? "r-edited" : ""}"><td class="num">${esc(k.ky)}</td><td class="num">${fmtDate(k.guiBK)}${src}</td><td class="num">${fmtDate(k.den_han)}</td><td class="r num">${tyN(k.so_tien)}</td><td class="r num">${k.da_thu ? tyN(k.da_thu) : "–"}</td><td class="r num ${k.con_lai > 0 && k.tt === "qua_han" ? "c-critical" : ""}">${k.con_lai > 0 ? tyN(k.con_lai) : "–"}</td><td class="num">${fmtDate(k.thu_du || (k.thu_gan_nhat && k.thu_gan_nhat <= C.asOf ? k.thu_gan_nhat : null))}</td><td class="r num ${k.tt === "qua_han" ? "c-critical" : ""}">${k.tt === "qua_han" ? n0(k.late) : "–"}</td><td>${pill(lab, cls)}${k.n > 1 ? ` <span class="small">${k.n} HĐ</span>` : ""}</td><td class="r">${canEdit ? `<button type="button" class="icon-btn cn-toggle" title="Cập nhật công nợ kỳ ${esc(k.ky)}"><i class="ri-edit-line"></i></button>` : ""}</td></tr>${form}`;
     }).join("");
     // Chi tiết từng hóa đơn — chỉ để xem
-    const inv = c.lines.map((l) => {
+    // tối đa 25 hóa đơn mỗi khách: còn nợ nhiều nhất trước, rồi mới nhất
+    const invShow = linesShow.slice().sort((a, b) => b.con_lai - a.con_lai || String(b.ngay_hd || "").localeCompare(String(a.ngay_hd || ""))).slice(0, 25);
+    const inv = invShow.map((l) => {
       const [lab, cls] = TT_AR[l.tt];
       return `<tr class="${l.suaTay ? "r-edited" : ""}"><td class="num">${esc(l.ky)}</td><td class="small">${esc(l.so_ct || "—")}</td><td class="num">${fmtDate(l.guiBK)}</td><td class="num">${fmtDate(l.ngay_hd)}</td><td class="num">${fmtDate(l.den_han)}</td><td class="r num">${tyN(l.so_tien)}</td><td class="r num">${l.da_thu ? tyN(l.da_thu) : "–"}</td><td class="r num ${l.con_lai > 0 && l.tt === "qua_han" ? "c-critical" : ""}">${l.con_lai > 0 ? tyN(l.con_lai) : "–"}</td><td class="num">${fmtDate(l.thu_du)}</td><td>${pill(lab, cls)}</td></tr>`;
     }).join("");
@@ -100,7 +108,7 @@ function arDetailCard(v: VM): string {
     return `<details class="cust-det"><summary><b>${esc(c.ten)}</b> <span class="small">${esc(c.nhom)} · PM ${esc(c.pm)} · còn lại <b class="num">${tr(c.open)}</b>${c.overdue > 0 ? ` · quá hạn <b class="num c-critical">${tr(c.overdue)}</b> (trễ nhất ${n0(c.maxLate)} ngày)` : ""} · đúng hạn ${pc(c.onTimeRate, 0)}</span></summary>
       <div class="tw" style="margin-top:10px"><table><thead><tr><th>Kỳ nợ</th><th>Gửi bảng kê</th><th>Đến hạn</th><th class="r">Phải thu (${unit().nhan})</th><th class="r">Đã thu (${unit().nhan})</th><th class="r">Còn lại (${unit().nhan})</th><th>Ngày thu</th><th class="r">Ngày trễ</th><th>Trạng thái</th><th></th></tr></thead><tbody>${kyRows}
       <tr class="tot"><td>Tổng</td><td></td><td></td><td class="r num">${tyN(c.billed)}</td><td class="r num">${tyN(c.paid)}</td><td class="r num">${tyN(c.open)}</td><td></td><td></td><td></td><td></td></tr></tbody></table></div>
-      <details class="inv-det"><summary>Xem chi tiết ${c.lines.length} hóa đơn của ${esc(c.ten)} (chỉ để xem — số từ file upload)</summary><div class="tw" style="margin-top:10px">${invTbl}</div></details>${canEdit ? `<details class="add-det"><summary>+ Thêm kỳ công nợ cho ${esc(c.ten)}</summary>${edForm("ar", c.ma_kh, "", "", [
+      ${an ? `<div class="small" style="margin-top:6px">${an} kỳ đã thu đủ trước ${kyFromIdx(lim)} không hiện.</div>` : ""}<details class="inv-det"><summary>Xem chi tiết ${invShow.length < linesShow.length ? `${invShow.length}/${linesShow.length}` : linesShow.length} hóa đơn của ${esc(c.ten)} (chỉ để xem — số từ file upload${invShow.length < linesShow.length ? "; còn nợ nhiều nhất trước" : ""})</summary><div class="tw" style="margin-top:10px">${invTbl}</div></details>${canEdit ? `<details class="add-det"><summary>+ Thêm kỳ công nợ cho ${esc(c.ten)}</summary>${edForm("ar", c.ma_kh, "", "", [
         { f: "__ky", l: "Kỳ nợ (T09.2026)", t: "text" },
         { f: "ngay_gui_bk", l: "Ngày gửi bảng kê", t: "date" },
         { f: "ngay_hd", l: "Ngày hóa đơn", t: "date" },
@@ -277,8 +285,8 @@ export function opsStrip(v: VM): string {
   const k: Tile[] = [
     money("GMV" + (day ? " ngày" : " kỳ"), "ri-shopping-bag-3-line", B.cur.gmv, B.plan.gmv, cmpS?.gmv),
     B.noDaily ? ["Margin", "—", NO_DAILY, 0, "muted", go, "ri-percent-line"]
-      : ["Margin", pc(mg, 2), [mgP ? `KH ${pc(mgP, 2)}` : "", cmpS ? `${dPlain(dPt(mg, mgOf(cmpS)), true)} so ${cmpL}` : ""].filter(Boolean).join(" · "), mg != null && mgP ? mg / mgP : 0, stCls(mg != null && mgP ? mg / mgP : null), go, "ri-percent-line"],
-    money("Net revenue", "ri-funds-line", B.cur.nr, B.plan.nr, cmpS?.nr),
+      : covTile(["Margin", pc(mg, 2), [mgP ? `KH ${pc(mgP, 2)}` : "", cmpS ? `${dPlain(dPt(mg, mgOf(cmpS)), true)} so ${cmpL}` : ""].filter(Boolean).join(" · "), mg != null && mgP ? mg / mgP : 0, stCls(mg != null && mgP ? mg / mgP : null), go, "ri-percent-line"], B),
+    covTile(money("Net revenue", "ri-funds-line", B.cur.nr, B.plan.nr, cmpS?.nr), B),
     ["Nợ phải thu quá hạn", A.tot ? pc(A.od / A.tot) : "—", A.tot ? `${ty(A.od)} / ${ty(A.tot)} · DSO ${ok(A.dso) ? n0(A.dso) + " ngày" : "—"}` : "chưa có sổ công nợ", A.tot ? A.od / A.tot : 0, !A.tot ? "muted" : A.od / A.tot > 0.4 ? "critical" : A.od / A.tot > 0.25 ? "high" : "stable", go, "ri-time-line"],
     B.noDaily ? ["Khách hàng active", "—", NO_DAILY, 0, "muted", go, "ri-group-line"]
       : ["Khách hàng active", n0(B.cur.kh), day ? (B.avg ? `TB 7 ngày ${N1.format(B.avg.kh)} khách/ngày` : "") : [B.plan.kh ? `của ${n0(B.plan.kh)} kế hoạch` : "", `${dPlain(dPct(B.cur.kh, B.prev.kh))} so ${W.prevL}`].filter(Boolean).join(" · "),
@@ -287,6 +295,12 @@ export function opsStrip(v: VM): string {
   return kpiTiles(k);
 }
 
+/** Net revenue & Margin chỉ tính trên phần GMV đã có giá vốn — ghi rõ khi chưa đủ */
+function covTile(t: Tile, B: Block): Tile {
+  const c = covOf(B.cur);
+  if (B.noDaily || c == null || c >= 0.995) return t;
+  return [t[0], t[1], `giá vốn có cho ${pc(c, 0)} GMV · ` + t[2], t[3], t[4], t[5], t[6]];
+}
 /** Ghi chú cửa sổ thời gian đang xem, đặt ở góc thẻ */
 function winNote(W: Win): string {
   if (W.mode === "ngay") return `ngày ${fmtDate(W.ngay)} · so hôm qua & TB 7 ngày (${fmtDate(W.last7[0]).slice(0, 5)}–${fmtDate(W.yday).slice(0, 5)})`;
@@ -322,6 +336,8 @@ function homeOps(v: VM): string {
     [day ? "% đạt kế hoạch ngày" : "% đạt kế hoạch", (k) => { const B = BS[k]; if (B.noDaily) return "—"; const x = B.plan.gmv ? B.cur.gmv / B.plan.gmv : null;
       return B.plan.gmv ? `<span class="num c-${stCls(x)}">${pc(x, 0)}</span><div class="t2">${tyN(B.plan.gmv)} kế hoạch</div>` : `<span class="c-muted small">chưa có kế hoạch</span>`; }],
     ["Giá vốn", (k) => cell(k, (s) => s.gv, "money")],
+    ["GMV đã có giá vốn", (k) => { const B = BS[k]; if (B.noDaily) return "—"; const c = covOf(B.cur);
+      return `<span class="num c-${c == null ? "muted" : c >= 0.95 ? "stable" : c >= 0.7 ? "high" : "critical"}">${pc(c, 0)}</span><div class="t2">${tyN(B.cur.gmvC)}</div>`; }],
     ["Net revenue", (k) => cell(k, (s) => s.nr, "money"), true],
     ["Margin", (k) => { const B = BS[k]; const h = cell(k, (s) => mgOf(s), "pct"); const p = B.plan.gmv ? B.plan.nr / B.plan.gmv : null; return h + (p != null && !B.noDaily ? `<div class="t2">KH ${pc(p, 2)}</div>` : ""); }],
     ["Khách active", (k) => cell(k, (s) => s.kh, "n")],
@@ -335,7 +351,7 @@ function homeOps(v: VM): string {
   };
   const F = facts(C);
   const tbl = `<table class="cmp seg-cmp"><thead><tr><th>${esc(unitLabel())}</th>${cols.map(head).join("")}</tr></thead><tbody>${rows.map(([l, f, hl]) => `<tr${hl ? ' class="hl"' : ""}><td>${esc(l)}</td>${cols.map((k) => `<td class="r">${f(k)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
-  const foot = `<div class="small" style="margin-top:6px">Net revenue = GMV − giá vốn · Margin = Net revenue ÷ GMV. Mobility lấy giao dịch ở tab Mobility${F.mobTab ? "" : " (chưa đọc được — đang dùng số trong file template)"}, giá vốn theo % chiết khấu từng đơn vị cung cấp — sửa ở tab <a href="#" data-go="data">Dữ liệu</a>.${day ? " Travel & SaaS: ngày chưa up số lấy số ngày gần nhất trước đó." : W.cutDom ? ` Kỳ đang chạy: so với ngày 1–${W.cutDom} của kỳ trước (số chỉ có theo tháng thì so cả tháng).` : ""}</div>`;
+  const foot = `<div class="small" style="margin-top:6px">Net revenue = GMV − giá vốn · Margin = Net revenue ÷ GMV, cả hai tính trên phần GMV đã có giá vốn (Travel & SaaS: dòng bảng kê nối được file đối soát NCC). Mobility lấy giao dịch ở tab Mobility${F.mobTab ? "" : " (chưa đọc được — đang dùng số trong file template)"}, giá vốn theo % chiết khấu từng đơn vị cung cấp — sửa ở tab <a href="#" data-go="data">Dữ liệu</a>.${day ? " Travel & SaaS: ngày chưa up số lấy số ngày gần nhất trước đó." : W.cutDom ? ` Kỳ đang chạy: so với ngày 1–${W.cutDom} của kỳ trước (số chỉ có theo tháng thì so cả tháng).` : ""}</div>`;
   const cmpCard = card("Hai mảng kinh doanh", day ? `Ngày ${fmtDate(W.ngay)}` : `Kỳ ${W.curL}`, winNote(W), `<div class="tw">${tbl}</div>${carriedNote(BS.ts)}${foot}`);
 
   /* Cầu nối GMV, Net revenue theo khách, tuổi nợ — mỗi thứ tách Travel & SaaS / Mobility */
@@ -358,7 +374,7 @@ function homeOps(v: VM): string {
     const neg = rs.filter((r) => r.nr < 0).slice(-6).reverse(), pos = rs.filter((r) => r.nr >= 0).slice(0, neg.length ? 6 : 10);
     const pick = [...pos, ...neg], rng = Math.max(...pick.map((r) => Math.abs(r.nr)), 1);
     return card(`Net revenue theo khách · ${SEG_NAME[seg]}`, "Khách nào mang lại nhiều nhất", `${unitLabel()} · ${rs.length} khách phát sinh`,
-      pick.length ? divBars(pick.map((r) => ({ l: r.ten, sub: `${r.sub ? r.sub + " · " : ""}GMV ${tien(r.gmv)} · margin ${pc(r.gmv ? r.nr / r.gmv : null, 1)}`, v: r.nr, c: r.nr < 0 ? "critical" : D("green"), txt: (r.nr < 0 ? "−" : "") + tien(Math.abs(r.nr)), dr: seg === "ts" ? `cust:${r.k}` : undefined })), rng) : empty("Chưa có GMV trong khoảng đang xem"));
+      pick.length ? divBars(pick.map((r) => ({ l: r.ten, sub: `${r.sub ? r.sub + " · " : ""}GMV ${tien(r.gmv)} · margin ${pc(r.gmvC ? r.nr / r.gmvC : null, 1)}${r.gmv && r.gmvC / r.gmv < 0.995 ? ` · có giá vốn ${pc(r.gmvC / r.gmv, 0)}` : ""}`, v: r.nr, c: r.nr < 0 ? "critical" : D("green"), txt: (r.nr < 0 ? "−" : "") + tien(Math.abs(r.nr)), dr: seg === "ts" ? `cust:${r.k}` : undefined })), rng) : empty("Chưa có GMV trong khoảng đang xem"));
   };
   const agingCard = (seg: Seg) => {
     const A = AS[seg];
@@ -399,10 +415,11 @@ function tsMain(v: VM): string {
         `<td class="r"><span class="num">${tyN(r.cur.gmv)}</span><div class="t2">${tyN(r.cmp.gmv)} ${dPctTxt(dPct(r.cur.gmv, r.cmp.gmv))}</div></td>` +
         `<td class="r"><span class="num${r.cur.nr < 0 ? " c-critical" : ""}">${tyN(r.cur.nr)}</span><div class="t2">${tyN(r.cmp.nr)} ${dPctTxt(dPct(r.cur.nr, r.cmp.nr))}</div></td>` +
         `<td class="r"><span class="num">${pc(m, 2)}</span><div class="t2">${pc(mc, 2)} ${dPtTxt(dPt(m, mc))}</div></td>` +
-        `<td class="r">${share(r.cur.gmv, tg)}</td><td class="r">${share(r.cur.nr, tn)}</td></tr>`;
+        `<td class="r">${share(r.cur.gmv, tg)}</td><td class="r">${share(r.cur.nr, tn)}</td>` +
+        `<td class="r num${(covOf(r.cur) ?? 1) < 0.7 ? " c-critical" : ""}">${pc(covOf(r.cur), 0)}</td></tr>`;
     };
     const tot = { ten: "Tổng Travel & SaaS", sub: "", cur: B.cur, cmp: day ? (B.avg as Sum) : B.prev };
-    body = rows.length ? `<div class="tw"><table class="cmp dimt"><thead><tr><th>${esc(DIM_L.find((x) => x[0] === dim)?.[1].replace("Theo ", "") || "")}</th><th class="r">GMV</th><th class="r">Net revenue</th><th class="r">Margin</th><th class="r">Đóng góp GMV</th><th class="r">Đóng góp Net revenue</th></tr></thead><tbody>${rows.map((r) => line(r, r.k === "__rest" ? "sub" : "")).join("")}${line(tot, "tot")}</tbody></table></div>` +
+    body = rows.length ? `<div class="tw"><table class="cmp dimt"><thead><tr><th>${esc(DIM_L.find((x) => x[0] === dim)?.[1].replace("Theo ", "") || "")}</th><th class="r">GMV</th><th class="r">Net revenue</th><th class="r">Margin</th><th class="r">Đóng góp GMV</th><th class="r">Đóng góp Net revenue</th><th class="r">Có giá vốn</th></tr></thead><tbody>${rows.map((r) => line(r, r.k === "__rest" ? "sub" : "")).join("")}${line(tot, "tot")}</tbody></table></div>` +
       `<div class="small" style="margin-top:6px">Dòng nhỏ dưới mỗi số: ${esc(cmpL)} và mức tăng/giảm. Margin = Net revenue ÷ GMV, chênh lệch tính bằng điểm %.${dim === "kh" || dim === "ncc" ? " Hiển thị 10 dòng lớn nhất, còn lại gộp một dòng." : ""}</div>`
       : empty("Chưa có GMV trong khoảng đang xem");
   }
@@ -451,7 +468,7 @@ function tsMain(v: VM): string {
     card("Kỳ hạn thực hưởng", "DPO thực tế so với payment term hợp đồng", "vạch = term HĐ", term + legend([["Trả sớm hơn HĐ > 4 ngày", "watch"], ["Đúng lịch", "stable"], ["Trễ hạn", "high"], ["Term hợp đồng", "ink", 1, true]]));
 
   const sec = (t: string) => `<div class="sec-h">${esc(t)}</div>`;
-  return sales + sec("Công nợ khách hàng") + arPart + sec("Công nợ phải trả") + apPart;
+  return sales + sec("Công nợ khách hàng") + arPart + sec("Công nợ phải trả") + apDsCard(v, W) + apPart;
 }
 
 /* ---------- Travel & SaaS › Công nợ (nhập trực tiếp) ---------- */
@@ -459,4 +476,28 @@ function tsCongNo(v: VM): string {
   const { APS } = apTs(v);
   const apAdd = v.canEdit ? card("Cập nhật trực tiếp", "Thêm công nợ phải trả", "upload file sổ phải trả sẽ ghi đè số nhập tay của cùng kỳ", addApForm(v.ky)) : "";
   return bangKeCard(v) + apAdd + apSupplierCards({ ...v, APS });
+}
+
+/* ---------- Phải trả NCC phát sinh theo file đối soát ----------
+   Có: số NCC ghi trên bảng kê (giá vốn) theo NCC & kỳ dịch vụ, tình trạng khớp với hệ thống.
+   Chưa có: ngày hóa đơn NCC, payment term, đã trả — nên chưa tính tuổi nợ / quá hạn từ nguồn này. */
+function apDsCard(v: VM, W: Win): string {
+  const src = v.Cc.D.src;
+  if (!src || !src.ncc.length) return "";
+  const ky = W.ky, rows = src.ncc.filter((r) => r.ky === ky && r.nganh !== "Mobility" && !(r.khop || "").startsWith("Trùng"));
+  if (!rows.length) return card("Đối soát NCC", `Phải trả phát sinh kỳ ${ky}`, "", empty(`Chưa có file đối soát NCC cho kỳ ${ky}`));
+  const by = new Map<string, { ncc: string; nganh: string; bk: number; led: number; khop: number; lech: number; thieu: number; n: number }>();
+  rows.forEach((r: SrcNccSum) => {
+    const k = r.ncc || "Chưa rõ NCC", o = by.get(k) || { ncc: k.replace(/^(hotel|flight):/, ""), nganh: r.nganh || "—", bk: 0, led: 0, khop: 0, lech: 0, thieu: 0, n: 0 };
+    o.bk += r.bang_ke; o.led += r.ledger; o.n += r.n;
+    if (r.khop === "Khớp") o.khop += r.bang_ke; else if (r.khop === "Thiếu trong hệ thống") o.thieu += r.bang_ke; else o.lech += r.bang_ke;
+    by.set(k, o);
+  });
+  const list = Array.from(by.values()).sort((a, b) => b.bk - a.bk);
+  const T = list.reduce((s, x) => ({ bk: s.bk + x.bk, led: s.led + x.led, khop: s.khop + x.khop, lech: s.lech + x.lech, thieu: s.thieu + x.thieu, n: s.n + x.n }), { bk: 0, led: 0, khop: 0, lech: 0, thieu: 0, n: 0 });
+  const stack = hStack(list.map((x) => ({ l: x.ncc, sub: `${x.nganh} · ${n0(x.n)} dòng · ledger ${tyN(x.led)}`, parts: [[x.khop, D("green"), "Khớp"], [x.lech, D("yellow"), "Lệch tiền"], [x.thieu, D("red"), "Thiếu trong hệ thống"]] as [number, string, string][], txt: tyN(x.bk) })),
+    { ft: tr, legend: [["Khớp", D("green")], ["Lệch tiền", D("yellow")], ["Thiếu trong hệ thống", D("red")]] });
+  const stats = `<div class="stat-row">${stat("Phải trả theo bảng kê NCC", ty(T.bk))}${stat("Số trên bảng kê khách (ledger)", ty(T.led))}${stat("Thiếu trong hệ thống", ty(T.thieu), T.thieu ? "critical" : "")}</div>`;
+  return card("Đối soát NCC", `Phải trả phát sinh theo NCC — kỳ dịch vụ ${ky}`, unitLabel(), stats + stack +
+    `<div class="small" style="margin-top:6px">Từ file đối soát NCC (bỏ dòng trùng). Chưa có ngày hóa đơn NCC, payment term và số đã trả nên các bảng tuổi nợ / lịch trả bên dưới vẫn lấy từ sổ phải trả cũ.</div>`);
 }
