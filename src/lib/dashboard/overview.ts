@@ -9,6 +9,7 @@ import { kyFromIdx } from "./util";
 import { esc, ty, tyN, tr, n0, pc, sum, ok, N1, kyShort, fmtDate, kyIdx, days, unit, unitLabel, axisNum, leVua, tyLe, kyAdd, kyEnd } from "./util";
 import { GROUPS } from "./insight";
 import type { VM } from "./views";
+import { drillPanel } from "./views";
 import type { SrcNccSum } from "./types";
 import { dimKey, makeWin, block, facts, mgOf, covOf, byDim, topRest, bridgeOf, nrByCustomer, onTimeSeg, invCol, Win, Dim, Block, Sum, Mode } from "./ops";
 
@@ -381,7 +382,7 @@ function homeOps(v: VM): string {
     const A = AS[seg];
     return card(`Rủi ro thu tiền · ${SEG_NAME[seg]}`, "Công nợ phải thu theo tuổi nợ", asOfTxt(C), !A.tot && !A.neg ? empty("Chưa có công nợ phải thu") :
       `<div class="stat-row">${stat("Quá hạn", pc(A.tot ? A.od / A.tot : null, 0), A.tot && A.od / A.tot > 0.25 ? "critical" : "")}${stat("> 60 ngày", ty(A.o60), A.o60 ? "critical" : "")}${stat("DSO", ok(A.dso) ? n0(A.dso) + " ngày" : "—")}</div>` +
-      donut(A.bk.map((x, k): [number, string, string] => [x, BCLS[k], AR_BUCKETS[k]]), ty(A.tot), "tổng phải thu", { ft: ty, size: 140 }));
+      donut(A.bk.map((x, k): [number, string, string, string] => [x, BCLS[k], AR_BUCKETS[k], `ops-ar:${seg}:${k}`]), ty(A.tot), "tổng phải thu", { ft: ty, size: 140 }));
   };
   return cmpCard +
     `<div class="g2">${bridgeCard("ts")}${bridgeCard("m")}</div>` +
@@ -591,6 +592,8 @@ const nccBare = (s: string | null | undefined) => String(s || "").replace(/^(hot
 
 export function opsDrill(v: VM, key: string): string {
   if (key.startsWith("ops-br:")) return opsBridgeDrill(v, key);
+  // Tổng quan › tuổi nợ phải thu của từng mảng: cùng khung chi tiết như ở Travel & SaaS, chỉ lấy khách của mảng đó
+  if (key.startsWith("ops-ar:")) { const [, sg, k] = key.split(":"); return drillPanel({ ...v, A: calcAR(segCtx(v.Cc, sg === "m" ? "m" : "ts")) }, `ar:${k}`); }
   const [, segS, dimS, enc] = key.split(":");
   const seg = (segS === "m" ? "m" : "ts") as Seg, dim = (["dv", "kh", "ncc"].includes(dimS) ? dimS : "kh") as Dim;
   const k = decodeURIComponent(enc || "");
