@@ -26,7 +26,8 @@ export default function SourceUpload({ data, canEdit, onDone, toast }: { data: D
     setBusy("Đang đọc file…"); setRes(null);
     try {
       const out: SrcFile[] = [];
-      for (const f of Array.from(list)) out.push(await readSource(f, data.customers, data.alias || {}));
+      const arCodes = Array.from(new Set(data.ar.map((r) => r.ma_kh)));
+      for (const f of Array.from(list)) out.push(await readSource(f, data.customers, arCodes));
       // file trùng tên (nạp lại) thay bản trước trong danh sách chờ
       setFiles((cur) => [...cur.filter((x) => !out.some((o) => o.name === x.name)), ...out]);
     } catch (e) { toast(e instanceof Error ? e.message : String(e), true); }

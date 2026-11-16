@@ -10,7 +10,7 @@ interface Grp { id: string; ma_he_thong: string; ten_nhom: string; pm?: string |
 interface Pn { id: string; group_id: string; code: string | null; ten_khach_hang: string; ten_viet_tat: string | null; pm?: string | null; ten_khac?: string | null }
 /** Tên gọi khác mặc định (khi Master Data chưa khai cột "Tên gọi khác"): mã KH trong Dashboard → các tên trên hệ thống khác */
 const ALIAS_MAC_DINH: Record<string, string[]> = {
-  "SAO THUY": ["MASTERISE", "CTCP TẬP ĐOÀN MASTERISE", "CÔNG TY CỔ PHẦN TẬP ĐOÀN MASTERISE", "TECHCOMBANK", "TCB", "MARI01"],
+  "SAO THUY": ["MASTERISE", "CTCP TẬP ĐOÀN MASTERISE", "CÔNG TY CỔ PHẦN TẬP ĐOÀN MASTERISE", "TECHCOMBANK", "TCB"],
 };
 interface Kh { ma_kh: string; ten_kh: string; ten_viet_tat: string | null; nhom: string; pm: string | null; ma_he_thong?: string | null }
 

@@ -10,7 +10,7 @@
 // Nhận diện file theo dòng tiêu đề, không theo tên file.
 import { loadSheetJS, norm } from "./parse";
 import type { Customer } from "./types";
-import { fixSwappedDates } from "./alias";
+
 
 export type SrcKind = "kh_hotel" | "kh_flight" | "kh_be" | "ncc" | "b1" | "ht_hotel" | "ht_flight" | "ar" | "unknown";
 export const KIND_LABEL: Record<SrcKind, string> = {
@@ -87,7 +87,7 @@ function header(rows: Cell[][], must: string[], scan = 15) {
 }
 
 /* ---------------- đọc một file ---------------- */
-export async function readSource(file: File, existing: Customer[], alias: Record<string, string> = {}): Promise<SrcFile> {
+export async function readSource(file: File, existing: Customer[], arCodes: string[] = []): Promise<SrcFile> {
   const X = await loadSheetJS();
   SSF = X.SSF;
   // CSV: đọc dạng chữ UTF-8 và giữ nguyên chữ (không để thư viện tự đoán ngày kiểu Mỹ)
@@ -97,7 +97,7 @@ export async function readSource(file: File, existing: Customer[], alias: Record
 
   // 1. Sổ công nợ phải thu: sheet CNO PTHU
   const arSheet = wb.SheetNames.find((n) => norm(n) === "cnopthu");
-  if (arSheet) return readAR(base, sheet(arSheet), wb.SheetNames.find((n) => norm(n) === "khachhang") ? sheet(wb.SheetNames.find((n) => norm(n) === "khachhang") as string) : [], existing, alias);
+  if (arSheet) return readAR(base, sheet(arSheet), wb.SheetNames.find((n) => norm(n) === "khachhang") ? sheet(wb.SheetNames.find((n) => norm(n) === "khachhang") as string) : [], existing, new Set(arCodes));
 
   for (const n of wb.SheetNames) {
     const rows = sheet(n);
@@ -184,11 +184,14 @@ function readNcc(f: SrcFile, rows: Cell[][], H: Hdr): SrcFile {
     out.push({ ncc, nganh, ma_booking: txt(g(r, c.bk)), so_ve: ve ? ve.split(/[\r\n]+/)[0].trim() || null : null, khach: txt(g(r, c.khach)), ngay_dv: d, ky: d ? kyOf(d) : null,
       bang_ke: bke, ledger: led, khop: txt(g(r, c.khop)), xu_ly: txt(g(r, c.xl)), mo_ta: txt(g(r, c.mo)), dong: txt(g(r, c.dong)) });
   });
-  // ngày bị đảo ngày/tháng (vd. 01/10 ghi thành 2026-01-10)
-  const fixed = fixSwappedDates(out.map((r) => r.ngay_dv));
-  let doi = 0;
-  out.forEach((r, i) => { if (fixed[i] !== r.ngay_dv) { r.ngay_dv = fixed[i]; r.ky = fixed[i] ? kyOf(fixed[i] as string) : null; doi++; } });
-  if (doi) f.notes.push(`${doi} dòng có ngày bị đảo ngày/tháng (vd. 2026-01-10 → 01/10/2026) — đã sửa`);
+  // Đối soát Be (không có NCC, mã booking là số 10 chữ số): không đưa vào dashboard
+  if (isBeDs(out)) {
+    f.ncc = []; f.rows = 0;
+    summarize(f, out.map((r) => r.ngay_dv), out.reduce((s, r) => s + (r.bang_ke || 0), 0));
+    f.totalL = `Bảng kê NCC ${fmtTien(f.total)}`;
+    f.warns.push(`Đây là đối soát bảng kê Be (${out.length} dòng, mã booking dạng số, không có NCC) — không đưa vào dashboard`);
+    return f;
+  }
   // NCC trống (dòng thiếu trong hệ thống): suy theo sheet bảng kê NCC
   const inf = inferNcc(out, () => "");
   inf.forEach((n, r) => { r.ncc = n; r.nganh = n.startsWith("hotel:") ? "Hotel" : n.startsWith("flight:") ? "Flight" : r.nganh; r.mo_ta = [r.mo_ta, `NCC suy theo sheet bảng kê ${String(r.dong || "").split("!")[0]}`].filter(Boolean).join(" · "); });
@@ -237,12 +240,14 @@ function readBe(f: SrcFile, rows: Cell[][], H: Hdr): SrcFile {
   });
   const all = Array.from(by.values());
   const out = all.filter((r) => r.gmv !== 0).map(({ n: _n, ...r }) => { void _n; return r; });
-  f.kh = out; f.rows = out.length;
+  // Bảng kê Be không đưa vào dashboard
+  f.kh = []; f.rows = 0;
+  f.warns.push("Bảng kê Be không đưa vào dashboard — file này sẽ không được ghi");
   summarize(f, out.map((r) => r.ngay), out.reduce((s, r) => s + r.gmv, 0));
   f.totalL = `GMV ${fmtTien(f.total)} · ${cty}`;
   const multi = all.filter((r) => r.n > 1).length, zero = all.length - out.length;
   f.notes.push(`${all.length} session · ${multi} session gộp nhiều dòng (cước phí + phụ phí) · ${zero} session tổng 0 (hoàn tiền) — bỏ qua`);
-  f.notes.push(`Khách hàng lấy từ tên file: ${cty}. Giá vốn = GMV × 94% (margin 6%). Nạp lại cùng kỳ chỉ thay bảng kê Be của công ty này`);
+
   if (skipFail) f.warns.push(`${skipFail} dòng trạng thái không thành công — bỏ qua`);
   return f;
 }
@@ -303,7 +308,7 @@ function readB1(f: SrcFile, rows: Cell[][], H: Hdr): SrcFile {
   return f;
 }
 
-function readAR(f: SrcFile, rows: Cell[][], kh: Cell[][], existing: Customer[], alias: Record<string, string>): SrcFile {
+function readAR(f: SrcFile, rows: Cell[][], kh: Cell[][], existing: Customer[], arSet: Set<string>): SrcFile {
   f.kind = "ar";
   const H = header(rows, ["Tên khách hàng", "Tên viết tắt khách hàng", "Công nợ phải thu", "Kỳ nợ phát sinh"]);
   if (!H) { f.warns.push("Sheet CNO PTHU thiếu dòng tiêu đề (Tên khách hàng, Tên viết tắt khách hàng, Công nợ phải thu, Kỳ nợ phát sinh)"); return f; }
@@ -318,18 +323,29 @@ function readAR(f: SrcFile, rows: Cell[][], kh: Cell[][], existing: Customer[], 
     kh.slice(HK.i + 1).forEach((r) => { const ma = txt(r[im]), vt = txt(r[iv]); if (ma && vt) master.set(norm(vt), { ma, ten: txt(r[it]) || vt, vt, term: num(r[ip]) }); });
   } else f.warns.push("Không thấy sheet KHACH HANG (mã khách hàng, payment term) — khách mới lấy mã theo tên viết tắt");
 
-  /* Mã khách: ưu tiên khách đã có trong dashboard (theo tên viết tắt / tên / mã), rồi tới mã trong sheet KHACH HANG */
-  const ex = new Map<string, Customer>();
-  existing.forEach((x) => { [x.ten_viet_tat, x.ten_kh, x.ma_kh].forEach((k) => { if (k && !ex.has(norm(k))) ex.set(norm(k), x); }); });
+  /* Nhận khách theo TÊN ĐẦY ĐỦ của pháp nhân (không theo tên viết tắt — tên viết tắt có thể trùng / là mã số thuế):
+     1. khách đã có trong dashboard cùng tên đầy đủ (nhiều khách cùng tên thì lấy khách đang có công nợ)
+     2. mã trong sheet KHACH HANG cùng tên đầy đủ
+     3. khách mới: mã = tên viết tắt (trùng mã của pháp nhân khác thì thêm hậu tố) */
+  const fullBy = new Map<string, Customer[]>();
+  existing.forEach((x) => { const k = norm(x.ten_kh); if (!k) return; const a = fullBy.get(k) || []; a.push(x); fullBy.set(k, a); });
+  const masterFull = new Map<string, { ma: string; ten: string; vt: string; term: number | null }>();
+  master.forEach((m) => { if (!masterFull.has(norm(m.ten))) masterFull.set(norm(m.ten), m); });
+  const used = new Map(existing.map((x) => [x.ma_kh, norm(x.ten_kh)]));
   const dm = new Map<string, DmRow>();
-  // tên gọi khác (vd. MASTERISE → SAO THUY): khóa của alias viết hoa không dấu, không ký tự đặc biệt
-  const aka = (s: string | null) => alias[String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").toUpperCase().replace(/[^A-Z0-9]/g, "")];
   const resolve = (vt: string, ten: string | null): string => {
-    const a = aka(vt);
-    if (a && ex.get(norm(a))) return a;
-    const k = norm(vt), e = ex.get(k), m = master.get(k);
-    const ma = e?.ma_kh || m?.ma || vt.toUpperCase().replace(/\s+/g, " ").trim();
-    if (!dm.has(ma)) dm.set(ma, { ma_kh: ma, ten_kh: e?.ten_kh || m?.ten || ten || vt, ten_viet_tat: e?.ten_viet_tat || vt, credit_term: m?.term ?? e?.credit_term ?? null, moi: !e });
+    const kf = norm(ten || vt);
+    const es = fullBy.get(kf) || [];
+    const e = es.find((x) => arSet.has(x.ma_kh)) || es[0];
+    const m = masterFull.get(kf);
+    let ma = e?.ma_kh || m?.ma;
+    if (!ma) {
+      const base = vt.toUpperCase().replace(/\s+/g, " ").trim();
+      ma = base; let i = 2;
+      while (used.has(ma) && used.get(ma) !== kf) ma = `${base}-${i++}`;
+    }
+    used.set(ma, kf);
+    if (!dm.has(ma)) dm.set(ma, { ma_kh: ma, ten_kh: e?.ten_kh || ten || m?.ten || vt, ten_viet_tat: e?.ten_viet_tat || vt || m?.vt || null, credit_term: m?.term ?? e?.credit_term ?? null, moi: !e } as DmRow);
     return ma;
   };
   master.forEach((m) => resolve(m.vt, m.ten));
@@ -386,4 +402,10 @@ export function inferNcc<T extends { ncc: string | null; dong: string | null }>(
     if (best && best[1] / tot >= 0.6) out.set(r, best[0]);
   });
   return out;
+}
+
+/** File đối soát của Be: không dòng nào có NCC và phần lớn mã booking là số 10 chữ số (Session / Booking ID của Be) */
+export function isBeDs(rows: { ncc: string | null; ma_booking: string | null }[]): boolean {
+  if (!rows.length || rows.some((r) => r.ncc)) return false;
+  return rows.filter((r) => /^\d{10}$/.test(String(r.ma_booking || "").trim())).length / rows.length >= 0.8;
 }

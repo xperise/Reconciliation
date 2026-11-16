@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { adminClient, guard, fetchAll } from "@/lib/dashboard/server";
 import type { KhRow, NccRow, ArRow, DmRow } from "@/lib/dashboard/sources";
-import { inferNcc } from "@/lib/dashboard/sources";
-import { canonNcc, fixSwappedDates } from "@/lib/dashboard/alias";
+import { inferNcc, isBeDs } from "@/lib/dashboard/sources";
+import { canonNcc } from "@/lib/dashboard/alias";
 import { kyEnd, addDays } from "@/lib/dashboard/util";
 import { syncTravelToMaster, masterInfo } from "@/lib/dashboard/masterSync";
 
@@ -155,18 +155,16 @@ async function rebuild(sb: Sb) {
     fetchAll<Kh>("fin_src_kh", "id"), fetchAll<Ncc>("fin_src_ncc", "id"),
     fetchAll<{ ma_kh: string; so_ct: string | null }>("fin_ar", "id"), fetchAll<{ ma_kh: string; ten_kh: string; ten_viet_tat: string | null }>("fin_customers"),
   ]);
-  // Ngày bị đảo ngày/tháng trong file đối soát đã nạp: sửa theo từng file, lưu lại
-  const byFile = new Map<string, Ncc[]>();
-  ncc.forEach((n) => { const k = (n as Ncc & { file_key?: string }).file_key || ""; if ((n.khop || "").startsWith("HT:") || (n.khop || "").startsWith("B1:")) return; const a = byFile.get(k) || []; a.push(n); byFile.set(k, a); });
-  for (const rows of Array.from(byFile.values())) {
-    const fx = fixSwappedDates(rows.map((n) => n.ngay_dv));
-    for (let i = 0; i < rows.length; i++) {
-      if (fx[i] === rows[i].ngay_dv || !fx[i]) continue;
-      const d = fx[i] as string, ky = `T${d.slice(5, 7)}.${d.slice(0, 4)}`;
-      const { error } = await sb.from("fin_src_ncc").update({ ngay_dv: d, ky }).eq("id", rows[i].id);
-      chk(error, "Sửa ngày đảo trong file đối soát");
-      rows[i].ngay_dv = d; rows[i].ky = ky;
-    }
+  // Bảng kê Be và đối soát Be không đưa vào dashboard: xóa khỏi dữ liệu đã nạp
+  {
+    const { error } = await sb.from("fin_src_kh").delete().eq("loai", "transport"); chk(error, "Bỏ bảng kê Be");
+    const byFile = new Map<string, Ncc[]>();
+    ncc.forEach((n) => { const k = (n as Ncc & { file_key?: string }).file_key || ""; const a = byFile.get(k) || []; a.push(n); byFile.set(k, a); });
+    const beKeys = Array.from(byFile.entries()).filter(([k, rows]) => k && !k.startsWith("ht_") && isBeDs(rows)).map(([k]) => k);
+    if (beKeys.length) { const r = await sb.from("fin_src_ncc").delete().in("file_key", beKeys); chk(r.error, "Bỏ đối soát Be"); }
+    const beSet = new Set(beKeys);
+    for (let i = ncc.length - 1; i >= 0; i--) if (beSet.has((ncc[i] as Ncc & { file_key?: string }).file_key || "")) ncc.splice(i, 1);
+    for (let i = kh.length - 1; i >= 0; i--) if (kh[i].loai === "transport") kh.splice(i, 1);
   }
   // Dòng đối soát chưa có NCC (thiếu trong hệ thống): suy NCC theo sheet bảng kê NCC trong cùng file, lưu lại vào bảng
   const inf = inferNcc(ncc.filter((n) => !(n.khop || "").startsWith("HT:") && !(n.khop || "").startsWith("B1:")), (n) => (n as Ncc & { file_key?: string }).file_key || "");
@@ -180,15 +178,18 @@ async function rebuild(sb: Sb) {
   }
   if (!kh.length) return { ok: true, kys: [], rows: 0, note: "Chưa có bảng kê khách hàng nào" };
 
-  /* --- tên gọi khác (Master Data + mặc định): gộp về đúng mã KH, kể cả số phải thu đã nạp dưới mã khác --- */
+  /* --- tên gọi khác (Master Data + mặc định): chỉ dùng cho tên công ty trên bảng kê; sổ phải thu nhận khách theo tên đầy đủ pháp nhân --- */
   const { alias } = await masterInfo(cust.map((c) => ({ ma_kh: c.ma_kh, ten_kh: c.ten_kh, ten_viet_tat: c.ten_viet_tat, nhom: "N1", pm: null })));
-  const gop: { tu: string; ve: string }[] = [];
-  cust.forEach((c) => { const ve = [c.ma_kh, c.ten_viet_tat, c.ten_kh].map((x) => alias[nk(x)]).find(Boolean); if (ve && ve !== c.ma_kh) gop.push({ tu: c.ma_kh, ve }); });
-  for (const g of gop) {
-    const { error } = await sb.from("fin_ar").update({ ma_kh: g.ve }).eq("ma_kh", g.tu);
-    chk(error, `Gộp phải thu ${g.tu} → ${g.ve}`);
-    ar.forEach((r) => { if (r.ma_kh === g.tu) r.ma_kh = g.ve; });
+  {
+    // nhiều mã cùng tên đầy đủ: đổi đích về mã đang có công nợ phải thu
+    const coAr = new Set(ar.map((r) => r.ma_kh)), tenOf = new Map(cust.map((c) => [c.ma_kh, nk(c.ten_kh)]));
+    Object.keys(alias).forEach((k) => {
+      const t = alias[k]; if (coAr.has(t)) return;
+      const alt = cust.find((c) => tenOf.get(c.ma_kh) === tenOf.get(t) && coAr.has(c.ma_kh));
+      if (alt) alias[k] = alt.ma_kh;
+    });
   }
+  const gop: { tu: string; ve: string }[] = [];
 
   /* --- khách hàng --- */
   const byHd = new Map<string, string>();
@@ -226,6 +227,7 @@ async function rebuild(sb: Sb) {
   const tier = (n: Ncc) => (n.khop?.startsWith("HT:") ? 2 : n.khop?.startsWith("B1:") ? 1 : 0);
   const TIER_L = ["Đối soát NCC", "Chi KS trực tiếp B1", "Giá NCC hệ thống", "Be (margin 6%)"];
   const coveredBy = new Map<number, number>();
+  const kyStmt = new Map<number, string>();
   const srcOf = new Map<number, number>();
   let htHit = 0, htMiss = 0;
   ncc.slice().sort((a, b) => tier(a) - tier(b)).forEach((n) => {
@@ -244,6 +246,9 @@ async function rebuild(sb: Sb) {
     const rs = Array.from(hits).filter((r) => (coveredBy.get(r.id) ?? t) >= t);
     if (!rs.length) { if (t === 2) htMiss++; else if (!hits.size) { nccMiss++; nccMissAmt += n.bang_ke; } return; }
     rs.forEach((r) => { coveredBy.set(r.id, t); srcOf.set(r.id, t); });
+    // kỳ của dòng NCC = kỳ ngày giao dịch trên bảng kê của booking đó (ngày dịch vụ trong đối soát là ngày check-in)
+    const main = rs.slice().sort((x, y) => Math.abs(gmvOf(y)) - Math.abs(gmvOf(x)))[0];
+    if (main && main.ky !== n.ky) kyStmt.set(n.id, main.ky);
     if (t === 2) htHit++; else nccHit++;
     // Booking đã hủy trên hệ thống: giá vốn theo phần khách vẫn bị thu trên bảng kê (hoàn hết thì 0)
     let bkAmt = n.bang_ke;
@@ -283,6 +288,12 @@ async function rebuild(sb: Sb) {
   chk(e1, "Xóa GMV Hotel/Flight/Transportation cũ");
   for (let i = 0; i < rows.length; i += 1000) { const { error } = await sb.from("fin_gmv").insert(rows.slice(i, i + 1000)); chk(error, "Ghi GMV theo ngày"); }
 
+  // lưu kỳ theo bảng kê vào dòng đối soát (thẻ phải trả phát sinh, file master data dùng kỳ này)
+  {
+    const byKy = new Map<string, number[]>();
+    ncc.forEach((n) => { const k = kyStmt.get(n.id); if (k) { n.ky = k; const a = byKy.get(k) || []; a.push(n.id); byKy.set(k, a); } });
+    for (const [k, ids] of Array.from(byKy.entries())) for (let i = 0; i < ids.length; i += 500) { const { error } = await sb.from("fin_src_ncc").update({ ky: k }).in("id", ids.slice(i, i + 500)); chk(error, "Cập nhật kỳ theo bảng kê"); }
+  }
   const ap = await rebuildAP(sb, ncc);
 
   return {
