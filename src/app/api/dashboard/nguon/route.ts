@@ -285,10 +285,15 @@ async function rebuild(sb: Sb) {
     }
     if (t === 2) htAmt.set(n.id, bkAmt);
     // chia giá vốn theo tỷ trọng GMV (có dấu: dòng hoàn vé / hủy phòng nhận phần âm)
+    // Booking có dòng bán + dòng hủy/hoàn (tổng GMV ~ 0, có khi nằm ở hai kỳ): giá vốn NCC còn tính chỉ chia cho
+    // các dòng bán (GMV dương), không chia cho dòng hoàn — tránh dòng hoàn âm GMV mà lại nhận giá vốn dương
     const tot = rs.reduce((s, r) => s + gmvOf(r), 0), totAbs = rs.reduce((s, r) => s + Math.abs(gmvOf(r)), 0);
+    const pos = rs.filter((r) => gmvOf(r) > 0), totPos = pos.reduce((s, r) => s + gmvOf(r), 0);
+    const nearZero = totAbs > 0 && Math.abs(tot) < 0.05 * totAbs;
     rs.forEach((r) => {
       const bk = bkAmt;
-      const part = tot !== 0 ? bk * gmvOf(r) / tot : totAbs > 0 ? bk * Math.abs(gmvOf(r)) / totAbs : bk / rs.length;
+      const part = nearZero ? (totPos > 0 ? (gmvOf(r) > 0 ? bk * gmvOf(r) / totPos : 0) : bk * Math.abs(gmvOf(r)) / totAbs)
+        : tot !== 0 ? bk * gmvOf(r) / tot : totAbs > 0 ? bk * Math.abs(gmvOf(r)) / totAbs : bk / rs.length;
       gv.set(r.id, (gv.get(r.id) || 0) + part);
       // NCC: B1 → Xperise_Manual; tên gọi khác / XPERISE:<mã> → NCC tổng hợp (HNH_Manual, Xperise_Manual)
       if (!nccOf.has(r.id) && (n.ncc || t === 1)) nccOf.set(r.id, nccOfSrc(supAll, n));
