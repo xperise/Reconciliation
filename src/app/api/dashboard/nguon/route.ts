@@ -176,6 +176,26 @@ async function rebuild(sb: Sb) {
       for (let i = ncc.length - 1; i >= 0; i--) if ((ncc[i].khop || "").startsWith("B1:")) ncc.splice(i, 1);
     }
   }
+  // Cùng một booking có trong nhiều file đã nạp (vd. Performance Dashboard xuất hai lần với khoảng ngày chồng nhau,
+  // hai file đối soát cùng NCC chồng kỳ): chỉ lấy dòng của file nạp sau cùng, tránh cộng giá vốn / phải trả hai lần
+  let trungFile = 0;
+  {
+    type R = Ncc & { file_key?: string; uploaded_at?: string };
+    const nhom = (n: R) => ((n.khop || "").startsWith("HT:") ? "HT|" + (n.nganh || "") : "DS|" + String(n.ncc || "").replace(/^(hotel|flight):/, ""));
+    const khoa = (n: R) => nhom(n) + "|" + nk(n.ma_booking) + "|" + nk(n.so_ve);
+    const latest = new Map<string, { file: string; at: string }>();
+    (ncc as R[]).forEach((n) => {
+      if (!n.ma_booking && !n.so_ve) return;
+      const k = khoa(n), f = n.file_key || "", at = n.uploaded_at || "", o = latest.get(k);
+      if (!o || at > o.at) latest.set(k, { file: f, at });
+    });
+    for (let i = ncc.length - 1; i >= 0; i--) {
+      const n = ncc[i] as R;
+      if (!n.ma_booking && !n.so_ve) continue;
+      const o = latest.get(khoa(n));
+      if (o && o.file !== (n.file_key || "")) { ncc.splice(i, 1); trungFile++; }
+    }
+  }
   // Dòng đối soát chưa có NCC, hoặc hệ thống ghi "XPERISE:<mã>" mà nằm trên bảng kê NCC khác: gán NCC của bảng kê đó, lưu lại vào bảng
   const inf = inferNcc(ncc.filter((n) => !(n.khop || "").startsWith("HT:") && !(n.khop || "").startsWith("B1:")), (n) => (n as Ncc & { file_key?: string }).file_key || "");
   const nccSuy = new Map<string, number[]>();
@@ -336,6 +356,7 @@ async function rebuild(sb: Sb) {
     ncc: { noi: nccHit, khongNoi: nccMiss, khongNoiTien: Math.round(nccMissAmt) },
     gopKhach: gop.map((g) => `${g.tu} → ${g.ve}`),
     ht: { noi: htHit, khongNoi: htMiss },
+    trungFile,
     theoNguon: Object.fromEntries(Object.entries(theoNguon).map(([k, v]) => [k, Math.round(v)])),
     khachChuaMap: Array.from(chuaMap.entries()).sort((a, b) => b[1] - a[1]).map(([ten, v]) => ({ ten, gmv: Math.round(v) })),
   };
