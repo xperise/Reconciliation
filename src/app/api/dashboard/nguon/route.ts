@@ -48,7 +48,12 @@ export async function POST(req: Request) {
         const { error } = await q; chk(error, "Xóa bảng kê cũ");
       }
       const rows = (b.rows || []).filter((r) => KY.test(r.ky) && r.ngay).map((r) => ({ ...r, loai: b.loai, file_name: b.fileName || null, uploaded_at: now }));
-      if (rows.length) { const { error } = await sb.from("fin_src_kh").insert(rows); chk(error, "Ghi bảng kê"); }
+      if (rows.length) {
+        let { error } = await sb.from("fin_src_kh").insert(rows);
+        // chưa chạy migration 35 (cột email): ghi không có email
+        if (error && /email/.test(error.message)) ({ error } = await sb.from("fin_src_kh").insert(rows.map(({ email: _e, ...r }) => { void _e; return r; })));
+        chk(error, "Ghi bảng kê");
+      }
       return NextResponse.json({ ok: true, written: rows.length });
     }
 
@@ -201,14 +206,29 @@ async function rebuild(sb: Sb) {
   const byCompany = new Map<string, string>();
   vote.forEach((v, k) => byCompany.set(k, Array.from(v.entries()).sort((a, b) => b[1] - a[1])[0][0]));
   const chuaMap = new Map<string, number>();
+  // Dòng không có tên công ty: nhận khách theo tên miền email người đặt (đa số các dòng cùng tên miền đã nhận được khách)
+  const DOM_CHUNG = /^(gmail|yahoo|hotmail|outlook|icloud|live|msn|xperise|uts)\./i;
+  const domOf = (r: Kh) => { const m = /@([^@\s>]+)$/.exec(String(r.email || "").trim()); return m && !DOM_CHUNG.test(m[1]) ? m[1].toLowerCase() : null; };
+  const domVote = new Map<string, Map<string, number>>();
+  const khBase = (r: Kh): string | null => {
+    const viaHd = byHd.get(hdKey(r.so_hd));
+    if (viaHd) return viaHd;
+    const k = nk(r.ten_cong_ty);
+    if (!k) return null;
+    return alias[k] || byCompany.get(k) || byName.get(k) || null;
+  };
+  kh.forEach((r) => { const d = domOf(r), m = khBase(r); if (!d || !m) return; const v = domVote.get(d) || new Map<string, number>(); v.set(m, (v.get(m) || 0) + Math.abs(gmvOf(r))); domVote.set(d, v); });
+  const byDomain = new Map<string, string>();
+  domVote.forEach((v, d) => byDomain.set(d, Array.from(v.entries()).sort((a, b) => b[1] - a[1])[0][0]));
   const khOf = (r: Kh) => {
+    if (!nk(r.ten_cong_ty)) { const d = domOf(r); if (d && byDomain.has(d)) return byDomain.get(d) as string; }
     const viaHd = byHd.get(hdKey(r.so_hd));
     if (viaHd) return viaHd;
     const k = nk(r.ten_cong_ty);
     if (alias[k]) return alias[k];
     const m = byCompany.get(k) || byName.get(k);
     if (m) return m;
-    const ten = (r.ten_cong_ty || "CHƯA RÕ").trim().toUpperCase();
+    const ten = (r.ten_cong_ty || (domOf(r) ? `CHƯA RÕ (@${domOf(r)})` : "CHƯA RÕ")).trim().toUpperCase();
     chuaMap.set(ten, (chuaMap.get(ten) || 0) + gmvOf(r));
     return ten;
   };
