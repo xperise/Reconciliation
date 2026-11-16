@@ -171,10 +171,10 @@ async function rebuild(sb: Sb) {
     for (let i = ncc.length - 1; i >= 0; i--) if (beSet.has((ncc[i] as Ncc & { file_key?: string }).file_key || "")) ncc.splice(i, 1);
     for (let i = kh.length - 1; i >= 0; i--) if (kh[i].loai === "transport") kh.splice(i, 1);
   }
-  // Dòng đối soát chưa có NCC (thiếu trong hệ thống): suy NCC theo sheet bảng kê NCC trong cùng file, lưu lại vào bảng
+  // Dòng đối soát chưa có NCC, hoặc hệ thống ghi "XPERISE:<mã>" mà nằm trên bảng kê NCC khác: gán NCC của bảng kê đó, lưu lại vào bảng
   const inf = inferNcc(ncc.filter((n) => !(n.khop || "").startsWith("HT:") && !(n.khop || "").startsWith("B1:")), (n) => (n as Ncc & { file_key?: string }).file_key || "");
   const nccSuy = new Map<string, number[]>();
-  inf.forEach((v, n) => { n.ncc = v; const a = nccSuy.get(v) || []; a.push(n.id); nccSuy.set(v, a); });
+  inf.forEach((v, n) => { n.ncc = v; n.nganh = v.startsWith("hotel:") ? "Hotel" : v.startsWith("flight:") ? "Flight" : n.nganh; const a = nccSuy.get(v) || []; a.push(n.id); nccSuy.set(v, a); });
   for (const [v, ids] of Array.from(nccSuy.entries())) {
     for (let i = 0; i < ids.length; i += 500) {
       const { error } = await sb.from("fin_src_ncc").update({ ncc: v, nganh: v.startsWith("hotel:") ? "Hotel" : v.startsWith("flight:") ? "Flight" : null }).in("id", ids.slice(i, i + 500));
