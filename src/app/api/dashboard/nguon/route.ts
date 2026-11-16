@@ -170,6 +170,11 @@ async function rebuild(sb: Sb) {
     const beSet = new Set(beKeys);
     for (let i = ncc.length - 1; i >= 0; i--) if (beSet.has((ncc[i] as Ncc & { file_key?: string }).file_key || "")) ncc.splice(i, 1);
     for (let i = kh.length - 1; i >= 0; i--) if (kh[i].loai === "transport") kh.splice(i, 1);
+    // File B1 không dùng nữa (trùng với Performance Dashboard): xóa dòng B1 đã nạp
+    if (ncc.some((n) => (n.khop || "").startsWith("B1:"))) {
+      const r = await sb.from("fin_src_ncc").delete().like("khop", "B1:%"); chk(r.error, "Bỏ file B1");
+      for (let i = ncc.length - 1; i >= 0; i--) if ((ncc[i].khop || "").startsWith("B1:")) ncc.splice(i, 1);
+    }
   }
   // Dòng đối soát chưa có NCC, hoặc hệ thống ghi "XPERISE:<mã>" mà nằm trên bảng kê NCC khác: gán NCC của bảng kê đó, lưu lại vào bảng
   const inf = inferNcc(ncc.filter((n) => !(n.khop || "").startsWith("HT:") && !(n.khop || "").startsWith("B1:")), (n) => (n as Ncc & { file_key?: string }).file_key || "");
@@ -250,6 +255,7 @@ async function rebuild(sb: Sb) {
   const kyStmt = new Map<number, string>();
   const srcOf = new Map<number, number>();
   let htHit = 0, htMiss = 0;
+  const htUsed = new Set<number>(), htAmt = new Map<number, number>();
   ncc.slice().sort((a, b) => tier(a) - tier(b)).forEach((n) => {
     if (n.khop?.startsWith("Trùng") || n.bang_ke == null) return;
     const t = tier(n);
@@ -270,12 +276,14 @@ async function rebuild(sb: Sb) {
     const main = rs.slice().sort((x, y) => Math.abs(gmvOf(y)) - Math.abs(gmvOf(x)))[0];
     if (main && main.ky !== n.ky) kyStmt.set(n.id, main.ky);
     if (t === 2) htHit++; else nccHit++;
+    if (t === 2) htUsed.add(n.id);
     // Booking đã hủy trên hệ thống: giá vốn theo phần khách vẫn bị thu trên bảng kê (hoàn hết thì 0)
     let bkAmt = n.bang_ke;
     if (t === 2 && /cancel/i.test(n.xu_ly || "")) {
       const net = rs.reduce((s, r) => s + gmvOf(r), 0), sold = Number(n.ledger || 0);
       bkAmt = sold > 0 ? n.bang_ke * Math.max(0, Math.min(1, net / sold)) : 0;
     }
+    if (t === 2) htAmt.set(n.id, bkAmt);
     // chia giá vốn theo tỷ trọng GMV (có dấu: dòng hoàn vé / hủy phòng nhận phần âm)
     const tot = rs.reduce((s, r) => s + gmvOf(r), 0), totAbs = rs.reduce((s, r) => s + Math.abs(gmvOf(r)), 0);
     rs.forEach((r) => {
@@ -315,7 +323,7 @@ async function rebuild(sb: Sb) {
     ncc.forEach((n) => { const k = kyStmt.get(n.id); if (k) { n.ky = k; const a = byKy.get(k) || []; a.push(n.id); byKy.set(k, a); } });
     for (const [k, ids] of Array.from(byKy.entries())) for (let i = 0; i < ids.length; i += 500) { const { error } = await sb.from("fin_src_ncc").update({ ky: k }).in("id", ids.slice(i, i + 500)); chk(error, "Cập nhật kỳ theo bảng kê"); }
   }
-  const ap = await rebuildAP(sb, ncc);
+  const ap = await rebuildAP(sb, ncc, htUsed, htAmt);
 
   return {
     ok: true, kys: kys.sort(), rows: rows.length, ap,
@@ -331,26 +339,31 @@ async function rebuild(sb: Sb) {
 /* --------------------------------------------------------------------------
    Công nợ phải trả dựng từ file nguồn — mỗi NCC × kỳ dịch vụ một dòng trong fin_ap (so_ct "DS <kỳ>"):
    · Phải trả = tổng cột "Bảng kê" (số NCC tính) của các file đối soát NCC, bỏ dòng "Trùng".
-   · Khách sạn trực tiếp (file B1) gộp thành một NCC; đã trả = các booking "Đã chi", ngày trả = ngày chi muộn nhất.
-   · Giá NCC trên hệ thống không tính (không phải số NCC đòi).
+   · Khách sạn lẻ (Xperise_Manual): giá NCC trên hệ thống (Performance Dashboard, NCC XPERISE) của các booking có trên
+     bảng kê mà chưa có trong file đối soát nào. File B1 không dùng nữa (trùng booking với Performance Dashboard).
+   · Giá NCC trên hệ thống của NCC khác không tính (đã có file đối soát của NCC đó).
    · Ngày ghi nhận = ngày cuối kỳ dịch vụ; đến hạn = ngày cuối kỳ + payment term trong danh mục NCC (chưa có = 0).
    · Đã trả của các NCC khác: kế toán nhập ở bảng "Phải trả & đã trả" (tab Công nợ) — lưu ở fin_ap_edit nên dựng lại không mất.
    -------------------------------------------------------------------------- */
 const CHUA_RO = "CHUA_RO_NCC";
-async function rebuildAP(sb: Sb, ncc: Ncc[]) {
+async function rebuildAP(sb: Sb, ncc: Ncc[], htUsed: Set<number>, htAmt: Map<number, number>) {
   const supList = await fetchAll<{ ma_ncc: string; ten_ncc: string; payment_term: number | null }>("fin_suppliers");
   const sup = new Map(supList.map((s) => [s.ma_ncc, s]));
   const agg = new Map<string, { ma: string; ky: string; nganh: string; tien: number; tra: number; ngayTra: string | null; b1: boolean }>();
   ncc.forEach((n) => {
     const k = n.khop || "";
-    if (k.startsWith("Trùng") || k.startsWith("HT:") || n.bang_ke == null || !n.ky || !KY.test(n.ky)) return;
+    // Giá NCC trên hệ thống: chỉ tính phải trả cho khách sạn lẻ (NCC XPERISE → Xperise_Manual), và chỉ những booking
+    // đã dùng làm giá vốn của dòng bảng kê (booking có trên bảng kê, chưa có trong file đối soát nào)
+    const ht = k.startsWith("HT:");
+    if (ht && !(htUsed.has(n.id) && nccOfSrc(supList, n) === "XPERISE_MANUAL")) return;
+    if (k.startsWith("Trùng") || n.bang_ke == null || !n.ky || !KY.test(n.ky)) return;
     const b1 = k.startsWith("B1:");
     // tên gọi khác của NCC (vd. HNH = Hồng Ngọc Hà) gộp về mã NCC tổng hợp; B1 / XPERISE:<mã> → Xperise_Manual
     const ma = n.ncc || b1 ? nccOfSrc(supList, n) : CHUA_RO;
     const key = `${ma}|${n.ky}`;
     const o = agg.get(key) || { ma, ky: n.ky, nganh: n.nganh || "Khác", tien: 0, tra: 0, ngayTra: null, b1: false };
     if (b1) o.b1 = true;
-    o.tien += n.bang_ke;
+    o.tien += ht ? htAmt.get(n.id) ?? n.bang_ke : n.bang_ke;
     if (b1 && k === "B1: Đã chi") {
       o.tra += n.bang_ke;
       const d = /chi (\d{4}-\d{2}-\d{2})/.exec(n.mo_ta || "")?.[1] || null;

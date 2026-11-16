@@ -580,7 +580,7 @@ function apDsCard(v: VM, W: Win): string {
     { ft: tr, legend: LG });
   const stats = `<div class="stat-row">${stat("Phải trả phát sinh", ty(T.bk))}${stat("Thiếu trong hệ thống", ty(T.thieu), T.thieu ? "critical" : "")}${T.daChi + T.chuaChi ? stat("KS trực tiếp đã chi / chờ chi", `${tyN(T.daChi)} / ${tyN(T.chuaChi)}`) : ""}</div>`;
   return card("Đối soát NCC", `Phải trả phát sinh theo NCC — kỳ dịch vụ ${ky}`, unitLabel(), stats + stack +
-    `<div class="small" style="margin-top:6px">Từ file đối soát NCC (bỏ dòng trùng) và file chi khách sạn trực tiếp B1 (theo ngày check-in). Đối soát NCC chưa có ngày hóa đơn, payment term và số đã trả nên các bảng tuổi nợ / lịch trả bên dưới vẫn lấy từ sổ phải trả cũ.</div>`);
+    `<div class="small" style="margin-top:6px">Từ file đối soát NCC (bỏ dòng trùng), kỳ theo ngày giao dịch trên bảng kê. Phải trả khách sạn lẻ (Xperise_Manual) lấy theo giá NCC trên hệ thống, xem ở bảng công nợ phải trả bên dưới. Đối soát NCC chưa có ngày hóa đơn, payment term và số đã trả nên các bảng tuổi nợ / lịch trả bên dưới vẫn lấy từ sổ phải trả cũ.</div>`);
 }
 
 /* ==========================================================================

@@ -92,7 +92,7 @@ export default function SourceUpload({ data, canEdit, onDone, toast }: { data: D
         <label className={"drop" + (over ? " over" : "")} onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={(e) => { e.preventDefault(); setOver(false); pick(e.dataTransfer.files); }}>
           <i className={busy ? "ri-loader-4-line" : "ri-upload-cloud-2-line"} aria-hidden="true" />
           <b>{busy || "Kéo thả các file Excel vào đây hoặc bấm để chọn"}</b>
-          xperise_hotel_statement · xperise_flight_statement · Be_statement_… · Doi_soat_… · hoa-don-ks-b1-… · Performance_Dashboard_…spending (.csv) · GOC_CONG_NO_PHAI_THU…
+          xperise_hotel_statement · xperise_flight_statement · Doi_soat_… · Performance_Dashboard_…spending (.csv) · GOC_CONG_NO_PHAI_THU…
           <input ref={inp} type="file" accept=".xlsx,.xls,.csv" multiple hidden onChange={(e) => pick(e.target.files)} />
         </label>
       )}

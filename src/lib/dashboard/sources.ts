@@ -309,8 +309,13 @@ function readB1(f: SrcFile, rows: Cell[][], H: Hdr): SrcFile {
       bang_ke: tien, ledger: null, khop: daChi ? "B1: Đã chi" : "B1: Chưa chi", xu_ly: tt || null,
       mo_ta: [daChi && chi ? `chi ${chi}` : "", txt(g(r, c.ht)), txt(g(r, c.hd)) === "Có" ? "có hoá đơn" : "chưa có hoá đơn"].filter(Boolean).join(" · "), dong: txt(g(r, c.de)) });
   });
-  f.ncc = out; f.rows = out.length;
+  // File B1 không dùng nữa: các booking này đã có trên Performance Dashboard (mã B1 là Internal ID, Performance
+  // Dashboard là External ID của cùng booking) — giữ cả hai sẽ bị lấy trùng
   summarize(f, out.map((r) => r.ngay_dv), out.reduce((s, r) => s + (r.bang_ke || 0), 0));
+  f.ncc = []; f.rows = 0;
+  f.totalL = `Chi khách sạn ${fmtTien(f.total)}`;
+  f.warns.push("File chi khách sạn trực tiếp B1 không dùng nữa — các booking đã có trên Performance Dashboard. File này sẽ không được ghi");
+  return f;
   const da = out.filter((r) => r.khop === "B1: Đã chi");
   f.totalL = `Chi khách sạn ${fmtTien(f.total)} · đã chi ${fmtTien(da.reduce((s, r) => s + (r.bang_ke || 0), 0))} · ${new Set(out.map((r) => r.ncc)).size} khách sạn`;
   f.notes.push(`${da.length} booking đã chi · ${out.length - da.length} chờ thanh toán / trong đợt chi — dùng làm giá vốn hotel, nối với bảng kê bằng mã booking`);
