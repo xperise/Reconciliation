@@ -12,6 +12,7 @@
 import type { DataSet } from "./types";
 import { Ctx, num, SEG_DV, Seg, hasActual, laTong, onTimeByGroup, SEG_GROUPS, makeCtx, mergeEdits, segOfCustomer } from "./calc";
 import type { ArRow } from "./types";
+import { nccTen } from "./alias";
 import { kyIdx, kyAdd, kyOfDate, kyEnd, addDays, todayIso, sum, ok } from "./util";
 
 export type Mode = "ky" | "ngay";
@@ -259,7 +260,7 @@ export function byDim(C: Ctx, W: Win, seg: Seg, dim: Dim, flt?: (f: Fact) => boo
   const k7 = W.mode === "ngay" ? 1 / 7 : 1;
   return Array.from(g.entries()).map(([k, o]) => {
     const c = dim === "kh" ? custInfo(C, k) : null, s = sup.get(k);
-    const ten = dim === "dv" ? k : dim === "kh" ? c!.ten : k === "—" ? "Chưa gán NCC" : s?.ten_ncc || k;
+    const ten = dim === "dv" ? k : dim === "kh" ? c!.ten : k === "—" ? "Chưa gán NCC" : nccTen(k, C.D.suppliers) || s?.ten_ncc || k;
     const nm = F.members.get(k)?.length || 0;
     const sub = dim === "kh" ? [c!.nhom, c!.pm ? "PM " + c!.pm : "", nm > 1 ? `${nm} pháp nhân` : ""].filter(Boolean).join(" · ") : dim === "ncc" ? s?.nganh || "" : "";
     const cmp = scale(sumOf(o.p), k7);

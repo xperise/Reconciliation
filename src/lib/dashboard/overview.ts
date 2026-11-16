@@ -11,7 +11,7 @@ import { GROUPS } from "./insight";
 import type { VM } from "./views";
 import { drillPanel } from "./views";
 import type { SrcNccSum } from "./types";
-import { canonNcc } from "./alias";
+import { canonNcc, nccOfSrc, nccTen } from "./alias";
 import { dimKey, grpKey, custInfo, groupArCustomers, makeWin, block, facts, mgOf, covOf, byDim, topRest, bridgeOf, nrByCustomer, onTimeSeg, invCol, Win, Dim, Block, Sum, Mode } from "./ops";
 
 /** Lựa chọn của người xem dành cho các màn hình này (nằm chung trong VM.st) */
@@ -565,8 +565,8 @@ function apDsCard(v: VM, W: Win): string {
   const by = new Map<string, G>();
   rows.forEach((r: SrcNccSum) => {
     const b1 = (r.khop || "").startsWith("B1:");
-    const k = b1 ? "__B1" : r.ncc ? canonNcc(v.Cc.D.suppliers, r.ncc.replace(/^(hotel|flight):/, "")) : "Chưa rõ NCC";
-    const o = by.get(k) || { ncc: b1 ? "Khách sạn trực tiếp (B1)" : v.Cc.D.suppliers.find((s) => s.ma_ncc === k)?.ten_ncc || k, nganh: r.nganh || "—", bk: 0, led: 0, khop: 0, lech: 0, thieu: 0, daChi: 0, chuaChi: 0, n: 0, ks: new Set<string>() };
+    const k = nccOfSrc(v.Cc.D.suppliers, r);
+    const o = by.get(k) || { ncc: nccTen(k, v.Cc.D.suppliers) || v.Cc.D.suppliers.find((s) => s.ma_ncc === k)?.ten_ncc || k, nganh: r.nganh || "—", bk: 0, led: 0, khop: 0, lech: 0, thieu: 0, daChi: 0, chuaChi: 0, n: 0, ks: new Set<string>() };
     o.bk += r.bang_ke; o.led += r.ledger; o.n += r.n;
     if (b1) { if (r.khop === "B1: Đã chi") o.daChi += r.bang_ke; else o.chuaChi += r.bang_ke; if (r.ncc) o.ks.add(r.ncc); }
     else if (r.khop === "Khớp") o.khop += r.bang_ke; else if (r.khop === "Thiếu trong hệ thống") o.thieu += r.bang_ke; else o.lech += r.bang_ke;
@@ -648,7 +648,7 @@ export function opsDrill(v: VM, key: string): string {
     rows.forEach((r) => {
       const b1 = (r.khop || "").startsWith("B1:");
       const kk = `${r.ky || "—"}|${b1 ? "B1" : nccBare(r.ncc) || "Chưa rõ NCC"}`;
-      const o = by.get(kk) || { ky: r.ky || "—", ncc: b1 ? "Khách sạn trực tiếp (B1)" : nccBare(r.ncc) || "Chưa rõ NCC", bk: 0, led: 0, khop: 0, lech: 0, thieu: 0, da: 0, cho: 0, n: 0 };
+      const o = by.get(kk) || { ky: r.ky || "—", ncc: b1 ? "File chi khách sạn trực tiếp (B1)" : nccBare(r.ncc) || "Chưa rõ NCC", bk: 0, led: 0, khop: 0, lech: 0, thieu: 0, da: 0, cho: 0, n: 0 };
       o.bk += r.bang_ke; o.led += r.ledger; o.n += r.n;
       if (r.khop === "B1: Đã chi") o.da += r.bang_ke; else if (b1) o.cho += r.bang_ke;
       else if (r.khop === "Khớp") o.khop += r.bang_ke; else if (r.khop === "Thiếu trong hệ thống") o.thieu += r.bang_ke; else o.lech += r.bang_ke;
@@ -692,7 +692,7 @@ export function opsDrill(v: VM, key: string): string {
     const ap = calcAP(v.C, null).rows.find((r) => r.ma_ncc === k || nccBare(r.ten).toUpperCase() === k.toUpperCase());
     const apStat = ap ? `<div class="stat-row">${stat("Còn phải trả (sổ phải trả)", ty(ap.out))}${stat("Quá hạn", ty(ap.od), ap.od ? "high" : "")}${stat("Term HĐ", ap.term != null ? n0(ap.term) + " ngày" : "—")}${stat("DPO thực tế", ok(ap.dpo) ? n0(ap.dpo as number) + " ngày" : "—")}</div>` : "";
     debt = card("Công nợ phải trả", `${esc(ten)} — phát sinh theo đối soát / chi trực tiếp`, unitLabel(),
-      apStat + apSrc((r) => canonNcc(C.D.suppliers, nccBare(r.ncc)) === canonNcc(C.D.suppliers, k)) +
+      apStat + apSrc((r) => nccOfSrc(C.D.suppliers, r) === canonNcc(C.D.suppliers, k)) +
       `<div class="small" style="margin-top:6px">${ap ? "" : "Chưa có trong sổ phải trả nên chưa có tuổi nợ / quá hạn. "}Đối soát NCC chưa có ngày hóa đơn, payment term và số đã trả.</div>`);
   } else {
     const gm = new Map(byDim(C, W, seg, "kh", flt as never).map((r) => [r.k, r.cur.gmv] as [string, number]));
