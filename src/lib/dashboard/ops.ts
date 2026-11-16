@@ -74,7 +74,11 @@ export function facts(C: Ctx): Facts {
   const names = new Map<string, string>();
   D.customers.forEach((c) => names.set(c.ma_kh, c.ten_viet_tat || c.ten_kh));
   const members = new Map<string, string[]>();
-  Object.entries(D.grp || {}).forEach(([ma, g]) => { names.set(g.k, g.ten); const a = members.get(g.k) || []; a.push(ma); members.set(g.k, a); });
+  Object.entries(D.grp || {}).forEach(([ma, g]) => {
+    const ten = /^\d{8,14}(-\d{3})?$/.test(g.ten.trim()) ? D.customers.find((c) => c.ma_kh === ma)?.ten_kh || g.ten : g.ten;
+    if (!names.has(g.k) || /^\d/.test(names.get(g.k) || "")) names.set(g.k, ten);
+    const a = members.get(g.k) || []; a.push(ma); members.set(g.k, a);
+  });
   const mob = D.mob && D.mob.rows.length ? D.mob : null;
   D.gmv.forEach((r) => {
     const seg: Seg | null = SEG_DV.ts.includes(r.dich_vu) ? "ts" : SEG_DV.m.includes(r.dich_vu) ? "m" : null;

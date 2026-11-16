@@ -5,6 +5,8 @@
 //     (vào nhóm trùng mã / tên nếu có, không thì tạo nhóm mới chưa có lịch gửi — workflow gửi thư không chạy cho nhóm này).
 import { adminClient, fetchAll } from "./server";
 
+/** Chuỗi chỉ là mã số thuế (10 / 13 số, có thể có -xxx) */
+export const laMst = (s: string | null | undefined) => /^\d{8,14}(-\d{3})?$/.test(String(s ?? "").trim());
 export const nk = (s: string | null | undefined) => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").toUpperCase().replace(/[^A-Z0-9]/g, "");
 interface Grp { id: string; ma_he_thong: string; ten_nhom: string; pm?: string | null }
 interface Pn { id: string; group_id: string; code: string | null; ten_khach_hang: string; ten_viet_tat: string | null; pm?: string | null; ten_khac?: string | null }
@@ -52,7 +54,8 @@ export async function masterInfo(customers: Kh[]): Promise<{ pm: Map<string, str
     const p = findPn(c), g = p ? grpId.get(p.group_id) : findGrp(c);
     const x = (p?.pm || g?.pm || "").trim();
     if (x) pm.set(c.ma_kh, x);
-    if (g) grp[c.ma_kh] = { k: `G:${g.ma_he_thong}`, ten: g.ten_nhom, pm: (g.pm || "").trim() || null };
+    // tên nhóm là mã số thuế (nhóm tạo tự động từ tên viết tắt) thì hiện tên đầy đủ của pháp nhân
+    if (g) grp[c.ma_kh] = { k: `G:${g.ma_he_thong}`, ten: laMst(g.ten_nhom) ? p?.ten_khach_hang || c.ten_kh : g.ten_nhom, pm: (g.pm || "").trim() || null };
   });
   return { pm, grp, alias };
 }
