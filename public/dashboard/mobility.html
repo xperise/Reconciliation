@@ -3122,12 +3122,65 @@ async function ctApply(list, prog) {
       prog(++i, B.length); } };
   DBQ = DBQ.then(run, run); await DBQ;
 }
+/* ---- file "Tệp khách theo PIC": 1 sheet có cột Tên công ty · MST · Địa chỉ · Người liên hệ · Số điện thoại · Email · Mã HĐ cũ · Mã HĐ mới · Mã KH
+   Khớp khách đã có (Mã HĐ mới → Mã KH → tên), khách chưa có thì tạo mới; giao cả tệp cho 1 PIC; người liên hệ thêm vào hồ sơ (upload lại không trùng). */
+function tepSheetOf(wb) {
+  for (const n of wb.SheetNames) { const A = sheetRows(wb.Sheets[n]), hi = headAt(A, ['Tên công ty', 'Người liên hệ']);
+    if (hi >= 0 && A[hi].some(c => /^ma hd (cu|moi)$|^ma kh$/.test(fold(c)))) return {n, A, hi}; }
+  return null;
+}
+const tepLoose = s => canonSp(s).replace(/\b(CTY|CT|TNHH|CP|CN|VPDD|MTV|1TV|HTV|COLTD|LTD|JSC|INC|CORP|CORPORATION|GROUP|TAP DOAN|TONG|VN|HN|HA NOI|HCM|TAI|TP|CUA|VA)\b/g, ' ').replace(/[^A-Z0-9]/g, '');
+function tepRowsOf(src, byKey) {
+  const {A, hi} = src, H = A[hi].map(c => fold(c)), col = x => H.indexOf(fold(x)), v = (R, c) => c < 0 ? '' : cellTxt(R[c]);
+  const cN = col('Tên công ty'), cM = col('MST'), cA = col('Địa chỉ'), cP = col('Người liên hệ'), cS = col('Số điện thoại'), cE = col('Email'), cO = col('Mã HĐ cũ'), cH = col('Mã HĐ mới'), cK = col('Mã KH');
+  const byName = {}, byLoose = {}; Object.values(byKey).forEach(r => { const c = canon(r.name); if (c && !byName[c]) byName[c] = r.key; const l = tepLoose(r.name); if (l.length >= 4) byLoose[l] = byLoose[l] && byLoose[l] !== r.key ? '!' : r.key; });
+  const seen = {}, rows = [], ids = new Set(); let dup = 0;
+  const split = x => String(x || '').split(/\s*;\s*|\n/).map(t => t.trim());
+  for (let i = hi + 1; i < A.length; i++) { const R = A[i], name = v(R, cN); if (!name) continue;
+    const codes = v(R, cH).split(/[\s,;]+/).filter(Boolean), mk = v(R, cK).split(/[\s,;]+/).filter(Boolean);
+    let k = '', how = '';
+    for (const c of codes) { const x = keyOf(c); if (byKey[x]) { k = x; how = 'Mã HĐ mới'; break; } }
+    if (!k) for (const c of mk) { const x = keyOf(c); if (byKey[x]) { k = x; how = 'Mã KH'; break; } }
+    if (!k) { const c = canon(name), x = byName[c] || BOOKC[c]; if (c && x && byKey[x]) { k = x; how = 'Tên'; } }
+    if (!k) { const x = byLoose[tepLoose(name)]; if (x && x !== '!' && byKey[x]) { k = x; how = 'Tên'; } }   // bỏ loại hình DN (Cty / TNHH / CP / CN…), chỉ nhận khi duy nhất
+    if (!k) { const c0 = codes.find(c => !byKey[keyOf(c)] && !BOOK[c] && !MERGE[c]); k = c0 || 'MOI-' + hashId(canon(name) || fold(name)).toUpperCase(); how = 'Mới'; }
+    let r = seen[k]; if (r) dup++;
+    else { r = seen[k] = {key: k, name: how === 'Mới' ? name : byKey[k].name, fname: name, how, isNew: how === 'Mới', from: how === 'Mới' ? '' : byKey[k].pic || '', grp: how === 'Mới' ? 5 : byKey[k].grp, old: v(R, cO), mst: v(R, cM).replace(/\s/g, ''), addr: v(R, cA), cts: []}; rows.push(r); }
+    const N = split(v(R, cP)), P = split(v(R, cS)), E = split(v(R, cE)), m = Math.max(N.length, P.length, E.length);
+    for (let j = 0; j < m; j++) { const c = {n: ctName(N[j]), p: ctPhone(P[j]), e: ctMail(E[j])}; if (!c.p && !c.e) continue;
+      const id = ctIdOf(k, c); if (ids.has(id) || ((DBX[k] || {}).ct || {})[id]) continue; ids.add(id);
+      Object.keys(c).forEach(f => { if (!c[f]) delete c[f]; }); r.cts.push({id, c: Object.assign(c, {src: 'Tệp khách theo PIC', ts: Date.now() + ids.size, imp: 1})}); }
+  }
+  // khách chưa có liên hệ chính: người đầu tiên có tên là liên hệ chính
+  rows.forEach(r => { if (!r.cts.length || ctOf(r.key).some(c => c.key)) return; (r.cts.find(x => x.c.n) || r.cts[0]).c.key = 1; });
+  const from = {}; rows.forEach(r => { if (!r.isNew && !(r.from in from)) from[r.from] = !r.from || !['AE Top 200', 'Lead hạng 201–300'].includes(ROLE[r.from]); });
+  return {rows, dup, from, to: ''};
+}
+const tepPlan = T => { const to = T.to, ex = T.rows.filter(r => !r.isNew), mv = to ? ex.filter(r => r.from !== to && T.from[r.from]) : [];
+  return {mv, keep: ex.filter(r => !mv.includes(r)), nw: to ? T.rows.filter(r => r.isNew) : [], ct: to ? T.rows.reduce((a, r) => a + r.cts.length, 0) : 0}; };
+async function tepApply(T, p, prog) {
+  const db = await claude.use('db'); if (!db) throw {code: 'not_granted'};
+  const by = {}, put = (k, o) => { const b = by[bucketOf(k)] = by[bucketOf(k)] || {}; b[k] = Object.assign(b[k] || {}, o); };
+  p.mv.forEach(r => put(r.key, {pic: T.to}));
+  p.nw.forEach(r => put(r.key, Object.assign({name: r.name, created: TODAY, pic: T.to}, r.old ? {hdOld: r.old} : {}, r.mst ? {mst: r.mst} : {}, r.addr ? {addr: r.addr} : {})));
+  T.rows.forEach(r => { if (!r.cts.length) return; const ct = {}; r.cts.forEach(x => ct[x.id] = x.c); put(r.key, {ct}); });
+  const B = Object.entries(by); let i = 0;
+  const run = async () => { for (const [b, patch] of B) { const ref = db.doc('crm/' + b), s = await ref.get();
+      if (!s.exists) await ref.set(patch); else await ref.update(patch);
+      for (const [k, v] of Object.entries(patch)) { const e = DBX[k] = Object.assign({}, DBX[k] || {}, v); e.ct = Object.assign({}, ((DBX[k] || {}).ct) || {}, v.ct || {}); if (v.name) NAMEOVR[k] = v.name; }
+      prog(++i, B.length); } };
+  DBQ = DBQ.then(run, run); await DBQ;
+  // MST / địa chỉ của khách mới → thông tin doanh nghiệp (cần quyền cập nhật thẻ)
+  if (CANWRITE && CARDST === 'ok') { const L = p.nw.filter(r => r.mst || r.addr).map(r => ({key: r.key, mst: r.mst || null, address: r.addr || null, email: null}));
+    for (let j = 0; j < L.length; j += 200) { try { await (await claude.use('cards')).save({companies: L.slice(j, j + 200), cards: [], deletes: [], dry: false}); } catch (e) { /* sửa sau trong hồ sơ */ } } }
+}
 async function updParse(file) {
   await loadScript(XLSX_URL);
   const wb = XLSX.read(await file.arrayBuffer(), {type: 'array', cellDates: true}), SH = wb.Sheets;
   const byKey = {}; crmRows(CR.day).forEach(r => byKey[r.key] = r);
   const I = {file: file.name, pic: null, errors: [], payload: null, srv: null, roles: {}};
   CR.picFile = file;
+  const TS = tepSheetOf(wb); if (TS) { I.tep = tepRowsOf(TS, byKey); I.tep.sheet = TS.n; return I; }
   if (SH.DS_PIC) sheetRows(SH.DS_PIC).forEach(r => { const n = cellTxt(r[0]), ro = cellTxt(r[1]); if (n && ro && !/người phụ trách/i.test(n)) I.roles[n] = ro; });
   if (SH.Moc_ky) { try { I.ms = msRows(sheetRows(SH.Moc_ky)); } catch (e) { I.errors.push(e.message); } }
   const CS = !SH.Phan_cong_PIC && callSheetOf(wb);
@@ -3143,7 +3196,7 @@ async function updParse(file) {
   }
   return I;
 }
-const updCount = I => (I.ct ? I.ct.adds.length : 0) + (I.call ? I.call.acts.length : 0) + (I.pic ? I.pic.changes.length : 0) + (I.ms ? I.ms.changes.length : 0) + (I.srv ? I.srv.companies.length + I.srv.added.length + I.srv.changed.length + I.srv.deleted.length : 0);
+const updCount = I => (I.tep ? (p => p.mv.length + p.nw.length + p.ct)(tepPlan(I.tep)) : 0) + (I.ct ? I.ct.adds.length : 0) + (I.call ? I.call.acts.length : 0) + (I.pic ? I.pic.changes.length : 0) + (I.ms ? I.ms.changes.length : 0) + (I.srv ? I.srv.companies.length + I.srv.added.length + I.srv.changed.length + I.srv.deleted.length : 0);
 /* Ghi PIC: gom theo nhóm tài liệu crm/bXX, mỗi nhóm 1 lần ghi */
 async function picApply(changes, prog) {
   const db = await claude.use('db'); if (!db) throw {code: 'not_granted'};
@@ -3199,7 +3252,22 @@ function picPanel() {
   const lab = p => p ? esc(p) : '<span class="lbl">Chưa phân công</span>', P = I.pic, V = I.srv, M = I.ms, total = updCount(I), errs = [...I.errors, ...(I.ct ? I.ct.errors : []), ...(I.call ? I.call.errors : []), ...(P ? P.errors : []), ...(M ? M.errors : []), ...(V ? V.errors : [])];
   const fv = v => v == null || v === '' ? '<span class="lbl">trống</span>' : typeof v === 'number' ? n0(v) + ' đ' : esc(v);
   const sec = (t, body) => `<h3 style="margin:14px 0 6px;font-size:14px">${t}</h3>${body}`, tbl = (head, rows) => `<div class="tw" style="max-height:300px;overflow:auto"><table><thead><tr>${head.map(x => `<th class="l">${x}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
-  const parts = [], CL = I.call, CT = I.ct;
+  const parts = [], CL = I.call, CT = I.ct, T = I.tep;
+  if (T) { const p = tepPlan(T), cnt = {}, how = {}; T.rows.forEach(r => { how[r.how] = (how[r.how] || 0) + 1; if (!r.isNew) cnt[r.from] = (cnt[r.from] || 0) + 1; });
+    const more = (L, n) => L.length > n ? `<tr><td colspan="6" class="l lbl">… còn ${n0(L.length - n)} khách (đủ trong file, áp dụng hết)</td></tr>` : '';
+    const ct0 = r => r.cts[0] ? r.cts[0].c : {};
+    parts.push(`<div class="banner" style="margin:8px 0;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><b>Tệp khách theo PIC</b> (sheet “${esc(T.sheet)}”) · giao cho
+      <select id="tepto" style="font:13px var(--font-family-sans-serif);padding:5px 8px;border:1px solid var(--line);border-radius:8px"><option value="">— chọn PIC —</option>${PICS.map(x => `<option ${x === T.to ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>
+      <span class="lbl">${n0(T.rows.length)} công ty${T.dup ? ` (${n0(T.dup)} dòng trùng đã gộp)` : ''} · khớp theo mã HĐ mới ${n0(how['Mã HĐ mới'] || 0)} · mã KH ${n0(how['Mã KH'] || 0)} · tên ${n0(how['Tên'] || 0)} · chưa có trên dashboard ${n0(how['Mới'] || 0)}</span>
+      ${T.to ? '' : '<b style="color:var(--critical)">Chọn PIC để áp dụng</b>'}</div>`);
+    const lab2 = x => x ? esc(x) : '<span class="lbl">Chưa phân công</span>';
+    parts.push(sec(`Khách đã có trên dashboard · ${n0(p.mv.length)} chuyển PIC chính${T.to ? ' sang ' + esc(T.to) : ''} · ${n0(p.keep.length)} giữ nguyên`,
+      `<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><span class="lbl">Chuyển từ PIC:</span>${Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([f, n]) => `<label style="display:inline-flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" class="tepfrom" data-f="${esc(f)}" ${T.from[f] ? 'checked' : ''}${f && f === T.to ? ' disabled' : ''}> ${lab2(f)} (${n0(n)})</label>`).join('')}<span class="lbl">· bỏ tick = giữ PIC cũ</span></div>`
+      + tbl(['Doanh nghiệp', 'Khớp theo', 'Nhóm', 'PIC hiện tại', 'PIC mới', 'Người liên hệ thêm'], [...p.mv, ...p.keep].slice(0, 300).map(r => `<tr class="hit" data-cropen="${esc(r.key)}" style="cursor:pointer"><td class="l name">${esc(r.name)}<span class="def">HĐ ${esc(r.key)}${r.how === 'Tên' && canon(r.fname) !== canon(r.name) ? ' · file: ' + esc(r.fname) : ''}</span></td><td class="l">${esc(r.how)}</td><td class="l">${r.grp === 9 ? '' : r.grp + '. '}${esc(GRP[r.grp] || '')}</td><td class="l">${lab2(r.from)}</td><td class="l">${p.mv.includes(r) ? `<b>${esc(T.to)}</b>` : '<span class="lbl">giữ nguyên</span>'}</td><td class="l">${r.cts.length ? n0(r.cts.length) : ''}</td></tr>`).join('') + more([...p.mv, ...p.keep], 300))));
+    const NW = T.rows.filter(r => r.isNew);
+    parts.push(sec(`Khách mới (chưa có trên dashboard) · ${n0(NW.length)} khách${T.to ? ' tạo mới với PIC ' + esc(T.to) : ''}`,
+      tbl(['Doanh nghiệp', 'Mã HĐ cũ', 'MST', 'Người liên hệ chính', 'SĐT', 'Email'], NW.slice(0, 300).map(r => { const c = ct0(r); return `<tr><td class="l name">${esc(r.name)}<span class="def">${/^MOI-/.test(r.key) ? 'mã tạm ' : 'HĐ '}${esc(r.key)}${r.addr ? ' · ' + esc(r.addr.slice(0, 60)) : ''}</span></td><td class="l">${esc(r.old || '')}</td><td class="l">${esc(r.mst || '')}</td><td class="l">${esc(c.n || '')}${r.cts.length > 1 ? `<span class="def">+${r.cts.length - 1} người</span>` : ''}</td><td class="l">${esc(c.p || '')}</td><td class="l">${esc(c.e || '')}</td></tr>`; }).join('') + more(NW, 300))));
+    parts.push(`<div class="lbl" style="margin-top:6px">Người liên hệ: ${n0(T.rows.reduce((a, r) => a + r.cts.length, 0))} người mới cho ${n0(T.rows.filter(r => r.cts.length).length)} khách (nguồn “Tệp khách theo PIC”; người đã có giữ nguyên).</div>`); }
   if (CT) parts.push(sec(`Người liên hệ (key person) · ${n0(CT.adds.length)} người mới cho ${n0(CT.cos)} khách${CT.same ? ` · ${n0(CT.same)} đã có, giữ nguyên` : ''}`,
     CT.adds.length ? tbl(['Doanh nghiệp', 'Người liên hệ', 'SĐT', 'Email', 'Ghi chú · nguồn'], CT.adds.slice(0, 300).map(x => `<tr class="hit" data-cropen="${esc(x.key)}" style="cursor:pointer"><td class="l name">${esc(x.name)}<span class="def">HĐ ${esc(x.key)}</span></td><td class="l">${x.c.key ? '★ ' : ''}${esc(x.c.n || '—')}${x.c.r ? `<span class="def">${esc(x.c.r)}</span>` : ''}</td><td class="l" style="white-space:pre-line">${esc(x.c.p || '')}</td><td class="l" style="white-space:pre-line">${esc(x.c.e || '')}</td><td class="l" style="white-space:normal;min-width:200px;font-size:12px">${esc(x.c.note || '')}<span class="def">${esc(x.c.src || '')}</span></td></tr>`).join('') + (CT.adds.length > 300 ? `<tr><td colspan="5" class="l lbl">… và ${n0(CT.adds.length - 300)} người nữa</td></tr>` : '')) : '<div class="hint">Không có người liên hệ mới.</div>'));
   if (CL) { const T = {call: 0, mset: 0, meet: 0}; CL.acts.forEach(x => T[x.a.t]++); const byP = {}; CL.acts.forEach(x => { const o = byP[x.a.who || 'Chưa phân công'] = byP[x.a.who || 'Chưa phân công'] || {call: 0, mset: 0, meet: 0}; o[x.a.t]++; });
@@ -3292,6 +3360,8 @@ function bindJourney() {
     try { CR.picImp = await updParse(f); } catch (er) { CR.picImp = {file: f.name, pic: null, srv: null, errors: [er.message || String(er)]}; }
     keep(() => {}); if ($('crpicp')) $('crpicp').scrollIntoView({behavior: 'smooth', block: 'start'}); };
   if ($('crpicx')) $('crpicx').onclick = () => keep(() => { CR.picImp = null; });
+  if ($('tepto')) $('tepto').onchange = e => keep(() => { CR.picImp.tep.to = e.target.value; });
+  document.querySelectorAll('.tepfrom').forEach(cb => cb.onchange = () => keep(() => { CR.picImp.tep.from[cb.dataset.f] = cb.checked; }));
   if ($('crpicadd')) $('crpicadd').onclick = async () => { const I = CR.picImp, b = $('crpicadd'); b.disabled = true; b.textContent = 'Đang thêm…';
     try { const add = Object.keys(Object.assign({}, I.pic && I.pic.unknown || {}, I.call && I.call.unknown || {})).map(n => [n, ROLES.includes(I.roles[n]) ? I.roles[n] : ROLES.find(r => fold(r) === fold(I.roles[n] || '')) || 'AE hạng 201–300']);
       await saveTeam([...PICS.map(p => [p, ROLE[p], EMAIL[p]]), ...add]);
@@ -3344,6 +3414,7 @@ function bindJourney() {
     if (!window.confirm(`Áp dụng ${n} thay đổi theo file "${I.file}"?`)) return;
     I.busy = true; I.msg = ''; keep(() => {}); const done_ = [];
     try {
+      if (I.tep) { const p = tepPlan(I.tep); await tepApply(I.tep, p, (i, m) => { const b = $('crpicok'); if (b) b.textContent = `Đang lưu tệp khách ${i}/${m}…`; }); done_.push(`${p.mv.length} khách chuyển PIC sang ${I.tep.to}`, `${p.nw.length} khách mới`, `${p.ct} người liên hệ`); I.tep = null; CRM_ = null; AUTOC_ = null; }
       if (I.ct && I.ct.adds.length) { const L = I.ct.adds; await ctApply(L, (i, m) => { const b = $('crpicok'); if (b) b.textContent = `Đang lưu người liên hệ ${i}/${m}…`; }); done_.push(`${L.length} người liên hệ`); I.ct.adds = []; CRM_ = null; }
       if (I.call && I.call.acts.length) { const L = I.call.acts; await callApply(L, (i, m) => { const b = $('crpicok'); if (b) b.textContent = `Đang lưu liên hệ ${i}/${m}…`; }); done_.push(`${L.length} lần liên hệ (gọi / đặt lịch / meeting)`); I.call.acts = []; CRM_ = null; }
       if (I.ms && I.ms.changes.length) { await msApply(I.ms.changes, (i, m) => { const b = $('crpicok'); if (b) b.textContent = `Đang lưu mốc ký ${i}/${m}…`; }); done_.push(`${I.ms.changes.length} khách cập nhật mốc ký`); I.ms.changes = []; CRM_ = null; AUTOC_ = null; }
