@@ -362,6 +362,8 @@ export function latestActualKy(C: Ctx): string | null {
    1. Ngày gửi bảng kê luôn lấy theo bảng tổng (sửa ở mức kỳ), kể cả khi có số sửa riêng của một hóa đơn.
    2. Danh sách kỳ có thêm các tháng có giao dịch ở tab Mobility. */
 export function dashCtx(D0: DataSet): Ctx {
+  // tên viết tắt là mã số thuế (vd. 2500260507) thì hiển thị tên đầy đủ
+  D0 = { ...D0, customers: D0.customers.map((c) => (c.ten_viet_tat && /^\d{8,14}(-\d{3})?$/.test(c.ten_viet_tat.trim()) ? { ...c, ten_viet_tat: null } : c)) };
   const D = mergeEdits(D0);
   const kyLevel = new Map(D0.arEdits.filter((e) => !e.so_ct && !e.tu_tao && !e.xoa && e.ngay_gui_bk).map((e) => [`${e.ma_kh}|${e.ky}`, e.ngay_gui_bk as string]));
   // 3. Kỳ đã đánh dấu "đã gửi bảng kê" (chưa có ngày gửi)

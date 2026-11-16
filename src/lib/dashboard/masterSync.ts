@@ -79,7 +79,8 @@ export async function syncTravelToMaster(): Promise<{ nhomMoi: string[]; phapNha
     if (!g) {
       let ma = c.ma_kh, i = 2;
       while (usedMa.has(ma)) ma = `${c.ma_kh}-${i++}`;
-      const row: Record<string, unknown> = { ma_he_thong: ma, ten_nhom: c.ten_viet_tat || c.ten_kh, ghi_chu: "Thêm từ Dashboard — chưa có lịch gửi bảng kê" };
+      const vt = c.ten_viet_tat && !/^\d{8,14}(-\d{3})?$/.test(c.ten_viet_tat.trim()) ? c.ten_viet_tat : null; // tên viết tắt là MST thì dùng tên đầy đủ
+      const row: Record<string, unknown> = { ma_he_thong: ma, ten_nhom: vt || c.ten_kh, ghi_chu: "Thêm từ Dashboard — chưa có lịch gửi bảng kê" };
       if (withPm && c.pm) row.pm = c.pm;
       const { data, error } = await sb.from("billing_groups").insert(row).select("id,ma_he_thong,ten_nhom").single();
       if (error) throw new Error(`Tạo nhóm ${ma}: ${error.message}`);

@@ -10,6 +10,7 @@
 // Nhận diện file theo dòng tiêu đề, không theo tên file.
 import { loadSheetJS, norm } from "./parse";
 import type { Customer } from "./types";
+import { fixSwappedDates } from "./alias";
 
 export type SrcKind = "kh_hotel" | "kh_flight" | "kh_be" | "ncc" | "b1" | "ht_hotel" | "ht_flight" | "ar" | "unknown";
 export const KIND_LABEL: Record<SrcKind, string> = {
@@ -183,6 +184,11 @@ function readNcc(f: SrcFile, rows: Cell[][], H: Hdr): SrcFile {
     out.push({ ncc, nganh, ma_booking: txt(g(r, c.bk)), so_ve: ve ? ve.split(/[\r\n]+/)[0].trim() || null : null, khach: txt(g(r, c.khach)), ngay_dv: d, ky: d ? kyOf(d) : null,
       bang_ke: bke, ledger: led, khop: txt(g(r, c.khop)), xu_ly: txt(g(r, c.xl)), mo_ta: txt(g(r, c.mo)), dong: txt(g(r, c.dong)) });
   });
+  // ngày bị đảo ngày/tháng (vd. 01/10 ghi thành 2026-01-10)
+  const fixed = fixSwappedDates(out.map((r) => r.ngay_dv));
+  let doi = 0;
+  out.forEach((r, i) => { if (fixed[i] !== r.ngay_dv) { r.ngay_dv = fixed[i]; r.ky = fixed[i] ? kyOf(fixed[i] as string) : null; doi++; } });
+  if (doi) f.notes.push(`${doi} dòng có ngày bị đảo ngày/tháng (vd. 2026-01-10 → 01/10/2026) — đã sửa`);
   // NCC trống (dòng thiếu trong hệ thống): suy theo sheet bảng kê NCC
   const inf = inferNcc(out, () => "");
   inf.forEach((n, r) => { r.ncc = n; r.nganh = n.startsWith("hotel:") ? "Hotel" : n.startsWith("flight:") ? "Flight" : r.nganh; r.mo_ta = [r.mo_ta, `NCC suy theo sheet bảng kê ${String(r.dong || "").split("!")[0]}`].filter(Boolean).join(" · "); });
