@@ -11,10 +11,10 @@ export const maxDuration = 60;
 
 /* Nạp file nguồn (bảng kê khách hàng, đối soát NCC, sổ công nợ phải thu) — xem supabase/migrations/30_dashboard_nguon.sql.
    Thứ tự client gửi: công nợ phải thu → bảng kê khách hàng → đối soát NCC → rebuild.
-     kh      { loai, kys, rows, first }   thay bảng kê của loai + các kỳ trong file
-     ncc     { fileKey, fileName, rows, first }  thay dữ liệu cũ của cùng file đối soát
+     kh      { loai, rows }               thay các giao dịch (mã giao dịch / số vé) có trong file, giữ phần còn lại
+     ncc     { fileKey, fileName, rows }  thay các booking (mã booking / số vé) có trong file, giữ phần còn lại
      dm      { rows }                     danh mục khách: cập nhật tên, payment term; khách mới vào nhóm N1
-     ar      { kys, rows, first }         thay công nợ phải thu Travel (giữ khách Mobility N2–N5)
+     ar      { rows }                     thay các hóa đơn (khách + số hóa đơn) có trong file, giữ phần còn lại
      rebuild {}                           dựng lại GMV & giá vốn theo ngày vào fin_gmv (nguon 'bk') */
 type Body =
   | { action: "kh"; loai: "hotel" | "flight" | "transport"; kys: string[]; rows: KhRow[]; first: boolean; fileName?: string; cty?: string }
@@ -39,30 +39,49 @@ export async function POST(req: Request) {
 
     if (b.action === "kh") {
       if (!["hotel", "flight", "transport"].includes(b.loai)) return fail("Loại bảng kê không hợp lệ");
-      if (b.loai === "transport" && !b.cty) return fail("Bảng kê Be thiếu tên công ty (lấy từ tên file Be_statement_<tên công ty>_<ngày>)");
-      const kys = (b.kys || []).filter((k) => KY.test(k));
-      if (b.first && kys.length) {
-        // Be: mỗi file là một công ty — chỉ thay số của công ty đó
-        let q = sb.from("fin_src_kh").delete().eq("loai", b.loai).in("ky", kys);
-        if (b.loai === "transport") q = q.eq("ten_cong_ty", b.cty as string);
-        const { error } = await q; chk(error, "Xóa bảng kê cũ");
-      }
+      // Nạp lại: chỉ thay các giao dịch có trong file mới (cùng mã giao dịch / số vé), dòng khác của kỳ giữ nguyên.
+      // Client chia lô theo mã giao dịch nên các dòng của một giao dịch luôn nằm cùng một lô.
       const rows = (b.rows || []).filter((r) => KY.test(r.ky) && r.ngay).map((r) => ({ ...r, loai: b.loai, file_name: b.fileName || null, uploaded_at: now }));
+      const codes = Array.from(new Set(rows.map((r) => r.ma_gd).filter(Boolean) as string[]));
+      const ves = Array.from(new Set(rows.filter((r) => !r.ma_gd && r.so_ve).map((r) => r.so_ve as string)));
+      let thay = 0;
+      for (let i = 0; i < codes.length; i += 200) { const r = await sb.from("fin_src_kh").delete({ count: "exact" }).eq("loai", b.loai).in("ma_gd", codes.slice(i, i + 200)); chk(r.error, "Thay giao dịch cũ"); thay += r.count || 0; }
+      for (let i = 0; i < ves.length; i += 200) { const r = await sb.from("fin_src_kh").delete({ count: "exact" }).eq("loai", b.loai).is("ma_gd", null).in("so_ve", ves.slice(i, i + 200)); chk(r.error, "Thay giao dịch cũ"); thay += r.count || 0; }
+      for (const r0 of rows.filter((r) => !r.ma_gd && !r.so_ve)) {
+        let q = sb.from("fin_src_kh").delete({ count: "exact" }).eq("loai", b.loai).eq("ngay", r0.ngay).eq("gmv", r0.gmv).is("ma_gd", null).is("so_ve", null);
+        q = r0.ten_cong_ty ? q.eq("ten_cong_ty", r0.ten_cong_ty) : q.is("ten_cong_ty", null);
+        const r = await q; chk(r.error, "Thay giao dịch cũ"); thay += r.count || 0;
+      }
       if (rows.length) {
         let { error } = await sb.from("fin_src_kh").insert(rows);
         // chưa chạy migration 35 (cột email): ghi không có email
         if (error && /email/.test(error.message)) ({ error } = await sb.from("fin_src_kh").insert(rows.map(({ email: _e, ...r }) => { void _e; return r; })));
         chk(error, "Ghi bảng kê");
       }
-      return NextResponse.json({ ok: true, written: rows.length });
+      return NextResponse.json({ ok: true, written: rows.length, thay });
     }
 
     if (b.action === "ncc") {
       if (!b.fileKey) return fail("Thiếu tên file đối soát");
-      if (b.first) { const { error } = await sb.from("fin_src_ncc").delete().eq("file_key", b.fileKey); chk(error, "Xóa đối soát cũ"); }
+      // Nạp lại: chỉ thay các booking có trong file mới (cùng mã booking / số vé, cùng loại nguồn), từ bất kỳ file nào
       const rows = (b.rows || []).map((r) => ({ ...r, file_key: b.fileKey, file_name: b.fileName || null, uploaded_at: now }));
+      const ht = rows.filter((r) => (r.khop || "").startsWith("HT:")), ds = rows.filter((r) => !(r.khop || "").startsWith("HT:"));
+      let thay = 0;
+      const del = async (list: typeof rows, laHt: boolean, col: "ma_booking" | "so_ve") => {
+        const vals = Array.from(new Set(list.map((r) => (col === "ma_booking" ? r.ma_booking : r.ma_booking ? null : r.so_ve)).filter(Boolean) as string[]));
+        for (let i = 0; i < vals.length; i += 200) {
+          const part = vals.slice(i, i + 200);
+          if (laHt) { const r = await sb.from("fin_src_ncc").delete({ count: "exact" }).like("khop", "HT:%").in(col, part); chk(r.error, "Thay booking cũ"); thay += r.count || 0; }
+          else {
+            const r1 = await sb.from("fin_src_ncc").delete({ count: "exact" }).not("khop", "like", "HT:%").in(col, part); chk(r1.error, "Thay booking cũ");
+            const r2 = await sb.from("fin_src_ncc").delete({ count: "exact" }).is("khop", null).in(col, part); chk(r2.error, "Thay booking cũ");
+            thay += (r1.count || 0) + (r2.count || 0);
+          }
+        }
+      };
+      await del(ht, true, "ma_booking"); await del(ds, false, "ma_booking"); await del(ds, false, "so_ve");
       if (rows.length) { const { error } = await sb.from("fin_src_ncc").insert(rows); chk(error, "Ghi đối soát NCC"); }
-      return NextResponse.json({ ok: true, written: rows.length });
+      return NextResponse.json({ ok: true, written: rows.length, thay });
     }
 
     if (b.action === "dm") {
@@ -84,33 +103,27 @@ export async function POST(req: Request) {
     }
 
     if (b.action === "ar") {
-      const kys = (b.kys || []).filter((k) => KY.test(k));
-      let suaTay = 0;
-      if (b.first) {
-        // Thay toàn bộ phải thu Travel; giữ phải thu khách Mobility (N2–N5) đang lấy từ nguồn khác
-        const mob = (await fetchAll<{ ma_kh: string; nhom: string }>("fin_customers")).filter((c) => ["N2", "N3", "N4", "N5"].includes(c.nhom)).map((c) => c.ma_kh);
-        let q = sb.from("fin_ar").delete();
-        q = mob.length ? q.not("ma_kh", "in", `(${mob.map((m) => `"${m.replace(/"/g, '""')}"`).join(",")})`) : q.not("ma_kh", "is", null);
-        const { error } = await q; chk(error, "Xóa công nợ phải thu cũ");
-        if (kys.length) {
-          // Số sửa tay của các kỳ có trong file: file là số chuẩn cho tiền & ngày thu; giữ ngày gửi bảng kê và ghi chú
-          const r0 = await sb.from("fin_ar_edit").delete({ count: "exact" }).in("ky", kys).eq("tu_tao", true);
-          chk(r0.error, "Bỏ dòng thêm tay"); suaTay += r0.count || 0;
-          const r1 = await sb.from("fin_ar_edit").delete({ count: "exact" }).in("ky", kys).neq("so_ct", "");
-          chk(r1.error, "Bỏ dòng sửa tay theo hóa đơn"); suaTay += r1.count || 0;
-          const r2 = await sb.from("fin_ar_edit").update({ so_tien: null, da_thu: null, ngay_thu_du: null, ngay_thu_gan_nhat: null, ngay_den_han: null, ngay_hd: null, updated_at: now })
-            .in("ky", kys).eq("so_ct", "").eq("tu_tao", false);
-          chk(r2.error, "Bỏ số tiền sửa tay");
-          // dòng rỗng (không còn ngày gửi, ghi chú, cờ đã gửi) thì xóa; chưa chạy migration 32 thì bỏ điều kiện cờ
-          const del = (flag: boolean) => { let q = sb.from("fin_ar_edit").delete({ count: "exact" }).in("ky", kys).eq("so_ct", "").eq("tu_tao", false).eq("xoa", false).is("ngay_gui_bk", null).is("ghi_chu", null); if (flag) q = q.eq("da_gui_bk", false); return q; };
-          let r3 = await del(true);
-          if (r3.error && /da_gui_bk/.test(r3.error.message)) r3 = await del(false);
-          chk(r3.error, "Dọn dòng sửa tay rỗng"); suaTay += r3.count || 0;
-        }
-      }
+      // Nạp lại: chỉ thay các hóa đơn có trong file mới (cùng khách + số hóa đơn; dòng không số hóa đơn: cùng khách + kỳ).
+      // Hóa đơn / kỳ không có trong file giữ nguyên. Client chia lô theo khách nên một khách luôn nằm cùng một lô.
       const rows = (b.rows || []).filter((r) => r.ma_kh && KY.test(r.ky) && r.ngay_den_han);
+      const byKh = new Map<string, typeof rows>();
+      rows.forEach((r) => { const a = byKh.get(r.ma_kh) || []; a.push(r); byKh.set(r.ma_kh, a); });
+      let thay = 0, suaTay = 0;
+      for (const [ma, list] of Array.from(byKh.entries())) {
+        const hd = Array.from(new Set(list.map((r) => r.so_ct).filter(Boolean) as string[]));
+        const kyKhongHd = Array.from(new Set(list.filter((r) => !r.so_ct).map((r) => r.ky)));
+        const kys = Array.from(new Set(list.map((r) => r.ky)));
+        for (let i = 0; i < hd.length; i += 200) { const r = await sb.from("fin_ar").delete({ count: "exact" }).eq("ma_kh", ma).in("so_ct", hd.slice(i, i + 200)); chk(r.error, "Thay hóa đơn cũ"); thay += r.count || 0; }
+        if (kyKhongHd.length) { const r = await sb.from("fin_ar").delete({ count: "exact" }).eq("ma_kh", ma).in("ky", kyKhongHd).is("so_ct", null); chk(r.error, "Thay dòng cũ"); thay += r.count || 0; }
+        // Số sửa tay của các kỳ có trong file (của khách này): file là số chuẩn cho tiền & ngày thu; giữ ngày gửi bảng kê, cờ đã gửi, ghi chú
+        if (hd.length) { const r1 = await sb.from("fin_ar_edit").delete({ count: "exact" }).eq("ma_kh", ma).in("so_ct", hd); chk(r1.error, "Bỏ sửa tay theo hóa đơn"); suaTay += r1.count || 0; }
+        const r0 = await sb.from("fin_ar_edit").delete({ count: "exact" }).eq("ma_kh", ma).in("ky", kys).eq("tu_tao", true); chk(r0.error, "Bỏ dòng thêm tay"); suaTay += r0.count || 0;
+        const r2 = await sb.from("fin_ar_edit").update({ so_tien: null, da_thu: null, ngay_thu_du: null, ngay_thu_gan_nhat: null, ngay_den_han: null, ngay_hd: null, updated_at: now })
+          .eq("ma_kh", ma).in("ky", kys).eq("so_ct", "").eq("tu_tao", false);
+        chk(r2.error, "Bỏ số tiền sửa tay");
+      }
       for (let i = 0; i < rows.length; i += 1000) { const { error } = await sb.from("fin_ar").insert(rows.slice(i, i + 1000).map((r) => ({ ...r, ngay_gui_bk: null }))); chk(error, "Ghi công nợ phải thu"); }
-      return NextResponse.json({ ok: true, written: rows.length, suaTay });
+      return NextResponse.json({ ok: true, written: rows.length, thay, suaTay });
     }
 
     if (b.action === "guibk") {

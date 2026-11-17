@@ -166,7 +166,7 @@ function readKh(f: SrcFile, rows: Cell[][], H: Hdr): SrcFile {
   if (chua) f.notes.push(`${chua} dòng chưa cấp số hóa đơn — khách hàng nhận theo tên công ty`);
   const khongCty = out.filter((r) => !r.ten_cong_ty);
   if (khongCty.length) f.warns.push(`${khongCty.length} dòng không có Tên công ty (vd. ${khongCty.slice(0, 2).map((r) => `${r.ngay} · ${r.ma_gd || r.so_ve || "?"}${r.email ? " · " + r.email : ""}`).join("; ")}) — nhận khách theo tên miền email người đặt`);
-  f.notes.push(`Nạp lại cùng kỳ (${f.kys.join(", ")}) sẽ thay bảng kê ${hotel ? "hotel" : "flight"} của kỳ đó`);
+  f.notes.push(`Nạp lại chỉ thay các giao dịch có trong file này (theo mã giao dịch / số vé); giao dịch khác giữ nguyên`);
   return f;
 }
 
@@ -214,7 +214,7 @@ function readNcc(f: SrcFile, rows: Cell[][], H: Hdr): SrcFile {
   if (inf.size - gopX) f.notes.push(`${inf.size - gopX} dòng thiếu NCC đã gán NCC theo sheet bảng kê NCC`);
   if (gopX) f.notes.push(`${gopX} dòng hệ thống ghi NCC "XPERISE:<mã>" nằm trên bảng kê NCC khác — gộp về NCC của bảng kê`);
   if (noNcc.length) f.warns.push(`${noNcc.length} dòng không suy được NCC (sheet bảng kê không có dòng nào đã gán NCC) — tính vào phải trả nhóm "Chưa rõ NCC"`);
-  f.notes.push(`Nạp lại file cùng kỳ đối soát sẽ thay dữ liệu cũ của file này`);
+  f.notes.push(`Nạp lại chỉ thay các booking có trong file này (theo mã booking / số vé); booking khác giữ nguyên`);
   return f;
 }
 
@@ -390,7 +390,7 @@ function readAR(f: SrcFile, rows: Cell[][], kh: Cell[][], existing: Customer[], 
   f.totalL = `Phải thu ${fmtTien(f.total)} · còn lại ${fmtTien(con)}`;
   const moi = f.dm.filter((x) => x.moi);
   f.notes.push(`${f.dm.length} khách trong danh mục · ${moi.length} khách mới sẽ thêm (nhóm N1)`);
-  f.notes.push("Thay toàn bộ công nợ phải thu Travel (giữ công nợ khách Mobility N2–N5). Ngày gửi bảng kê và ghi chú sửa trên web được giữ lại");
+  f.notes.push("Chỉ thay các hóa đơn có trong file (theo khách + số hóa đơn); hóa đơn khác giữ nguyên. Ngày gửi bảng kê, cờ đã gửi và ghi chú sửa trên web được giữ lại");
   if (noKy) f.warns.push(`${noKy} dòng không đọc được kỳ nợ phát sinh — bỏ qua`);
   if (bad) f.warns.push(`${bad} dòng thiếu ngày đến hạn — bỏ qua`);
   return f;

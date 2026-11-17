@@ -8,6 +8,15 @@ import { readSource, SrcFile, KIND_LABEL } from "@/lib/dashboard/sources";
 import { n0, pc } from "@/lib/dashboard/util";
 
 const CHUNK = 1000;
+/** Chia lô ~CHUNK dòng nhưng không cắt ngang một khóa (giao dịch / booking / khách): server thay theo khóa trong từng lô */
+function lots<T>(rows: T[], key: (r: T) => string): T[][] {
+  const g = new Map<string, T[]>();
+  rows.forEach((r) => { const k = key(r); const a = g.get(k) || []; a.push(r); g.set(k, a); });
+  const out: T[][] = []; let cur: T[] = [];
+  g.forEach((a) => { if (cur.length && cur.length + a.length > CHUNK) { out.push(cur); cur = []; } cur.push(...a); });
+  if (cur.length) out.push(cur);
+  return out;
+}
 const ORDER = ["ar", "kh_hotel", "kh_flight", "kh_be", "ncc", "b1", "ht_hotel", "ht_flight"];
 const vnd = (v: number) => new Intl.NumberFormat("vi-VN").format(Math.round(v));
 const dmy = (d: string | null) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : "—");
@@ -54,12 +63,12 @@ export default function SourceUpload({ data, canEdit, onDone, toast }: { data: D
         setBusy(`Đang ghi ${f.name}…`);
         if (f.kind === "ar") {
           await post({ action: "dm", rows: f.dm || [] }); tick();
-          for (let i = 0; i < (f.ar || []).length; i += CHUNK) { await post({ action: "ar", kys: f.kys, rows: (f.ar || []).slice(i, i + CHUNK), first: i === 0 }); tick(); }
+          for (const lot of lots(f.ar || [], (r) => r.ma_kh)) { await post({ action: "ar", rows: lot }); tick(); }
         } else if (f.kind === "kh_hotel" || f.kind === "kh_flight" || f.kind === "kh_be") {
           const loai = f.kind === "kh_hotel" ? "hotel" : f.kind === "kh_flight" ? "flight" : "transport";
-          for (let i = 0; i < (f.kh || []).length; i += CHUNK) { await post({ action: "kh", loai, cty: f.cty, kys: f.kys, rows: (f.kh || []).slice(i, i + CHUNK), first: i === 0, fileName: f.name }); tick(); }
+          for (const lot of lots(f.kh || [], (r) => r.ma_gd || r.so_ve || `${r.ngay}|${r.ten_cong_ty}|${r.gmv}`)) { await post({ action: "kh", loai, rows: lot, fileName: f.name }); tick(); }
         } else if (f.kind === "ncc" || f.kind === "b1" || f.kind === "ht_hotel" || f.kind === "ht_flight") {
-          for (let i = 0; i < (f.ncc || []).length; i += CHUNK) { await post({ action: "ncc", fileKey: f.fileKey, fileName: f.name, rows: (f.ncc || []).slice(i, i + CHUNK), first: i === 0 }); tick(); }
+          for (const lot of lots(f.ncc || [], (r) => r.ma_booking || r.so_ve || "")) { await post({ action: "ncc", fileKey: f.fileKey, fileName: f.name, rows: lot }); tick(); }
         }
       }
       setBusy("Đang dựng lại GMV & giá vốn theo ngày…");
