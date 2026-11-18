@@ -938,13 +938,30 @@ let KP = {lvl: 0, pic: '', st: 'open', more: false};
 const kpLab = d => (KPIL.find(x => x[0] === d) || [0, d + ' ngày'])[1];
 function kpiRows(R, t) {
   const BY = {}; R.forEach(r => BY[r.key] = r);
-  const L = Object.entries(KPIA).map(([k, a]) => { const r = BY[k]; return {k, r, name: r ? r.name : cname(k), pic: r && PICS.includes(r.pic) ? r.pic : '', d: a[0], tr: a[1], g: a[2], f: (r && r.first) || a[3] || '', par: a[4]}; })
+  // cùng nguồn giao dịch với kế hoạch tuần (txDates): active = chuyến XPAY đầu tiên từ 16/11; đã chạy trước 16/11 = active trước
+  const TD = txDates();
+  const L = Object.entries(KPIA).map(([k, a]) => { const r = BY[k], T = TD[k] || [], pre = a[3] || (T[0] && T[0] < KPI0 ? T[0] : ''); return {k, r, name: r ? r.name : cname(k), pic: r && PICS.includes(r.pic) ? r.pic : '', d: a[0], tr: a[1], g: a[2], pre, f: pre || T.find(x => x >= KPI0) || '', par: a[4]}; })
     .concat(KPIU.map((u, i) => ({k: '', r: null, name: u[0], pic: '', d: u[1], tr: u[2], g: u[3], f: u[4] || '', par: 0, nodb: 1})));
   L.forEach(x => { x.due = addD(KPI0, x.d); x.left = Math.round((Date.parse(x.due) - Date.parse(t)) / 864e5);
-    x.st = x.f && x.f <= t ? (x.f <= KPI0 ? 'pre' : x.f <= x.due ? 'ok' : 'late') : x.left < 0 ? 'over' : x.left <= 2 ? 'soon' : 'open'; });
+    x.st = x.pre ? 'pre' : x.f ? (x.f <= x.due ? 'ok' : 'late') : x.due < TODAY ? 'over' : x.left <= 2 ? 'soon' : 'open'; });
   return L;
 }
 const KPST = {pre: ['Active trước 16/11', 'var(--muted)'], ok: ['Active đúng hạn', 'var(--stable)'], late: ['Active trễ hạn', 'var(--watch)'], over: ['Quá hạn, chưa active', 'var(--critical)'], soon: ['Sắp đến hạn', 'var(--watch)'], open: ['Còn hạn', 'var(--ink)']};
+/* KPI active sếp giao gộp vào Mục tiêu 2: 4 ô theo mức, bấm ô → nhảy tới tuần / ngày hạn trong kế hoạch bên dưới */
+function kpiStrip(R, t, who) {
+  // chỉ tính khách đang có trên dashboard (cùng danh sách với kế hoạch bên dưới); khách trong file chưa có trên dashboard ghi riêng
+  const RAW = kpiRows(R, t), ALL = RAW.filter(x => x.r && !x.r.liq && (!who || x.pic === who)); if (!ALL.length) return '';
+  const act = x => x.st === 'pre' || x.st === 'ok' || x.st === 'late', A0 = ALL.filter(x => x.st !== 'pre'), nOut = who ? 0 : RAW.filter(x => !x.r && x.st !== 'pre').length;
+  const tiles = KPIL.map(([d, lab]) => { const A = A0.filter(x => x.d === d), due = addD(KPI0, d), left = diffD(due, t), nA = A.filter(act).length, nO = A.filter(x => x.st === 'over').length, on = CR.wkDay === due;
+    return `<div class="hit" data-kpgo="${due}" style="cursor:pointer;padding:8px 12px;border-radius:12px;border:1px solid ${on ? 'var(--accent)' : 'var(--line)'};background:${on ? 'var(--color-surface-primary)' : 'var(--surface)'}">
+      <div class="lbl" style="font-weight:600">KPI ${lab} · hạn ${wd(due)} ${dm(due)}</div>
+      <div style="font-size:20px;font-weight:700;margin-top:2px;color:${nA >= A.length && A.length ? 'var(--stable)' : nO ? 'var(--critical)' : 'var(--ink)'}">${n0(nA)}<span style="font-size:13px;color:var(--ink-3)">/${n0(A.length)} đã active</span></div>
+      <div class="lbl" style="font-size:11.5px">${left >= 0 ? `còn ${left} ngày` : '<b class="c-critical">đã qua hạn</b>'} · chưa active <b>${n0(A.length - nA)}</b>${nO ? ` · <b class="c-critical">quá hạn ${n0(nO)}</b>` : ''}${(e => e ? ` · ${n0(e)} khách PIC hẹn sớm hơn hạn` : '')(A.filter(x => x.r.tact && x.r.tact < due).length)}</div>
+      <div style="height:4px;border-radius:2px;background:var(--line-soft);margin-top:6px;overflow:hidden"><i style="display:block;height:100%;width:${A.length ? 100 * nA / A.length : 0}%;background:var(--stable)"></i></div></div>`; }).join('');
+  const nA = A0.filter(act).length, nO = A0.filter(x => x.st === 'over').length;
+  return `<div style="margin:2px 0 12px"><div class="eyebrow" style="margin-bottom:6px">KPI active sếp giao (mốc 16/11) · ${n0(nA)}/${n0(A0.length)} khách đã active${nO ? ` · <span style="color:var(--critical)">${n0(nO)} quá hạn</span>` : ''} <span class="lbl" style="text-transform:none;font-weight:400">· hạn KPI là ngày mục tiêu trong kế hoạch bên dưới · bấm ô để nhảy tới ngày hạn${nOut ? ` · ${n0(nOut)} khách trong file KPI chưa có trên dashboard nên chưa tính` : ''}</span></div>
+    <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">${tiles}</div></div>`;
+}
 function kpiAct(R, t) {
   const who = PICS.includes(CR.who) ? CR.who : '', ALL = kpiRows(R, t).filter(x => !who || x.pic === who);
   const act = x => x.st === 'pre' || x.st === 'ok' || x.st === 'late', wait = x => !act(x);
@@ -1130,7 +1147,7 @@ function crmWeekActive2(R, t) {
   const lock = PLANS[ws], locked = !!(lock && lock.items);
   // kế hoạch: đã lock thì giữ đúng danh sách + ngày lúc lock; chưa lock thì lấy theo ngày mục tiêu hiện tại
   let items = locked ? Object.entries(lock.items).map(([k, v]) => ({k, d: v.d, c0: v.c})) : R.filter(r => r.tact >= ws && r.tact <= we).map(r => ({k: r.key, d: r.tact, c0: ''}));
-  items = items.filter(x => BY[x.k] && (!who || BY[x.k].pic === who)).map(x => { const r = BY[x.k], s = planSt(x.k, x.d, ws), c = confOf(x.k);
+  items = items.filter(x => BY[x.k] && (!who || BY[x.k].pic === who)).map(x => { const r = BY[x.k], s = planSt(x.k, x.d, r.tactKpi && KPI0 < ws ? KPI0 : ws), c = confOf(x.k);
     const p = s.st === 'ok' || s.st === 'late' ? 1 : s.st === 'miss' ? 0 : probOf(c); return Object.assign(x, {r, c, p, ...s}); });
   const extra = locked ? R.filter(r => r.tact >= ws && r.tact <= we && !lock.items[r.key] && (!who || r.pic === who)) : [];
   const sel = CR.wkDay && CR.wkDay >= ws && CR.wkDay <= we ? CR.wkDay : '';
@@ -1158,7 +1175,7 @@ function crmWeekActive2(R, t) {
   const canW = DBST === 'ok' && DBW !== false;
   const confSel = x => x.st === 'ok' || x.st === 'late' ? `<span class="lbl">${PROB[x.c][1]}</span>` : `<select data-tconf="${esc(x.k)}" ${canW ? '' : 'disabled'} style="font-size:12px;max-width:190px">${Object.entries(PROB).map(([c, v]) => `<option value="${c}" ${x.c === c ? 'selected' : ''}>${v[1]} · ${v[2]}</option>`).join('')}</select>`;
   const list = L.length ? `<div class="tw" style="max-height:420px;overflow:auto;margin-top:10px"><table><thead><tr><th class="l">Ngày mục tiêu</th><th class="l">Khách dự kiến active</th><th class="l">PIC</th><th class="l">Trạng thái</th><th class="l">Nguồn xác nhận (sửa được)</th><th>Xác suất</th><th class="l">Next step</th></tr></thead><tbody>${L.map(x => `<tr>
-      <td class="l" style="white-space:nowrap">${wd(x.d)} ${dmy(x.d)}${locked && x.r.tact && x.r.tact !== x.d ? `<span class="def c-high">PIC đã dời sang ${dm(x.r.tact)}</span>` : ''}</td>
+      <td class="l" style="white-space:nowrap">${wd(x.d)} ${dmy(x.d)}${locked && x.r.tact && x.r.tact !== x.d ? `<span class="def c-high">PIC đã dời sang ${dm(x.r.tact)}</span>` : ''}${x.r.tactKpi && x.r.tact === x.d ? `<span class="def" style="color:var(--accent)">KPI ${kpLab(x.r.tactKpi)} · hạn sếp giao</span>` : ''}</td>
       <td class="l name hit" data-cropen="${esc(x.k)}" style="cursor:pointer;color:var(--accent)">${esc(x.r.name)}${globTag(x.k)}<span class="def">HĐ ${esc(x.k)}</span></td>
       <td class="l">${x.r.pic ? esc(x.r.pic) : '<b style="color:var(--critical)">chưa phân công</b>'}</td>
       <td class="l"><span class="pill p-${PST[x.st][1]}">${PST[x.st][0]}</span>${x.ach ? `<span class="def">giao dịch ${dmy(x.ach)}</span>` : ''}</td>
@@ -1169,7 +1186,7 @@ function crmWeekActive2(R, t) {
   const lockBtn = canW && !who ? `<button class="btn ${locked ? '' : 'pri'}" id="wklock" data-ws="${ws}">${locked ? 'Lock lại kế hoạch tuần' : '🔒 Lock kế hoạch tuần'}</button>` : '';
   return `<div class="card" id="fx2"><div class="hd"><div><div class="eyebrow">Mục tiêu 2 · Tăng khách active đã nhận thẻ XPAY${who ? ' · ' + esc(who) : ''}</div><h2 class="card-title">Kế hoạch active tuần ${dm(ws)} – ${dm(we)} · ${n0(W.a)}/${n0(W.n)} đã active · kỳ vọng ${nf(W.e, 1)}</h2></div>
     <div class="card-note" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${lockBtn}<button class="btn" data-wk="-1">← Tuần trước</button>${CR.wkOff ? '<button class="btn" data-wk="0">Tuần này</button>' : ''}<button class="btn" data-wk="1">Tuần sau →</button></div></div>
-    ${kpi}<div style="display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px">${days.map(chip).join('')}${totChip}</div>
+    ${kpi}${kpiStrip(R, t, who)}<div style="display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px">${days.map(chip).join('')}${totChip}</div>
     <div class="eyebrow" style="margin-top:14px">${sel ? `Khách dự kiến active ${wd(sel)} ${dmy(sel)} · ${n0(L.length)}` : `Khách dự kiến active cả tuần · ${n0(L.length)}`} <span class="lbl" style="text-transform:none;font-weight:400">(bấm tên khách để mở hồ sơ)</span></div>${list}${ex}
     <div class="hint">Mỗi ô ngày = khách đã active / khách trong kế hoạch ngày đó. Ngày đã qua có 🔒: kết quả chốt theo giao dịch thực tế, ✓ Đạt khi đủ số kế hoạch. <b>Kỳ vọng</b> = khách đã active + Σ xác suất của khách đang chờ: email xác nhận 90%, đồng ý bằng lời 70%, nhân sự ước chừng 25% (mặc định khi chưa chọn); quá hạn chưa active tính 0. Lock vào đầu tuần (thứ 2) để giữ cố định danh sách so sánh; PIC dời ngày sau khi lock vẫn tính theo ngày đã lock. Active = có giao dịch XPAY từ đầu tuần.</div></div>`;
 }
@@ -1184,7 +1201,7 @@ function rngBar() {
 function plan3(R) {
   const D = []; for (let x = addD(TODAY, 1); D.length < 3; x = addD(x, 1)) { const w = new Date(x + 'T00:00:00Z').getUTCDay(); if (w !== 0 && w !== 6) D.push(x); }
   const who = PICS.includes(CR.who) ? CR.who : '', ppl = (who ? [who] : PICS).filter(p => R.some(r => r.pic === p));
-  const rows = ppl.map(p => { const c = D.map(d => R.filter(r => r.pic === p && r.tact === d)); return {p, c, ok: c.every(a => a.length)}; });
+  const rows = ppl.map(p => { const c = D.map(d => R.filter(r => r.pic === p && (r.tactMan || '') === d)); return {p, c, ok: c.every(a => a.length)}; });
   const nOk = rows.filter(o => o.ok).length;
   const cell = a => a.length ? `<td class="l" style="font-size:12px;white-space:normal"><b style="color:var(--stable)">${n0(a.length)} khách</b><span class="def">${a.slice(0, 3).map(r => `<a href="#" data-cropen="${esc(r.key)}" style="color:var(--accent)">${esc(r.name.length > 34 ? r.name.slice(0, 33) + '…' : r.name)}</a> · ${esc((PROB[confOf(r.key)] || PROB.est)[2])}`).join('<br>')}${a.length > 3 ? `<br>+${a.length - 3} khách` : ''}</span></td>`
     : `<td class="l"><span class="pill p-critical">Chưa nhập</span></td>`;
@@ -2142,7 +2159,10 @@ function crmRows(d) {
     r.stage = r.first ? 4 : done(r.meet) ? 3 : done(r.call) ? 2 : done(r.xp) ? 1 : 0;
     r.todo = {nocall: !done(r.call), nomeet: !done(r.meet), unused: done(r.xp) && !r.gmv30, due: isoOk(r.nx) && r.nx <= d, nsSoon: isoOk(r.nx) && r.nx > d && r.nx <= addD(d, 7), nopic: !r.pic && r.grp <= 3, g1: r.grp === 1, topnc: r.grp === 2 && !done(r.call), topnm: r.grp === 2 && done(r.call) && !done(r.meet), stopped: r.gmv > 0 && !r.gmv30, never: done(r.xp) && !r.gmv};
     // mục tiêu active: PIC cam kết ngày khách có giao dịch; đạt = có giao dịch đúng / trước ngày đó
-    r.tact = isoOk(e.tact) ? e.tact : ''; r.tactSet = isoOk(e.tactSet) ? e.tactSet : ''; r.tactAch = ''; r.tactSt = '';
+    r.tact = isoOk(e.tact) ? e.tact : ''; r.tactSet = isoOk(e.tactSet) ? e.tactSet : ''; r.tactAch = ''; r.tactSt = ''; r.tactMan = r.tact; r.tactKpi = 0;
+    // KPI active sếp giao (mốc 16/11, hạn 5 / 7 / 14 ngày / 1 tháng) đổ thẳng vào mục tiêu active; PIC hẹn sớm hơn hạn KPI thì giữ ngày của PIC
+    { const a = typeof KPIA !== 'undefined' && KPIA[k]; if (a && !a[3] && !(r.first && r.first < KPI0)) { const due = addD(KPI0, a[0]);
+      if (!r.tact || r.tact > due || r.tact < KPI0) { r.tact = due; r.tactSet = KPI0; r.tactKpi = a[0]; } } }   // ngày PIC đặt trước 16/11 là mục tiêu cũ → thay bằng hạn KPI
     if (r.tact) { const from = r.first && r.tactSet && r.first < r.tactSet ? r.tactSet : '';   // đã từng dùng trước lúc đặt → cần giao dịch mới
       const dts = (kd[k] || []).filter(x => x >= from).sort(); r.tactAch = dts[0] || '';
       r.tactSt = r.tactAch ? (r.tactAch <= r.tact ? 'dat' : 'datTre') : r.tact < d ? 'tre' : diffD(r.tact, d) <= 7 ? 'sap' : 'cho'; }
@@ -2385,7 +2405,7 @@ function crmDash(ALL, f, t, part) {
   s += `</svg><div class="legend" style="flex-wrap:wrap;margin-top:8px">${stageTxt.map((l, i) => `<span><i style="background:${SC[i]}"></i>${l}</span>`).join('')}</div>`;
   h += `<div class="card"><div class="hd"><div><div class="eyebrow">Tiến độ theo nhóm khách</div><h2 class="card-title">Mỗi nhóm đang ở bước nào (tính đến ${dmy(t)})</h2></div><div class="card-note">bấm ô màu để mở danh sách ở tab Nhập liệu</div></div>${s}</div>`;
   const PIPE = h;
-  if (part === 'act') return stale + (who ? `<div class="banner" style="display:flex;justify-content:space-between;align-items:center"><span>Đang xem riêng <b>${esc(who)}</b> · ${esc(ROLE[who] || '')}</span><button class="btn" data-crwho="">← Quay lại toàn đội</button></div>` : '') + kpiAct(R, t) + fxHeader(R, t) + fxCards(R, t) + crmWeekActive2(R, t) + plan3(R) + PIPE + crmNextSteps(R, who);
+  if (part === 'act') return stale + (who ? `<div class="banner" style="display:flex;justify-content:space-between;align-items:center"><span>Đang xem riêng <b>${esc(who)}</b> · ${esc(ROLE[who] || '')}</span><button class="btn" data-crwho="">← Quay lại toàn đội</button></div>` : '') + fxHeader(R, t) + fxCards(R, t) + crmWeekActive2(R, t) + plan3(R) + PIPE + crmNextSteps(R, who);
   h = TQ + PIPE;
   // 3. DN active theo tuần · 4. Next steps · 5. Meeting · 6. Chi tiết từng người
   const MEET = crmMeetings(ALL, f, t);
@@ -3409,6 +3429,7 @@ function bindJourney() {
     if (PAT.msOpen && $('pmsp') && !$('pmsp').contains(e.target) && e.target.id !== 'pmsb') { PAT.msOpen = false; $('pmsp').style.display = 'none'; } };
   document.querySelectorAll('[data-mf]').forEach(el => el.onclick = ev => { ev.preventDefault(); keep(() => { const k = el.dataset.mf; CR.mf = CR.mf === k && k !== 'soon7' ? 'soon7' : k; }); });
   document.querySelectorAll('[data-wk]').forEach(el => el.onclick = () => keep(() => { const v = +el.dataset.wk; CR.wkOff = v === 0 ? 0 : (CR.wkOff || 0) + v; CR.wkDay = ''; }));
+  document.querySelectorAll('[data-kpgo]').forEach(el => el.onclick = () => keep(() => { const due = el.dataset.kpgo; CR.wkOff = Math.round(diffD(wkStart(due), wkStart(CR.to || TODAY)) / 7); CR.wkDay = due; }));
   document.querySelectorAll('[data-wkday]').forEach(el => el.onclick = () => keep(() => { const v = el.dataset.wkday; CR.wkDay = CR.wkDay === v ? '' : v; }));
   document.querySelectorAll('[data-nsf]').forEach(el => el.onclick = ev => { ev.preventDefault(); keep(() => { const v = el.dataset.nsf; CR.nsf = !v || CR.nsf === v ? '' : v; }); });
   document.querySelectorAll('[data-crwho]').forEach(el => el.onclick = () => keep(() => { CR.who = el.dataset.crwho; try { localStorage.setItem('xpay_who', CR.who); } catch (e) {} }));
