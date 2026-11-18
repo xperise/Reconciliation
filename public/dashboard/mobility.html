@@ -1027,9 +1027,38 @@ function kyData(ALL) {
   return {G: out, other, otherR, who};
 }
 
+/* target ký HĐ đến 31/12 giao theo PIC (sếp chia 18/11; quản lý sửa & lưu được → plan/kyhd.picT) */
+const KYPT0 = {'Khánh': 500, 'Minh': 500, 'Hiền': 300, 'Nguyệt': 300, 'Khoa': 100, 'Phú': 100, 'Tuấn': 50, 'Tâm': 50, 'Kimy': 213};
+const kyPicT = () => Object.assign({}, KYPT0, (PLANS.kyhd || {}).picT || {});
+function kyPicStats(ALL) {
+  const O = {}, add = p => O[p] = O[p] || {p, n: 0, sgn: 0, sgnR: 0, conf: 0, mset: 0, up: 0};
+  ALL.forEach(r => { if (r.liq || (r.signed && (!sdOf(r) || sdOf(r) < KY0))) return; const x = add(PICS.includes(r.pic) ? r.pic : '');
+    if (r.signed) x.sgn++; else x.n++; x.sgnR += kyIn(r); if (done(r.vc) && !r.signed) x.conf++; if (r.msets.some(a => (a.d || '') >= KY0)) x.mset++; if (r.mnext && !r.signed) x.up++; });
+  return O;
+}
+function kyPicCard(ALL, wl, canW) {
+  const PT = kyPicT(), O = kyPicStats(ALL), RL = rngLabel(CR.from || KY0, CR.to || TODAY), who = PICS.includes(CR.who) ? CR.who : '';
+  const pics = [...new Set([...Object.keys(PT).filter(p => PICS.includes(p)), ...PICS.filter(p => O[p] && (O[p].sgn || O[p].n))])].sort((a, b) => (PT[b] || 0) - (PT[a] || 0) || (O[b] || {}).sgn - (O[a] || {}).sgn);
+  if (O[''] && (O[''].sgn || O[''].n)) pics.push('');
+  const z = {n: 0, sgn: 0, sgnR: 0, conf: 0, mset: 0, up: 0}, tot = Object.assign({}, z), tT = pics.reduce((s, p) => s + (+PT[p] || 0), 0);
+  const row = p => { const x = O[p] || z, tg = +PT[p] || 0, left = Math.max(0, tg - x.sgn), on = who && who === p; Object.keys(z).forEach(k => tot[k] += x[k] || 0);
+    const pc = tg ? x.sgn / tg : 0;
+    return `<tr class="hit" data-kypic="${on ? '' : esc(p || '_')}" style="cursor:pointer;${on ? 'background:var(--color-surface-primary);font-weight:600' : ''}"><td class="l name">${p ? esc(p) : '<b style="color:var(--critical)">Chưa phân công</b>'}${p && ROLE[p] ? `<span class="def">${esc(ROLE[p])}</span>` : ''}</td>
+      <td>${canW && p ? `<input type="number" min="0" step="1" data-kypt="${esc(p)}" value="${tg}" style="width:70px" onclick="event.stopPropagation()">` : `<b>${tg ? n0(tg) : '—'}</b>`}</td>
+      <td class="c-stable"><b>${n0(x.sgnR)}</b></td><td>${n0(x.sgn)}</td>
+      <td style="min-width:120px">${tg ? `<div style="display:flex;gap:6px;align-items:center"><div style="flex:1;height:6px;border-radius:4px;background:var(--line);overflow:hidden"><div style="height:100%;width:${Math.min(100, pc * 100).toFixed(1)}%;background:${pc >= 0.5 ? 'var(--stable)' : pc >= 0.2 ? 'var(--watch)' : 'var(--critical)'}"></div></div>${pct(pc)}</div>` : '<span class="lbl">—</span>'}</td>
+      <td>${n0(x.conf)}</td><td>${n0(x.mset)}${x.up ? `<span class="def">${n0(x.up)} sắp tới</span>` : ''}</td><td>${n0(x.n)}</td><td>${tg ? n0(left) : '—'}</td><td>${tg ? nf(left / wl, 1) : '—'}</td></tr>`; };
+  const body = pics.map(row).join('');
+  return `<div class="card" id="kypic"><div class="hd"><div><div class="eyebrow">Target ký HĐ đến 31/12 theo PIC</div><h2 class="card-title">Tổng target ${n0(tT)} hợp đồng · đã ký ${n0(tot.sgn)} (${tT ? pct(tot.sgn / tT) : '—'}) · trong ${RL}: ${n0(tot.sgnR)}</h2></div><div class="card-note">bấm 1 PIC để xem tiến độ riêng của PIC đó</div></div>
+    <div class="tw"><table><thead><tr><th class="l">PIC</th><th>Target 31/12</th><th>Đã ký<span class="def">${RL}</span></th><th>Lũy kế từ ${dm(KY0)}</th><th>% target</th><th>Đồng ý, đang process</th><th>Meeting đã set</th><th>Tệp chưa ký</th><th>Còn phải ký</th><th>Cần / tuần</th></tr></thead><tbody>${body}
+    <tr style="font-weight:700;border-top:2px solid var(--line)"><td class="l">Tổng</td><td>${n0(tT)}</td><td class="c-stable">${n0(tot.sgnR)}</td><td>${n0(tot.sgn)}</td><td>${tT ? pct(tot.sgn / tT) : ''}</td><td>${n0(tot.conf)}</td><td>${n0(tot.mset)}</td><td>${n0(tot.n)}</td><td>${n0(Math.max(0, tT - tot.sgn))}</td><td>${nf(Math.max(0, tT - tot.sgn) / wl, 1)}</td></tr></tbody></table></div>
+    ${canW ? '<div style="margin-top:8px"><button class="btn pri" id="kyptsave">Lưu target theo PIC</button> <span class="lbl" id="kyptmsg"></span></div>' : ''}
+    <div class="hint">Đã ký / lũy kế đếm theo PIC chính hiện tại của khách trên dashboard (đổi PIC trong hồ sơ là số tự chuyển). Lũy kế tính PL / HĐ mới ký từ ${dmy(KY0)}; cần / tuần = còn phải ký ÷ số tuần làm việc còn lại đến 31/12. Tệp chưa ký = khách PIC đang phụ trách chưa ký.</div></div>`;
+}
 function kyGroups(ALL, t) {
   const D = kyData(ALL), G = KYG.map(g => D.G[g[0]]), sum = f => G.reduce((s, x) => s + f(x), 0);
   const RL = rngLabel(CR.from || KY0, CR.to || TODAY);
+  if (D.who) { const pt = +kyPicT()[D.who] || 0, gs = sum(x => x.tgt); let acc = 0; G.forEach((x, i) => { x.tgt0 = x.tgt; x.tgt = i === G.length - 1 ? pt - acc : Math.round(gs ? pt * x.tgt0 / gs : 0); acc += x.tgt; }); }
   const T = {tgt: sum(x => x.tgt), sgn: sum(x => x.sgn) + D.other, sgnR: sum(x => x.sgnR) + D.otherR, conf: sum(x => x.conf), mset: sum(x => x.mset), up: sum(x => x.up), n: sum(x => x.n)};
   let road = 0; S.plan.forEach(p => { if (p.d >= KY0) road += p.newco || 0; });
   let wl = 0; for (let x = addD(TODAY, 1); x <= P.end; x = addD(x, 1)) if (isWd(x)) wl++; wl = Math.max(1, wl / 5);
@@ -1037,7 +1066,7 @@ function kyGroups(ALL, t) {
   const tile = (k, v, s, col) => `<div class="kpi"><div class="k">${k}</div><div class="v" ${col ? `style="color:${col}"` : ''}>${v}</div><div class="s">${s}</div></div>`;
   let h = `<div class="card"><div class="hd"><div><div class="eyebrow">Tiến độ ký hợp đồng${D.who ? ' · ' + esc(D.who) : ''} · từ ${dm(KY0)} đến 31/12</div><h2 class="card-title">Mục tiêu ${n0(T.tgt)} hợp đồng · đã ký ${n0(T.sgn)} (${T.tgt ? pct(T.sgn / T.tgt) : '—'}) · trong ${RL}: ${n0(T.sgnR)} · ${n0(T.conf)} khách đã đồng ý đang làm thủ tục</h2></div><div class="card-note">số trong kỳ tính từ ${dmy(KY0)}</div></div>
     <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:12px">
-      ${tile('Target đến 31/12', n0(T.tgt), `4 nhóm × tỷ lệ ký mục tiêu · lộ trình 60 tỷ cần <b>${n0(road)}</b>${!D.who && road > T.tgt ? ` → <b class="c-critical">thiếu ${n0(road - T.tgt)}</b> phải từ khách mới ngoài tệp` : ''}`)}
+      ${D.who ? tile(`Target ${esc(D.who)} đến 31/12`, n0(T.tgt), `target giao cho ${esc(D.who)} · chia vào 4 nhóm theo tỷ trọng target nhóm · còn phải ký <b>${n0(Math.max(0, T.tgt - T.sgn))}</b>`) : ''}${D.who ? '' : tile('Target đến 31/12', n0(T.tgt), `4 nhóm × tỷ lệ ký mục tiêu · lộ trình 60 tỷ cần <b>${n0(road)}</b>${!D.who && road > T.tgt ? ` → <b class="c-critical">thiếu ${n0(road - T.tgt)}</b> phải từ khách mới ngoài tệp` : ''}`)}
       ${tile(`Đã ký · ${RL}`, n0(T.sgnR), `PL / HĐ mới có ngày ký trong khoảng đang chọn · <b>lũy kế từ ${dm(KY0)}: ${n0(T.sgn)}</b> (${T.tgt ? pct(T.sgn / T.tgt) : '—'} target${D.other ? `, gồm ${n0(D.other)} khách mới ngoài 4 nhóm` : ''}) · cần <b>${nf(Math.max(0, T.tgt - T.sgn) / wl, 0)}</b> HĐ/tuần từ nay`, 'var(--stable)')}
       ${tile('Khách đã đồng ý, đang process', n0(T.conf), 'đã có mốc “Đồng ý ký (verbal)”, chưa có ngày ký · ký xong tự chuyển sang đã ký', 'var(--watch)')}
       ${tile('Meeting đã set', n0(T.mset), `khách có lịch meeting đặt từ ${dm(KY0)} · <b>${n0(T.up)}</b> khách có meeting sắp tới`)}</div>
@@ -1047,6 +1076,7 @@ function kyGroups(ALL, t) {
     <tr style="font-weight:700;border-top:2px solid var(--line)"><td class="l">Tổng 4 nhóm${D.other ? ` (+ ${n0(D.other)} khách mới đã ký)` : ''}</td><td>${n0(T.n)}</td><td>${n0(sum(x => x.glob))}</td><td>${T.n ? pct(T.tgt / T.n) : ''}</td><td>${n0(T.tgt)}</td><td class="c-stable">${n0(T.sgnR)}</td><td>${n0(T.sgn)}</td><td>${T.tgt ? pct(T.sgn / T.tgt) : ''}</td><td>${n0(T.conf)}</td><td>${n0(T.mset)}</td><td>${n0(Math.max(0, T.tgt - T.sgn))}</td><td>${nf(Math.max(0, T.tgt - T.sgn) / wl, 1)}</td></tr></tbody></table></div>
     ${canW ? '<div style="margin-top:8px"><button class="btn pri" id="kyrsave">Lưu tỷ lệ ký mục tiêu</button> <span class="lbl" id="kyrmsg"></span></div>' : ''}
     <div class="hint">Mỗi khách thuộc đúng 1 nhóm, xét theo thứ tự A → B → C → D. Tệp = khách chưa ký tính đến ${dmy(KY0)} (khách đã ký trước đó không tính). <b>Tỷ lệ ký mục tiêu là giả định</b> (mặc định 85% / 50% / 30% / 10%), quản lý sửa và lưu được; target = tệp × tỷ lệ. Cột Đã ký đếm số PL / HĐ mới có ngày ký trong khoảng thời gian đang chọn ở trên (chọn 1 ngày = số ký ngày đó); lũy kế, % target, còn phải ký tính từ ${dmy(KY0)}. Bấm 1 nhóm để xem danh sách bên dưới.</div></div>`;
+  if (!D.who) h += kyPicCard(ALL, wl, DBST === 'ok' && DBW !== false);   // bảng target theo PIC chỉ hiện ở chế độ Tất cả (quản lý)
   // danh sách nhóm đang chọn
   const x = D.G[FX.kg] || D.G.a, st = FX.kst || 'open';
   let L = x.L.filter(r => st === 'all' ? true : st === 'conf' ? done(r.vc) && !r.signed : st === 'sgn' ? r.signed : st === 'mtg' ? r.mnext && !r.signed : !r.signed).filter(r => !FX.glob || isGlob(r.key)).sort((a, b) => b.ks - a.ks || b.kv - a.kv);
@@ -1071,9 +1101,14 @@ function bindKy(keep) {
   document.querySelectorAll('[data-kyg]').forEach(el => el.onclick = () => keep(() => { FX.kg = el.dataset.kyg; }));
   document.querySelectorAll('[data-kst]').forEach(el => el.onclick = () => keep(() => { FX.kst = el.dataset.kst; }));
   if ($('fx1gap')) $('fx1gap').onchange = e => keep(() => { FX.c1gap = e.target.checked; });
+  document.querySelectorAll('[data-kypic]').forEach(el => el.onclick = () => { const p = el.dataset.kypic; if (p === '_') return; keep(() => { CR.who = p; try { localStorage.setItem('xpay_who', p); } catch (e) {} }); });
+  if ($('kyptsave')) $('kyptsave').onclick = async () => { const picT = {}; document.querySelectorAll('[data-kypt]').forEach(i => { const v = Math.round(+i.value); if (isFinite(v) && v >= 0) picT[i.dataset.kypt] = v; });
+    $('kyptmsg').textContent = 'Đang lưu…';
+    try { const db = await claude.use('db'); const doc = Object.assign({}, PLANS.kyhd || {}, {picT, picAt: TODAY, picBy: myPic() || MYMAIL || ''}); await db.doc('plan/kyhd').set(doc); PLANS.kyhd = doc; keep(() => {}); }
+    catch (e) { $('kyptmsg').textContent = 'Chưa lưu được: ' + ((e && (e.message || e.code)) || e); } };
   if ($('kyrsave')) $('kyrsave').onclick = async () => { const rates = {}; document.querySelectorAll('[data-kyr]').forEach(i => { const v = +i.value; if (isFinite(v) && v >= 0 && v <= 100) rates[i.dataset.kyr] = v / 100; });
     $('kyrmsg').textContent = 'Đang lưu…';
-    try { const db = await claude.use('db'); const doc = {rates, at: TODAY, by: myPic() || MYMAIL || ''}; await db.doc('plan/kyhd').set(doc); PLANS.kyhd = doc; keep(() => {}); }
+    try { const db = await claude.use('db'); const doc = Object.assign({}, PLANS.kyhd || {}, {rates, at: TODAY, by: myPic() || MYMAIL || ''}); await db.doc('plan/kyhd').set(doc); PLANS.kyhd = doc; keep(() => {}); }
     catch (e) { $('kyrmsg').textContent = 'Chưa lưu được: ' + ((e && (e.message || e.code)) || e); } };
 }
 
