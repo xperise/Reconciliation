@@ -68,7 +68,8 @@ export default function SourceUpload({ data, canEdit, onDone, toast }: { data: D
           const loai = f.kind === "kh_hotel" ? "hotel" : f.kind === "kh_flight" ? "flight" : "transport";
           for (const lot of lots(f.kh || [], (r) => r.ma_gd || r.so_ve || `${r.ngay}|${r.ten_cong_ty}|${r.gmv}`)) { await post({ action: "kh", loai, rows: lot, fileName: f.name }); tick(); }
         } else if (f.kind === "ncc" || f.kind === "b1" || f.kind === "ht_hotel" || f.kind === "ht_flight") {
-          for (const lot of lots(f.ncc || [], (r) => r.ma_booking || r.so_ve || "")) { await post({ action: "ncc", fileKey: f.fileKey, fileName: f.name, rows: lot }); tick(); }
+          let dau = true;
+          for (const lot of lots(f.ncc || [], (r) => r.ma_booking || r.so_ve || "")) { await post({ action: "ncc", fileKey: f.fileKey, fileName: f.name, rows: lot, first: dau }); dau = false; tick(); }
         }
       }
       setBusy("Đang dựng lại GMV & giá vốn theo ngày…");

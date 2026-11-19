@@ -42,11 +42,20 @@ export async function POST(req: Request) {
       // Nạp lại: chỉ thay các giao dịch có trong file mới (cùng mã giao dịch / số vé), dòng khác của kỳ giữ nguyên.
       // Client chia lô theo mã giao dịch nên các dòng của một giao dịch luôn nằm cùng một lô.
       const rows = (b.rows || []).filter((r) => KY.test(r.ky) && r.ngay).map((r) => ({ ...r, loai: b.loai, file_name: b.fileName || null, uploaded_at: now }));
-      const codes = Array.from(new Set(rows.map((r) => r.ma_gd).filter(Boolean) as string[]));
-      const ves = Array.from(new Set(rows.filter((r) => !r.ma_gd && r.so_ve).map((r) => r.so_ve as string)));
+      // Giao dịch = mã giao dịch + ngày giao dịch: file sau chỉ bao một khoảng ngày thì giao dịch các ngày khác của
+      // cùng booking (vd. dòng bán ngày 12 khi file mới chỉ có dòng hoàn ngày 15) được giữ nguyên
+      const byNgay = new Map<string, { codes: Set<string>; ves: Set<string> }>();
+      rows.forEach((r) => {
+        const o = byNgay.get(r.ngay) || { codes: new Set<string>(), ves: new Set<string>() };
+        if (r.ma_gd) o.codes.add(r.ma_gd); else if (r.so_ve) o.ves.add(r.so_ve);
+        byNgay.set(r.ngay, o);
+      });
       let thay = 0;
-      for (let i = 0; i < codes.length; i += 200) { const r = await sb.from("fin_src_kh").delete({ count: "exact" }).eq("loai", b.loai).in("ma_gd", codes.slice(i, i + 200)); chk(r.error, "Thay giao dịch cũ"); thay += r.count || 0; }
-      for (let i = 0; i < ves.length; i += 200) { const r = await sb.from("fin_src_kh").delete({ count: "exact" }).eq("loai", b.loai).is("ma_gd", null).in("so_ve", ves.slice(i, i + 200)); chk(r.error, "Thay giao dịch cũ"); thay += r.count || 0; }
+      for (const [ngay, o] of Array.from(byNgay.entries())) {
+        const codes = Array.from(o.codes), ves = Array.from(o.ves);
+        for (let i = 0; i < codes.length; i += 200) { const r = await sb.from("fin_src_kh").delete({ count: "exact" }).eq("loai", b.loai).eq("ngay", ngay).in("ma_gd", codes.slice(i, i + 200)); chk(r.error, "Thay giao dịch cũ"); thay += r.count || 0; }
+        for (let i = 0; i < ves.length; i += 200) { const r = await sb.from("fin_src_kh").delete({ count: "exact" }).eq("loai", b.loai).eq("ngay", ngay).is("ma_gd", null).in("so_ve", ves.slice(i, i + 200)); chk(r.error, "Thay giao dịch cũ"); thay += r.count || 0; }
+      }
       for (const r0 of rows.filter((r) => !r.ma_gd && !r.so_ve)) {
         let q = sb.from("fin_src_kh").delete({ count: "exact" }).eq("loai", b.loai).eq("ngay", r0.ngay).eq("gmv", r0.gmv).is("ma_gd", null).is("so_ve", null);
         q = r0.ten_cong_ty ? q.eq("ten_cong_ty", r0.ten_cong_ty) : q.is("ten_cong_ty", null);
@@ -79,7 +88,21 @@ export async function POST(req: Request) {
           }
         }
       };
-      await del(ht, true, "ma_booking"); await del(ds, false, "ma_booking"); await del(ds, false, "so_ve");
+      // Giá NCC trên hệ thống: ảnh chụp cả booking → thay theo mã booking.
+      // Đối soát NCC: một booking có thể có dòng tính tiền ở bảng kê NCC tháng này và dòng hoàn ở tháng sau —
+      // chỉ bỏ dòng trùng hệt (cùng mã booking / số vé, ngày dịch vụ, số tiền NCC), dòng khác giữ nguyên
+      await del(ht, true, "ma_booking");
+      {
+        // gom theo ngày dịch vụ để ít lượt gọi: trong cùng ngày, bỏ dòng của file khác có cùng mã booking và cùng số tiền NCC
+        const g = new Map<string, { codes: Set<string>; amts: Set<number> }>();
+        ds.forEach((r0) => { if (!r0.ma_booking || r0.bang_ke == null || !r0.ngay_dv) return; const o = g.get(r0.ngay_dv) || { codes: new Set<string>(), amts: new Set<number>() }; o.codes.add(r0.ma_booking); o.amts.add(r0.bang_ke); g.set(r0.ngay_dv, o); });
+        for (const [ngay, o] of Array.from(g.entries())) {
+          const r = await sb.from("fin_src_ncc").delete({ count: "exact" }).neq("file_key", b.fileKey).not("khop", "like", "HT:%").eq("ngay_dv", ngay).in("ma_booking", Array.from(o.codes)).in("bang_ke", Array.from(o.amts));
+          chk(r.error, "Bỏ dòng đối soát trùng"); thay += r.count || 0;
+        }
+      }
+      // nạp lại đúng file đối soát cũ (cùng tên kỳ): thay toàn bộ dòng cũ của file đó
+      if (b.first) { const r = await sb.from("fin_src_ncc").delete({ count: "exact" }).eq("file_key", b.fileKey).not("khop", "like", "HT:%").lt("uploaded_at", now); chk(r.error, "Thay file đối soát cũ"); thay += r.count || 0; }
       if (rows.length) { const { error } = await sb.from("fin_src_ncc").insert(rows); chk(error, "Ghi đối soát NCC"); }
       return NextResponse.json({ ok: true, written: rows.length, thay });
     }
@@ -199,7 +222,8 @@ async function rebuild(sb: Sb) {
   {
     type R = Ncc & { file_key?: string; uploaded_at?: string };
     const nhom = (n: R) => ((n.khop || "").startsWith("HT:") ? "HT|" + (n.nganh || "") : "DS|" + String(n.ncc || "").replace(/^(hotel|flight):/, ""));
-    const khoa = (n: R) => nhom(n) + "|" + nk(n.ma_booking) + "|" + nk(n.so_ve);
+    // giá hệ thống: theo booking (ảnh chụp mới nhất); đối soát: dòng trùng hệt (booking, số vé, ngày dịch vụ, số tiền)
+    const khoa = (n: R) => nhom(n) + "|" + nk(n.ma_booking) + "|" + nk(n.so_ve) + ((n.khop || "").startsWith("HT:") ? "" : "|" + (n.ngay_dv || "") + "|" + (n.bang_ke ?? ""));
     const latest = new Map<string, { file: string; at: string }>();
     (ncc as R[]).forEach((n) => {
       if (!n.ma_booking && !n.so_ve) return;
