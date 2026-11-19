@@ -221,6 +221,34 @@ async function rebuild(sb: Sb) {
   }
   if (!kh.length) return { ok: true, kys: [], rows: 0, note: "Chưa có bảng kê khách hàng nào" };
 
+  /* --- Lệch kỳ: booking đặt kỳ trước, hủy / hoàn / đổi ở kỳ sau → mọi dòng của booking tính về kỳ (và ngày) của
+         giao dịch đầu tiên trên bảng kê. Nhận cùng booking theo mã giao dịch (hotel), mã đặt chỗ đi / về và số vé (flight). */
+  const kysGoc = new Set(kh.map((r) => r.ky));
+  let quyKy = 0;
+  {
+    const parent = new Map<string, string>();
+    const find = (x: string): string => { let p = parent.get(x) ?? x; while (p !== (parent.get(p) ?? p)) p = parent.get(p) ?? p; parent.set(x, p); return p; };
+    const join = (a: string, b: string) => { const ra = find(a), rb = find(b); if (ra !== rb) parent.set(ra, rb); };
+    const keysOf = (r: Kh) => {
+      const k: string[] = [];
+      if (r.loai === "hotel") { if (nk(r.ma_gd)) k.push("H|" + nk(r.ma_gd)); }
+      else {
+        if (nk(r.ma_gd)) k.push("F|" + nk(r.ma_gd));
+        if (nk(r.ma_gd2)) k.push("F|" + nk(r.ma_gd2));
+        if (r.so_ve && !/^temp_/i.test(r.so_ve) && nk(r.so_ve)) k.push("V|" + nk(r.so_ve));
+      }
+      return k;
+    };
+    kh.forEach((r) => { const k = keysOf(r); k.forEach((x) => join(k[0], x)); });
+    const first = new Map<string, string>();
+    kh.forEach((r) => { const k = keysOf(r); if (!k.length) return; const g = find(k[0]), d = first.get(g); if (!d || r.ngay < d) first.set(g, r.ngay); });
+    kh.forEach((r) => {
+      const k = keysOf(r); if (!k.length) return;
+      const d = first.get(find(k[0])) as string, kyD = `T${d.slice(5, 7)}.${d.slice(0, 4)}`;
+      if (kyD !== r.ky) { r.ky = kyD; r.ngay = d; quyKy++; }
+    });
+  }
+
   /* --- tên gọi khác (Master Data + mặc định): chỉ dùng cho tên công ty trên bảng kê; sổ phải thu nhận khách theo tên đầy đủ pháp nhân --- */
   const { alias } = await masterInfo(cust.map((c) => ({ ma_kh: c.ma_kh, ten_kh: c.ten_kh, ten_viet_tat: c.ten_viet_tat, nhom: "N1", pm: null })));
   {
@@ -339,7 +367,8 @@ async function rebuild(sb: Sb) {
   });
 
   /* --- gộp theo ngày × khách × NCC × dịch vụ --- */
-  const kys = Array.from(new Set(kh.map((r) => r.ky)));
+  // gồm cả kỳ gốc của các dòng đã quy về kỳ trước, để xóa số cũ của kỳ đó
+  const kys = Array.from(new Set([...Array.from(kysGoc), ...kh.map((r) => r.ky)]));
   const agg = new Map<string, { ky: string; ngay: string; ma_kh: string; ma_ncc: string | null; dich_vu: string; gmv: number; gia_von: number; gmv_co_gv: number }>();
   let gmvAll = 0, gmvCov = 0;
   const theoNguon: Record<string, number> = {};
@@ -374,7 +403,7 @@ async function rebuild(sb: Sb) {
     ncc: { noi: nccHit, khongNoi: nccMiss, khongNoiTien: Math.round(nccMissAmt) },
     gopKhach: gop.map((g) => `${g.tu} → ${g.ve}`),
     ht: { noi: htHit, khongNoi: htMiss },
-    trungFile,
+    trungFile, quyKy,
     theoNguon: Object.fromEntries(Object.entries(theoNguon).map(([k, v]) => [k, Math.round(v)])),
     khachChuaMap: Array.from(chuaMap.entries()).sort((a, b) => b[1] - a[1]).map(([ten, v]) => ({ ten, gmv: Math.round(v) })),
   };

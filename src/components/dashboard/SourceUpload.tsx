@@ -20,7 +20,7 @@ function lots<T>(rows: T[], key: (r: T) => string): T[][] {
 const ORDER = ["ar", "kh_hotel", "kh_flight", "kh_be", "ncc", "b1", "ht_hotel", "ht_flight"];
 const vnd = (v: number) => new Intl.NumberFormat("vi-VN").format(Math.round(v));
 const dmy = (d: string | null) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : "—");
-interface Rebuild { kys: string[]; rows: number; gmv?: number; gmvCoGv?: number; ncc?: { noi: number; khongNoi: number; khongNoiTien: number }; ht?: { noi: number; khongNoi: number }; theoNguon?: Record<string, number>; trungFile?: number; khachChuaMap?: { ten: string; gmv: number }[]; note?: string }
+interface Rebuild { kys: string[]; rows: number; gmv?: number; gmvCoGv?: number; ncc?: { noi: number; khongNoi: number; khongNoiTien: number }; ht?: { noi: number; khongNoi: number }; theoNguon?: Record<string, number>; trungFile?: number; quyKy?: number; khachChuaMap?: { ten: string; gmv: number }[]; note?: string }
 
 export default function SourceUpload({ data, canEdit, onDone, toast }: { data: DataSet; canEdit: boolean; onDone: () => Promise<void>; toast: (m: string, err?: boolean) => void }) {
   const [files, setFiles] = useState<SrcFile[]>([]);
@@ -135,6 +135,7 @@ export default function SourceUpload({ data, canEdit, onDone, toast }: { data: D
           {res.gmv != null && <> GMV {vnd(res.gmv)}, trong đó đã có giá vốn {vnd(res.gmvCoGv || 0)} ({pc(res.gmv ? (res.gmvCoGv || 0) / res.gmv : null, 0)}).</>}
           {res.ncc && <> Dòng đối soát NCC / B1 nối được bảng kê: {n0(res.ncc.noi)}; không nối được: {n0(res.ncc.khongNoi)} ({vnd(res.ncc.khongNoiTien)}).</>}
           {res.ht && <> Giá NCC trên hệ thống: {n0(res.ht.noi)} booking dùng làm giá vốn; {n0(res.ht.khongNoi)} booking không có trên bảng kê hoặc dòng bảng kê đã có giá vốn từ đối soát / B1 — không tính.</>}
+          {!!res.quyKy && <div className="small" style={{ marginTop: 6 }}>{n0(res.quyKy)} dòng hủy / hoàn / đổi ở kỳ sau đã quy về kỳ của giao dịch đầu tiên của booking.</div>}
           {!!res.trungFile && <div className="small" style={{ marginTop: 6 }}>{n0(res.trungFile)} dòng giá vốn / đối soát trùng booking giữa các file đã nạp — chỉ lấy theo file nạp sau cùng.</div>}
           {res.theoNguon && <div className="small" style={{ marginTop: 6 }}>GMV có giá vốn theo nguồn: {Object.entries(res.theoNguon).map(([k, v]) => `${k} ${vnd(v)}`).join(" · ")}</div>}
           {!!res.khachChuaMap?.length && <div className="small" style={{ marginTop: 6 }}>Chưa nhận được mã khách (giữ theo tên công ty — thêm vào danh mục khách hàng để gộp đúng): {res.khachChuaMap.map((x) => `${x.ten} (${vnd(x.gmv)})`).join(" · ")}</div>}
