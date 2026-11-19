@@ -95,6 +95,24 @@ async function mobAgg(): Promise<MobAgg | null> {
   }
 }
 
+/** GMV theo chuyến đi (Trip ID) × khách × kỳ tính × mảng — cần migration 36 (kh_ma, ky_tinh) và 37 (trip_id) */
+async function tripSum(): Promise<[string, string, string, string, number, string][] | null> {
+  try {
+    const rows = await fetchAll<{ ky_tinh: string | null; kh_ma: string | null; trip_id: string | null; loai: string; ngay: string; ma_gd: string | null; so_ve: string | null; gmv: number; tong_tt: number | null; phi_dv: number | null; chiet_khau: number | null }>("fin_src_kh", "id");
+    if (!rows.length || !("trip_id" in rows[0]) || !("ky_tinh" in rows[0])) return null;
+    const m = new Map<string, [string, string, string, string, number, string]>();
+    rows.forEach((r) => {
+      if (!r.ky_tinh || !r.kh_ma || r.loai === "transport") return;
+      // không có Trip ID: mỗi booking coi như một chuyến
+      const trip = r.trip_id || `BK:${r.ma_gd || r.so_ve || ""}`;
+      const g = r.tong_tt && !(Number(r.tong_tt) === 0 && Number(r.gmv) !== 0) ? Number(r.tong_tt) : Number(r.gmv) + Number(r.phi_dv || 0) - Number(r.chiet_khau || 0);
+      const k = [r.ky_tinh, r.kh_ma, trip, r.loai].join("|"), o = m.get(k);
+      if (o) { o[4] += g; if (r.ngay < o[5]) o[5] = r.ngay; } else m.set(k, [r.ky_tinh, r.kh_ma, trip, r.loai, g, r.ngay]);
+    });
+    return Array.from(m.values());
+  } catch { return null; }
+}
+
 /** Tổng hợp file nguồn đã nạp — để xem độ phủ và phải trả NCC phát sinh theo đối soát */
 async function srcSum(): Promise<SrcSum | null> {
   try {
@@ -125,7 +143,7 @@ export async function GET() {
       fetchAll("fin_uploads", "id"), fetchAll("fin_snapshots"), fetchAll("fin_alert_actions"),
       fetchAll("fin_ar_edit"), fetchAll("fin_ap_edit"), fetchAll("fin_manual").catch(() => []),
     ]);
-    const [bangKe, mob, src, md] = await Promise.all([bangKeMap(customers), mobAgg(), srcSum(), masterInfo(customers)]);
+    const [bangKe, mob, src, md, trips] = await Promise.all([bangKeMap(customers), mobAgg(), srcSum(), masterInfo(customers), tripSum()]);
     // PM phụ trách lấy theo Master Data (tab Xperise): pháp nhân → nhóm
     customers.forEach((c) => { const p = md.pm.get(c.ma_kh); if (p) c.pm = p; });
     const grp = md.grp, alias = md.alias;
@@ -133,7 +151,7 @@ export async function GET() {
       params: Object.fromEntries(params.map((p) => [p.key, p.value ?? ""])),
       customers, suppliers, staff, alloc, targets, gmv, ar, ap, cash, opex, contracts,
       uploads: (uploads as { id: number }[]).slice(-30).reverse(), snapshots, alertActions,
-      arEdits, apEdits, manual, bangKe, mob, src, grp, alias,
+      arEdits, apEdits, manual, bangKe, mob, src, grp, alias, trips,
       me: { email: g.user.email, role: g.user.role, canEdit: EDIT_ROLES.includes(g.user.role) },
     });
   } catch (e) {

@@ -12,7 +12,7 @@ import type { VM } from "./views";
 import { drillPanel } from "./views";
 import type { SrcNccSum } from "./types";
 import { canonNcc, nccOfSrc, nccTen } from "./alias";
-import { dimKey, grpKey, custInfo, groupArCustomers, makeWin, block, facts, mgOf, covOf, byDim, topRest, bridgeOf, nrByCustomer, onTimeSeg, invCol, Win, Dim, Block, Sum, Mode } from "./ops";
+import { tripBridge, dimKey, grpKey, custInfo, groupArCustomers, makeWin, block, facts, mgOf, covOf, byDim, topRest, bridgeOf, nrByCustomer, onTimeSeg, invCol, Win, Dim, Block, Sum, Mode } from "./ops";
 
 /** Lựa chọn của người xem dành cho các màn hình này (nằm chung trong VM.st) */
 export interface OpsState { mode?: Mode; ngay?: string; dim?: string; dimAll?: string }
@@ -475,7 +475,7 @@ function tsMain(v: VM): string {
     card("Kỳ hạn thực hưởng", "DPO thực tế so với payment term hợp đồng", "vạch = term HĐ", term + legend([["Trả sớm hơn HĐ > 4 ngày", "watch"], ["Đúng lịch", "stable"], ["Trễ hạn", "high"], ["Term hợp đồng", "ink", 1, true]]));
 
   const sec = (t: string) => `<div class="sec-h">${esc(t)}</div>`;
-  return sumTs(v) + sales + sec("Công nợ khách hàng") + arPart + sec("Công nợ phải trả") + apDsCard(v, W) + apPart;
+  return sumTs(v) + sales + tripCard(v) + sec("Công nợ khách hàng") + arPart + sec("Công nợ phải trả") + apDsCard(v, W) + apPart;
 }
 
 /* ---------- Travel & SaaS › Công nợ (nhập trực tiếp) ---------- */
@@ -879,3 +879,31 @@ function sumCongNo(v: VM): string {
   return band("Tóm tắt công nợ", lead, pts);
 }
 const kyOf = (d: string) => `T${d.slice(5, 7)}.${d.slice(0, 4)}`;
+
+/* ---------- Travel & SaaS › GMV thay đổi theo chuyến đi (Trip ID) ---------- */
+function tripCard(v: VM): string {
+  const C = v.Cc, W = winOf(v);
+  const title = "GMV thay đổi do số chuyến hay giá trị mỗi chuyến";
+  if (W.mode === "ngay") return card("Theo chuyến đi", title, "", empty("Xem theo kỳ để so sánh chuyến đi kỳ này với kỳ trước"));
+  const R = tripBridge(C, W);
+  if (!R) return card("Theo chuyến đi", title, "", empty("Chưa có dữ liệu chuyến đi — chạy 36_dashboard_ket_qua_noi.sql và 37_dashboard_trip.sql, nạp lại bảng kê khách hàng (để lưu Trip ID) rồi dựng lại"));
+  const T = R.total, sg = (x: number) => `${x >= 0 ? "+" : "−"}${tyN(Math.abs(x))}`;
+  const pL = W.cutDom != null ? `cùng kỳ ${kyAdd(W.ky, -1)}` : kyAdd(W.ky, -1);
+  const stats = `<div class="stat-row">` +
+    stat("Số chuyến", `${n0(T.prev.n)} → ${n0(T.cur.n)}`) + stat("GMV / chuyến", `${tyN(T.prev.avg)} → ${tyN(T.cur.avg)}`) +
+    stat("GMV thay đổi", sg(T.d), T.d < 0 ? "critical" : "") + stat("do số chuyến", sg(T.dN), T.dN < 0 ? "critical" : "") + stat("do GMV / chuyến", sg(T.dAvg), T.dAvg < 0 ? "critical" : "") + `</div>`;
+  const mix = (x: TripSideT) => `${n0(x.hotelOnly)} chỉ hotel · ${n0(x.flightOnly)} chỉ flight · ${n0(x.both)} cả hai`;
+  const top = R.rows.slice(0, 12);
+  const body = top.map((r) => {
+    const c = custInfo(C, r.k);
+    return `<tr data-drill="${esc(drillKey("ts", "kh", r.k))}"><td>${esc(c.ten)}<div class="t2">${esc([c.nhom, c.pm ? "PM " + c.pm : ""].filter(Boolean).join(" · "))}</div></td>` +
+      `<td class="r num">${n0(r.prev.n)} → ${n0(r.cur.n)}</td><td class="r num">${tyN(r.prev.avg)} → ${tyN(r.cur.avg)}</td>` +
+      `<td class="r num c-${r.d < 0 ? "critical" : "stable"}">${sg(r.d)}</td><td class="r num">${sg(r.dN)}</td><td class="r num">${sg(r.dAvg)}</td></tr>`;
+  }).join("");
+  const tbl = `<div class="tw"><table class="cmp"><thead><tr><th>Khách hàng</th><th class="r">Số chuyến</th><th class="r">GMV / chuyến</th><th class="r">GMV thay đổi</th><th class="r">do số chuyến</th><th class="r">do GMV / chuyến</th></tr></thead><tbody>${body}</tbody></table></div>`;
+  const note = `<div class="small" style="margin-top:6px">Kỳ trước: ${esc(pL)} · ${mix(T.prev)}. Kỳ này: ${mix(T.cur)}. ` +
+    `Một chuyến = một Trip ID trên bảng kê (hotel và flight cùng Trip ID là một chuyến${R.coTrip ? "" : " — bảng kê đã nạp chưa có Trip ID, đang coi mỗi booking là một chuyến"}). ` +
+    `Do số chuyến = (số chuyến này − trước) × GMV/chuyến kỳ trước; do GMV/chuyến = (GMV/chuyến này − trước) × số chuyến kỳ này. Hiện ${top.length}/${R.rows.length} khách thay đổi nhiều nhất · bấm để xem chi tiết.</div>`;
+  return card("Theo chuyến đi", title, `${unitLabel()} · ${W.ky} so ${pL}`, stats + tbl + note);
+}
+type TripSideT = { hotelOnly: number; flightOnly: number; both: number };

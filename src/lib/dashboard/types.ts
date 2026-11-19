@@ -77,6 +77,8 @@ export interface DataSet {
   grp?: Record<string, { k: string; ten: string; pm: string | null }>;
   /** Tên gọi khác → mã KH (Master Data "Tên gọi khác" + mặc định) — dùng khi đọc sổ phải thu */
   alias?: Record<string, string>;
+  /** GMV theo chuyến đi: [kỳ tính, mã KH, Trip ID, mảng, GMV, ngày giao dịch đầu] — từ bảng kê (Trip ID), sau khi dựng lại */
+  trips?: [string, string, string, string, number, string][] | null;
   /** File nguồn đã nạp: bảng kê khách hàng & đối soát NCC (tổng hợp) */
   src?: SrcSum | null;
   me?: { email: string; role: string; canEdit: boolean };

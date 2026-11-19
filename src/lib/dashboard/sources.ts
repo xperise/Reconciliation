@@ -16,7 +16,7 @@ export type SrcKind = "kh_hotel" | "kh_flight" | "kh_be" | "ncc" | "b1" | "ht_ho
 export const KIND_LABEL: Record<SrcKind, string> = {
   kh_hotel: "Bảng kê khách hàng · Hotel", kh_flight: "Bảng kê khách hàng · Flight", kh_be: "Bảng kê Be · Transportation", ncc: "Đối soát NCC", b1: "Chi khách sạn trực tiếp (B1)", ht_hotel: "Giá NCC trên hệ thống · Hotel", ht_flight: "Giá NCC trên hệ thống · Flight", ar: "Công nợ phải thu", unknown: "Không nhận diện được",
 };
-export interface KhRow { loai: "hotel" | "flight" | "transport"; ky: string; ngay: string; ten_cong_ty: string | null; trang_thai: string | null; ma_gd: string | null; ma_gd2: string | null; so_ve: string | null; so_hd: string | null; gmv: number; tong_tt: number | null; chiet_khau: number | null; phi_dv: number | null; khach: string | null; mo_ta: string | null; email?: string | null }
+export interface KhRow { loai: "hotel" | "flight" | "transport"; ky: string; ngay: string; ten_cong_ty: string | null; trang_thai: string | null; ma_gd: string | null; ma_gd2: string | null; so_ve: string | null; so_hd: string | null; gmv: number; tong_tt: number | null; chiet_khau: number | null; phi_dv: number | null; khach: string | null; mo_ta: string | null; email?: string | null; trip_id?: string | null }
 export interface NccRow { ncc: string | null; nganh: string | null; ma_booking: string | null; so_ve: string | null; khach: string | null; ngay_dv: string | null; ky: string | null; bang_ke: number | null; ledger: number | null; khop: string | null; xu_ly: string | null; mo_ta: string | null; dong: string | null }
 export interface ArRow { ma_kh: string; ky: string; so_ct: string | null; ngay_hd: string | null; ngay_den_han: string; so_tien: number; da_thu: number | null; ngay_thu_du: string | null; ngay_thu_gan_nhat: string | null }
 export interface DmRow { ma_kh: string; ten_kh: string; ten_viet_tat: string; credit_term: number | null; moi: boolean }
@@ -144,7 +144,7 @@ function readKh(f: SrcFile, rows: Cell[][], H: Hdr): SrcFile {
     amt: hotel ? H.col("Thành tiền (đã VAT)") : H.col("Thành tiền"), tong: H.col("Tổng thành tiền"), ck: H.col("Tổng tiền chiết khấu"), phi: H.col("Tổng phí dịch vụ"),
     ma: hotel ? H.col("Mã giao dịch") : H.col("Mã giao dịch (Chiều đi)"), ma2: hotel ? -1 : H.col("Mã giao dịch (Chiều về)"),
     ve: H.col("Số vé"), hd: H.col("Số hóa đơn"), mo: hotel ? H.col("Tên khách sạn") : H.col("Tên dịch vụ (Hành trình)"),
-    email: H.col("Email người đặt"),
+    email: H.col("Email người đặt"), trip: H.col("Trip ID"),
   };
   if (c.amt < 0) { f.warns.push(`Không thấy cột ${hotel ? "Thành tiền (đã VAT)" : "Thành tiền"}`); return f; }
   const out: KhRow[] = [];
@@ -159,7 +159,7 @@ function readKh(f: SrcFile, rows: Cell[][], H: Hdr): SrcFile {
     out.push({
       loai: hotel ? "hotel" : "flight", ky: kyOf(d), ngay: d, ten_cong_ty: txt(g(r, c.cty)), trang_thai: txt(g(r, c.tt)),
       ma_gd: txt(g(r, c.ma)), ma_gd2: txt(g(r, c.ma2)), so_ve: txt(g(r, c.ve)), so_hd: hd && /\d/.test(hd) ? hd : null,
-      gmv: amt, tong_tt: money(g(r, c.tong)), chiet_khau: money(g(r, c.ck)), phi_dv: money(g(r, c.phi)), khach: txt(g(r, c.khach)), mo_ta: txt(g(r, c.mo)), email: txt(g(r, c.email))?.toLowerCase() || null,
+      gmv: amt, tong_tt: money(g(r, c.tong)), chiet_khau: money(g(r, c.ck)), phi_dv: money(g(r, c.phi)), khach: txt(g(r, c.khach)), mo_ta: txt(g(r, c.mo)), email: txt(g(r, c.email))?.toLowerCase() || null, trip_id: txt(g(r, c.trip)),
     });
   });
   f.kh = out; f.rows = out.length;

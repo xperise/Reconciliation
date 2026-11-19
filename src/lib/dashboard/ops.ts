@@ -429,3 +429,42 @@ export function groupArCustomers(C: Ctx, list: ArC[]): ArC[] {
   });
   return Array.from(by.values()).sort((a, b) => b.tot - a.tot);
 }
+
+/* ---------------- Chuyến đi (Trip ID): GMV thay đổi do số chuyến hay giá trị mỗi chuyến ----------------
+   Một chuyến = một Trip ID trên bảng kê; hotel và flight cùng Trip ID là cùng chuyến. Không có Trip ID thì mỗi booking
+   là một chuyến. Số chuyến chỉ đếm chuyến có GMV > 0 trong kỳ (chuyến chỉ có dòng hoàn không tính là chuyến).
+     ΔGMV = (Số chuyến kỳ này − kỳ trước) × GMV/chuyến kỳ trước   ← do số chuyến
+          + (GMV/chuyến kỳ này − kỳ trước) × Số chuyến kỳ này      ← do giá trị mỗi chuyến
+   GMV/chuyến = GMV của mọi chuyến ÷ số chuyến có GMV > 0. */
+export interface TripSide { n: number; gmv: number; avg: number; hotelOnly: number; flightOnly: number; both: number }
+export interface TripRow { k: string; prev: TripSide; cur: TripSide; d: number; dN: number; dAvg: number }
+function tripSide(list: { trip: string; loai: string; gmv: number }[]): TripSide {
+  const by = new Map<string, { g: number; h: boolean; f: boolean }>();
+  list.forEach((x) => { const o = by.get(x.trip) || { g: 0, h: false, f: false }; o.g += x.gmv; if (x.loai === "hotel") o.h = true; else o.f = true; by.set(x.trip, o); });
+  const ts = Array.from(by.values()), pos = ts.filter((t) => t.g > 0);
+  const gmv = sum(ts, (t) => t.g), n = pos.length;
+  return { n, gmv, avg: n ? gmv / n : 0, hotelOnly: pos.filter((t) => t.h && !t.f).length, flightOnly: pos.filter((t) => t.f && !t.h).length, both: pos.filter((t) => t.h && t.f).length };
+}
+export function tripBridge(C: Ctx, W: Win): { total: TripRow; rows: TripRow[]; coTrip: boolean } | null {
+  const T = C.D.trips;
+  if (!T || !T.length) return null;
+  const p = kyAdd(W.ky, -1);
+  const cut = W.cutDom;
+  const isTs = (ma: string) => !["N2", "N3", "N4", "N5"].includes(C.cust.get(ma)?.nhom || "");
+  type X = { k: string; trip: string; loai: string; gmv: number };
+  const cur: X[] = [], prev: X[] = [];
+  T.forEach(([ky, ma, trip, loai, gmv, ngay]) => {
+    if (!isTs(ma)) return;
+    const x = { k: grpKey(C.D, ma), trip, loai, gmv };
+    if (ky === W.ky) cur.push(x);
+    else if (ky === p && (cut == null || Number(String(ngay).slice(8, 10)) <= cut)) prev.push(x);
+  });
+  const row = (k: string, a: X[], b: X[]): TripRow => {
+    const P = tripSide(a), Q = tripSide(b);
+    const dN = (Q.n - P.n) * P.avg, dAvg = (Q.avg - P.avg) * Q.n;
+    return { k, prev: P, cur: Q, d: Q.gmv - P.gmv, dN, dAvg };
+  };
+  const keys = Array.from(new Set([...cur, ...prev].map((x) => x.k)));
+  const rows = keys.map((k) => row(k, prev.filter((x) => x.k === k), cur.filter((x) => x.k === k))).sort((a, b) => Math.abs(b.d) - Math.abs(a.d));
+  return { total: row("__all", prev, cur), rows, coTrip: T.some((t) => !t[2].startsWith("BK:")) };
+}

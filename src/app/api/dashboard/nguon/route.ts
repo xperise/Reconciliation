@@ -63,8 +63,8 @@ export async function POST(req: Request) {
       }
       if (rows.length) {
         let { error } = await sb.from("fin_src_kh").insert(rows);
-        // chưa chạy migration 35 (cột email): ghi không có email
-        if (error && /email/.test(error.message)) ({ error } = await sb.from("fin_src_kh").insert(rows.map(({ email: _e, ...r }) => { void _e; return r; })));
+        // chưa chạy migration 35 / 37 (cột email, trip_id): ghi không có các cột đó
+        if (error && /email|trip_id/.test(error.message)) ({ error } = await sb.from("fin_src_kh").insert(rows.map(({ email: _e, trip_id: _t, ...r }) => { void _e; void _t; return r; })));
         chk(error, "Ghi bảng kê");
       }
       return NextResponse.json({ ok: true, written: rows.length, thay });
