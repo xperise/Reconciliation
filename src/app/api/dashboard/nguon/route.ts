@@ -212,6 +212,31 @@ async function rebuild(sb: Sb) {
       for (let i = ncc.length - 1; i >= 0; i--) if ((ncc[i].khop || "").startsWith("B1:")) ncc.splice(i, 1);
     }
   }
+  // Bảng kê khách hàng: cùng một giao dịch có thể nằm trong hai bản xuất (vd. bản 15/11 và bản 20/11). Bản sau thường
+  // đổi mã giao dịch và trạng thái nên không nối theo mã được; nhận diện theo ngày × khách × khách sạn × số tiền.
+  // Dòng của bản cũ trùng với bản nạp sau cùng bị bỏ (xóa khỏi fin_src_kh); dòng chỉ có ở bản cũ thì giữ nguyên.
+  let trungKh = 0;
+  {
+    type RK = Kh & { file_name?: string | null; uploaded_at?: string | null };
+    const khoaKh = (r: RK) => [r.loai, r.ngay, nk(r.khach), nk(r.mo_ta), Math.round(Number(r.gmv) || 0)].join("|");
+    const moiNhat = new Map<string, { file: string; at: string }>();
+    (kh as RK[]).forEach((r) => {
+      const k = khoaKh(r), f = r.file_name || "", at = r.uploaded_at || "", o = moiNhat.get(k);
+      if (!o || at > o.at) moiNhat.set(k, { file: f, at });
+    });
+    const bo: number[] = [];
+    for (let i = kh.length - 1; i >= 0; i--) {
+      const r = kh[i] as RK;
+      if (!nk(r.khach) && !nk(r.mo_ta)) continue; // không đủ thông tin để nhận diện thì giữ nguyên
+      const o = moiNhat.get(khoaKh(r));
+      if (o && o.file !== (r.file_name || "")) { bo.push(r.id); kh.splice(i, 1); }
+    }
+    for (let i = 0; i < bo.length; i += 200) {
+      const { error } = await sb.from("fin_src_kh").delete().in("id", bo.slice(i, i + 200));
+      chk(error, "Bỏ dòng bảng kê trùng giữa các bản xuất");
+    }
+    trungKh = bo.length;
+  }
   // Cùng một booking có trong nhiều file đã nạp (vd. Performance Dashboard xuất hai lần với khoảng ngày chồng nhau,
   // hai file đối soát cùng NCC chồng kỳ): chỉ lấy dòng của file nạp sau cùng, tránh cộng giá vốn / phải trả hai lần
   let trungFile = 0;
@@ -461,7 +486,7 @@ async function rebuild(sb: Sb) {
     ncc: { noi: nccHit, khongNoi: nccMiss, khongNoiTien: Math.round(nccMissAmt) },
     gopKhach: gop.map((g) => `${g.tu} → ${g.ve}`),
     ht: { noi: htHit, khongNoi: htMiss },
-    trungFile, quyKy, luuNoi,
+    trungFile, trungKh, quyKy, luuNoi,
     theoNguon: Object.fromEntries(Object.entries(theoNguon).map(([k, v]) => [k, Math.round(v)])),
     khachChuaMap: Array.from(chuaMap.entries()).sort((a, b) => b[1] - a[1]).map(([ten, v]) => ({ ten, gmv: Math.round(v) })),
   };
