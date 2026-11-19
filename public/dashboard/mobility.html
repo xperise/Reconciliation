@@ -584,6 +584,7 @@ function renderRange() {
     tile('Chuyến', n0(cur.trips), cmp(cur.trips, prv.trips, n0), cur.trips ? `GMV / chuyến ${mu(cur.gmv / cur.trips)}` : ''),
     tile('DN có giao dịch', n0(cur.cos.size), cmp(cur.cos.size, prv.cos.size, n0), ''),
     tile('Thẻ có giao dịch', n0(cur.cards.size), cmp(cur.cards.size, prv.cards.size, n0), cur.cards.size ? `${nf(cur.trips / cur.cards.size, 1)} chuyến / thẻ` : ''),
+    tile('GMV trung bình / thẻ active', cur.cards.size ? mu(cur.gmv / cur.cards.size) : '—', cur.cards.size && prv.cards.size ? cmp(cur.gmv / cur.cards.size, prv.gmv / prv.cards.size, mu) : '', `GMV trong kỳ ÷ ${n0(cur.cards.size)} thẻ có giao dịch`),
     tile('Tài xế active', n0(cur.drv.size), cmp(cur.drv.size, prv.drv.size, n0), cur.drv.size ? `GMV / tài xế ${mu(cur.gmv / cur.drv.size)}` : ''),
     tile('Đơn vị có giao dịch', n0(Object.keys(cur.units).length), cmp(Object.keys(cur.units).length, Object.keys(prv.units).length, n0), ''),
   ];
@@ -1339,6 +1340,8 @@ function renderOverview(d, C, A, p) {
   const tiles = [
     tile('GMV hôm nay', mu(g.t), cmp(g.t, g.a7, mu), `Kế hoạch ${mu(g.pl)} · đạt <b>${pct(g.ratio)}</b>`, bar(g.ratio)),
     tile('GMV lũy kế tháng', mu(m.t), cmpY(m.t, m.y, mu), [`Kế hoạch ${mu(m.pl)} · đạt <b>${pct(m.ratio)}</b>`, `Đích tháng 12: ${mu(P.dec)}`], bar(m.ratio)),
+    (() => { const r = A0.cards ? g.t / A0.cards : null, r30 = A0.cards30 ? A0.gmv30 / A0.cards30 : null;
+      return tile('GMV trung bình / thẻ active', r == null ? '—' : mu(r), cmp(r, av(x => x.cards ? x.gmv / x.cards : 0), mu), [`GMV hôm nay ÷ ${n0(A0.cards || 0)} thẻ có giao dịch`, r30 != null ? `30 ngày: ${mu(r30)} / thẻ` : '']); })(),
     (() => { const sT = (ACT[d] || {}).signed, sY = (ACT[addD(d, -1)] || {}).signed, hdN = hdCountAt(d), plN = sT == null ? null : sT - hdN;
       return tile('DN đã ký (phụ lục + HĐ mới)', sT == null ? '—' : n0(sT), sY != null && sT != null ? cmpY(sT, sY, n0) : '', [`Phụ lục <b>${plN == null ? '—' : n0(plN)}</b> · HĐ mới <b>${n0(hdN)}</b>`, srcTxt(plC)]); })(),
     (() => { const sT = (ACT[d] || {}).signed; return tile('DN đã khởi tạo XPAY', obC.v == null ? '—' : n0(obC.v) + (sT ? of(n0(sT)) : ''), sT && obC.v != null ? `<b>${pct(obC.v / sT)}</b> số DN đã ký` : '', srcTxt(obC), bar(sT ? obC.v / sT : 0, 'var(--accent)')); })(),
@@ -1353,7 +1356,7 @@ function renderOverview(d, C, A, p) {
     tile('Tài xế active hôm nay', n0(A0.drivers || 0) + of(n0(A0.drivers30 || 0)), cmp(A0.drivers, av(x => x.drivers), n0), `Trên ${n0(A0.drivers30 || 0)} tài xế active 30 ngày`, bar(A0.drivers30 ? A0.drivers / A0.drivers30 : 0, 'var(--accent)')),
   ];
   // hàng trên 4 ô (GMV, ký, khởi tạo) · hàng dưới 5 ô (active, thẻ, tỷ lệ thẻ / DN, gọi · meeting, tài xế)
-  if (single) h += `<div class="kpis kpis4">${tiles.slice(0, 4).join('')}</div><div class="kpis kpis5" style="margin-top:12px">${tiles.slice(4).join('')}</div>`;
+  if (single) h += `<div class="kpis kpis5">${tiles.slice(0, 5).join('')}</div><div class="kpis kpis5" style="margin-top:12px">${tiles.slice(5).join('')}</div>`;
   h += `<div class="card"><div class="hd"><div><div class="eyebrow">Bảng CEO · Demand & Supply${single ? '' : ` · tại ngày ${dmy(d)}${OV.units.length ? ' · toàn bộ đơn vị' : ''}`}</div><h2 class="card-title">Hôm nay vs trung bình 7 ngày vs lộ trình · kế hoạch ngày mai đã bù thâm hụt</h2></div><div class="card-note">Tiền: ${unitLabel()} · tại ${dmy(d)} · số liệu giao dịch đến ${dmy(LASTDAY)}</div></div>
     <div class="tw ceo-tw"><table class="ceo"><thead><tr><th class="l">Chỉ số</th><th>Hôm qua</th><th>TB 7 ngày gần nhất</th><th>Hôm nay</th><th title="(Hôm nay − TB 7 ngày) ÷ TB 7 ngày">Tăng so TB 7 ngày</th><th title="Theo lộ trình: (KH hôm nay − TB KH 7 ngày) ÷ TB KH 7 ngày">Mục tiêu tăng so TB 7 ngày</th><th>KH hôm nay</th><th>% đạt</th><th>Thâm hụt phải bù</th><th>KH ngày mai (gốc)</th><th>KH ngày mai (đã bù)</th><th>KH tuần</th><th>Đích T12 / 31/12</th><th>Còn thiếu</th><th class="l">Quyết định</th></tr></thead><tbody>`;
   for (const r of ROWS) {
