@@ -192,6 +192,10 @@ async function rebuild(sb: Sb) {
   // Cùng một booking có trong nhiều file đã nạp (vd. Performance Dashboard xuất hai lần với khoảng ngày chồng nhau,
   // hai file đối soát cùng NCC chồng kỳ): chỉ lấy dòng của file nạp sau cùng, tránh cộng giá vốn / phải trả hai lần
   let trungFile = 0;
+  // Kết quả nối để ghi lại vào dòng nguồn (file master data đối soát qua lại)
+  const ttNoi = new Map<number, string>(), nccKh = new Map<number, string>(), nccDung = new Map<number, number>();
+  const nccRaw = ncc.slice();
+  const kyGocKh = new Map<number, { ky: string; ngay: string }>();
   {
     type R = Ncc & { file_key?: string; uploaded_at?: string };
     const nhom = (n: R) => ((n.khop || "").startsWith("HT:") ? "HT|" + (n.nganh || "") : "DS|" + String(n.ncc || "").replace(/^(hotel|flight):/, ""));
@@ -206,7 +210,7 @@ async function rebuild(sb: Sb) {
       const n = ncc[i] as R;
       if (!n.ma_booking && !n.so_ve) continue;
       const o = latest.get(khoa(n));
-      if (o && o.file !== (n.file_key || "")) { ncc.splice(i, 1); trungFile++; }
+      if (o && o.file !== (n.file_key || "")) { ttNoi.set(n.id, `Trùng booking với file nạp sau — dùng ${o.file}`); ncc.splice(i, 1); trungFile++; }
     }
   }
   // Dòng đối soát chưa có NCC, hoặc hệ thống ghi "XPERISE:<mã>" mà nằm trên bảng kê NCC khác: gán NCC của bảng kê đó, lưu lại vào bảng
@@ -245,7 +249,7 @@ async function rebuild(sb: Sb) {
     kh.forEach((r) => {
       const k = keysOf(r); if (!k.length) return;
       const d = first.get(find(k[0])) as string, kyD = `T${d.slice(5, 7)}.${d.slice(0, 4)}`;
-      if (kyD !== r.ky) { r.ky = kyD; r.ngay = d; quyKy++; }
+      if (kyD !== r.ky) { kyGocKh.set(r.id, { ky: r.ky, ngay: r.ngay }); r.ky = kyD; r.ngay = d; quyKy++; }
     });
   }
 
@@ -272,6 +276,7 @@ async function rebuild(sb: Sb) {
   const byCompany = new Map<string, string>();
   vote.forEach((v, k) => byCompany.set(k, Array.from(v.entries()).sort((a, b) => b[1] - a[1])[0][0]));
   const chuaMap = new Map<string, number>();
+  const khMa = new Map<number, string>();
   // Dòng không có tên công ty: nhận khách theo tên miền email người đặt (đa số các dòng cùng tên miền đã nhận được khách)
   const DOM_CHUNG = /^(gmail|yahoo|hotmail|outlook|icloud|live|msn|xperise|uts)\./i;
   const domOf = (r: Kh) => { const m = /@([^@\s>]+)$/.exec(String(r.email || "").trim()); return m && !DOM_CHUNG.test(m[1]) ? m[1].toLowerCase() : null; };
@@ -313,12 +318,13 @@ async function rebuild(sb: Sb) {
   const tier = (n: Ncc) => (n.khop?.startsWith("HT:") ? 2 : n.khop?.startsWith("B1:") ? 1 : 0);
   const TIER_L = ["Đối soát NCC", "Chi KS trực tiếp B1", "Giá NCC hệ thống", "Be (margin 6%)"];
   const coveredBy = new Map<number, number>();
+  const nccMain = new Map<number, number>();
   const kyStmt = new Map<number, string>();
   const srcOf = new Map<number, number>();
   let htHit = 0, htMiss = 0;
   const htUsed = new Set<number>(), htAmt = new Map<number, number>();
   ncc.slice().sort((a, b) => tier(a) - tier(b)).forEach((n) => {
-    if (n.khop?.startsWith("Trùng") || n.bang_ke == null) return;
+    if (n.khop?.startsWith("Trùng") || n.bang_ke == null) { ttNoi.set(n.id, n.khop?.startsWith("Trùng") ? "Không dùng — dòng trùng (đã đối soát)" : "Không dùng — không có số tiền NCC"); return; }
     const t = tier(n);
     const flight = n.nganh === "Flight" || n.ncc?.startsWith("flight:");
     const hits = new Set<Kh>();
@@ -331,8 +337,12 @@ async function rebuild(sb: Sb) {
       if (!hits.size && tokKey(n.ma_booking).includes("|")) (idx.get("T|" + tokKey(n.ma_booking)) || []).forEach((r) => hits.add(r));
     }
     const rs = Array.from(hits).filter((r) => (coveredBy.get(r.id) ?? t) >= t);
-    if (!rs.length) { if (t === 2) htMiss++; else if (!hits.size) { nccMiss++; nccMissAmt += n.bang_ke; } return; }
+    if (!rs.length) {
+      ttNoi.set(n.id, hits.size ? "Không dùng — booking đã có giá vốn từ đối soát NCC" : "Không nối được — booking không có trên bảng kê khách hàng");
+      if (t === 2) htMiss++; else if (!hits.size) { nccMiss++; nccMissAmt += n.bang_ke; } return;
+    }
     rs.forEach((r) => { coveredBy.set(r.id, t); srcOf.set(r.id, t); });
+    nccMain.set(n.id, rs.slice().sort((x, y) => Math.abs(gmvOf(y)) - Math.abs(gmvOf(x)))[0].id);
     // kỳ của dòng NCC = kỳ ngày giao dịch trên bảng kê của booking đó (ngày dịch vụ trong đối soát là ngày check-in)
     const main = rs.slice().sort((x, y) => Math.abs(gmvOf(y)) - Math.abs(gmvOf(x)))[0];
     if (main && main.ky !== n.ky) kyStmt.set(n.id, main.ky);
@@ -361,6 +371,7 @@ async function rebuild(sb: Sb) {
       const part = nearZero ? 0
         : tot !== 0 ? bk * gmvOf(r) / tot : totAbs > 0 ? bk * Math.abs(gmvOf(r)) / totAbs : bk / rs.length;
       gv.set(r.id, (gv.get(r.id) || 0) + part);
+      nccDung.set(n.id, (nccDung.get(n.id) || 0) + part);
       // NCC: B1 → Xperise_Manual; tên gọi khác / XPERISE:<mã> → NCC tổng hợp (HNH_Manual, Xperise_Manual)
       if (!nccOf.has(r.id) && (n.ncc || t === 1)) nccOf.set(r.id, nccOfSrc(supAll, n));
     });
@@ -376,6 +387,7 @@ async function rebuild(sb: Sb) {
   kh.forEach((r) => { if (r.loai === "transport") { gv.set(r.id, gmvOf(r) * (1 - BE_MARGIN)); nccOf.set(r.id, "Be"); srcOf.set(r.id, 3); } });
   kh.forEach((r) => {
     const ma = khOf(r), n = nccOf.get(r.id) || null, dv = r.loai === "hotel" ? "Hotel" : r.loai === "flight" ? "Flight" : "Transportation";
+    khMa.set(r.id, ma);
     const key = `${r.ky}|${r.ngay}|${ma}|${n || ""}|${dv}`;
     const o = agg.get(key) || { ky: r.ky, ngay: r.ngay, ma_kh: ma, ma_ncc: n, dich_vu: dv, gmv: 0, gia_von: 0, gmv_co_gv: 0 };
     const G = gmvOf(r);
@@ -397,13 +409,35 @@ async function rebuild(sb: Sb) {
   }
   const ap = await rebuildAP(sb, ncc, htUsed, htAmt);
 
+  // Ghi kết quả nối vào dòng nguồn (chưa chạy migration 36 thì bỏ qua)
+  let luuNoi = true;
+  try {
+    const TIER = ["Đối soát NCC", "Chi KS trực tiếp B1", "Giá NCC hệ thống (Performance Dashboard)"];
+    const rowsKh = kh.map((r) => {
+      const g0 = kyGocKh.get(r.id);
+      const { id, ...rest } = r as Kh & Record<string, unknown>;
+      return { ...rest, id, ky: g0?.ky ?? r.ky, ngay: g0?.ngay ?? r.ngay, kh_ma: khMa.get(r.id) ?? null, ncc_ma: nccOf.get(r.id) ?? null,
+        gia_von: gv.has(r.id) ? Math.round(gv.get(r.id) as number) : null, nguon_gv: gv.has(r.id) ? TIER[srcOf.get(r.id) ?? 0] ?? null : null, ky_tinh: r.ky };
+    });
+    for (let i = 0; i < rowsKh.length; i += 500) { const { error } = await sb.from("fin_src_kh").upsert(rowsKh.slice(i, i + 500), { onConflict: "id" }); if (error) throw error; }
+    const rowsNcc = nccRaw.map((n) => {
+      const dung = nccDung.get(n.id), main = nccMain.get(n.id);
+      const tt = ttNoi.get(n.id) || (dung != null ? (Math.abs(dung - (n.bang_ke || 0)) > 1 ? "Dùng làm giá vốn — đã quy theo phần trên bảng kê" : "Dùng làm giá vốn") : "Không dùng");
+      return { ...n, kh_ma: main != null ? khMa.get(main) ?? null : null, gia_von_dung: dung != null ? Math.round(dung) : null, tt_noi: tt };
+    });
+    for (let i = 0; i < rowsNcc.length; i += 500) { const { error } = await sb.from("fin_src_ncc").upsert(rowsNcc.slice(i, i + 500), { onConflict: "id" }); if (error) throw error; }
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String((e as { message?: string })?.message || e);
+    if (/kh_ma|ncc_ma|gia_von|nguon_gv|ky_tinh|tt_noi/.test(m)) luuNoi = false; else throw new Error("Lưu kết quả nối: " + m);
+  }
+
   return {
     ok: true, kys: kys.sort(), rows: rows.length, ap,
     gmv: Math.round(gmvAll), gmvCoGv: Math.round(gmvCov),
     ncc: { noi: nccHit, khongNoi: nccMiss, khongNoiTien: Math.round(nccMissAmt) },
     gopKhach: gop.map((g) => `${g.tu} → ${g.ve}`),
     ht: { noi: htHit, khongNoi: htMiss },
-    trungFile, quyKy,
+    trungFile, quyKy, luuNoi,
     theoNguon: Object.fromEntries(Object.entries(theoNguon).map(([k, v]) => [k, Math.round(v)])),
     khachChuaMap: Array.from(chuaMap.entries()).sort((a, b) => b[1] - a[1]).map(([ten, v]) => ({ ten, gmv: Math.round(v) })),
   };

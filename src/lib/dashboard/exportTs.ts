@@ -3,6 +3,7 @@
 import type { Ctx } from "./calc";
 import { SEG_DV, segOfCustomer } from "./calc";
 import { kyIdx, todayIso } from "./util";
+import { nccOfSrc, nccTen } from "./alias";
 
 /* SheetJS — chỉ phần dùng ở đây */
 interface WS { [cell: string]: unknown; "!cols"?: { wch: number }[]; "!autofilter"?: { ref: string }; "!freeze"?: unknown; "!ref"?: string }
@@ -65,8 +66,8 @@ export async function exportTravel(C: Ctx, src: SrcLines): Promise<string> {
     ["Master data Travel & SaaS", ""], ["Xuất lúc", new Date().toLocaleString("vi-VN")], ["Số liệu chốt", C.asOf], ["", ""],
     ["Sheet", "Nội dung"],
     ["GMV_theo_ngay", "GMV, giá vốn theo ngày × khách × NCC × mảng — số dashboard dùng. Net revenue = GMV có giá vốn − giá vốn; Margin = Net revenue ÷ GMV có giá vốn (công thức)"],
-    ["Bang_ke_KH", "Dòng gốc bảng kê khách hàng đã nạp: hotel, flight, Transportation (Be). GMV = Tổng thành tiền"],
-    ["Gia_von_NCC", "Dòng gốc nguồn giá vốn: đối soát NCC, chi khách sạn trực tiếp B1, giá NCC trên hệ thống. Thứ tự ưu tiên khi nối bảng kê: đối soát → B1 → hệ thống"],
+    ["Bang_ke_KH", "Dòng gốc bảng kê khách hàng (GMV = Tổng thành tiền) + kết quả nối của dashboard: khách, nhóm đối soát, kỳ tính số (sau quy lệch kỳ), NCC, nguồn giá vốn, giá vốn phân bổ, Net revenue"],
+    ["Gia_von_NCC", "Dòng gốc nguồn giá vốn (đối soát NCC → giá NCC hệ thống) + kết quả nối: khách của booking, tình trạng nối / lý do không dùng, số đã dùng làm giá vốn. Lọc Mã booking / Số vé để đối chiếu với Bang_ke_KH"],
     ["Cong_no_phai_thu", "Công nợ phải thu khách Travel & SaaS theo hóa đơn, đã gộp số sửa trên web. Ở kỳ đã có bảng kê: phải thu = GMV bảng kê (quy theo tỷ trọng từng hóa đơn; chưa có hóa đơn thì một dòng không số HĐ), đã thu theo sổ phải thu. Còn lại là công thức"],
     ["Cong_no_phai_tra", "Sổ công nợ phải trả NCC Travel & SaaS (không gồm NCC Mobility)"],
     ["DM_Khach_hang", "Danh mục khách hàng Travel & SaaS"], ["DM_NCC", "Danh mục nhà cung cấp + mã NCC có phát sinh nhưng chưa có trong danh mục"],
@@ -88,25 +89,45 @@ export async function exportTravel(C: Ctx, src: SrcLines): Promise<string> {
       r.nguon === "bk" ? "Bảng kê" : r.tay ? "Nhập tay" : "File template", r.gmv, r.gmv_co_gv == null ? r.gmv : r.gmv_co_gv, r.gia_von, null, null];
   })), "GMV_theo_ngay");
 
+  /* Tên khách / NCC theo kết quả nối của lần dựng lại gần nhất (cột kh_ma, ncc_ma… — cần migration 36) */
+  const tenKh = (ma: unknown) => { const m = String(ma || ""); if (!m) return ""; const c = cust(m); return c?.ten_viet_tat || c?.ten_kh || m; };
+  const nhomOf = (ma: unknown) => D.grp?.[String(ma || "")]?.ten || "";
+  const tenNcc = (ma: unknown) => { const m = String(ma || ""); return m ? nccTen(m, D.suppliers) || sup.get(m)?.ten_ncc || m : ""; };
+  const coNoi = src.kh.some((r) => "kh_ma" in r);
+
   /* Bảng kê khách hàng */
   const LOAI: Record<string, string> = { hotel: "Hotel", flight: "Flight", transport: "Transportation (Be)" };
   const kh = src.kh.slice().sort((a, b) => String(a.ngay).localeCompare(String(b.ngay)));
   X.utils.book_append_sheet(wb, sheet(X, [
-    { h: "Mảng", w: 15 }, { h: "Kỳ", w: 10 }, { h: "Ngày giao dịch", t: "date", w: 13 }, { h: "Tên công ty", w: 30 }, { h: "Trạng thái", w: 12 },
+    { h: "Mảng", w: 9 }, { h: "Kỳ", w: 10 }, { h: "Ngày giao dịch", t: "date", w: 13 }, { h: "Tên công ty", w: 30 }, { h: "Trạng thái", w: 12 },
     { h: "Mã giao dịch / Session", w: 22 }, { h: "Mã chiều về", w: 12 }, { h: "Số vé", w: 16 }, { h: "Số hóa đơn", w: 12 },
     { h: "Thành tiền", t: "money", w: 14 }, { h: "Tổng thành tiền (GMV)", t: "money", w: 16 }, { h: "Chiết khấu", t: "money", w: 12 }, { h: "Phí dịch vụ", t: "money", w: 12 },
+    // kết quả nối của dashboard
+    { h: "Mã KH (dashboard)", w: 16 }, { h: "Tên KH (dashboard)", w: 30 }, { h: "Nhóm đối soát", w: 18 }, { h: "Kỳ tính số", w: 11 },
+    { h: "NCC", w: 22 }, { h: "Nguồn giá vốn", w: 24 }, { h: "Giá vốn phân bổ", t: "money", w: 16 },
+    { h: "Net revenue", t: "money", w: 14, f: (r, c) => `IF(${c("Giá vốn phân bổ")}${r}="","",${c("Tổng thành tiền (GMV)")}${r}-${c("Giá vốn phân bổ")}${r})` },
     { h: "Khách", w: 24 }, { h: "Mô tả", w: 36 }, { h: "File", w: 30 },
-  ], kh.map((r) => [LOAI[String(r.loai)] || r.loai, r.ky, r.ngay, r.ten_cong_ty, r.trang_thai, r.ma_gd, r.ma_gd2, r.so_ve, r.so_hd, r.gmv, r.tong_tt ? r.tong_tt : Number(r.gmv || 0) + Number(r.phi_dv || 0) - Number(r.chiet_khau || 0), r.chiet_khau, r.phi_dv, r.khach, r.mo_ta, r.file_name])), "Bang_ke_KH");
+  ], kh.map((r) => [LOAI[String(r.loai)] || r.loai, r.ky, r.ngay, r.ten_cong_ty, r.trang_thai, r.ma_gd, r.ma_gd2, r.so_ve, r.so_hd, r.gmv,
+    r.tong_tt ? r.tong_tt : Number(r.gmv || 0) + Number(r.phi_dv || 0) - Number(r.chiet_khau || 0), r.chiet_khau, r.phi_dv,
+    r.kh_ma ?? "", tenKh(r.kh_ma), nhomOf(r.kh_ma), r.ky_tinh ?? "", tenNcc(r.ncc_ma), r.nguon_gv ?? (coNoi ? "Chưa có giá vốn" : ""), r.gia_von ?? null, null,
+    r.khach, r.mo_ta, r.file_name])), "Bang_ke_KH");
 
   /* Nguồn giá vốn */
   const nguon = (k: unknown) => { const s = String(k || ""); return s.startsWith("HT:") ? "Giá NCC hệ thống" : s.startsWith("B1:") ? "Chi KS trực tiếp B1" : "Đối soát NCC"; };
   const ncc = src.ncc.slice().sort((a, b) => nguon(a.khop).localeCompare(nguon(b.khop)) || String(a.ngay_dv || "").localeCompare(String(b.ngay_dv || "")));
   X.utils.book_append_sheet(wb, sheet(X, [
-    { h: "Nguồn", w: 18 }, { h: "NCC", w: 26 }, { h: "Ngành", w: 9 }, { h: "Mã booking", w: 22 }, { h: "Số vé", w: 16 }, { h: "Khách", w: 24 },
+    { h: "Nguồn", w: 18 }, { h: "NCC (trong file)", w: 22 }, { h: "NCC (dashboard)", w: 24 }, { h: "Ngành", w: 9 }, { h: "Mã booking", w: 22 }, { h: "Số vé", w: 16 }, { h: "Khách", w: 24 },
     { h: "Ngày dịch vụ", t: "date", w: 12 }, { h: "Kỳ", w: 10 }, { h: "Số tiền NCC (giá vốn)", t: "money", w: 16 }, { h: "Ledger / giá bán hệ thống", t: "money", w: 16 },
-    { h: "Khớp / trạng thái", w: 22 }, { h: "Xử lý", w: 16 }, { h: "Mô tả", w: 36 }, { h: "Dòng / mã đề xuất", w: 16 }, { h: "File", w: 30 },
-  ], ncc.map((r) => [nguon(r.khop), String(r.ncc || "").replace(/^(hotel|flight):/, ""), r.nganh, r.ma_booking, r.so_ve, r.khach, r.ngay_dv, r.ky, r.bang_ke, r.ledger,
-    String(r.khop || "").replace(/^(HT|B1): /, ""), r.xu_ly, r.mo_ta, r.dong, r.file_name])), "Gia_von_NCC");
+    { h: "Khớp / trạng thái", w: 22 },
+    // kết quả nối của dashboard
+    { h: "Mã KH (dashboard)", w: 16 }, { h: "Tên KH (dashboard)", w: 30 }, { h: "Nhóm đối soát", w: 18 },
+    { h: "Tình trạng nối", w: 44 }, { h: "Giá vốn đã dùng", t: "money", w: 16 },
+    { h: "Xử lý", w: 16 }, { h: "Mô tả", w: 36 }, { h: "Dòng / mã đề xuất", w: 16 }, { h: "File", w: 30 },
+  ], ncc.map((r) => {
+    const raw = String(r.ncc || "").replace(/^(hotel|flight):/, "");
+    return [nguon(r.khop), raw, raw ? tenNcc(nccOfSrc(D.suppliers, { ncc: String(r.ncc), khop: String(r.khop || "") })) : "", r.nganh, r.ma_booking, r.so_ve, r.khach, r.ngay_dv, r.ky, r.bang_ke, r.ledger,
+      String(r.khop || "").replace(/^(HT|B1): /, ""), r.kh_ma ?? "", tenKh(r.kh_ma), nhomOf(r.kh_ma), r.tt_noi ?? "", r.gia_von_dung ?? null, r.xu_ly, r.mo_ta, r.dong, r.file_name];
+  })), "Gia_von_NCC");
 
   /* Công nợ phải thu */
   const ar = D.ar.filter((r) => isTs(r.ma_kh)).slice().sort((a, b) => a.ma_kh.localeCompare(b.ma_kh) || byKy(a, b));
