@@ -311,14 +311,16 @@ async function rebuild(sb: Sb) {
     if (t === 2) htHit++; else nccHit++;
     if (t === 2) htUsed.add(n.id);
     // Giá NCC trên hệ thống là giá của cả booking, không phản ánh hủy / hoàn / đổi. Quy theo phần bảng kê thực thu:
-    //   giá vốn = giá NCC × (GMV bảng kê của booking ÷ giá bán trên hệ thống), tối đa 1.
+    //   giá vốn = giá NCC × (Thành tiền bảng kê của booking ÷ giá bán trên hệ thống), khi tỷ lệ dưới 98%.
     //   · bảng kê chỉ có dòng hoàn (bán ở kỳ trước / ngoài bảng kê) → giá vốn âm tương ứng (hoàn cả doanh thu lẫn giá vốn)
     //   · hủy có phí / bảng kê chỉ có một phần → giá vốn theo phần đó
     //   · hủy hoàn hết (bảng kê = 0) → giá vốn 0
     let bkAmt = n.bang_ke;
     if (t === 2) {
-      const net = rs.reduce((s, r) => s + gmvOf(r), 0), sold = Number(n.ledger || 0);
-      bkAmt = sold > 0 ? n.bang_ke * Math.max(-1, Math.min(1, net / sold)) : /cancel/i.test(n.xu_ly || "") ? 0 : n.bang_ke;
+      // so Thành tiền (trước chiết khấu cho khách) với giá bán hệ thống — chiết khấu không phải hủy / hoàn
+      const net = rs.reduce((s, r) => s + Number(r.gmv || 0), 0), sold = Number(n.ledger || 0);
+      const ty = sold > 0 ? net / sold : null;
+      bkAmt = ty == null ? (/cancel/i.test(n.xu_ly || "") ? 0 : n.bang_ke) : ty >= 0.98 ? n.bang_ke : n.bang_ke * Math.max(-1, ty);
     }
     if (t === 2) htAmt.set(n.id, bkAmt);
     // chia giá vốn theo tỷ trọng GMV (có dấu: dòng hoàn vé / hủy phòng nhận phần âm)

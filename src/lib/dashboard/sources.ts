@@ -95,6 +95,11 @@ export async function readSource(file: File, existing: Customer[], arCodes: stri
   const sheet = (n: string) => X.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: null, blankrows: false }) as Cell[][];
   const base: SrcFile = { name: file.name, kind: "unknown", fileKey: fileKeyOf(file.name), rows: 0, from: null, to: null, kys: [], total: 0, totalL: "", notes: [], warns: [] };
 
+  // 0. File master data tải từ dashboard (README + GMV_theo_ngay…): không nạp lại, tránh ghi trùng số đã có
+  if (wb.SheetNames.some((n) => norm(n) === "gmvtheongay") && wb.SheetNames.some((n) => norm(n) === "readme")) {
+    base.warns.push("Đây là file master data tải từ dashboard — không nạp lại file này (số liệu đã có sẵn trên dashboard)");
+    return base;
+  }
   // 1. Sổ công nợ phải thu: sheet CNO PTHU
   const arSheet = wb.SheetNames.find((n) => norm(n) === "cnopthu");
   if (arSheet) return readAR(base, sheet(arSheet), wb.SheetNames.find((n) => norm(n) === "khachhang") ? sheet(wb.SheetNames.find((n) => norm(n) === "khachhang") as string) : [], existing, new Set(arCodes));
