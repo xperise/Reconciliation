@@ -512,19 +512,33 @@ const CHUA_RO = "CHUA_RO_NCC";
 async function rebuildAP(sb: Sb, ncc: Ncc[], htUsed: Set<number>, htAmt: Map<number, number>) {
   const supList = await fetchAll<{ ma_ncc: string; ten_ncc: string; payment_term: number | null }>("fin_suppliers");
   const sup = new Map(supList.map((s) => [s.ma_ncc, s]));
-  const agg = new Map<string, { ma: string; ky: string; nganh: string; tien: number; tra: number; ngayTra: string | null; b1: boolean }>();
+  // NCC đã có file đối soát trong kỳ thì dùng file đó. NCC chưa có file (trừ khách sạn lẻ XPERISE_MANUAL) thì lấy giá NCC
+  // trên hệ thống của các booking đã dùng làm giá vốn, ghi là ước tính (so_ct "UT <kỳ>"); khi có file thì file thay thế.
+  const maOf = (n: Ncc, b1: boolean) => ((n.ncc || b1) ? nccOfSrc(supList, n) : CHUA_RO);
+  const coDoiSoat = new Set<string>();
   ncc.forEach((n) => {
     const k = n.khop || "";
-    // Giá NCC trên hệ thống: chỉ tính phải trả cho khách sạn lẻ (NCC XPERISE → Xperise_Manual), và chỉ những booking
-    // đã dùng làm giá vốn của dòng bảng kê (booking có trên bảng kê, chưa có trong file đối soát nào)
+    if (k.startsWith("HT:") || k.startsWith("Trùng") || n.bang_ke == null || !n.ky || !KY.test(n.ky)) return;
+    coDoiSoat.add(`${maOf(n, k.startsWith("B1:"))}|${n.ky}`);
+  });
+  const agg = new Map<string, { ma: string; ky: string; nganh: string; tien: number; tra: number; ngayTra: string | null; b1: boolean; uoc: boolean }>();
+  ncc.forEach((n) => {
+    const k = n.khop || "";
     const ht = k.startsWith("HT:");
-    if (ht && !(htUsed.has(n.id) && nccOfSrc(supList, n) === "XPERISE_MANUAL")) return;
     if (k.startsWith("Trùng") || n.bang_ke == null || !n.ky || !KY.test(n.ky)) return;
     const b1 = k.startsWith("B1:");
-    // tên gọi khác của NCC (vd. HNH = Hồng Ngọc Hà) gộp về mã NCC tổng hợp; B1 / XPERISE:<mã> → Xperise_Manual
-    const ma = n.ncc || b1 ? nccOfSrc(supList, n) : CHUA_RO;
-    const key = `${ma}|${n.ky}`;
-    const o = agg.get(key) || { ma, ky: n.ky, nganh: n.nganh || "Khác", tien: 0, tra: 0, ngayTra: null, b1: false };
+    const ma = maOf(n, b1);
+    let uoc = false;
+    if (ht) {
+      // giá NCC trên hệ thống: chỉ những booking đã dùng làm giá vốn của dòng bảng kê
+      if (!htUsed.has(n.id)) return;
+      const xm = nccOfSrc(supList, n) === "XPERISE_MANUAL";
+      // NCC khác đã có file đối soát trong kỳ thì không cộng giá hệ thống nữa (tránh tính hai lần)
+      if (!xm && coDoiSoat.has(`${ma}|${n.ky}`)) return;
+      uoc = !xm;
+    }
+    const key = `${ma}|${n.ky}|${uoc ? "UT" : "DS"}`;
+    const o = agg.get(key) || { ma, ky: n.ky, nganh: n.nganh || "Khác", tien: 0, tra: 0, ngayTra: null, b1: false, uoc };
     if (b1) o.b1 = true;
     o.tien += ht ? htAmt.get(n.id) ?? n.bang_ke : n.bang_ke;
     if (b1 && k === "B1: Đã chi") {
@@ -537,11 +551,13 @@ async function rebuildAP(sb: Sb, ncc: Ncc[], htUsed: Set<number>, htAmt: Map<num
   const rows = Array.from(agg.values()).map((o) => {
     const end = kyEnd(o.ky), term = Number(sup.get(o.ma)?.payment_term ?? 0) || 0;
     const b1 = o.b1;
-    return { ma_ncc: o.ma, ky: o.ky, so_ct: `DS ${o.ky}`, ngay_hd: end, ngay_den_han: addDays(end, term), so_tien: Math.round(o.tien),
+    return { ma_ncc: o.ma, ky: o.ky, so_ct: `${o.uoc ? "UT" : "DS"} ${o.ky}`, ngay_hd: end, ngay_den_han: addDays(end, term), so_tien: Math.round(o.tien),
       da_tra: b1 ? Math.round(o.tra) : null, ngay_tra: b1 && o.tra > 0 ? o.ngayTra : null };
   });
   const { error: e1 } = await sb.from("fin_ap").delete().like("so_ct", "DS %");
   chk(e1, "Xóa phải trả dựng từ đối soát cũ");
+  const { error: e1b } = await sb.from("fin_ap").delete().like("so_ct", "UT %");
+  chk(e1b, "Xóa phải trả ước tính cũ");
   for (let i = 0; i < rows.length; i += 1000) { const { error } = await sb.from("fin_ap").insert(rows.slice(i, i + 1000)); chk(error, "Ghi công nợ phải trả"); }
   // NCC chưa có trong danh mục: thêm với payment term 0 (sửa ở danh mục NCC)
   const moi = Array.from(new Map(Array.from(agg.values()).filter((o) => !sup.has(o.ma)).map((o) => [o.ma, o])).values()).map((o) => ({
