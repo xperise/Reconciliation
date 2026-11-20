@@ -385,9 +385,16 @@ async function rebuild(sb: Sb) {
       (idx.get("H|" + nk(n.ma_booking)) || []).forEach((r) => hits.add(r));
       if (!hits.size && tokKey(n.ma_booking).includes("|")) (idx.get("T|" + tokKey(n.ma_booking)) || []).forEach((r) => hits.add(r));
     }
-    const rs = Array.from(hits).filter((r) => (coveredBy.get(r.id) ?? t) >= t);
+    // Đối soát NCC (t = 0): chỉ nối khi tên khách trên đối soát khớp tên khách trên bảng kê.
+    // Cùng mã booking nhưng khác khách (vd. HR968795: đối soát ghi khách khác, khách sạn khác, ngày dịch vụ tháng trước)
+    // thì không gán giá vốn cho dòng bán đó — tránh gán chi phí của booking này cho doanh thu của booking khác.
+    const khachKhop = (r: Kh) => {
+      const a = nk(n.khach), b = nk(r.khach);
+      return t !== 0 || !a || !b || a === b || a.includes(b) || b.includes(a);
+    };
+    const rs = Array.from(hits).filter((r) => (coveredBy.get(r.id) ?? t) >= t && khachKhop(r));
     if (!rs.length) {
-      ttNoi.set(n.id, hits.size ? "Không dùng — booking đã có giá vốn từ đối soát NCC" : "Không nối được — booking không có trên bảng kê khách hàng");
+      ttNoi.set(n.id, !hits.size ? "Không nối được — booking không có trên bảng kê khách hàng" : t === 0 && Array.from(hits).some((r) => (coveredBy.get(r.id) ?? t) >= t) ? "Không nối được — khách trên đối soát khác khách trên bảng kê" : "Không dùng — booking đã có giá vốn từ đối soát NCC");
       if (t === 2) htMiss++; else if (!hits.size) { nccMiss++; nccMissAmt += n.bang_ke; } return;
     }
     rs.forEach((r) => { coveredBy.set(r.id, t); srcOf.set(r.id, t); });
