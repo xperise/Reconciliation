@@ -1032,6 +1032,10 @@ function kyGroupOf(r) {
 const kyVal = r => { const t = TEPMAP[r.key] || {}, cv = CVK[r.key] || {}; return Math.max(r.gmv30 || 0, cv.g79 || 0, (t.v || 0) * 1e6, (t.r10 || 0) * 1e5); };
 
 const kyIn = r => { const f = CR.from || KY0, t = CR.to || TODAY; return [r.pl, r.hd].filter(d => isoOk(d) && d >= f && d <= t).length; };
+/* khách đã ký trước lộ trình (trước 26/10) hoặc chỉ đánh dấu đã ký không có ngày — không tính vào số ký của lộ trình (giống tab Tiến độ ký HĐ) */
+const kyOld = r => r.signed && (!sdOf(r) || sdOf(r) < KY0);
+/* số mốc ký (phụ lục / HĐ mới) có ngày trong [a, b], bỏ khách kyOld */
+const kyInR = (r, a, b) => kyOld(r) ? 0 : [r.pl, r.hd].filter(d => isoOk(d) && d >= a && d <= b).length;
 function kyData(ALL) {
   const who = PICS.includes(CR.who) ? CR.who : '';
   const U = ALL.filter(r => !r.liq && (!who || r.pic === who) && !(r.signed && (!sdOf(r) || sdOf(r) < KY0))).map(r => Object.assign(r, {kg: kyGroupOf(r)}));
@@ -2328,7 +2332,7 @@ function renderJourney() {
     <span class="lbl" style="margin-left:8px">Thời gian</span>${rangePicker()}
     <span class="lbl" style="margin-left:auto">${DBST === 'ok' ? `Dữ liệu nhập: đồng bộ trực tiếp${DBW === false ? ' · bạn chỉ có quyền xem' : ''}` : DBST === 'loading' ? 'Đang kết nối dữ liệu nhập…' : 'Chưa kết nối được dữ liệu nhập (chỉ xem số có sẵn)'}</span></div>`;
   PAT.rng = [f, t]; PAT.keys = CR.who ? new Set(crmScope(ALL).map(r => r.key)) : null;
-  const body = CR.view === 'dash' ? crmDash(ALL, f, t) : CR.view === 'pat' ? renderPattern(t) : crmInput(ALL, d);
+  const body = CR.view === 'dash' ? crmDash(picFix(ALL), f, t) : CR.view === 'pat' ? renderPattern(t) : crmInput(ALL, d);
   return tabs + body;
 }
 /* danh sách bên dưới các ô "Các mốc trong …": bấm ô nào hiện đúng các khách / lần liên hệ đã đếm vào ô đó (cùng kỳ, cùng người đang lọc) */
@@ -2356,12 +2360,15 @@ function crmKpiList(ALL, mine, f, t, who0, id, lab) {
   } else {
     const fld = {vc: r => inR(r.vc, f, t) ? r.vc : '', sign: r => [inR(r.pl, f, t) ? r.pl : '', inR(r.hd, f, t) ? r.hd : ''].filter(Boolean).sort()[0] || '', xp: r => inR(r.xp, f, t) ? r.xp : '', first: r => r.first && r.first >= f && r.first <= t ? r.first : '', nx: r => inR(r.nx, f, t) ? r.nx : ''}[id];
     const src = id === 'vc' || id === 'sign' ? ALL.filter(r => !r.liq && (!who || r.pic === who)) : mine;
-    const L = src.map(r => ({r, d: fld(r)})).filter(x => x.d).sort((a, b) => b.d.localeCompare(a.d)); n = L.length;
-    const kind = r => id === 'sign' ? (inR(r.pl, f, t) ? 'Ký phụ lục' : 'Ký HĐ mới') : '';
+    const L = id === 'sign'
+      ? src.filter(r => !kyOld(r)).flatMap(r => [['pl', 'Ký phụ lục'], ['hd', 'Ký HĐ mới']].filter(([k2]) => inR(r[k2], f, t)).map(([k2, lb]) => ({r, d: r[k2], kd: lb}))).sort((a, b) => b.d.localeCompare(a.d))
+      : src.map(r => ({r, d: fld(r)})).filter(x => x.d).sort((a, b) => b.d.localeCompare(a.d));
+    n = L.length;
+    const kind = x => x.kd || '';
     head = `<th class="l">Ngày ${id === 'nx' ? 'next step' : 'mốc'}</th><th class="l">Khách hàng</th>${id === 'sign' ? '<th class="l">Loại</th>' : ''}<th class="l">PIC</th><th class="l">Nhóm</th><th>GMV 30 ngày</th><th class="l">Liên hệ gần nhất</th><th class="l">Next step</th>`;
-    rows = L.map(({r, d}) => `<tr ${open(r)}><td class="l" style="white-space:nowrap"><b>${wd(d)} ${dmy(d)}</b></td>${nm(r)}${id === 'sign' ? `<td class="l">${kind(r)}</td>` : ''}${picTd(r)}<td class="l" style="font-size:12px">${r.grp === 9 ? '' : r.grp + '. '}${esc(GRP[r.grp] || '')}</td><td>${r.gmv30 ? money(r.gmv30) : '<span class="lbl">–</span>'}</td><td class="l" style="white-space:normal;min-width:200px;font-size:12px">${last(r)}</td><td class="l" style="white-space:normal;font-size:12px">${nxt(r)}</td></tr>`);
+    rows = L.map(x => { const {r, d} = x; return `<tr ${open(r)}><td class="l" style="white-space:nowrap"><b>${wd(d)} ${dmy(d)}</b></td>${nm(r)}${id === 'sign' ? `<td class="l">${kind(x)}</td>` : ''}${picTd(r)}<td class="l" style="font-size:12px">${r.grp === 9 ? '' : r.grp + '. '}${esc(GRP[r.grp] || '')}</td><td>${r.gmv30 ? money(r.gmv30) : '<span class="lbl">–</span>'}</td><td class="l" style="white-space:normal;min-width:200px;font-size:12px">${last(r)}</td><td class="l" style="white-space:normal;font-size:12px">${nxt(r)}</td></tr>`; });
   }
-  const unit = ['call', 'meet', 'email', 'mset'].includes(id) ? 'lần' : 'khách';
+  const unit = ['call', 'meet', 'email', 'mset'].includes(id) ? 'lần' : id === 'sign' ? 'mốc ký' : 'khách';
   return `<div id="crkpil" style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap"><div><b style="font-size:15px">${TT[id]}${CR.kpiWho ? ' · ' + esc(CR.kpiWho) : ''}</b> <span class="lbl">· ${lab}${who ? ' · ' + esc(who) : ' · toàn đội'} · <b style="color:var(--ink)">${n0(n)}</b> ${unit}</span></div>
     <div style="display:flex;gap:8px">${CR.kpiWho ? `<button class="btn" data-crkpi="${id}" data-keep="1">Xem cả đội</button>` : ''}<button class="btn" id="crkpicsv">Tải CSV</button><button class="btn" data-crkpi="${id}">Đóng ✕</button></div></div>
@@ -2393,7 +2400,7 @@ function crmDash(ALL, f, t, part) {
       K('email', 'Email · Zalo', cur.email + cur.zalo, prv.email + prv.zalo, n0(all.email + all.zalo), ''),
       K('mset', 'Meeting được set', cur.mset, prv.mset, n0(all.mset), `<b>${n0(cur.mon)}</b> meeting theo lịch trong kỳ`),
       K('vc', 'Verbal confirm', cur.vc, prv.vc, n0(mine.filter(r => done(r.vc)).length), ''),
-      K('sign', 'Ký phụ lục / HĐ mới', cur.sign, prv.sign, n0(mine.filter(r => done(r.pl) || done(r.hd)).length), ''),
+      K('sign', 'Ký phụ lục / HĐ mới', cur.sign, prv.sign, n0(mine.filter(r => r.signed && !kyOld(r)).length), '', 0, 'lũy kế tính từ 26/10, khớp tab Tiến độ ký HĐ'),
       K('xp', 'Khởi tạo XPAY', mine.filter(r => inR(r.xp, f, t)).length, mine.filter(r => inR(r.xp, pf, pt)).length, n0(mine.filter(r => done(r.xp)).length), ''),
       K('first', 'DN active mới', mine.filter(r => r.first && r.first >= f && r.first <= t).length, mine.filter(r => r.first && r.first >= pf && r.first <= pt).length, n0(mine.filter(r => r.first).length), `<b>${n0(tact7)}</b> khách hẹn active`),
       K('nx', 'Next step đến hạn', mine.filter(r => inR(r.nx, f, t)).length, mine.filter(r => inR(r.nx, pf, pt)).length, `<span class="${nsOver ? 'dn' : ''}">${n0(nsOver)} quá hạn</span>`, `<b>${n0(ns7)}</b> việc`)].join('')}</div>${CR.kpi ? crmKpiList(ALL, mine, f, t, who, CR.kpi, lab) : '<div class="hint" style="margin-top:8px">Bấm vào một ô (cuộc gọi, meeting, verbal confirm, ký…) để xem danh sách khách ngay bên dưới.</div>'}</div>`;
@@ -2480,8 +2487,7 @@ function dayStats(ALL, a, b, who) {
       if (x.t === 'mset' && isoOk(x.md) && x.md >= a && x.md <= b) o.mon++; });
     if (r.liq || (who && r.pic !== who)) return;
     if (isoOk(r.vc) && r.vc >= a && r.vc <= b) o.vc++;
-    if (isoOk(r.pl) && r.pl >= a && r.pl <= b) o.sign++;
-    if (isoOk(r.hd) && r.hd >= a && r.hd <= b) o.sign++; });
+    o.sign += kyInR(r, a, b); });
   return o;
 }
 function mtgList(ALL, who) {
