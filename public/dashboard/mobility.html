@@ -1352,7 +1352,7 @@ function renderOverview(d, C, A, p) {
   bul.push(`<li class="${status(ca.ratio)}">Doanh nghiệp active 30 ngày: <b>${nf(ca.t, 0)}</b> trên kế hoạch ${nf(ca.pl, 0)}. Tài xế có giao dịch hôm nay: <b>${nf(dr.t, 0)}</b>. Tài xế đã active: ${nf(A.dact, 0)} trên ${nf(A.init, 0)} tài xế khởi tạo.</li>`);
   if (behind.length) bul.push(`<li class="critical">Xa kế hoạch nhất: <b>${behind.slice().sort((a, b) => C[a.k].ratio - C[b.k].ratio).slice(0, 3).map(r => full(r.k) + ' (' + pct(C[r.k].ratio) + ')').join(', ')}</b>.</li>`);
   const mu = v => money(v) + ' ' + (UNIT.div === 1 ? 'đồng' : unitLabel());
-  const single = ovSingle();
+  const single = ovSingle() && !OV.fee;   // lọc phí nền tảng: dùng KPI theo khoảng đã lọc
   let h = single ? `<div class="banner"><b>${['Chủ nhật','Thứ hai','Thứ ba','Thứ tư','Thứ năm','Thứ sáu','Thứ bảy'][new Date(d + 'T00:00:00Z').getUTCDay()]} ${dmy(d)}: ngày ${T} trên 92 ngày của lộ trình, còn ${diffD(P.end, d)} ngày đến 31/12</b><ul>${bul.join('')}</ul></div>` : renderRange();
   const A0 = ACT[d] || {}, av = f => { let s = 0, n = 0; for (let i = 1; i <= 7; i++) { const x = ACT[addD(d, -i)]; if (!x || !x.trips) continue; s += f(x); n++; } return n ? s / n : null; };
   const cmp = (t, a, F) => { if (t == null || a == null) return '<span class="lbl">chưa đủ dữ liệu 7 ngày</span>'; const dl = t - a;
@@ -1391,6 +1391,7 @@ function renderOverview(d, C, A, p) {
   ];
   // hàng trên 4 ô (GMV, ký, khởi tạo) · hàng dưới 5 ô (active, thẻ, tỷ lệ thẻ / DN, gọi · meeting, tài xế)
   if (single) h += `<div class="kpis kpis5">${tiles.slice(0, 5).join('')}</div><div class="kpis kpis5" style="margin-top:12px">${tiles.slice(5).join('')}</div>`;
+  const ceoAt = h.length;
   h += `<div class="card"><div class="hd"><div><div class="eyebrow">Bảng CEO · Demand & Supply${single ? '' : ` · tại ngày ${dmy(d)}${OV.units.length ? ' · toàn bộ đơn vị' : ''}`}</div><h2 class="card-title">Hôm nay vs trung bình 7 ngày vs lộ trình · kế hoạch ngày mai đã bù thâm hụt</h2></div><div class="card-note">Tiền: ${unitLabel()} · tại ${dmy(d)} · số liệu giao dịch đến ${dmy(LASTDAY)}</div></div>
     <div class="tw ceo-tw"><table class="ceo"><thead><tr><th class="l">Chỉ số</th><th>Hôm qua</th><th>TB 7 ngày gần nhất</th><th>Hôm nay</th><th title="(Hôm nay − TB 7 ngày) ÷ TB 7 ngày">Tăng so TB 7 ngày</th><th title="Theo lộ trình: (KH hôm nay − TB KH 7 ngày) ÷ TB KH 7 ngày">Mục tiêu tăng so TB 7 ngày</th><th>KH hôm nay</th><th>% đạt</th><th>Thâm hụt phải bù</th><th>KH ngày mai (gốc)</th><th>KH ngày mai (đã bù)</th><th>KH tuần</th><th>Đích T12 / 31/12</th><th>Còn thiếu</th><th class="l">Quyết định</th></tr></thead><tbody>`;
   for (const r of ROWS) {
@@ -1410,6 +1411,7 @@ function renderOverview(d, C, A, p) {
       <td>${c.wk == null ? '—' : F(c.wk)}</td><td>${c.tg == null ? (r.t ? '<span class="lbl">cần chốt</span>' : '—') : F(c.tg)}</td><td>${F(c.gap)}</td><td class="l">${dec}</td></tr>`;
   }
   h += `</tbody></table></div><div class="hint"><b>Tăng so TB 7 ngày</b> = (Hôm nay − TB 7 ngày gần nhất) ÷ TB 7 ngày. <b>Mục tiêu tăng so TB 7 ngày</b> = cùng công thức trên số kế hoạch của lộ trình: (KH hôm nay − TB KH 7 ngày trước) ÷ TB KH 7 ngày. Xanh = tăng bằng hoặc nhanh hơn mục tiêu, đỏ = chậm hơn.<br><b>Cách bù:</b> chỉ số theo ngày (GMV, thẻ active, tài xế có giao dịch): KH ngày mai đã bù = KH gốc + thâm hụt cộng dồn từ 01/10 ÷ số ngày còn lại đến 31/12. Chỉ số lũy kế (DN, thẻ, GMV lũy kế tháng, GMV 30N): KH ngày mai đã bù = KH gốc ngày mai + khoảng hụt hôm nay so với kế hoạch ÷ số ngày còn lại. Vượt KH thì không giảm kế hoạch; chỉ số tỷ lệ giữ KH gốc.</div></div>`;
+  if (OV.fee) { h = h.slice(0, ceoAt) + `<div class="hint" style="margin-top:12px">Bảng CEO (số toàn công ty) không lọc theo phí nền tảng nên đã ẩn khi đang lọc. Xem số đã lọc ở các ô phía trên và khối Khách có phí nền tảng bên dưới.</div>`; }
   // charts
   const all = PDAYS, win = CH.full ? all : all.filter(x => x <= addD(d, 14));
   const mark = win.indexOf(d);
