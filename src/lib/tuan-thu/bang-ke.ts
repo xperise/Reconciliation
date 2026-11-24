@@ -167,12 +167,15 @@ function sheetPhongBan(wb: ExcelJS.Workbook, ts: ThamSoHopDong, nhanKy: string, 
 export async function taoBangKe(opts: {
   ts: ThamSoHopDong; nhanKy: string; dong: DongRaw[];
   danhMucPhongBan: { ten: string; ma_cost_center: string | null }[];
+  tenSheet?: { ve_may_bay: string; khach_san: string };
 }): Promise<Buffer> {
+  const ten = opts.tenSheet ?? { ve_may_bay: 'VMB-TRIP ID', khach_san: 'KS-TRIP ID' };
+  const tien = `${opts.ts.ma_khach}-`;
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Xperise – Tuân thủ bảng kê';
   sheetPhongBan(wb, opts.ts, opts.nhanKy, opts.dong, opts.danhMucPhongBan);
-  sheetChiTiet(wb, 'VCB-VMB-TRIP ID', 'Dịch vụ vé máy bay', COT_VMB, opts.dong.filter((d) => d.loai === 've_may_bay'), opts.ts, opts.nhanKy, 've_may_bay');
-  sheetChiTiet(wb, 'VCB-KS-TRIP ID', 'Dịch vụ khách sạn', COT_KS, opts.dong.filter((d) => d.loai === 'khach_san'), opts.ts, opts.nhanKy, 'khach_san');
+  sheetChiTiet(wb, (tien + ten.ve_may_bay).slice(0, 31), 'Dịch vụ vé máy bay', COT_VMB, opts.dong.filter((d) => d.loai === 've_may_bay'), opts.ts, opts.nhanKy, 've_may_bay');
+  sheetChiTiet(wb, (tien + ten.khach_san).slice(0, 31), 'Dịch vụ khách sạn', COT_KS, opts.dong.filter((d) => d.loai === 'khach_san'), opts.ts, opts.nhanKy, 'khach_san');
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 export { COT_TT_DA_VAT };

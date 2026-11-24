@@ -12,12 +12,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!user) redirect('/login?loi=ho_so');
 
   const sb = supabaseAdmin();
-  const [choDuyet, thongBao] = await Promise.all([
+  const [choDuyet, thongBao, ttTv] = await Promise.all([
     sb.from('tracking').select('id', { count: 'exact', head: true })
       .eq('status', 'cho_duyet_phan_loai'),
     sb.from('notifications').select('*')
       .order('created_at', { ascending: false }).limit(30),
+    // Phần Tuân thủ bảng kê (SQL 38). Chưa chạy SQL thì bảng chưa có → coi như không có quyền.
+    sb.from('tt_thanh_vien').select('user_id').eq('user_id', user.id).maybeSingle(),
   ]);
+  const tuanThu = user.role === 'admin' || (!ttTv.error && !!ttTv.data);
 
   // Chỉ giữ thông báo dành cho vai trò của người đang đăng nhập
   const items = (thongBao.data ?? []).filter((n: any) =>
@@ -32,6 +35,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       soChoDuyet={choDuyet.count ?? 0}
       thongBao={items}
       access={tabAccess(user)}
+      tuanThu={tuanThu}
     >
       {children}
     </Shell>

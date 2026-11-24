@@ -53,3 +53,6 @@ export const isDashboardPath = (path: string) => path === '/dashboard' || path.s
 export const isGuidePath = (path: string) => path === '/guide' || path === '/huong-dan' || path.startsWith('/huong-dan/') || path.startsWith('/in-huong-dan');
 /** Tab Workstream: trang /workstream và các tệp tĩnh public/workstream/* chạy trong khung */
 export const isWorkstreamPath = (path: string) => path === '/workstream' || path.startsWith('/workstream/');
+
+/** Phần Tuân thủ bảng kê: quyền kiểm ở trang (bảng tt_thanh_vien, SQL 38), middleware chỉ cho qua */
+export const isTuanThuPath = (path: string) => path === '/tuan-thu' || path.startsWith('/tuan-thu/');

@@ -15,6 +15,8 @@ export interface DauVaoKiem {
   /** Danh mục phòng ban của khách (tên phòng ban trên sheet Chi phí phòng ban) */
   danh_muc_phong_ban: string[];
   thieu_cot: Record<LoaiDichVu, string[]>;
+  /** Tên công ty khách trên cột 'Tên công ty' của raw */
+  ten_cong_ty: string;
 }
 
 /**
@@ -37,9 +39,9 @@ export function kiemTra(x: DauVaoKiem): CanhBao[] {
     const ten = TEN_DICH_VU[loai];
 
     // KT-08 đúng khách hàng
-    const khac = ds.filter((d) => String(d.v['Tên công ty'] ?? '').trim().toUpperCase() !== 'VIETCOMBANK');
+    const khac = ds.filter((d) => String(d.v['Tên công ty'] ?? '').trim().toUpperCase() !== x.ten_cong_ty.trim().toUpperCase());
     if (khac.length) add({ ma_quy_tac: 'KT-08', phong_ban: 'ke_toan', muc_do: 'chan_gui', loai, dong: khac.map((d) => d.dong),
-      noi_dung: `${ten}: ${khac.length} dòng không thuộc VIETCOMBANK` });
+      noi_dung: `${ten}: ${khac.length} dòng không thuộc ${x.ten_cong_ty}` });
 
     // KT-03 số học: chưa VAT + VAT = thành tiền đã VAT
     const sai = ds.filter((d) => coTien(d) &&

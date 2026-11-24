@@ -40,9 +40,9 @@ const VAI_TRO: Record<string, string> = {
   admin: 'Quản trị', ke_toan: 'Kế toán', pm: 'PM', high_level: 'Cấp quản lý',
 };
 
-export function Shell({ role, email, userId, soChoDuyet, thongBao, access, children }: {
+export function Shell({ role, email, userId, soChoDuyet, thongBao, access, tuanThu = false, children }: {
   role: string; email: string; userId: string; soChoDuyet: number;
-  thongBao: any[]; access?: TabAccess; children: React.ReactNode;
+  thongBao: any[]; access?: TabAccess; tuanThu?: boolean; children: React.ReactNode;
 }) {
   const path = usePathname();
   const router = useRouter();
@@ -70,6 +70,8 @@ export function Shell({ role, email, userId, soChoDuyet, thongBao, access, child
   const laHd = path === '/huong-dan' || path.startsWith('/huong-dan/');
   // Tab Workstream: ứng dụng chạy trong khung riêng, có thanh tab riêng
   const laWs = path === '/workstream' || path.startsWith('/workstream/');
+  // Tuân thủ bảng kê: có thanh tab riêng (layout của /tuan-thu tự bọc .page)
+  const laTt = path === '/tuan-thu' || path.startsWith('/tuan-thu/');
 
   const isOn = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));
 
@@ -88,10 +90,10 @@ export function Shell({ role, email, userId, soChoDuyet, thongBao, access, child
       <header className="topbar">
         <img src={LOGO} alt="xperise" className="topbar-logo" />
         <span className="topbar-div" />
-        <span className="topbar-name">{laMlx ? 'Bảng kê MLX' : laDash ? 'Dashboard quản trị' : laHd ? 'Hướng dẫn sử dụng' : laWs ? 'Workstream' : 'Đối soát bảng kê'}</span>
+        <span className="topbar-name">{laMlx ? 'Bảng kê MLX' : laDash ? 'Dashboard quản trị' : laHd ? 'Hướng dẫn sử dụng' : laWs ? 'Workstream' : laTt ? 'Tuân thủ bảng kê' : 'Đối soát bảng kê'}</span>
 
         <div className="ml-auto flex items-center gap-3 no-print">
-          <AppTabs xperise={access?.xperise ?? true} mlx={access?.mlx ?? true} dashboard={access?.dashboard ?? false} guide={access?.guide ?? true} workstream={access?.workstream ?? false} />
+          <AppTabs xperise={access?.xperise ?? true} mlx={access?.mlx ?? true} dashboard={access?.dashboard ?? false} guide={access?.guide ?? true} workstream={access?.workstream ?? false} tuanThu={tuanThu} />
           <Bell items={thongBao} userId={userId} />
           <div className="text-right leading-tight hidden sm:block">
             <div className="text-[11.5px] text-[var(--ink-2)] font-semibold">{email}</div>
@@ -101,7 +103,7 @@ export function Shell({ role, email, userId, soChoDuyet, thongBao, access, child
         </div>
       </header>
 
-      {!laMlx && !laDash && !laHd && !laWs && (
+      {!laMlx && !laDash && !laHd && !laWs && !laTt && (
         <>
           {/* Hàng 1: nhóm tab */}
           <nav className="tabs no-print" aria-label="Nhóm chức năng">
@@ -141,7 +143,7 @@ export function Shell({ role, email, userId, soChoDuyet, thongBao, access, child
       )}
 
       {/* Trang MLX tự có khung & lề riêng, không bọc thêm .page để tránh lề đôi */}
-      {laMlx || laDash || laHd || laWs ? <main>{children}</main> : <main className="page">{children}</main>}
+      {laTt ? children : laMlx || laDash || laHd || laWs ? <main>{children}</main> : <main className="page">{children}</main>}
     </>
   );
 }

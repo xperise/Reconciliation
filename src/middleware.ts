@@ -1,6 +1,6 @@
 import { createServerClient, type SetAllCookies } from '@supabase/ssr';
 import { NextRequest, NextResponse } from 'next/server';
-import { coQuyen, isDashboardPath, isGuidePath, isMlxPath, isWorkstreamPath, tabAccess, trangChu } from '@/lib/access';
+import { coQuyen, isDashboardPath, isGuidePath, isMlxPath, isTuanThuPath, isWorkstreamPath, tabAccess, trangChu } from '@/lib/access';
 
 /** Làm mới phiên đăng nhập và chặn truy cập khi chưa đăng nhập. */
 export async function middleware(req: NextRequest) {
@@ -99,6 +99,8 @@ export async function middleware(req: NextRequest) {
     if (!access.workstream) return chuyenHuong(home);
     return res;
   }
+  // Tuân thủ bảng kê: trang tự kiểm quyền theo tt_thanh_vien (SQL 38)
+  if (isTuanThuPath(path)) return res;
   if (!path.startsWith('/api/')) {
     if (isMlxPath(path) && !access.mlx) return chuyenHuong(home);
     if (!isMlxPath(path) && !access.xperise) return chuyenHuong(home);
