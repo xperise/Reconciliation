@@ -7,6 +7,7 @@ import { deXuatBuoc, DeXuat } from '@/lib/tuan-thu/de-xuat';
 import { TEN_DICH_VU, TEN_MUC_DO, TEN_PHONG_BAN, PhongBan, LoaiDichVu } from '@/lib/tuan-thu/types';
 import { thongTinGui } from '../../actions';
 import { Duyet, GiaiTrinh, TaiLai, XacNhanMot, XacNhanTatCa } from './panels';
+import { ChatAgent, GoiYGiaiTrinh, RaSoat } from '../../agent-ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,6 +35,14 @@ export default async function Page({ params }: { params: { id: string } }) {
     sb.from('tt_duyet').select('*').eq('lan_chay_id', lc.id).order('luc', { ascending: false }),
   ]);
   const canhBao = (cb ?? []) as any[], thayDoi = (td ?? []) as any[], dy = ((dyAll ?? []) as any[]);
+  // Agent AI (SQL 39): kết quả rà soát mới nhất của vòng hiện tại + lịch sử chat của người đang xem
+  const pbs = (['ke_toan', 'demand', 'supply', 'ceo'] as PhongBan[]).filter((p) => duocLam(n, p));
+  const [{ data: aiKq }, { data: chat }] = await Promise.all([
+    sb.from('tt_ai_ket_qua').select('phong_ban, noi_dung, luc, skill_phien_ban, vong').eq('lan_chay_id', params.id).eq('loai', 'ra_soat').order('luc', { ascending: false }),
+    sb.from('tt_chat').select('phong_ban, vai, noi_dung').eq('user_id', n.id).eq('lan_chay_id', params.id).order('luc'),
+  ]);
+  const raSoat = (b: string) => ((aiKq ?? []) as any[]).find((k) => k.phong_ban === b && k.vong === lc.vong) ?? null;
+  const lichSu: any = {}; for (const m of (chat ?? []) as any[]) (lichSu[m.phong_ban] ??= []).push({ vai: m.vai, noi_dung: m.noi_dung });
   const dyVong = dy.filter((d) => d.vong === lc.vong);
   const hd: any = lc.tt_hop_dong;
   const th: any = lc.tong_hop ?? {};
@@ -116,6 +125,7 @@ export default async function Page({ params }: { params: { id: string } }) {
       {/* Cảnh báo */}
       <section className="card card-pad mb-5">
         <h2 className="card-title mb-2">Cảnh báo theo bộ quy tắc ({canhBao.length})</h2>
+        {canhBao.some((c) => c.giai_trinh?.startsWith('[Gợi ý agent')) && <div className="callout callout-high mb-2 text-[12px]">Có giải trình đang là gợi ý của agent. Kế toán đọc, sửa lại và xóa phần [Gợi ý agent…] thì mới được tính là giải trình.</div>}
         <table className="tbl"><thead><tr><th>Mã</th><th>Phòng ban</th><th>Mức độ</th><th>Nội dung</th><th className="text-right">Số tiền</th><th style={{ minWidth: 280 }}>Giải trình của kế toán</th></tr></thead>
           <tbody>{canhBao.map((c) => (
             <tr key={c.id}>
@@ -133,6 +143,7 @@ export default async function Page({ params }: { params: { id: string } }) {
         <section className="card card-pad mb-5">
           <h2 className="card-title mb-2">Bước 1–2 · Kế toán xác nhận</h2>
           <KhungDeXuat dx={dx('ke_toan')} />
+          {duocLam(n, 'ke_toan') && <div className="flex gap-3 flex-wrap items-start"><RaSoat lanChayId={lc.id} buoc="ke_toan" ketQua={raSoat('ke_toan')} /><GoiYGiaiTrinh lanChayId={lc.id} /></div>}
           {duocLam(n, 'ke_toan') ? (
             <div className="grid gap-5 md:grid-cols-2">
               <div><p className="label mb-1">Duyệt chuyển sang Demand & Supply</p><Duyet lanId={lc.id} buoc="ke_toan" nhan="Duyệt, chuyển Demand & Supply" /></div>
@@ -149,6 +160,7 @@ export default async function Page({ params }: { params: { id: string } }) {
             <section key={b} className="card card-pad">
               <h2 className="card-title mb-2">Bước 3 · {TEN_PHONG_BAN[b]} duyệt</h2>
               <KhungDeXuat dx={dx(b)} />
+              {duocLam(n, b) && !daDuyet(b) && <RaSoat lanChayId={lc.id} buoc={b} ketQua={raSoat(b)} />}
               {daDuyet(b) ? <span className="pill pill-stable">Đã duyệt</span>
                 : duocLam(n, b) ? <Duyet lanId={lc.id} buoc={b} /> : <p className="text-[12px]">Chờ {TEN_PHONG_BAN[b]}.</p>}
             </section>
@@ -161,6 +173,7 @@ export default async function Page({ params }: { params: { id: string } }) {
         <section className="card card-pad mb-5">
           <h2 className="card-title mb-2">Bước 4 · CEO duyệt cuối & gửi</h2>
           {lc.buoc === 'cho_ceo' && <KhungDeXuat dx={dx('ceo')} />}
+          {lc.buoc === 'cho_ceo' && duocLam(n, 'ceo') && <RaSoat lanChayId={lc.id} buoc="ceo" ketQua={raSoat('ceo')} />}
           <div className="grid gap-4 md:grid-cols-2 mb-3 text-[12.5px]">
             <div>
               <p className="label mb-1">Thay đổi so với raw</p>
@@ -191,14 +204,15 @@ export default async function Page({ params }: { params: { id: string } }) {
       <section className="card card-pad">
         <h2 className="card-title mb-2">Lịch sử duyệt</h2>
         {dy.length === 0 ? <p className="empty">Chưa có.</p> : (
-          <table className="tbl"><thead><tr><th>Lúc</th><th>Vòng</th><th>Bước</th><th>Quyết định</th><th>Người</th><th>Ý kiến</th><th>Agent đề xuất lúc đó</th></tr></thead>
+          <table className="tbl"><thead><tr><th>Lúc</th><th>Vòng</th><th>Bước</th><th>Quyết định</th><th>Người</th><th>Ý kiến</th><th>Agent đề xuất lúc đó</th><th>Skill</th></tr></thead>
             <tbody>{dy.map((d) => (
               <tr key={d.id}><td className="text-xs">{new Date(d.luc).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</td><td>{d.vong}</td>
                 <td>{TEN_PHONG_BAN[d.buoc as PhongBan]}</td><td>{d.quyet_dinh === 'duyet' ? 'Duyệt' : 'Trả về'}</td>
-                <td className="text-xs">{d.nguoi_email}</td><td className="text-[12px]">{d.y_kien}</td><td className="text-[11px]">{d.de_xuat_agent}</td></tr>))}</tbody></table>
+                <td className="text-xs">{d.nguoi_email}</td><td className="text-[12px]">{d.y_kien}</td><td className="text-[11px]">{d.de_xuat_agent}</td><td className="text-[11px]">{d.skill_phien_ban ? `v${d.skill_phien_ban}` : ''}</td></tr>))}</tbody></table>
         )}
       </section>
       <p className="mt-4"><Link href="/tuan-thu" className="text-[12px] underline">← Danh sách lần chạy</Link></p>
+      <ChatAgent lanChayId={lc.id} pbs={pbs} lichSu={lichSu} nhanNgCanh={`${hd.ma_khach} ${nhanThang(lc.thang, lc.dot)}`} />
     </>
   );
 }

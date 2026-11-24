@@ -3,6 +3,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { duocLam, nguoiTT } from '@/lib/tuan-thu/db';
 import { PhongBan, TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
 import { DuyetSuaDoi, FormDeXuat } from './client';
+import { PhanTichSuaDoi } from '../agent-ui';
 
 export const dynamic = 'force-dynamic';
 const PB: PhongBan[] = ['ke_toan', 'supply', 'demand', 'ceo'];
@@ -11,11 +12,13 @@ const TT: Record<string, [string, string]> = { cho_duyet: ['Chờ duyệt', 'pil
 export default async function Page({ searchParams }: { searchParams: { hd?: string; ma?: string } }) {
   const sb = supabaseAdmin();
   const n = (await nguoiTT())!;
-  const [{ data: hds }, { data: qts }, { data: sds }] = await Promise.all([
+  const [{ data: hds }, { data: qts }, { data: sds }, { data: aiKq }] = await Promise.all([
     sb.from('tt_hop_dong').select('id, ma_khach, so_hop_dong').order('ma_khach'),
     sb.from('tt_quy_tac').select('hop_dong_id, ma, noi_dung, gia_tri, phong_ban').order('ma'),
     sb.from('tt_sua_doi').select('*, tt_hop_dong(ma_khach), tt_sua_doi_duyet(*)').order('created_at', { ascending: false }),
+    sb.from('tt_ai_ket_qua').select('sua_doi_id, phong_ban, noi_dung, luc').eq('loai', 'tac_dong').order('luc', { ascending: false }),
   ]);
+  const tacDong = (id: string, pb: string) => ((aiKq ?? []) as any[]).find((k) => k.sua_doi_id === id && k.phong_ban === pb)?.noi_dung ?? null;
   const quyTac: Record<string, any[]> = {};
   for (const q of qts ?? []) (quyTac[(q as any).hop_dong_id] ??= []).push(q);
   return (
@@ -52,6 +55,8 @@ export default async function Page({ searchParams }: { searchParams: { hd?: stri
                     {d ? <><span className={`pill ${d.quyet_dinh === 'dong_y' ? 'pill-stable' : 'pill-critical'}`}>{d.quyet_dinh === 'dong_y' ? 'Đồng ý' : 'Không đồng ý'}</span>
                       {d.y_kien && <div className="text-[11px] mt-1">{d.y_kien}</div>}</>
                       : s.trang_thai === 'cho_duyet' && duocLam(n, pb) ? <DuyetSuaDoi id={s.id} pb={pb} /> : <span className="pill pill-watch">Chờ</span>}
+                    {s.trang_thai === 'cho_duyet' && duocLam(n, pb) ? <PhanTichSuaDoi suaDoiId={s.id} pb={pb} ketQua={tacDong(s.id, pb)} />
+                      : tacDong(s.id, pb) ? <details className="mt-1"><summary className="text-[12px] cursor-pointer">Agent {TEN_PHONG_BAN[pb]} phân tích</summary><div className="text-[12px]" style={{ whiteSpace: 'pre-wrap' }}>{tacDong(s.id, pb)}</div></details> : null}
                   </div>
                 );
               })}

@@ -7,7 +7,10 @@ type CB = { id: number; ma_quy_tac: string; phong_ban: string; muc_do: string; n
 type TD = { xac_nhan: boolean; ma_quy_tac: string; cot: string };
 type DY = { buoc: string; quyet_dinh: string };
 
-const canGiaiTrinh = (c: CB) => (c.muc_do === 'chan_gui' || c.muc_do === 'giai_trinh') && !c.giai_trinh?.trim();
+/** Giải trình còn là gợi ý của agent (chưa được kế toán sửa lại) thì coi như chưa có. */
+export const GOI_Y_AGENT = '[Gợi ý agent';
+const coGt = (c: CB) => !!c.giai_trinh?.trim() && !c.giai_trinh.startsWith(GOI_Y_AGENT);
+const canGiaiTrinh = (c: CB) => (c.muc_do === 'chan_gui' || c.muc_do === 'giai_trinh') && !coGt(c);
 
 export function deXuatBuoc(buoc: string, cb: CB[], td: TD[], dy: DY[]): DeXuat {
   const ly_do: string[] = [], luu_y: string[] = [];
@@ -24,9 +27,9 @@ export function deXuatBuoc(buoc: string, cb: CB[], td: TD[], dy: DY[]): DeXuat {
   if (buoc === 'demand' || buoc === 'supply') {
     const cua = cb.filter((c) => c.phong_ban === buoc);
     const chan = cua.filter((c) => c.muc_do === 'chan_gui');
-    const chanThieu = chan.filter((c) => !c.giai_trinh?.trim());
+    const chanThieu = chan.filter((c) => !coGt(c));
     if (chanThieu.length) ly_do.push(`${chanThieu.length} cảnh báo chặn gửi thuộc scope chưa có giải trình.`);
-    for (const c of chan.filter((c) => c.giai_trinh?.trim())) luu_y.push(`${c.ma_quy_tac}: ${c.noi_dung} — kế toán giải trình: "${c.giai_trinh}"`);
+    for (const c of chan.filter(coGt)) luu_y.push(`${c.ma_quy_tac}: ${c.noi_dung} — kế toán giải trình: "${c.giai_trinh}"`);
     const gt = cua.filter((c) => c.muc_do === 'giai_trinh').length;
     if (gt) luu_y.push(`${gt} cảnh báo cần giải trình thuộc scope, đã có giải trình — đọc lại trước khi duyệt.`);
     const chua = cua.filter((c) => c.muc_do === 'theo_doi' && /^Chưa/.test(c.noi_dung));
@@ -38,12 +41,12 @@ export function deXuatBuoc(buoc: string, cb: CB[], td: TD[], dy: DY[]): DeXuat {
   for (const b of ['ke_toan', 'demand', 'supply']) {
     if (!dy.some((d) => d.buoc === b && d.quyet_dinh === 'duyet')) ly_do.push(`Bước ${b} chưa duyệt.`);
   }
-  const chanThieu = cb.filter((c) => c.muc_do === 'chan_gui' && !c.giai_trinh?.trim());
+  const chanThieu = cb.filter((c) => c.muc_do === 'chan_gui' && !coGt(c));
   if (chanThieu.length) ly_do.push(`${chanThieu.length} cảnh báo chặn gửi chưa có giải trình.`);
   if (chuaXn) ly_do.push(`${chuaXn} ô app tự sửa chưa được kế toán xác nhận.`);
   if (td.length) luu_y.push(`Bảng kê khác raw ở ${td.length} ô do app tự sửa theo quy tắc (đã được kế toán xác nhận).`);
-  const coGt = cb.filter((c) => c.muc_do !== 'theo_doi' && c.giai_trinh?.trim());
-  if (coGt.length) luu_y.push(`${coGt.length} ngoại lệ được gửi đi kèm giải trình — xem danh sách bên dưới.`);
+  const daGt = cb.filter((c) => c.muc_do !== 'theo_doi' && coGt(c));
+  if (daGt.length) luu_y.push(`${daGt.length} ngoại lệ được gửi đi kèm giải trình — xem danh sách bên dưới.`);
   return { ket_luan: ly_do.length ? 'tra_ve' : 'duyet', ly_do, luu_y };
 }
 

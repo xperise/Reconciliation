@@ -127,8 +127,19 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
     if (quyetDinh === 'duyet' && dx.ket_luan === 'tra_ve' && !yKien.trim())
       throw new Error('Duyệt khác đề xuất của agent phải ghi ý kiến.');
 
-    await sb.from('tt_duyet').insert({ lan_chay_id: lanId, vong: lc.vong, buoc, quyet_dinh: quyetDinh, y_kien: yKien.trim() || null,
-      de_xuat_agent: textDeXuat(dx), nguoi: n.id, nguoi_email: n.email });
+    // Phiên bản skill đang dùng (SQL 39); chưa chạy SQL 39 thì bỏ qua cột này
+    const { data: sk } = await sb.from('tt_skill').select('phien_ban').eq('phong_ban', buoc).order('phien_ban', { ascending: false }).limit(1);
+    const dongDuyet: any = { lan_chay_id: lanId, vong: lc.vong, buoc, quyet_dinh: quyetDinh, y_kien: yKien.trim() || null,
+      de_xuat_agent: textDeXuat(dx), nguoi: n.id, nguoi_email: n.email };
+    if (sk?.length) dongDuyet.skill_phien_ban = sk[0].phien_ban;
+    let ins = await sb.from('tt_duyet').insert(dongDuyet);
+    if (ins.error && /skill_phien_ban/.test(ins.error.message)) { delete dongDuyet.skill_phien_ban; ins = await sb.from('tt_duyet').insert(dongDuyet); }
+    if (ins.error) throw new Error(ins.error.message);
+    // Học từ quyết định: head duyệt khác đề xuất của agent → gợi ý bổ sung skill
+    if (quyetDinh === 'duyet' && dx.ket_luan === 'tra_ve' && yKien.trim()) {
+      await sb.from('tt_skill_goi_y').insert({ phong_ban: buoc, lan_chay_id: lanId, nguon: `Duyệt khác đề xuất · ${lc.thang}${lc.dot ? ` đợt ${lc.dot}` : ''}`,
+        noi_dung: `Tình huống: ${dx.ly_do.join(' ')} — head đã duyệt với lý do: ${yKien.trim()}. Lần sau coi là ngoại lệ hợp lệ nếu cùng điều kiện.` });
+    }
 
     if (quyetDinh === 'tra_ve') {
       await sb.from('tt_lan_chay').update({ buoc: 'cho_ke_toan', vong: lc.vong + 1 }).eq('id', lanId);
