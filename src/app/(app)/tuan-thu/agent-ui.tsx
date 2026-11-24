@@ -4,6 +4,28 @@ import { useRouter } from 'next/navigation';
 import { goiYGiaiTrinh, hoiAgent, luuSkill, phanTichSuaDoi, raSoatBuoc, xoaChat, xuLyGoiY } from './actions-agent';
 import type { PhongBan } from '@/lib/tuan-thu/types';
 
+/** Hiển thị câu trả lời của agent: in đậm **…**, tiêu đề #, gạch đầu dòng. Không dùng innerHTML. */
+function DongChu({ t }: { t: string }) {
+  const parts = t.split(/(\*\*[^*]+\*\*)/g);
+  return <>{parts.map((x, i) => (x.startsWith('**') && x.endsWith('**') && x.length > 4 ? <strong key={i}>{x.slice(2, -2)}</strong> : <span key={i}>{x}</span>))}</>;
+}
+export function VanBan({ text }: { text: string }) {
+  const dong = text.replace(/\r/g, '').split('\n');
+  return (
+    <div className="flex flex-col gap-1">
+      {dong.map((d, i) => {
+        const tr = d.trim();
+        if (!tr) return <div key={i} style={{ height: 4 }} />;
+        const h = tr.match(/^#{1,4}\s+(.*)$/);
+        if (h) return <div key={i} className="font-semibold mt-1"><DongChu t={h[1]} /></div>;
+        const b = d.match(/^(\s*)([-*•]|\d+[.)])\s+(.*)$/);
+        if (b) return <div key={i} style={{ display: 'flex', gap: 6, paddingLeft: Math.min(b[1].length, 6) * 6 }}><span>{/\d/.test(b[2]) ? b[2] : '•'}</span><span><DongChu t={b[3]} /></span></div>;
+        return <div key={i}><DongChu t={d} /></div>;
+      })}
+    </div>
+  );
+}
+
 const TEN: Record<PhongBan, string> = { ke_toan: 'Kế toán', demand: 'Demand', supply: 'Supply', ceo: 'CEO' };
 type M = { vai: 'user' | 'assistant'; noi_dung: string };
 
@@ -51,10 +73,10 @@ export function ChatAgent({ lanChayId, pbs, lichSu, nhanNgCanh }: {
             <button type="button" className="btn btn-sm" onClick={() => setMo(false)}>Đóng</button>
           </div>
           <div ref={cuon} className="flex-1 overflow-auto px-4 py-3 flex flex-col gap-2">
-            {msgs.length === 0 && <div className="text-[12px] text-[var(--ink-3)]">Hỏi agent {TEN[pb]} về {lanChayId ? 'cảnh báo, ô app tự sửa, nên duyệt hay không' : 'bộ quy tắc trong scope của phòng'}. Agent đọc skill hiện hành và dữ liệu mới nhất mỗi lần trả lời.</div>}
+            {msgs.length === 0 && <div className="text-[12px] text-[var(--ink-3)]">Hỏi agent {TEN[pb]} bất cứ điều gì về hợp đồng, bộ quy tắc của cả 4 phòng{lanChayId ? ', cảnh báo và ô app tự sửa của lần chạy này' : ''}. Agent nắm toàn bộ hợp đồng; nhận định theo chuyên môn trong skill của phòng {TEN[pb]}.</div>}
             {msgs.map((m, i) => (
               <div key={i} className="text-[12.5px] rounded-xl px-3 py-2"
-                style={{ whiteSpace: 'pre-wrap', alignSelf: m.vai === 'user' ? 'flex-end' : 'flex-start', maxWidth: '92%', background: m.vai === 'user' ? 'var(--accent-soft, #edfaf8)' : 'var(--surface-2, #f0f0f2)' }}>{m.noi_dung}</div>
+                style={{ whiteSpace: m.vai === 'user' ? 'pre-wrap' : 'normal', alignSelf: m.vai === 'user' ? 'flex-end' : 'flex-start', maxWidth: '92%', background: m.vai === 'user' ? 'var(--accent-soft, #edfaf8)' : 'var(--surface-2, #f0f0f2)' }}>{m.vai === 'user' ? m.noi_dung : <VanBan text={m.noi_dung} />}</div>
             ))}
             {dang && <div className="text-[12px] text-[var(--ink-3)]">Agent đang đọc dữ liệu…</div>}
             {loi && <div className="text-[12px] text-red-600">{loi}</div>}
@@ -90,9 +112,9 @@ export function RaSoat({ lanChayId, buoc, ketQua }: { lanChayId: string; buoc: P
     <div className="mb-3">
       <NutAI chay={() => raSoatBuoc(lanChayId, buoc)} nhan={`Agent AI ${TEN[buoc]} rà soát`} dangNhan="Agent đang rà soát…" />
       {ketQua && (
-        <div className="callout callout-accent mt-2 text-[12.5px]" style={{ whiteSpace: 'pre-wrap' }}>
+        <div className="callout callout-accent mt-2 text-[12.5px]">
           <div className="text-[11px] mb-1">Agent AI · skill v{ketQua.skill_phien_ban ?? '?'} · {new Date(ketQua.luc).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</div>
-          {ketQua.noi_dung}
+          <VanBan text={ketQua.noi_dung} />
         </div>
       )}
     </div>
@@ -108,7 +130,7 @@ export function PhanTichSuaDoi({ suaDoiId, pb, ketQua }: { suaDoiId: string; pb:
     <div className="mt-2">
       <NutAI chay={() => phanTichSuaDoi(suaDoiId, pb)} nhan="Agent AI phân tích tác động" dangNhan="Agent đang phân tích…" />
       {ketQua && <details className="mt-1"><summary className="text-[12px] cursor-pointer">Agent {TEN[pb]} phân tích</summary>
-        <div className="text-[12px] mt-1" style={{ whiteSpace: 'pre-wrap' }}>{ketQua}</div></details>}
+        <div className="text-[12px] mt-1"><VanBan text={ketQua} /></div></details>}
     </div>
   );
 }

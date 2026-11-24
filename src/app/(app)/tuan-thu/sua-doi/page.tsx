@@ -3,7 +3,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { duocLam, nguoiTT } from '@/lib/tuan-thu/db';
 import { PhongBan, TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
 import { DuyetSuaDoi, FormDeXuat } from './client';
-import { PhanTichSuaDoi } from '../agent-ui';
+import { PhanTichSuaDoi, VanBan } from '../agent-ui';
 
 export const dynamic = 'force-dynamic';
 const PB: PhongBan[] = ['ke_toan', 'supply', 'demand', 'ceo'];
@@ -56,7 +56,7 @@ export default async function Page({ searchParams }: { searchParams: { hd?: stri
                       {d.y_kien && <div className="text-[11px] mt-1">{d.y_kien}</div>}</>
                       : s.trang_thai === 'cho_duyet' && duocLam(n, pb) ? <DuyetSuaDoi id={s.id} pb={pb} /> : <span className="pill pill-watch">Chờ</span>}
                     {s.trang_thai === 'cho_duyet' && duocLam(n, pb) ? <PhanTichSuaDoi suaDoiId={s.id} pb={pb} ketQua={tacDong(s.id, pb)} />
-                      : tacDong(s.id, pb) ? <details className="mt-1"><summary className="text-[12px] cursor-pointer">Agent {TEN_PHONG_BAN[pb]} phân tích</summary><div className="text-[12px]" style={{ whiteSpace: 'pre-wrap' }}>{tacDong(s.id, pb)}</div></details> : null}
+                      : tacDong(s.id, pb) ? <details className="mt-1"><summary className="text-[12px] cursor-pointer">Agent {TEN_PHONG_BAN[pb]} phân tích</summary><div className="text-[12px]"><VanBan text={tacDong(s.id, pb)} /></div></details> : null}
                   </div>
                 );
               })}

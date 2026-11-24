@@ -30,24 +30,69 @@ export async function skillHienHanh(pb: PhongBan): Promise<{ phien_ban: number; 
   return data[0] as any;
 }
 
-/** System prompt: vai trò + skill + quy tắc hợp đồng thuộc scope + giới hạn hành vi. */
+/** Tóm tắt bộ tham số máy đang áp dụng để agent đọc. */
+function thamSoChu(t: any): string {
+  if (!t) return '(chưa có)';
+  const pct = (x: number) => `${((x ?? 0) * 100).toLocaleString('vi-VN')}%`;
+  const dm = (t.dinh_muc_phong ?? []).map((g: any) => `  - ${g.nhom}: ${g.muc ? `nhóm I–II ${fmtVnd(g.muc[0])}đ, nhóm III ${fmtVnd(g.muc[1])}đ /ngày/phòng` : 'phòng Suite'}`).join('\n');
+  return [
+    `- Kỳ bảng kê: ${t.ky?.kieu === 'hai_dot' ? `2 đợt (1–${t.ky.ngay_cat}, ${t.ky.ngay_cat + 1}–cuối tháng)` : '1 kỳ/tháng'}`,
+    `- Chiết khấu: khách sạn ${pct(t.ty_le_chiet_khau?.khach_san)}, vé ${pct(t.ty_le_chiet_khau?.ve_may_bay)}`,
+    `- Phí dịch vụ: khách sạn ${fmtVnd(t.phi_dich_vu?.khach_san)}đ, vé ${fmtVnd(t.phi_dich_vu?.ve_may_bay)}đ`,
+    `- Tài khoản nhận tiền: ${t.tai_khoan?.so} — ${t.tai_khoan?.ngan_hang}`,
+    `- Hạn mức mua sắm/tháng: ${fmtVnd(t.han_muc_thang)}đ`,
+    `- Định mức tiền phòng app đang dùng để kiểm (đã gồm thuế):\n${dm}`,
+  ].join('\n');
+}
+
+/**
+ * System prompt. Agent của mọi phòng ban đều nắm TOÀN BỘ hợp đồng, toàn bộ bộ quy tắc (cả 4 phòng),
+ * tham số đang áp dụng và các sửa đổi — để head hỏi gì cũng trả lời được. Chuyên môn, góc nhìn
+ * và cách đề xuất theo skill riêng của phòng.
+ */
 export async function heThong(pb: PhongBan, hopDongId: string | null) {
+  const sb = supabaseAdmin();
   const sk = await skillHienHanh(pb);
-  let quyTac = '';
+  let hopDong = '', quyTac = '', thamSo = '', suaDoi = '';
   if (hopDongId) {
-    const { data: qt } = await supabaseAdmin().from('tt_quy_tac').select('ma, noi_dung, gia_tri, can_cu, muc_do, chot')
-      .eq('hop_dong_id', hopDongId).eq('phong_ban', pb).order('ma');
-    quyTac = (qt ?? []).map((q: any) => `${q.ma}: ${q.noi_dung} | giá trị: ${q.gia_tri ?? ''} | căn cứ: ${q.can_cu ?? ''} | ${TEN_MUC_DO[q.muc_do as keyof typeof TEN_MUC_DO] ?? q.muc_do}${q.chot !== 'dong_y' ? ' | (head chưa chốt)' : ''}`).join('\n');
+    const [{ data: hd }, { data: qt }, { data: bo }, { data: sd }] = await Promise.all([
+      sb.from('tt_hop_dong').select('*').eq('id', hopDongId).single(),
+      sb.from('tt_quy_tac').select('ma, phong_ban, noi_dung, gia_tri, can_cu, muc_do, chot').eq('hop_dong_id', hopDongId).order('ma'),
+      sb.from('tt_bo_quy_tac').select('phien_ban, hieu_luc_tu, tham_so, ghi_chu').eq('hop_dong_id', hopDongId).order('phien_ban', { ascending: false }),
+      sb.from('tt_sua_doi').select('so, ma_quy_tac, noi_dung_moi, gia_tri_moi, hieu_luc_tu, trang_thai, can_cu').eq('hop_dong_id', hopDongId).order('so'),
+    ]);
+    hopDong = (hd as any)?.tom_tat_dieu_khoan ?? `${(hd as any)?.ten_khach ?? ''} — HĐ ${(hd as any)?.so_hop_dong ?? ''} (chưa có bản tóm tắt điều khoản; chạy SQL 41)`;
+    const PBS: PhongBan[] = ['ke_toan', 'demand', 'supply', 'ceo'];
+    quyTac = PBS.map((p) => {
+      const ds = (qt ?? []).filter((q: any) => q.phong_ban === p);
+      return `[${TEN_PHONG_BAN[p]}${p === pb ? ' — scope của bạn' : ''}]\n` + ds.map((q: any) =>
+        `${q.ma}: ${q.noi_dung} | giá trị: ${q.gia_tri ?? ''} | căn cứ: ${q.can_cu ?? ''} | ${TEN_MUC_DO[q.muc_do as keyof typeof TEN_MUC_DO] ?? q.muc_do}${q.chot !== 'dong_y' ? ' | head chưa chốt' : ''}`).join('\n');
+    }).join('\n\n');
+    const hh = (bo ?? [])[0] as any;
+    thamSo = hh ? `Phiên bản v${hh.phien_ban} (hiệu lực từ ${hh.hieu_luc_tu}):\n${thamSoChu(hh.tham_so)}\nCác phiên bản: ${(bo ?? []).map((b: any) => `v${b.phien_ban} từ ${b.hieu_luc_tu}: ${b.ghi_chu ?? ''}`).join('; ')}` : '(chưa có)';
+    suaDoi = (sd ?? []).map((x: any) => `SĐ-${String(x.so).padStart(2, '0')} ${x.ma_quy_tac}: ${x.noi_dung_moi}${x.gia_tri_moi ? ` — ${x.gia_tri_moi}` : ''} | hiệu lực từ ${x.hieu_luc_tu} | ${x.trang_thai === 'hieu_luc' ? 'ĐÃ CÓ HIỆU LỰC' : x.trang_thai === 'tu_choi' ? 'bị từ chối' : 'đang chờ 4 head duyệt'} | căn cứ: ${x.can_cu ?? 'chưa có'}`).join('\n') || 'không có';
   }
   const system = `${sk.noi_dung}
 
-QUY TẮC HỢP ĐỒNG THUỘC SCOPE ${TEN_PHONG_BAN[pb].toUpperCase()}:
+PHẠM VI KIẾN THỨC: Bạn nắm TOÀN BỘ hợp đồng, toàn bộ bộ quy tắc của cả 4 phòng ban, tham số app đang áp dụng và các sửa đổi dưới đây. Head hỏi bất kỳ điều khoản hay quy tắc nào cũng phải trả lời đầy đủ, trích điều khoản (Đ…, PL…) và mã quy tắc. Chuyên môn, góc nhìn rủi ro và đề xuất của bạn theo skill ở trên; khi nội dung thuộc scope phòng khác, vẫn trả lời và ghi rõ phòng nào phụ trách chốt.
+
+=== HỢP ĐỒNG ===
+${hopDong || '(chưa có)'}
+
+=== BỘ QUY TẮC (cả 4 phòng) ===
 ${quyTac || '(chưa có)'}
 
+=== THAM SỐ APP ĐANG ÁP DỤNG ===
+${thamSo || '(chưa có)'}
+
+=== SỬA ĐỔI QUY TẮC SO VỚI HỢP ĐỒNG ===
+${suaDoi || 'không có'}
+Khi tham số hoặc quy tắc đã sửa đổi khác hợp đồng gốc, nói rõ cả hai: hợp đồng gốc quy định gì, đang áp dụng gì, căn cứ sửa đổi.
+
 CÁCH LÀM VIỆC:
-- Trả lời bằng tiếng Việt, ngắn gọn, đi thẳng vào việc; trích mã quy tắc (KT-.., DM-.., SP-.., CEO-..) khi nêu căn cứ.
-- Chỉ dựa trên dữ liệu được cung cấp. Không bịa số liệu, tên, số hóa đơn. Mục nào thiếu dữ liệu thì nói rõ là chưa kiểm được.
-- Bạn chỉ đề xuất; quyết định duyệt, trả về, sửa quy tắc thuộc về head. Không tuyên bố đã thực hiện thao tác nào.
+- Trả lời bằng tiếng Việt, đi thẳng vào câu hỏi; dùng gạch đầu dòng khi liệt kê.
+- Chỉ dựa trên dữ liệu được cung cấp. Không bịa số liệu, tên, số hóa đơn. Mục nào không có trong dữ liệu thì nói rõ.
+- Bạn chỉ đề xuất; quyết định duyệt, chặn, trả về, sửa quy tắc thuộc về head. Không tuyên bố đã thực hiện thao tác nào.
 - Số tiền viết theo kiểu Việt Nam (1.234.567đ).`;
   return { system, skill: sk.phien_ban };
 }
@@ -64,6 +109,9 @@ export async function boiCanhLanChay(lanChayId: string): Promise<{ text: string;
   ]);
   const th: any = lc.tong_hop ?? {};
   const chan = await dsDangChan(lanChayId);
+  const { data: aiKq } = await sb.from('tt_ai_ket_qua').select('phong_ban, noi_dung, luc').eq('lan_chay_id', lanChayId)
+    .eq('loai', 'ra_soat').eq('vong', lc.vong).order('luc', { ascending: false });
+  const aiMoiNhat = (['ke_toan', 'demand', 'supply', 'ceo'] as PhongBan[]).map((p) => ({ p, k: (aiKq ?? []).find((x: any) => x.phong_ban === p) as any })).filter((x) => x.k);
   const nhom = new Map<string, { n: number; chenh: number; xn: number }>();
   for (const t of td ?? []) {
     const k = `${t.ma_quy_tac} ${TEN_DICH_VU[t.loai as LoaiDichVu]} cột ${t.cot}`;
@@ -82,6 +130,9 @@ ${(cb ?? []).map((c: any) => `- [#${c.id}] ${c.ma_quy_tac} (${TEN_PHONG_BAN[c.ph
 
 QUY TRÌNH: kế toán duyệt → CEO duyệt & gửi. Demand và Supply không duyệt; họ nhận cảnh báo và chỉ CHẶN hoặc TRẢ VỀ khi cần kiểm soát.
 ĐANG CHẶN: ${chan.map((c: any) => `${TEN_PHONG_BAN[c.phong_ban as PhongBan]} — ${c.ly_do}`).join('; ') || 'không'}
+
+KẾT QUẢ RÀ SOÁT AI MỚI NHẤT CỦA CÁC PHÒNG (vòng này):
+${aiMoiNhat.map((x) => `[${TEN_PHONG_BAN[x.p]}]\n${String(x.k.noi_dung).slice(0, 1500)}`).join('\n\n') || '- chưa có'}
 
 DUYỆT VÒNG HIỆN TẠI:
 ${(dy ?? []).map((d: any) => `- ${TEN_PHONG_BAN[d.buoc as PhongBan]}: ${d.quyet_dinh === 'duyet' ? 'duyệt' : 'trả về'}${d.y_kien ? ` — ${d.y_kien}` : ''}`).join('\n') || '- chưa có'}`;

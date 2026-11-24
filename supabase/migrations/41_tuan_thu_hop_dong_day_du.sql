@@ -1,0 +1,50 @@
+-- =====================================================================
+-- 41_tuan_thu_hop_dong_day_du.sql — Agent nắm TOÀN BỘ hợp đồng
+--   Thêm bản tóm tắt điều khoản hợp đồng (đọc từ bản ký) để agent của mọi phòng ban
+--   trả lời được mọi câu hỏi về hợp đồng; chuyên môn vẫn theo skill riêng của từng phòng.
+-- Chạy SAU 40_tuan_thu_chan.sql. Chạy lại nhiều lần không mất dữ liệu (không ghi đè nếu đã sửa tay).
+-- =====================================================================
+
+alter table tt_hop_dong add column if not exists tom_tat_dieu_khoan text;
+
+update tt_hop_dong set tom_tat_dieu_khoan = 'HỢP ĐỒNG 216.2.0.2026/VCB-UTS — Cung cấp gói dịch vụ giải pháp Xperise, ký 11/05/2026.
+Bên A (khách): Ngân hàng TMCP Ngoại thương Việt Nam (VCB), MST 0100112437, 198 Trần Quang Khải, phường Hoàn Kiếm, Hà Nội; đại diện bà Phùng Nguyễn Hải Yến, Phó Tổng Giám đốc.
+Bên B (Xperise): Công ty Cổ phần Universal Travel Solutions Network, MST 0317855759, Tầng 3 Harbour View Tower, 35 Nguyễn Huệ, P. Sài Gòn, TP.HCM; tài khoản 1068273979 tại VCB CN Tân Định; đại diện ông Hồ Anh Dương, Tổng Giám đốc.
+
+Đ1 Nội dung: giải pháp quản trị chi phí, ngân sách và quy trình nội bộ tích hợp trung tâm mua sắm số (vé máy bay, khách sạn) cho công tác trong nước của cán bộ VCB.
+Đ1.1 Hạn mức mua sắm hàng tháng 3.000.000.000đ. VCB muốn điều chỉnh thì gửi văn bản; Bên B điều chỉnh trong 02 ngày làm việc, không phát sinh chi phí.
+Đ1.2 Giá hợp đồng 3.240.000.000đ (3.000.000.000đ + VAT 8%) cho bộ giải pháp 12 tháng. Giá này CHƯA gồm chi phí mua sắm vé, phòng — phần đó thanh toán theo thực tế phát sinh.
+Đ2 Thời gian tính phí: 12 tháng từ khi nghiệm thu tính năng và kích hoạt tài khoản.
+Đ3.1 Hồ sơ thanh toán chi phí mua sắm: đề nghị thanh toán; bảng kê chi tiết giao dịch theo mẫu PL01 và chi phí phát sinh trong tháng được hai bên xác nhận — Bên B gửi vào ngày cuối cùng của tháng dương lịch; hóa đơn GTGT. Hóa đơn cho các khoản chiết khấu (nếu có) xuất sau khi hai bên hoàn thành đối soát bảng kê. Hợp đồng KHÔNG quy định mức chiết khấu nào.
+Đ3.2 Thanh toán: bộ giải pháp trả một lần trong 10 ngày làm việc. Chi phí mua sắm trả cuối kỳ hàng tháng: trong 10 ngày làm việc kể từ khi nhận hồ sơ, nếu VCB không phản hồi thì coi như chấp nhận; trong 05 ngày làm việc sau khi chấp nhận, VCB thanh toán 100% bằng chuyển khoản vào tài khoản ghi trong hợp đồng; phí chuyển khoản VCB chịu.
+Đ4 Tạm ứng: VCB tạm ứng 2.000.000.000đ sau khi Bên B nộp bảo lãnh tạm ứng; chi trong 05 ngày làm việc; thu hồi vào kỳ thanh toán cuối cùng trước khi hết 12 tháng.
+Đ5 Loại hợp đồng hỗn hợp: bộ giải pháp trọn gói; mua sắm theo chi phí thực tế.
+Đ6.1 Bên B: được chấm dứt nếu quá 60 ngày kể từ khi hồ sơ được chấp thuận mà VCB chưa thanh toán; giá vé không cao hơn giá cùng loại vé trên website hãng tại cùng thời điểm và hạng vé; giá phòng không cao hơn giá khách sạn chào trực tiếp VCB (cùng hạng phòng, số phòng, thời gian, đã gồm thuế); bảo đảm cán bộ dùng dịch vụ đúng chính sách PL02; nguồn khách sạn VCB thỏa thuận trực tiếp chỉ dùng cho VCB; cấp tài khoản trong 01 ngày làm việc; bảo mật thông tin.
+Đ6.2 Bên A: thanh toán đúng hạn; chi phí không vượt chính sách PL02 — VCB KHÔNG phải thanh toán phần vượt định mức PL02, trừ khi đã được VCB phê duyệt trước.
+Đ7.2 Đầu mối VCB: Lê Thị Thanh Nhàn (Phó Trưởng ban Mua sắm), Lương Trung Hiếu (Ban Mua sắm), Trịnh Mạnh Thắng (quản trị hệ thống, Phòng TCKT), Nguyễn Ngọc Yến (Phó phòng TCKT), Nguyễn Thị Thu Hằng và Vũ Thị Hoàng Quỳnh (Phòng TCKT). Đầu mối Bên B: Ngô Thị Kim Anh (Brand Account Manager).
+Đ8 Chấm dứt: VCB không được đơn phương chấm dứt trừ các trường hợp: (i) quá 60 ngày làm việc VCB không thanh toán đủ — VCB chịu phạt chậm trả = số tiền đến hạn × (1%/tháng/30 ngày) × số ngày chậm; (ii) Bên B không thể tiếp tục cung cấp; (iii) một bên không còn tồn tại; (iv) VCB chuyển nhượng tài khoản — phạt 1% tổng phát sinh trong tháng vi phạm; (v) hai bên thỏa thuận. Khi chấm dứt, Bên B hoàn tạm ứng sau khi trừ các khoản phát sinh.
+Đ9 Phạt: Bên B vi phạm (hệ thống gián đoạn, không đáp ứng SLA Sev1) bị khấu trừ 0,1% giá hợp đồng mỗi ngày, tối đa 8% giá trị phần nghĩa vụ vi phạm.
+Đ10 Khiếu nại: bằng văn bản trong 03 ngày làm việc kể từ khi phát sinh/phát hiện; Bên B chỉ xử lý sự việc trong vòng 60 ngày; Bên B cung cấp bản sao biên lai trong 03 ngày làm việc.
+Đ12 Sửa đổi chỉ có hiệu lực khi có văn bản đồng ý của đại diện có thẩm quyền hai bên, ký dưới dạng phụ lục.
+
+PL01 Mẫu bảng kê: Tiền phòng (STT, tên khách sạn, địa bàn, hạng phòng, nội địa/quốc tế, ngày giao dịch, người đặt, người duyệt, bypass approve name/email, Trip ID, phòng ban, ngày checkin, họ tên khách, chức danh, mã cán bộ, giới tính, cost center, ngày checkout, tên chuyến đi, đơn giá, số phòng, số đêm, thành tiền chưa VAT, VAT, thành tiền đã VAT) và Tiền vé máy bay (tương tự, thêm số vé, hạng vé, hạng ghế đi/về, số lượng, ghi chú). Mẫu chỉ thay đổi khi Quản lý bộ phận kế toán của VCB thống nhất.
+
+PL02 Chính sách công tác phí của VCB:
+I. Công tác phí lưu động tối đa 1.200.000đ/người/tháng. Phụ cấp lưu trú: có lưu trú — tiền ăn 200.000đ, tiêu vặt 100.000đ/người/ngày; không lưu trú — 150.000đ và 50.000đ/người/ngày.
+Tiền thuê phòng (theo hóa đơn thực tế), mức tối đa mỗi ngày mỗi phòng:
+- Chủ tịch HĐQT, TGĐ, Thành viên HĐQT, Trưởng BKS, Phó Bí thư thường trực Đảng ủy, Ủy viên BTV Đảng ủy chuyên trách, Phó TGĐ, Kế toán trưởng, Giám đốc Khối, Phó Giám đốc Khối: phòng Suite (cả nhóm I-II và III).
+- GĐ, Phó GĐ Chi nhánh Sở giao dịch và Chi nhánh TP.HCM: nhóm I-II 2.500.000đ; nhóm III 2.000.000đ.
+- GĐ, Phó GĐ đơn vị thành viên (ĐVTV) khác: nhóm I-II 2.000.000đ; nhóm III 1.700.000đ.
+- Các đối tượng khác: nhóm I-II 1.500.000đ; nhóm III 1.300.000đ.
+Sử dụng phương tiện cá nhân: 5.000đ/km.
+II. Vé máy bay: lãnh đạo cấp cao (CT HĐQT, TV HĐQT, Trưởng BKS, TGĐ, Phó TGĐ, KTT, GĐ khối) hạng J, C, D, I của Vietnam Airlines hoặc tương đương. Đối tượng còn lại: phổ thông siêu tiết kiệm/tiết kiệm/tiêu chuẩn (vé cố định, hoàn hủy được). Ngoại lệ vì lý do khách quan: TSC tối đa phổ thông linh hoạt khi đại lý xác nhận hết các hạng thấp hơn, cao hơn nữa do TGĐ/Phó TGĐ phụ trách tài chính duyệt; ĐVTV tối đa phổ thông linh hoạt do GĐ/PGĐ phụ trách kế toán duyệt, cao hơn trình Phó TGĐ tài chính duyệt qua Phòng TCKT TSC.
+III. Nguyên tắc khác: người đi công tác phải có phê duyệt cử đi của PTGĐ phụ trách đơn vị. Vượt định mức tiền phòng vì lý do khách quan: nhóm lãnh đạo cấp cao do Chủ tịch HĐQT hoặc TGĐ/Phó TGĐ tài chính duyệt; đối tượng còn lại — vượt đến 10% do lãnh đạo trực tiếp (TSC) hoặc GĐ ĐVTV duyệt, vượt trên 10% do TGĐ/Phó TGĐ tài chính duyệt. Thời gian công tác tính cả thứ Bảy, Chủ nhật, lễ tết. Đi từ 2 người trở lên phải ghép phòng, trừ: chức danh từ GĐ, PGĐ ĐVTV trở lên; đoàn lẻ hoặc 2 người khác giới; cơ sở lưu trú không đủ phòng đôi. Ở ghép quá 2 người/phòng được tăng tối đa 50% định mức cho mỗi người từ người thứ 3. Phương tiện ô tô do Văn phòng trụ sở bố trí; không bố trí được thì dùng phương tiện khác và được thanh toán.
+
+PL2b Nhóm địa bàn (tên phường/xã mới):
+Nhóm I: các phường trung tâm Hà Nội (46 phường, gồm Hoàn Kiếm, Cửa Nam, Ba Đình, Ngọc Hà, Giảng Võ, Hai Bà Trưng, Đống Đa, Cầu Giấy, Tây Hồ, Thanh Xuân, Hoàng Mai, Long Biên, Hà Đông, Từ Liêm…); TP.HCM (78 phường trung tâm, gồm Sài Gòn, Tân Định, Bến Thành, Bàn Cờ, Xuân Hoà, Chợ Lớn, Gia Định, Bình Thạnh, Gò Vấp, Phú Nhuận, Tân Sơn Nhất, Tân Bình, Tân Phú, Thủ Đức, Bình Tân…); Cần Thơ (16 phường: Ninh Kiều, Cái Khế, Tân An, An Bình, Bình Thủy, Cái Răng, Ô Môn, Thốt Nốt…); Đà Nẵng (11 phường: Hải Châu, Hoà Cường, Thanh Khê, An Khê, An Hải, Sơn Trà, Ngũ Hành Sơn, Hoà Khánh, Hải Vân, Liên Chiểu, Cẩm Lệ); Hải Phòng (24 phường: Thuỷ Nguyên, Hồng Bàng, Ngô Quyền, Lê Chân, Hải An, Kiến An, Đồ Sơn, Dương Kinh, An Dương…); Huế (Hóa Châu, Vỹ Dạ, Thuận Hóa, An Cựu, Thủy Xuân, Kim Long, Hương An, Phú Xuân, Dương Nỗ); Quảng Ninh (Tuần Châu, Việt Hưng, Bãi Cháy, Hà Tu, Hà Lầm, Cao Xanh, Hồng Gai, Hạ Long, Hoành Bồ); Khánh Hòa (Nha Trang, Bắc Nha Trang, Tây Nha Trang, Nam Nha Trang); An Giang (đặc khu Phú Quốc, Thổ Châu).
+Nhóm II: TP.HCM (Vũng Tàu, Tam Thắng, Rạch Dừa, Phước Thắng, Bình Dương, Chánh Hiệp, Thủ Dầu Một, Phú Lợi, Phú An); Hải Phòng (Hải Dương, Lê Thanh Nghị, Việt Hoà, Thành Đông, Nam Đồng, Tân Hưng, Thạch Khôi, Ái Quốc); Bắc Ninh (Kinh Bắc, Võ Cường, Vũ Ninh, Hạp Lĩnh, Nam Sơn); Ninh Bình (Tây Hoa Lư, Hoa Lư, Nam Hoa Lư); Thái Nguyên (Phan Đình Phùng, Linh Sơn, Tích Lương, Gia Sàng, Quyết Thắng, Quan Triều); Phú Thọ (Việt Trì, Nông Trang, Thanh Miếu, Vân Phú); Thanh Hóa (Hạc Thành, Quảng Phú, Đông Quang, Đông Sơn, Đông Tiến, Hàm Rồng, Nguyệt Viên); Nghệ An (Trường Vinh, Thành Vinh, Vinh Hưng, Vinh Phú, Vinh Lộc, Cửa Lò); Gia Lai (Quy Nhơn, Quy Nhơn Đông/Tây/Nam/Bắc, Pleiku, Hội Phú, Thống Nhất, Diên Hồng, An Phú); Đắk Lắk (Buôn Ma Thuột, Tân An, Tân Lập, Thành Nhất, Ea Kao); Lâm Đồng (Xuân Hương, Cam Ly, Lâm Viên, Xuân Trường – Đà Lạt); Đồng Nai (Biên Hoà, Trấn Biên, Tam Hiệp, Long Bình, Trảng Dài, Hố Nai, Long Hưng, Tam Phước, Phước Tân); Đồng Tháp (Mỹ Tho, Đạo Thạnh, Mỹ Phong, Thới Sơn, Trung An); An Giang (Long Xuyên, Bình Đức, Mỹ Thới, Vĩnh Thông, Rạch Giá).
+Nhóm III: các địa phương còn lại.
+Lưu ý: địa chỉ khách sạn trong raw là chữ tự do, nhiều nơi dùng tên tỉnh/quận cũ, nên app chỉ ước nhóm địa bàn theo địa chỉ; head cần xác nhận khi sát ngưỡng.
+
+PL03 Yêu cầu kỹ thuật (tóm tắt): nền tảng SaaS Travel & Expense; cấp phép 01 năm (dự kiến 01/04/2026–31/03/2027), tối đa 4.000 tài khoản TSC; phạm vi Việt Nam. SLA giờ hành chính (8:00–17:00 T2–T6): Sev1 phản hồi ≤45 phút, xử lý ≤4 giờ làm việc (giải pháp tạm ≤1 giờ); Sev2 ≤30 phút / ≤2 giờ; Sev3 ≤60 phút / ≤4 giờ; Sev4 ≤90 phút / ≤8 giờ; Sev5 ≤2,5 giờ / theo kế hoạch. Uptime 99,5%/tháng; RTO ≤4 giờ; RPO ≤1 giờ; xuất toàn bộ dữ liệu trong 02 ngày làm việc khi VCB yêu cầu; lưu dữ liệu 1 năm sau khi kết thúc hợp đồng. Thay đổi: Luồng A (cấu hình, sửa lỗi) trong phạm vi, không phí; Luồng B (tùy biến, phát triển mới) cần đề xuất chi phí và VCB duyệt bằng văn bản. Báo cáo đối soát theo mẫu mới của VCB thuộc Luồng A (cấu hình).'
+where ma_khach = 'VCB' and tom_tat_dieu_khoan is null;
