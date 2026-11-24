@@ -144,7 +144,14 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
     let ins = await sb.from('tt_duyet').insert(dongDuyet);
     if (ins.error && /skill_phien_ban/.test(ins.error.message)) { delete dongDuyet.skill_phien_ban; ins = await sb.from('tt_duyet').insert(dongDuyet); }
     if (ins.error) throw new Error(ins.error.message);
-    // Học từ quyết định: head duyệt khác đề xuất của agent → gợi ý bổ sung skill
+    // Học từ quyết định: head duyệt trong khi agent AI (lần rà soát mới nhất của bước này) đề xuất trả về
+    const { data: aiMoi } = await sb.from('tt_ai_ket_qua').select('noi_dung').eq('lan_chay_id', lanId).eq('vong', lc.vong)
+      .eq('loai', 'ra_soat').eq('phong_ban', buoc).order('luc', { ascending: false }).limit(1);
+    const aiTraVe = !!aiMoi?.[0]?.noi_dung && /^\s*\**\s*ĐỀ XUẤT TRẢ VỀ/i.test(aiMoi[0].noi_dung);
+    if (quyetDinh === 'duyet' && aiTraVe && yKien.trim()) {
+      await sb.from('tt_skill_goi_y').insert({ phong_ban: buoc, lan_chay_id: lanId, nguon: `Duyệt khác agent AI · ${lc.thang}${lc.dot ? ` đợt ${lc.dot}` : ''}`,
+        noi_dung: `Agent AI đề xuất trả về nhưng head đã duyệt với lý do: ${yKien.trim()}. Lần sau cân nhắc tình huống này là ngoại lệ hợp lệ nếu cùng điều kiện.` });
+    }
     if (quyetDinh === 'duyet' && dx.ket_luan === 'tra_ve' && yKien.trim()) {
       await sb.from('tt_skill_goi_y').insert({ phong_ban: buoc, lan_chay_id: lanId, nguon: `Duyệt khác đề xuất · ${lc.thang}${lc.dot ? ` đợt ${lc.dot}` : ''}`,
         noi_dung: `Tình huống: ${dx.ly_do.join(' ')} — head đã duyệt với lý do: ${yKien.trim()}. Lần sau coi là ngoại lệ hợp lệ nếu cùng điều kiện.` });
@@ -341,6 +348,9 @@ export async function goChan(chanId: number, ghiChu: string): Promise<KQ> {
     const n = await batBuoc(c.phong_ban as PhongBan);
     if (c.go_luc) throw new Error('Đã gỡ trước đó.');
     await sb.from('tt_chan').update({ go_luc: new Date().toISOString(), go_boi: n.id, go_email: n.email, go_ghi_chu: ghiChu.trim() || null }).eq('id', chanId);
+    // Học từ quyết định: chặn rồi gỡ kèm cách xử lý → gợi ý bổ sung skill cho phòng đó
+    if (ghiChu.trim()) await sb.from('tt_skill_goi_y').insert({ phong_ban: c.phong_ban, lan_chay_id: c.lan_chay_id, nguon: 'Chặn rồi gỡ chặn',
+      noi_dung: `Từng chặn vì: ${c.ly_do} — gỡ sau khi: ${ghiChu.trim()}. Lần sau gặp tình huống tương tự, kiểm tra điều kiện gỡ này trước khi đề xuất chặn.` });
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.go_chan', entity: 'tt_lan_chay', entityId: c.lan_chay_id, after: { ghiChu } });
     await baoChoPhongBan(c.lan_chay_id, ['ke_toan', 'ceo'], 'go_chan', `${TEN_PHONG_BAN[c.phong_ban as PhongBan]} đã gỡ chặn${ghiChu.trim() ? `: ${ghiChu.trim()}` : ''}`);
     revalidatePath(`/tuan-thu/chay/${c.lan_chay_id}`); revalidatePath('/tuan-thu');

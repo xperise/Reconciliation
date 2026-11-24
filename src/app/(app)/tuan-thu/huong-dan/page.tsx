@@ -52,7 +52,7 @@ export default async function Page() {
     ] },
     { phan: 'F · Trả về, tải lại raw và học từ quyết định', buoc: [
       { ten: 'Trả về và tải lại raw', vai: 'Demand → Kế toán', lam: 'Ở một lần chạy chưa gửi, Demand bấm Trả về kế toán kèm lý do; kế toán tải lại raw đã sửa.', kq: 'Lần chạy sang vòng 2, lịch sử giữ đủ.', link: '/tuan-thu', xong: R.some((r) => r.vong > 1) },
-      { ten: 'Nhận gợi ý bổ sung skill', vai: 'Head bất kỳ', lam: 'Duyệt khác đề xuất của agent (bắt buộc ghi ý kiến); vào Agent của tôi, bấm Thêm vào skill.', kq: 'Skill lên phiên bản mới với lý do Học từ quyết định.', link: '/tuan-thu/agent', xong: (sk ?? []).some((x: any) => /^Học từ/.test(x.ly_do ?? '')) },
+      { ten: 'Nhận gợi ý bổ sung skill', vai: 'Head bất kỳ', lam: 'Gợi ý được tạo khi Demand/Supply gỡ chặn kèm ghi chú, hoặc khi kế toán/CEO duyệt dù agent AI rà soát đề xuất trả về (có ghi ý kiến). Vào Agent của tôi, bấm Thêm vào skill.', kq: 'Skill lên phiên bản mới với lý do Học từ quyết định.', link: '/tuan-thu/agent', xong: (sk ?? []).some((x: any) => /^Học từ/.test(x.ly_do ?? '')) },
     ] },
   ];
   const tat = P.flatMap((p) => p.buoc), xong = tat.filter((b) => b.xong).length;
