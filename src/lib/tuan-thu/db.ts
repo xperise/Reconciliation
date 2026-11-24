@@ -6,7 +6,7 @@ export const BUCKET_TT = 'bang-ke';
 export type BuocDuyet = 'ke_toan' | 'demand' | 'supply' | 'ceo';
 export const BUOC_DUYET: BuocDuyet[] = ['ke_toan', 'demand', 'supply', 'ceo'];
 export const TEN_BUOC: Record<string, string> = {
-  cho_ke_toan: 'Chờ kế toán', cho_scope: 'Chờ Demand & Supply', cho_ceo: 'Chờ CEO duyệt', da_gui: 'Đã gửi khách', huy: 'Đã hủy',
+  cho_ke_toan: 'Chờ kế toán', cho_scope: 'Chờ CEO duyệt', cho_ceo: 'Chờ CEO duyệt', da_gui: 'Đã gửi khách', huy: 'Đã hủy',
 };
 
 export type NguoiTT = {
@@ -59,3 +59,9 @@ export const fmtVnd = (x: number | null | undefined) =>
 export const nhanThang = (thang: string, dot?: number | null) => {
   const [y, m] = thang.split('-'); return `T${m}/${y}${dot ? ` · đợt ${dot}` : ''}`;
 };
+
+/** Các lần chặn còn hiệu lực của Demand/Supply (SQL 40). Chưa chạy SQL 40 thì coi như không có. */
+export async function dsDangChan(lanId: string): Promise<any[]> {
+  const { data, error } = await supabaseAdmin().from('tt_chan').select('*').eq('lan_chay_id', lanId).is('go_luc', null).order('luc');
+  return error ? [] : (data ?? []);
+}

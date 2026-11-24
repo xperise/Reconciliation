@@ -4,10 +4,11 @@ import { revalidatePath } from 'next/cache';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { writeAudit } from '@/lib/audit';
 import { sendMail } from '@/lib/google/gmail';
-import { batBuoc, BuocDuyet, duocLam, gopSau, nguoiTT, thamSoHieuLuc, BUCKET_TT, fmtVnd } from '@/lib/tuan-thu/db';
+import { batBuoc, BuocDuyet, duocLam, gopSau, nguoiTT, thamSoHieuLuc, BUCKET_TT, fmtVnd, dsDangChan } from '@/lib/tuan-thu/db';
 import { luuTep, xuLyLanChay } from '@/lib/tuan-thu/xu-ly';
 import { deXuatBuoc, textDeXuat } from '@/lib/tuan-thu/de-xuat';
 import { PhongBan, TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
+import { baoChoPhongBan } from '@/lib/tuan-thu/thong-bao';
 
 type KQ = { ok: true; id?: string; thongBao?: string } | { ok: false; loi: string };
 const loi = (e: unknown): KQ => ({ ok: false, loi: e instanceof Error ? e.message : String(e) });
@@ -50,6 +51,7 @@ export async function taoLanChay(fd: FormData): Promise<KQ> {
       const { paths, ten } = await ghiRaw(lc.id, hd.ma_khach, thang, fd.getAll('raw') as File[]);
       await sb.from('tt_lan_chay').update({ raw_paths: paths, raw_ten: ten }).eq('id', lc.id);
       await xuLyLanChay(lc.id);
+      await baoChoPhongBan(lc.id, ['demand', 'supply'], 'xu_ly');
     } catch (e) {
       await sb.from('tt_lan_chay').update({ loi: e instanceof Error ? e.message : String(e) }).eq('id', lc.id);
     }
@@ -72,6 +74,7 @@ export async function taiLaiRaw(fd: FormData): Promise<KQ> {
     const { phien_ban } = await thamSoHieuLuc(lc.hop_dong_id, lc.thang);
     await sb.from('tt_lan_chay').update({ raw_paths: paths, raw_ten: ten, vong: lc.vong + 1, buoc: 'cho_ke_toan', phien_ban_quy_tac: phien_ban }).eq('id', id);
     await xuLyLanChay(id);
+    await baoChoPhongBan(id, ['demand', 'supply'], 'xu_ly');
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.tai_lai_raw', entity: 'tt_lan_chay', entityId: id });
     revalidatePath(`/tuan-thu/chay/${id}`);
     return { ok: true, thongBao: 'Đã xử lý lại raw. Các duyệt trước đó cần làm lại.' };
@@ -102,8 +105,12 @@ export async function luuGiaiTrinh(canhBaoId: number, text: string): Promise<KQ>
   });
 }
 
-const BUOC_TIEP: Record<string, string> = { ke_toan: 'cho_scope', ceo: 'da_gui' };
-const BUOC_DANG: Record<BuocDuyet, string> = { ke_toan: 'cho_ke_toan', demand: 'cho_scope', supply: 'cho_scope', ceo: 'cho_ceo' };
+/**
+ * Quy trình: kế toán duyệt → CEO duyệt & gửi.
+ * Demand và Supply không duyệt; họ chỉ TRẢ VỀ kế toán (khi chưa gửi) hoặc CHẶN (xem chanLanChay).
+ */
+const BUOC_DANG: Record<BuocDuyet, string[]> = { ke_toan: ['cho_ke_toan'], demand: ['cho_ke_toan', 'cho_ceo'], supply: ['cho_ke_toan', 'cho_ceo'], ceo: ['cho_ceo'] };
+
 
 export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duyet' | 'tra_ve', yKien: string): Promise<KQ> {
   return lam(async () => {
@@ -112,7 +119,8 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
     const { data: lc } = await sb.from('tt_lan_chay').select('*').eq('id', lanId).single();
     if (!lc) throw new Error('Không tìm thấy lần chạy.');
     if (lc.loi) throw new Error('Lần chạy đang lỗi xử lý raw, hãy tải lại raw.');
-    if (lc.buoc !== BUOC_DANG[buoc]) throw new Error('Lần chạy không ở bước này.');
+    if (!BUOC_DANG[buoc].includes(lc.buoc)) throw new Error('Lần chạy không ở bước này.');
+    if ((buoc === 'demand' || buoc === 'supply') && quyetDinh === 'duyet') throw new Error('Demand và Supply không duyệt bảng kê — chỉ chặn hoặc trả về khi cần.');
     if (quyetDinh === 'tra_ve' && !yKien.trim()) throw new Error('Trả về phải ghi lý do.');
 
     const [{ data: cb }, { data: td }, { data: dy }] = await Promise.all([
@@ -120,7 +128,8 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
       sb.from('tt_thay_doi').select('xac_nhan, ma_quy_tac, cot').eq('lan_chay_id', lanId),
       sb.from('tt_duyet').select('buoc, quyet_dinh').eq('lan_chay_id', lanId).eq('vong', lc.vong),
     ]);
-    const dx = deXuatBuoc(buoc, (cb ?? []) as any, (td ?? []) as any, (dy ?? []) as any);
+    const chan = await dsDangChan(lanId);
+    const dx = deXuatBuoc(buoc, (cb ?? []) as any, (td ?? []) as any, (dy ?? []) as any, chan);
     // Điều kiện cứng: không duyệt được khi còn việc bắt buộc (chỉ cho phép ghi đè ở bước demand/supply bằng ý kiến)
     if (quyetDinh === 'duyet' && dx.ket_luan === 'tra_ve' && (buoc === 'ke_toan' || buoc === 'ceo'))
       throw new Error('Chưa đủ điều kiện duyệt: ' + dx.ly_do.join(' '));
@@ -143,13 +152,11 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
 
     if (quyetDinh === 'tra_ve') {
       await sb.from('tt_lan_chay').update({ buoc: 'cho_ke_toan', vong: lc.vong + 1 }).eq('id', lanId);
-    } else if (buoc === 'demand' || buoc === 'supply') {
-      const da = new Set([...(dy ?? []).filter((d: any) => d.quyet_dinh === 'duyet').map((d: any) => d.buoc), buoc]);
-      if (da.has('demand') && da.has('supply')) await sb.from('tt_lan_chay').update({ buoc: 'cho_ceo' }).eq('id', lanId);
     } else if (buoc === 'ceo') {
       await guiBangKe(lanId);
     } else {
-      await sb.from('tt_lan_chay').update({ buoc: BUOC_TIEP[buoc] }).eq('id', lanId);
+      await sb.from('tt_lan_chay').update({ buoc: 'cho_ceo' }).eq('id', lanId);
+      await baoChoPhongBan(lanId, ['ceo', 'demand', 'supply'], 'cho_ceo');
     }
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: `tuan_thu.${quyetDinh}`, entity: 'tt_lan_chay', entityId: lanId, after: { buoc, yKien } });
     revalidatePath(`/tuan-thu/chay/${lanId}`); revalidatePath('/tuan-thu');
@@ -303,5 +310,40 @@ export async function ganThanhVien(userId: string, phongBan: string): Promise<KQ
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.gan_thanh_vien', entity: 'tt_thanh_vien', entityId: userId, after: { phongBan } });
     revalidatePath('/tuan-thu/thanh-vien');
     return { ok: true, thongBao: phongBan ? `Đã gán ${TEN_PHONG_BAN[phongBan as PhongBan]}.` : 'Đã bỏ quyền.' };
+  });
+}
+
+// ---------------------------------------------------------------------
+// Demand / Supply kiểm soát: chặn và gỡ chặn
+// ---------------------------------------------------------------------
+export async function chanLanChay(lanId: string, pb: 'demand' | 'supply', lyDo: string): Promise<KQ> {
+  return lam(async () => {
+    const n = await batBuoc(pb);
+    if (!lyDo.trim()) throw new Error('Chặn phải ghi lý do.');
+    const sb = supabaseAdmin();
+    const { data: lc } = await sb.from('tt_lan_chay').select('buoc').eq('id', lanId).single();
+    if (!lc) throw new Error('Không tìm thấy lần chạy.');
+    if (lc.buoc === 'da_gui') throw new Error('Bảng kê đã gửi, không chặn được nữa.');
+    const { error } = await sb.from('tt_chan').insert({ lan_chay_id: lanId, phong_ban: pb, ly_do: lyDo.trim(), nguoi: n.id, nguoi_email: n.email });
+    if (error) throw new Error(/tt_chan/.test(error.message) ? 'Cần chạy supabase/migrations/40_tuan_thu_chan.sql.' : error.message);
+    await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.chan', entity: 'tt_lan_chay', entityId: lanId, after: { pb, lyDo } });
+    await baoChoPhongBan(lanId, ['ke_toan', 'ceo'], 'chan', `${TEN_PHONG_BAN[pb]} chặn: ${lyDo.trim()}`);
+    revalidatePath(`/tuan-thu/chay/${lanId}`); revalidatePath('/tuan-thu');
+    return { ok: true, thongBao: 'Đã chặn. CEO không duyệt được cho tới khi gỡ chặn.' };
+  });
+}
+
+export async function goChan(chanId: number, ghiChu: string): Promise<KQ> {
+  return lam(async () => {
+    const sb = supabaseAdmin();
+    const { data: c } = await sb.from('tt_chan').select('*').eq('id', chanId).single();
+    if (!c) throw new Error('Không tìm thấy lần chặn.');
+    const n = await batBuoc(c.phong_ban as PhongBan);
+    if (c.go_luc) throw new Error('Đã gỡ trước đó.');
+    await sb.from('tt_chan').update({ go_luc: new Date().toISOString(), go_boi: n.id, go_email: n.email, go_ghi_chu: ghiChu.trim() || null }).eq('id', chanId);
+    await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.go_chan', entity: 'tt_lan_chay', entityId: c.lan_chay_id, after: { ghiChu } });
+    await baoChoPhongBan(c.lan_chay_id, ['ke_toan', 'ceo'], 'go_chan', `${TEN_PHONG_BAN[c.phong_ban as PhongBan]} đã gỡ chặn${ghiChu.trim() ? `: ${ghiChu.trim()}` : ''}`);
+    revalidatePath(`/tuan-thu/chay/${c.lan_chay_id}`); revalidatePath('/tuan-thu');
+    return { ok: true, thongBao: 'Đã gỡ chặn.' };
   });
 }

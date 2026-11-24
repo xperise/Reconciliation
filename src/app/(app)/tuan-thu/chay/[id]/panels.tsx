@@ -1,6 +1,7 @@
 'use client';
+import { useState } from 'react';
 import { FormHanhDong, KhoiDuyet, Nut, OGhi } from '../../ui';
-import { duyetBuoc, luuGiaiTrinh, taiLaiRaw, xacNhanThayDoi } from '../../actions';
+import { chanLanChay, duyetBuoc, goChan, luuGiaiTrinh, taiLaiRaw, xacNhanThayDoi } from '../../actions';
 
 export function XacNhanTatCa({ lanId, con }: { lanId: string; con: number }) {
   if (!con) return <span className="pill pill-stable">Đã xác nhận hết</span>;
@@ -25,4 +26,21 @@ export function TaiLai({ lanId }: { lanId: string }) {
 }
 export function Duyet({ lanId, buoc, nhan, xacNhan }: { lanId: string; buoc: 'ke_toan' | 'demand' | 'supply' | 'ceo'; nhan?: string; xacNhan?: string }) {
   return <KhoiDuyet duyet={(q, y) => duyetBuoc(lanId, buoc, q, y)} nhanDuyet={nhan} xacNhanDuyet={xacNhan} />;
+}
+
+/** Demand/Supply kiểm soát: không duyệt; chỉ chặn (CEO không duyệt được) hoặc trả về kế toán. */
+export function KiemSoat({ lanId, pb, coTraVe }: { lanId: string; pb: 'demand' | 'supply'; coTraVe: boolean }) {
+  const [y, setY] = useState('');
+  return (
+    <div className="flex flex-col gap-2">
+      <textarea className="field text-[12px]" rows={2} placeholder="Lý do (bắt buộc khi chặn hoặc trả về)" value={y} onChange={(e) => setY(e.target.value)} />
+      <div className="flex gap-2 flex-wrap">
+        <Nut chay={() => chanLanChay(lanId, pb, y)} nhan="Chặn bảng kê" kieu="btn-danger" xacNhan="Chặn bảng kê này? CEO sẽ không duyệt được cho tới khi gỡ chặn." />
+        {coTraVe && <Nut chay={() => duyetBuoc(lanId, pb, 'tra_ve', y)} nhan="Trả về kế toán" />}
+      </div>
+    </div>
+  );
+}
+export function GoChan({ id }: { id: number }) {
+  return <OGhi dau="" luu={(t) => goChan(id, t)} nhan="Gỡ chặn" placeholder="Ghi chú khi gỡ (đã xử lý thế nào)" />;
 }

@@ -12,7 +12,7 @@ export const GOI_Y_AGENT = '[Gợi ý agent';
 const coGt = (c: CB) => !!c.giai_trinh?.trim() && !c.giai_trinh.startsWith(GOI_Y_AGENT);
 const canGiaiTrinh = (c: CB) => (c.muc_do === 'chan_gui' || c.muc_do === 'giai_trinh') && !coGt(c);
 
-export function deXuatBuoc(buoc: string, cb: CB[], td: TD[], dy: DY[]): DeXuat {
+export function deXuatBuoc(buoc: string, cb: CB[], td: TD[], dy: DY[], dangChan: { phong_ban: string; ly_do: string }[] = []): DeXuat {
   const ly_do: string[] = [], luu_y: string[] = [];
   const chuaXn = td.filter((t) => !t.xac_nhan).length;
 
@@ -24,6 +24,7 @@ export function deXuatBuoc(buoc: string, cb: CB[], td: TD[], dy: DY[]): DeXuat {
     return { ket_luan: ly_do.length ? 'tra_ve' : 'duyet', ly_do, luu_y };
   }
 
+  // Demand/Supply không duyệt: 'duyet' nghĩa là KHÔNG CẦN CHẶN, 'tra_ve' nghĩa là NÊN CHẶN / TRẢ VỀ
   if (buoc === 'demand' || buoc === 'supply') {
     const cua = cb.filter((c) => c.phong_ban === buoc);
     const chan = cua.filter((c) => c.muc_do === 'chan_gui');
@@ -37,10 +38,9 @@ export function deXuatBuoc(buoc: string, cb: CB[], td: TD[], dy: DY[]): DeXuat {
     return { ket_luan: ly_do.length ? 'tra_ve' : 'duyet', ly_do, luu_y };
   }
 
-  // CEO: mọi bước trước phải duyệt; không còn chặn gửi thiếu giải trình
-  for (const b of ['ke_toan', 'demand', 'supply']) {
-    if (!dy.some((d) => d.buoc === b && d.quyet_dinh === 'duyet')) ly_do.push(`Bước ${b} chưa duyệt.`);
-  }
+  // CEO: kế toán đã duyệt; Demand/Supply không chặn; không còn chặn gửi thiếu giải trình
+  if (!dy.some((d) => d.buoc === 'ke_toan' && d.quyet_dinh === 'duyet')) ly_do.push('Kế toán chưa duyệt.');
+  for (const c of dangChan) ly_do.push(`${c.phong_ban === 'demand' ? 'Demand' : 'Supply'} đang chặn: ${c.ly_do}`);
   const chanThieu = cb.filter((c) => c.muc_do === 'chan_gui' && !coGt(c));
   if (chanThieu.length) ly_do.push(`${chanThieu.length} cảnh báo chặn gửi chưa có giải trình.`);
   if (chuaXn) ly_do.push(`${chuaXn} ô app tự sửa chưa được kế toán xác nhận.`);

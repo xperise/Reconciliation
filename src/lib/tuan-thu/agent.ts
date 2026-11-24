@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { fmtVnd } from './db';
+import { dsDangChan, fmtVnd } from './db';
 import { PhongBan, TEN_DICH_VU, TEN_MUC_DO, TEN_PHONG_BAN, LoaiDichVu } from './types';
 
 /**
@@ -63,6 +63,7 @@ export async function boiCanhLanChay(lanChayId: string): Promise<{ text: string;
     sb.from('tt_duyet').select('*').eq('lan_chay_id', lanChayId).eq('vong', lc.vong).order('luc'),
   ]);
   const th: any = lc.tong_hop ?? {};
+  const chan = await dsDangChan(lanChayId);
   const nhom = new Map<string, { n: number; chenh: number; xn: number }>();
   for (const t of td ?? []) {
     const k = `${t.ma_quy_tac} ${TEN_DICH_VU[t.loai as LoaiDichVu]} cột ${t.cot}`;
@@ -78,6 +79,9 @@ ${[...nhom.entries()].map(([k, g]) => `- ${k}: ${g.n} ô, chênh ${fmtVnd(g.chen
 
 CẢNH BÁO:
 ${(cb ?? []).map((c: any) => `- [#${c.id}] ${c.ma_quy_tac} (${TEN_PHONG_BAN[c.phong_ban as PhongBan]}, ${TEN_MUC_DO[c.muc_do as keyof typeof TEN_MUC_DO]}): ${c.noi_dung}${c.so_tien != null ? ` | số tiền ${fmtVnd(c.so_tien)}đ` : ''} | ${c.dong?.length ?? 0} dòng raw | giải trình: ${c.giai_trinh ?? 'chưa có'}`).join('\n') || '- không có'}
+
+QUY TRÌNH: kế toán duyệt → CEO duyệt & gửi. Demand và Supply không duyệt; họ nhận cảnh báo và chỉ CHẶN hoặc TRẢ VỀ khi cần kiểm soát.
+ĐANG CHẶN: ${chan.map((c: any) => `${TEN_PHONG_BAN[c.phong_ban as PhongBan]} — ${c.ly_do}`).join('; ') || 'không'}
 
 DUYỆT VÒNG HIỆN TẠI:
 ${(dy ?? []).map((d: any) => `- ${TEN_PHONG_BAN[d.buoc as PhongBan]}: ${d.quyet_dinh === 'duyet' ? 'duyệt' : 'trả về'}${d.y_kien ? ` — ${d.y_kien}` : ''}`).join('\n') || '- chưa có'}`;

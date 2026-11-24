@@ -6,7 +6,7 @@ import { duocLam, fmtVnd, nguoiTT, nhanThang, TEN_BUOC } from '@/lib/tuan-thu/db
 import { deXuatBuoc, DeXuat } from '@/lib/tuan-thu/de-xuat';
 import { TEN_DICH_VU, TEN_MUC_DO, TEN_PHONG_BAN, PhongBan, LoaiDichVu } from '@/lib/tuan-thu/types';
 import { thongTinGui } from '../../actions';
-import { Duyet, GiaiTrinh, TaiLai, XacNhanMot, XacNhanTatCa } from './panels';
+import { Duyet, GiaiTrinh, GoChan, KiemSoat, TaiLai, XacNhanMot, XacNhanTatCa } from './panels';
 import { ChatAgent, GoiYGiaiTrinh, RaSoat } from '../../agent-ui';
 
 export const dynamic = 'force-dynamic';
@@ -14,10 +14,10 @@ export const dynamic = 'force-dynamic';
 const tep = (p?: string | null) => (p ? `/api/tuan-thu/tep?path=${encodeURIComponent(p)}` : null);
 const PILL: Record<string, string> = { chan_gui: 'pill-critical', giai_trinh: 'pill-high', theo_doi: 'pill-neutral' };
 
-function KhungDeXuat({ dx }: { dx: DeXuat }) {
+function KhungDeXuat({ dx, kiemSoat }: { dx: DeXuat; kiemSoat?: boolean }) {
   return (
     <div className={`callout ${dx.ket_luan === 'duyet' ? 'callout-stable' : 'callout-high'} mb-3`}>
-      <b>Agent đề xuất: {dx.ket_luan === 'duyet' ? 'DUYỆT' : 'CHƯA DUYỆT / TRẢ VỀ'}</b>
+      <b>Agent đề xuất: {kiemSoat ? (dx.ket_luan === 'duyet' ? 'KHÔNG CẦN CHẶN' : 'NÊN CHẶN HOẶC TRẢ VỀ') : (dx.ket_luan === 'duyet' ? 'DUYỆT' : 'CHƯA DUYỆT / TRẢ VỀ')}</b>
       {dx.ly_do.length > 0 && <ul className="m-0 pl-4">{dx.ly_do.map((x, i) => <li key={i}>{x}</li>)}</ul>}
       {dx.luu_y.length > 0 && <div className="mt-1"><b>Lưu ý:</b><ul className="m-0 pl-4">{dx.luu_y.map((x, i) => <li key={i}>{x}</li>)}</ul></div>}
     </div>
@@ -41,13 +41,15 @@ export default async function Page({ params }: { params: { id: string } }) {
     sb.from('tt_ai_ket_qua').select('phong_ban, noi_dung, luc, skill_phien_ban, vong').eq('lan_chay_id', params.id).eq('loai', 'ra_soat').order('luc', { ascending: false }),
     sb.from('tt_chat').select('phong_ban, vai, noi_dung').eq('user_id', n.id).eq('lan_chay_id', params.id).order('luc'),
   ]);
+  const { data: chanAll } = await sb.from('tt_chan').select('*').eq('lan_chay_id', params.id).order('luc', { ascending: false });
+  const chanDs = (chanAll ?? []) as any[], dangChanDs = chanDs.filter((c) => !c.go_luc);
   const raSoat = (b: string) => ((aiKq ?? []) as any[]).find((k) => k.phong_ban === b && k.vong === lc.vong) ?? null;
   const lichSu: any = {}; for (const m of (chat ?? []) as any[]) (lichSu[m.phong_ban] ??= []).push({ vai: m.vai, noi_dung: m.noi_dung });
   const dyVong = dy.filter((d) => d.vong === lc.vong);
   const hd: any = lc.tt_hop_dong;
   const th: any = lc.tong_hop ?? {};
   const daDuyet = (b: string) => dyVong.find((d) => d.buoc === b && d.quyet_dinh === 'duyet');
-  const dx = (b: string) => deXuatBuoc(b, canhBao, thayDoi, dyVong);
+  const dx = (b: string) => deXuatBuoc(b, canhBao, thayDoi, dyVong, b === 'ceo' ? dangChanDs : []);
   const chuaXn = thayDoi.filter((t) => !t.xac_nhan).length;
   const suaKeToan = duocLam(n, 'ke_toan') && lc.buoc === 'cho_ke_toan';
   const gui = lc.buoc === 'cho_ceo' || lc.buoc === 'da_gui' ? await thongTinGui(lc.id) : null;
@@ -59,11 +61,6 @@ export default async function Page({ params }: { params: { id: string } }) {
     const g = nhomSua.get(k) ?? { n: 0, chenh: 0, xn: 0 };
     g.n++; g.chenh += Number(t.sau) - Number(t.truoc); if (t.xac_nhan) g.xn++; nhomSua.set(k, g);
   }
-
-  const buocDuyet: { b: 'ke_toan' | 'demand' | 'supply' | 'ceo'; ten: string }[] = [
-    { b: 'ke_toan', ten: '1–2. Kế toán xác nhận raw & bảng kê' }, { b: 'demand', ten: '3. Demand duyệt' },
-    { b: 'supply', ten: '3. Supply duyệt' }, { b: 'ceo', ten: '4. CEO duyệt & gửi' },
-  ];
 
   return (
     <>
@@ -78,18 +75,16 @@ export default async function Page({ params }: { params: { id: string } }) {
 
       {lc.loi && <div className="callout callout-critical mb-4"><b>Lỗi xử lý raw:</b> {lc.loi}</div>}
 
-      {/* Trạng thái các cổng */}
+      {/* Trạng thái các cổng: kế toán duyệt → (Demand/Supply kiểm soát) → CEO duyệt & gửi */}
       <div className="grid gap-3 md:grid-cols-4 mb-5">
-        {buocDuyet.map(({ b, ten }) => {
-          const d = daDuyet(b);
-          return (
-            <div key={b} className="card card-pad">
-              <div className="text-[12px] font-semibold mb-1">{ten}</div>
-              {d ? <span className="pill pill-stable">Đã duyệt · {d.nguoi_email}</span>
-                : <span className="pill pill-watch">{lc.buoc === 'da_gui' ? '—' : 'Chờ'}</span>}
-            </div>
-          );
-        })}
+        <div className="card card-pad"><div className="text-[12px] font-semibold mb-1">1–2. Kế toán duyệt</div>
+          {daDuyet('ke_toan') ? <span className="pill pill-stable">Đã duyệt · {daDuyet('ke_toan').nguoi_email}</span> : <span className="pill pill-watch">Chờ</span>}</div>
+        <div className="card card-pad"><div className="text-[12px] font-semibold mb-1">Demand & Supply kiểm soát</div>
+          {dangChanDs.length ? <span className="pill pill-critical">Đang chặn ({dangChanDs.map((c) => TEN_PHONG_BAN[c.phong_ban as PhongBan]).join(', ')})</span> : <span className="pill pill-neutral">Không chặn</span>}</div>
+        <div className="card card-pad"><div className="text-[12px] font-semibold mb-1">3. CEO duyệt & gửi</div>
+          {daDuyet('ceo') ? <span className="pill pill-stable">Đã duyệt · {daDuyet('ceo').nguoi_email}</span> : <span className="pill pill-watch">{lc.buoc === 'cho_ceo' ? 'Đang chờ' : 'Chờ'}</span>}</div>
+        <div className="card card-pad"><div className="text-[12px] font-semibold mb-1">Gửi khách</div>
+          {lc.buoc === 'da_gui' ? <span className="pill pill-stable">Đã gửi</span> : <span className="pill pill-neutral">—</span>}</div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-4 mb-5">
@@ -146,25 +141,36 @@ export default async function Page({ params }: { params: { id: string } }) {
           {duocLam(n, 'ke_toan') && <div className="flex gap-3 flex-wrap items-start"><RaSoat lanChayId={lc.id} buoc="ke_toan" ketQua={raSoat('ke_toan')} /><GoiYGiaiTrinh lanChayId={lc.id} /></div>}
           {duocLam(n, 'ke_toan') ? (
             <div className="grid gap-5 md:grid-cols-2">
-              <div><p className="label mb-1">Duyệt chuyển sang Demand & Supply</p><Duyet lanId={lc.id} buoc="ke_toan" nhan="Duyệt, chuyển Demand & Supply" /></div>
+              <div><p className="label mb-1">Duyệt chuyển sang Demand & Supply</p><Duyet lanId={lc.id} buoc="ke_toan" nhan="Duyệt, chuyển CEO" /></div>
               <div><p className="label mb-1">Kế toán tự sửa raw rồi tải lại</p><TaiLai lanId={lc.id} /></div>
             </div>
           ) : <p className="text-[12px]">Chờ kế toán.</p>}
         </section>
       )}
 
-      {/* Bước 3: Demand & Supply */}
-      {lc.buoc === 'cho_scope' && (
+      {/* Demand & Supply: không duyệt, nhận cảnh báo và chỉ can thiệp khi cần */}
+      {lc.buoc !== 'da_gui' && !lc.loi && (
         <div className="grid gap-4 md:grid-cols-2 mb-5">
-          {(['demand', 'supply'] as const).map((b) => (
-            <section key={b} className="card card-pad">
-              <h2 className="card-title mb-2">Bước 3 · {TEN_PHONG_BAN[b]} duyệt</h2>
-              <KhungDeXuat dx={dx(b)} />
-              {duocLam(n, b) && !daDuyet(b) && <RaSoat lanChayId={lc.id} buoc={b} ketQua={raSoat(b)} />}
-              {daDuyet(b) ? <span className="pill pill-stable">Đã duyệt</span>
-                : duocLam(n, b) ? <Duyet lanId={lc.id} buoc={b} /> : <p className="text-[12px]">Chờ {TEN_PHONG_BAN[b]}.</p>}
-            </section>
-          ))}
+          {(['demand', 'supply'] as const).map((b) => {
+            const cua = canhBao.filter((c) => c.phong_ban === b && c.muc_do !== 'theo_doi');
+            const chanCua = chanDs.filter((c) => c.phong_ban === b);
+            return (
+              <section key={b} className="card card-pad">
+                <h2 className="card-title mb-1">{TEN_PHONG_BAN[b]} kiểm soát</h2>
+                <p className="text-[12px] text-[var(--ink-3)] mb-2">Không cần duyệt. {cua.length} cảnh báo thuộc scope; chỉ chặn hoặc trả về khi cần kiểm soát.</p>
+                <KhungDeXuat dx={dx(b)} kiemSoat />
+                {duocLam(n, b) && <RaSoat lanChayId={lc.id} buoc={b} ketQua={raSoat(b)} />}
+                {chanCua.map((c) => (
+                  <div key={c.id} className={`callout ${c.go_luc ? 'callout-stable' : 'callout-critical'} mb-2 text-[12px]`}>
+                    <b>{c.go_luc ? 'Đã gỡ chặn' : 'Đang chặn'}</b> · {c.nguoi_email} · {new Date(c.luc).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}<br />{c.ly_do}
+                    {c.go_luc && <div>Gỡ bởi {c.go_email}{c.go_ghi_chu ? `: ${c.go_ghi_chu}` : ''}</div>}
+                    {!c.go_luc && duocLam(n, b) && <div className="mt-2"><GoChan id={c.id} /></div>}
+                  </div>
+                ))}
+                {duocLam(n, b) && <KiemSoat lanId={lc.id} pb={b} coTraVe />}
+              </section>
+            );
+          })}
         </div>
       )}
 
@@ -172,6 +178,7 @@ export default async function Page({ params }: { params: { id: string } }) {
       {(lc.buoc === 'cho_ceo' || lc.buoc === 'da_gui') && gui && (
         <section className="card card-pad mb-5">
           <h2 className="card-title mb-2">Bước 4 · CEO duyệt cuối & gửi</h2>
+          {lc.buoc === 'cho_ceo' && dangChanDs.length > 0 && <div className="callout callout-critical mb-3"><b>Đang bị chặn — CEO chưa duyệt được.</b><ul className="m-0 pl-4">{dangChanDs.map((c) => <li key={c.id}>{TEN_PHONG_BAN[c.phong_ban as PhongBan]}: {c.ly_do}</li>)}</ul></div>}
           {lc.buoc === 'cho_ceo' && <KhungDeXuat dx={dx('ceo')} />}
           {lc.buoc === 'cho_ceo' && duocLam(n, 'ceo') && <RaSoat lanChayId={lc.id} buoc="ceo" ketQua={raSoat('ceo')} />}
           <div className="grid gap-4 md:grid-cols-2 mb-3 text-[12.5px]">
@@ -182,6 +189,8 @@ export default async function Page({ params }: { params: { id: string } }) {
                 {[...nhomSua.entries()].map(([k, g]) => <li key={k}>{k}: {g.n} ô, chênh {fmtVnd(g.chenh)}đ</li>)}
                 <li>Số lần tải lại raw: {lc.vong - 1}</li>
               </ul>
+              <p className="label mt-3 mb-1">Demand & Supply kiểm soát</p>
+              <ul className="m-0 pl-4">{chanDs.length === 0 ? <li>Không có lần chặn nào.</li> : chanDs.map((c) => <li key={c.id}>{TEN_PHONG_BAN[c.phong_ban as PhongBan]} {c.go_luc ? 'đã chặn rồi gỡ' : 'đang chặn'}: {c.ly_do}{c.go_ghi_chu ? ` — gỡ: ${c.go_ghi_chu}` : ''}</li>)}</ul>
               <p className="label mt-3 mb-1">Ngoại lệ gửi đi kèm giải trình</p>
               <ul className="m-0 pl-4">{canhBao.filter((c) => c.muc_do !== 'theo_doi').map((c) => (
                 <li key={c.id}><b>{c.ma_quy_tac}</b> {c.noi_dung} — <i>{c.giai_trinh ?? 'chưa giải trình'}</i></li>))}</ul>

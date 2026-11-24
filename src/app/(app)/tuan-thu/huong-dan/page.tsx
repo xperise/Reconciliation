@@ -12,13 +12,14 @@ export default async function Page() {
   const sb = supabaseAdmin();
   const { data: hd } = await sb.from('tt_hop_dong').select('id, group_id').eq('ma_khach', 'VCB').maybeSingle();
   const hdId = hd?.id ?? '00000000-0000-0000-0000-000000000000';
-  const [{ data: tv }, { data: qt }, { data: runs }, { data: sd }, { data: sk }, { data: ai }] = await Promise.all([
+  const [{ data: tv }, { data: qt }, { data: runs }, { data: sd }, { data: sk }, { data: ai }, { data: chan }] = await Promise.all([
     sb.from('tt_thanh_vien').select('phong_ban'),
     sb.from('tt_quy_tac').select('phong_ban, chot').eq('hop_dong_id', hdId),
     sb.from('tt_lan_chay').select('id, dot, buoc, vong, loi').eq('hop_dong_id', hdId),
     sb.from('tt_sua_doi').select('ma_quy_tac, trang_thai').eq('hop_dong_id', hdId),
     sb.from('tt_skill').select('phong_ban, phien_ban, ly_do'),
     sb.from('tt_ai_ket_qua').select('loai').limit(200),
+    sb.from('tt_chan').select('go_luc').limit(200),
   ]);
   const coTv = (p: string) => (tv ?? []).some((x: any) => x.phong_ban === p);
   const chot = (p: string) => { const ds = (qt ?? []).filter((q: any) => q.phong_ban === p); return ds.length > 0 && ds.every((q: any) => q.chot === 'dong_y'); };
@@ -27,7 +28,7 @@ export default async function Page() {
   const dm01 = (sd ?? []).find((x: any) => x.ma_quy_tac === 'DM-01');
   const P: { phan: string; buoc: Buoc[] }[] = [
     { phan: 'A · Cài đặt (admin, làm một lần)', buoc: [
-      { ten: 'Chạy SQL 38 và 39', vai: 'Admin', lam: 'Supabase → SQL Editor: chạy supabase/migrations/38_tuan_thu.sql rồi 39_tuan_thu_agent.sql.', kq: 'Có hợp đồng VCB, 32 quy tắc, skill v1 cho 4 phòng.', link: '/tuan-thu/quy-tac', xong: !!hd && (sk ?? []).length >= 4 },
+      { ten: 'Chạy SQL 38, 39, 40', vai: 'Admin', lam: 'Supabase → SQL Editor: chạy lần lượt supabase/migrations/38_tuan_thu.sql, 39_tuan_thu_agent.sql, 40_tuan_thu_chan.sql.', kq: 'Có hợp đồng VCB, 32 quy tắc, skill v1 cho 4 phòng.', link: '/tuan-thu/quy-tac', xong: !!hd && (sk ?? []).length >= 4 },
       { ten: 'Nhập Claude API key', vai: 'Admin', lam: 'Vercel → Settings → Environment Variables: thêm ANTHROPIC_API_KEY (tùy chọn ANTHROPIC_MODEL), rồi Redeploy.', kq: 'Nút agent AI trả lời được.', link: '/tuan-thu/agent', xong: (ai ?? []).length > 0 },
       { ten: 'Gán phòng ban cho 4 head', vai: 'Admin', lam: 'Mục Thành viên: gán Kế toán, Demand, Supply, CEO.', kq: 'Mỗi head thấy tab Tuân thủ và chỉ duyệt được bước của phòng mình.', link: '/tuan-thu/thanh-vien', xong: ['ke_toan', 'demand', 'supply', 'ceo'].every(coTv) },
       { ten: 'Gắn nhóm Master Data cho hợp đồng VCB', vai: 'Admin', lam: 'Hợp đồng & quy tắc: chọn nhóm Master Data (email đầu mối, CC). Khi thử nghiệm, gắn tạm nhóm có email nội bộ vì CEO duyệt là app gửi thư thật.', kq: 'Hiện email đầu mối dưới tên hợp đồng.', link: '/tuan-thu/quy-tac', xong: !!hd?.group_id },
@@ -37,8 +38,8 @@ export default async function Page() {
       lam: 'Đọc từng quy tắc, đối chiếu cột Căn cứ với hợp đồng; bấm Đồng ý, hoặc Cần sửa / Đề xuất sửa. Có thể hỏi agent của phòng ở trang Agent.', kq: 'Mọi quy tắc của phòng ở trạng thái Đã đồng ý.', link: '/tuan-thu/quy-tac', xong: chot(p) })) },
     { phan: 'C · Chạy bảng kê T10/2026 theo hợp đồng gốc (1 kỳ/tháng)', buoc: [
       { ten: 'Kế toán upload raw', vai: 'Kế toán', lam: 'Lần chạy bảng kê: chọn VCB, tháng 10/2026, Đợt = Cả tháng, chọn 2 file raw (khách sạn, vé), Upload & xử lý.', kq: 'Tổng 2.657.626.775đ; 265 ô app tự sửa; 15 cảnh báo.', link: '/tuan-thu', xong: thang.length > 0 },
-      { ten: 'Kế toán xác nhận ô app tự sửa và giải trình', vai: 'Kế toán', lam: 'Xác nhận app sửa đúng (hoặc tự sửa raw rồi tải lại). Điền giải trình cho cảnh báo; có thể bấm Nhờ agent Kế toán gợi ý giải trình rồi sửa lại. Bấm Agent AI rà soát trước khi duyệt.', kq: 'Agent đề xuất DUYỆT; bước chuyển sang Demand & Supply.', link: '/tuan-thu', xong: thang.some((r) => r.buoc !== 'cho_ke_toan') },
-      { ten: 'Demand và Supply duyệt', vai: 'Demand, Supply', lam: 'Mỗi head đọc đề xuất theo luật, bấm Agent AI rà soát, hỏi thêm ở nút Hỏi agent, rồi Duyệt hoặc Trả về kèm lý do.', kq: 'Bước chuyển sang Chờ CEO.', link: '/tuan-thu', xong: thang.some((r) => r.buoc === 'cho_ceo' || r.buoc === 'da_gui') },
+      { ten: 'Kế toán xác nhận ô app tự sửa và giải trình', vai: 'Kế toán', lam: 'Xác nhận app sửa đúng (hoặc tự sửa raw rồi tải lại). Điền giải trình cho cảnh báo; có thể bấm Nhờ agent Kế toán gợi ý giải trình rồi sửa lại. Bấm Agent AI rà soát trước khi duyệt.', kq: 'Agent đề xuất DUYỆT; bước chuyển sang Chờ CEO, Demand/Supply/CEO nhận thông báo.', link: '/tuan-thu', xong: thang.some((r) => r.buoc !== 'cho_ke_toan') },
+      { ten: 'Demand và Supply nhận cảnh báo, thử chặn rồi gỡ', vai: 'Demand, Supply', lam: 'Không cần duyệt. Mỗi head nhận chuông và email cảnh báo thuộc scope, mở lần chạy, bấm Agent AI rà soát. Thử Chặn bảng kê kèm lý do (CEO sẽ không duyệt được), rồi Gỡ chặn kèm ghi chú đã xử lý.', kq: 'Lịch sử chặn và gỡ chặn hiện trong khung kiểm soát và ở màn hình CEO.', link: '/tuan-thu', xong: ((chan ?? []) as any[]).some((c) => c.go_luc) },
       { ten: 'CEO duyệt và gửi', vai: 'CEO', lam: 'Xem thay đổi so với raw, ngoại lệ kèm giải trình, thư sẽ gửi; bấm Agent AI rà soát; Duyệt & gửi.', kq: 'Trạng thái Đã gửi khách; thư đi từ cs@uts.network.', link: '/tuan-thu', xong: thang.some((r) => r.buoc === 'da_gui') },
     ] },
     { phan: 'D · Sửa đổi quy tắc: VCB nhận bảng kê 2 đợt', buoc: [
@@ -47,10 +48,10 @@ export default async function Page() {
     ] },
     { phan: 'E · Chạy lại T10/2026 theo 2 đợt', buoc: [
       { ten: 'Kế toán tạo đợt 1 và đợt 2', vai: 'Kế toán', lam: 'Tạo lần chạy Đợt 1 với raw 01–15/10 và Đợt 2 với raw 16–31/10.', kq: 'Đợt 1 1.518.452.016đ; đợt 2 1.139.174.759đ; cộng lại bằng cả tháng.', link: '/tuan-thu', xong: d1.length > 0 && d2.length > 0 },
-      { ten: 'Đi hết 4 cổng duyệt cho cả hai đợt', vai: 'Cả 4', lam: 'Lặp lại phần C cho từng đợt.', kq: 'Cả hai đợt Đã gửi khách.', link: '/tuan-thu', xong: d1.some((r) => r.buoc === 'da_gui') && d2.some((r) => r.buoc === 'da_gui') },
+      { ten: 'Duyệt và gửi cả hai đợt', vai: 'Kế toán, CEO', lam: 'Lặp lại phần C cho từng đợt: kế toán duyệt, CEO duyệt; Demand/Supply chỉ can thiệp khi cần.', kq: 'Cả hai đợt Đã gửi khách.', link: '/tuan-thu', xong: d1.some((r) => r.buoc === 'da_gui') && d2.some((r) => r.buoc === 'da_gui') },
     ] },
     { phan: 'F · Trả về, tải lại raw và học từ quyết định', buoc: [
-      { ten: 'Trả về và tải lại raw', vai: 'Demand → Kế toán', lam: 'Ở một lần chạy đang chờ Demand, bấm Trả về kế toán kèm lý do; kế toán tải lại raw đã sửa.', kq: 'Lần chạy sang vòng 2, lịch sử giữ đủ.', link: '/tuan-thu', xong: R.some((r) => r.vong > 1) },
+      { ten: 'Trả về và tải lại raw', vai: 'Demand → Kế toán', lam: 'Ở một lần chạy chưa gửi, Demand bấm Trả về kế toán kèm lý do; kế toán tải lại raw đã sửa.', kq: 'Lần chạy sang vòng 2, lịch sử giữ đủ.', link: '/tuan-thu', xong: R.some((r) => r.vong > 1) },
       { ten: 'Nhận gợi ý bổ sung skill', vai: 'Head bất kỳ', lam: 'Duyệt khác đề xuất của agent (bắt buộc ghi ý kiến); vào Agent của tôi, bấm Thêm vào skill.', kq: 'Skill lên phiên bản mới với lý do Học từ quyết định.', link: '/tuan-thu/agent', xong: (sk ?? []).some((x: any) => /^Học từ/.test(x.ly_do ?? '')) },
     ] },
   ];

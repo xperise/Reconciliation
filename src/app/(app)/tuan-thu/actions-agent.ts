@@ -62,9 +62,13 @@ export async function raSoatBuoc(lanChayId: string, buoc: PhongBan): Promise<KQ>
     const { system, skill } = await heThong(buoc, b.hopDongId);
     const tl = await goiClaude(system, [{ role: 'user', content: `${b.text}
 
-NHIỆM VỤ: Rà soát bước ${TEN_PHONG_BAN[buoc]} của lần chạy này theo skill và quy tắc của bạn.
+${buoc === 'demand' || buoc === 'supply'
+  ? `NHIỆM VỤ: Bạn KHÔNG duyệt bảng kê. Rà soát các cảnh báo thuộc scope ${TEN_PHONG_BAN[buoc]} và cho biết có cần can thiệp không.
+Dòng đầu tiên chỉ ghi một trong ba: KHÔNG CẦN CHẶN, NÊN CHẶN, hoặc NÊN TRẢ VỀ KẾ TOÁN.
+Sau đó tối đa 6 gạch đầu dòng: rủi ro thật (kèm số tiền nếu có), giải trình nào chưa thuyết phục, nếu chặn thì điều kiện để gỡ chặn.`
+  : `NHIỆM VỤ: Rà soát bước ${TEN_PHONG_BAN[buoc]} của lần chạy này theo skill và quy tắc của bạn.
 Dòng đầu tiên chỉ ghi một trong hai: ĐỀ XUẤT DUYỆT hoặc ĐỀ XUẤT TRẢ VỀ.
-Sau đó tối đa 6 gạch đầu dòng: rủi ro theo mức độ (kèm số tiền nếu có), giải trình nào chưa thuyết phục, việc cần làm trước khi duyệt.` }], 1000);
+Sau đó tối đa 6 gạch đầu dòng: rủi ro theo mức độ (kèm số tiền nếu có), giải trình nào chưa thuyết phục, lần chặn nào của Demand/Supply còn hiệu lực, việc cần làm trước khi duyệt.`}` }], 1000);
     await supabaseAdmin().from('tt_ai_ket_qua').insert({ loai: 'ra_soat', phong_ban: buoc, lan_chay_id: lanChayId, vong: b.vong,
       skill_phien_ban: skill, noi_dung: tl, model: MODEL(), nguoi: n.id });
     revalidatePath(`/tuan-thu/chay/${lanChayId}`);
