@@ -39,12 +39,43 @@ export const CAU_HINH_MAC_DINH: QuyTrinhCauHinh = {
   quorumSuaDoi: 'all',
 };
 
+/**
+ * Chuẩn hoá mã role: bỏ dấu tiếng Việt, đổi về chữ thường, mọi ký tự không phải a–z, 0–9 thành "_".
+ * Ví dụ: "Kế toán", "KẾ TOÁN", "ke toan", "Ke-Toan", "kế_toán" đều thành "ke_toan".
+ */
+export function chuanHoaMa(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/đ/g, 'd').replace(/Đ/g, 'D')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+/** Khoá so sánh trùng: bỏ hẳn dấu gạch dưới. "ke_toan" và "ketoan" cùng khoá. */
+export function khoaSoSanh(s: string): string {
+  return chuanHoaMa(s).replace(/_/g, '');
+}
+
+/** Mã đã ở dạng chuẩn (không cần chuẩn hoá thêm) và không rỗng. */
+export function maHopLe(ma: string): boolean {
+  return ma.length > 0 && ma === chuanHoaMa(ma);
+}
+
 /** Kiểm tra ràng buộc cứng. Trả về danh sách lỗi; rỗng nghĩa là hợp lệ. */
 export function kiemTraCauHinh(c: QuyTrinhCauHinh): string[] {
   const loi: string[] = [];
   const roleKeys = new Set(c.roles.map((r) => r.key));
-  if (new Set(c.roles.map((r) => r.key)).size !== c.roles.length) loi.push('Trùng key role.');
-  if (new Set(c.buoc.map((b) => b.key)).size !== c.buoc.length) loi.push('Trùng key bước.');
+
+  for (const r of c.roles) if (!maHopLe(r.key)) loi.push(`Mã role không hợp lệ: "${r.key}" (dùng chữ thường, số, gạch dưới).`);
+  const khoaRole = c.roles.map((r) => khoaSoSanh(r.key));
+  if (new Set(khoaRole).size !== khoaRole.length) loi.push('Hai role trùng mã (không phân biệt hoa, thường, dấu, dấu cách).');
+  const tenRole = c.roles.map((r) => khoaSoSanh(r.ten));
+  if (new Set(tenRole).size !== tenRole.length) loi.push('Hai role trùng tên hiển thị.');
+
+  const khoaBuoc = c.buoc.map((b) => khoaSoSanh(b.key));
+  if (new Set(khoaBuoc).size !== khoaBuoc.length) loi.push('Hai bước trùng mã.');
   for (const b of c.buoc) {
     if (!roleKeys.has(b.roleKey)) loi.push(`Bước ${b.key} trỏ tới role không tồn tại: ${b.roleKey}.`);
     if (b.ketQua.length === 0) loi.push(`Bước ${b.key} không có kết quả nào.`);

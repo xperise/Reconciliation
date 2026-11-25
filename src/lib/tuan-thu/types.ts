@@ -1,9 +1,14 @@
+/**
+ * Mã role (phòng ban). Là chuỗi, lấy từ cấu hình tt_role; mã phải ở dạng chuẩn (xem chuanHoaMa trong cau-hinh.ts).
+ * Các mã mặc định: ke_toan, supply, demand, ceo.
+ */
+export type PhongBan = string;
 /** Kiểu dữ liệu dùng chung cho luồng tuân thủ bảng kê. */
-export type PhongBan = 'ke_toan' | 'supply' | 'demand' | 'ceo';
 export type MucDo = 'chan_gui' | 'giai_trinh' | 'theo_doi';
 export type LoaiDichVu = 'khach_san' | 've_may_bay';
 
-export const TEN_PHONG_BAN: Record<PhongBan, string> = {
+/** Tên hiển thị mặc định của các role mặc định. Role khác lấy tên từ cấu hình. */
+export const TEN_PHONG_BAN: Record<string, string> = {
   ke_toan: 'Kế toán', supply: 'Supply', demand: 'Demand', ceo: 'CEO',
 };
 export const TEN_MUC_DO: Record<MucDo, string> = {

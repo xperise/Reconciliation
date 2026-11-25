@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { CAU_HINH_MAC_DINH, kiemTraCauHinh, type QuyTrinhCauHinh } from './cau-hinh';
+import { CAU_HINH_MAC_DINH, chuanHoaMa, kiemTraCauHinh, type QuyTrinhCauHinh } from './cau-hinh';
 
 /**
  * Đọc cấu hình quy trình từ bảng tt_role và tt_buoc_quy_trinh (SQL 47).
@@ -15,8 +15,8 @@ export async function docCauHinhQuyTrinh(): Promise<QuyTrinhCauHinh> {
     ]);
     if (r1.error || r2.error || !r1.data?.length || !r2.data?.length) return CAU_HINH_MAC_DINH;
     const c: QuyTrinhCauHinh = {
-      roles: r1.data.map((r: any) => ({ key: r.key, ten: r.ten, thuTu: r.thu_tu, kichHoat: !!r.kich_hoat })),
-      buoc: r2.data.map((b: any) => ({ key: b.key, thuTu: b.thu_tu, roleKey: b.role_key, mode: b.mode, ketQua: b.ket_qua })),
+      roles: r1.data.map((r: any) => ({ key: chuanHoaMa(r.key), ten: r.ten, thuTu: r.thu_tu, kichHoat: !!r.kich_hoat })),
+      buoc: r2.data.map((b: any) => ({ key: chuanHoaMa(b.key), thuTu: b.thu_tu, roleKey: chuanHoaMa(b.role_key), mode: b.mode, ketQua: b.ket_qua })),
       quorumSuaDoi: 'all',
     };
     const loi = kiemTraCauHinh(c);

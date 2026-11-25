@@ -14,7 +14,7 @@ import { PhongBan, TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
 import { baoChoPhongBan } from '@/lib/tuan-thu/thong-bao';
 import { CauTrucMau, hocMau } from '@/lib/tuan-thu/mau-bang-ke';
 import { goiYGhepCot } from '@/lib/tuan-thu/mau-ai';
-import { coChan, coDuyet, coQuyenKichHoat, trangThaiDuocDuyet, TRANG_THAI_CHO, vaiTroChiKiemSoat, vaiTroCoDuyet, vaiTroTheoTrangThai } from '@/lib/tuan-thu/cau-hinh';
+import { chuanHoaMa, coChan, coDuyet, coQuyenKichHoat, trangThaiDuocDuyet, TRANG_THAI_CHO, vaiTroChiKiemSoat, vaiTroCoDuyet, vaiTroTheoTrangThai } from '@/lib/tuan-thu/cau-hinh';
 import { docCauHinhQuyTrinh } from '@/lib/tuan-thu/cau-hinh-db';
 
 type KQ = { ok: true; id?: string; thongBao?: string } | { ok: false; loi: string };
@@ -362,13 +362,15 @@ export async function ganThanhVien(userId: string, phongBan: string): Promise<KQ
     const n = await nguoiTT();
     if (!n?.laAdmin) throw new Error('Chỉ admin phân quyền.');
     const sb = supabaseAdmin();
-    const { error } = phongBan
-      ? await sb.from('tt_thanh_vien').upsert({ user_id: userId, phong_ban: phongBan })
+    const ma = phongBan ? chuanHoaMa(phongBan) : '';
+    if (ma && !(await docCauHinhQuyTrinh()).roles.some((r) => r.key === ma)) throw new Error(`Role "${phongBan}" chưa có trong cấu hình.`);
+    const { error } = ma
+      ? await sb.from('tt_thanh_vien').upsert({ user_id: userId, phong_ban: ma })
       : await sb.from('tt_thanh_vien').delete().eq('user_id', userId);
     if (error) throw new Error(error.message);
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.gan_thanh_vien', entity: 'tt_thanh_vien', entityId: userId, after: { phongBan } });
     revalidatePath('/tuan-thu/thanh-vien');
-    return { ok: true, thongBao: phongBan ? `Đã gán ${TEN_PHONG_BAN[phongBan as PhongBan]}.` : 'Đã bỏ quyền.' };
+    return { ok: true, thongBao: ma ? `Đã gán ${TEN_PHONG_BAN[ma] ?? ma}.` : 'Đã bỏ quyền.' };
   });
 }
 
