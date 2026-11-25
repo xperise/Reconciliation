@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { goiMoHinh, TEN_MO_HINH } from './ai-provider';
 import { dsDangChan, fmtVnd } from './db';
 import { PhongBan, TEN_DICH_VU, TEN_MUC_DO, TEN_PHONG_BAN, LoaiDichVu } from './types';
 
@@ -6,21 +7,13 @@ import { PhongBan, TEN_DICH_VU, TEN_MUC_DO, TEN_PHONG_BAN, LoaiDichVu } from './
  * Agent AI của từng phòng ban: gọi Claude API, đọc skill (có phiên bản) + quy tắc hợp đồng trong scope
  * + dữ liệu lần chạy. Agent chỉ đề xuất; mọi quyết định do head bấm.
  */
-export const MODEL = () => process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5';
+export const MODEL = () => TEN_MO_HINH();
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
 export async function goiClaude(system: string, messages: Msg[], maxTokens = 1500): Promise<string> {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) throw new Error('Chưa cấu hình ANTHROPIC_API_KEY trên Vercel — agent AI chưa chạy được. Luồng duyệt theo luật vẫn hoạt động.');
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: MODEL(), max_tokens: maxTokens, system, messages }),
-  });
-  const data: any = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`Claude API lỗi ${res.status}: ${data?.error?.message ?? 'không rõ'}`);
-  return (data.content ?? []).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n').trim();
+  const d = await goiMoHinh({ system, messages, max_tokens: maxTokens });
+  return d.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n').trim();
 }
 
 export async function skillHienHanh(pb: PhongBan): Promise<{ phien_ban: number; noi_dung: string }> {
@@ -140,20 +133,9 @@ ${(dy ?? []).map((d: any) => `- ${TEN_PHONG_BAN[d.buoc as PhongBan]}: ${d.quyet_
   return { text, hopDongId: lc.hop_dong_id, vong: lc.vong };
 }
 
-/** Gọi Claude có công cụ; trả nguyên phản hồi để xử lý tool_use. */
+/** Gọi mô hình có công cụ; trả nguyên phản hồi (định dạng chung) để xử lý tool_use. */
 export async function goiClaudeCongCu(system: string, messages: any[], tools: any[], maxTokens = 1500, batBuocCongCu?: string): Promise<any> {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) throw new Error('Chưa cấu hình ANTHROPIC_API_KEY trên Vercel — agent AI chưa chạy được.');
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: MODEL(), max_tokens: maxTokens, system, messages, tools, ...(batBuocCongCu ? { tool_choice: { type: 'tool', name: batBuocCongCu } } : {}) }),
-  });
-  const data: any = await res.json().catch(() => ({}));
-  // Model không hỗ trợ ép gọi công cụ → gọi lại ở chế độ tự chọn
-  if (!res.ok && batBuocCongCu && /tool_choice/i.test(data?.error?.message ?? '')) return goiClaudeCongCu(system, messages, tools, maxTokens);
-  if (!res.ok) throw new Error(`Claude API lỗi ${res.status}: ${data?.error?.message ?? 'không rõ'}`);
-  return data;
+  return goiMoHinh({ system, messages, tools, max_tokens: maxTokens, ...(batBuocCongCu ? { tool_choice: { type: 'tool', name: batBuocCongCu } } : {}) });
 }
 
 /** Lấy JSON từ câu trả lời của model (bỏ rào ```json nếu có). */

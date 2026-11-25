@@ -8,6 +8,7 @@ import { CONG_CU_DOC, CONG_CU_THAO_TAC, LA_THAO_TAC, chayCongCuDoc, moTa, phongB
 import { chanLanChay, chonBanGui, chotQuyTac, duyetMauBangKe, hocMauBangKe, deXuatSuaDoi, duyetBuoc, duyetSuaDoi, goChan, luuGiaiTrinh, suaBangKe, taiLaiRaw, taoHopDong, taoLanChay, xacNhanThayDoi } from './actions';
 import { khoiDinhKem, TepDinhKem } from '@/lib/tuan-thu/dinh-kem';
 import { docHopDong } from '@/lib/tuan-thu/doc-hop-dong';
+import { goiMoHinh, NHA_CUNG_CAP } from '@/lib/tuan-thu/ai-provider';
 import { boiCanhLanChay, docJson, goiClaude, goiClaudeCongCu, heThong, MODEL, skillHienHanh } from '@/lib/tuan-thu/agent';
 import { GOI_Y_AGENT } from '@/lib/tuan-thu/de-xuat';
 import { PhongBan, TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
@@ -357,16 +358,10 @@ export async function kiemTraClaude(): Promise<KQ> {
     // PDF nhỏ dựng sẵn để kiểm tra khả năng đọc tài liệu
     const pdf = Buffer.from('JVBERi0xLjQKMSAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFI+PgplbmRvYmoKMiAwIG9iago8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PgplbmRvYmoKMyAwIG9iago8PC9UeXBlL1BhZ2UvUGFyZW50IDIgMCBSL01lZGlhQm94WzAgMCAzMDAgMTAwXS9Db250ZW50cyA0IDAgUi9SZXNvdXJjZXM8PC9Gb250PDwvRjEgNSAwIFI+Pj4+Pj4KZW5kb2JqCjQgMCBvYmoKPDwvTGVuZ3RoIDQ3Pj5zdHJlYW0KQlQgL0YxIDE4IFRmIDIwIDQwIFRkIChIT1AgRE9ORyBURVNUIDEyMykgVGogRVQKZW5kc3RyZWFtCmVuZG9iago1IDAgb2JqCjw8L1R5cGUvRm9udC9TdWJ0eXBlL1R5cGUxL0Jhc2VGb250L0hlbHZldGljYT4+CmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1NCAwMDAwMCBuIAowMDAwMDAwMTA1IDAwMDAwIG4gCjAwMDAwMDAyMTcgMDAwMDAgbiAKMDAwMDAwMDMxMSAwMDAwMCBuIAp0cmFpbGVyCjw8L1NpemUgNi9Sb290IDEgMCBSPj4Kc3RhcnR4cmVmCjM3NAolJUVPRgo=', 'base64');
     const t1 = Date.now();
-    const key = process.env.ANTHROPIC_API_KEY!;
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: MODEL(), max_tokens: 40, messages: [{ role: 'user', content: [
-        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdf.toString('base64') } },
-        { type: 'text', text: 'Chép lại đúng dòng chữ trong tài liệu.' }] }] }),
-    });
-    const j: any = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(`Gọi thường OK (${ms1}ms) nhưng đọc PDF lỗi ${res.status}: ${j?.error?.message ?? ''}`);
+    const j: any = await goiMoHinh({ max_tokens: 60, messages: [{ role: 'user', content: [
+      { type: 'document', title: 'kiem-tra.pdf', source: { type: 'base64', media_type: 'application/pdf', data: pdf.toString('base64') } },
+      { type: 'text', text: 'Chép lại đúng dòng chữ trong tài liệu.' }] }] }).catch((e) => { throw new Error(`Gọi thường OK (${ms1}ms) nhưng đọc PDF lỗi: ${e instanceof Error ? e.message : e}`); });
     const pdfTxt = (j.content ?? []).map((b: any) => b.text ?? '').join(' ').trim();
-    return { ok: true, thongBao: `Model ${MODEL()} · trả lời "${tl}" sau ${ms1}ms · đọc PDF: "${pdfTxt}" sau ${Date.now() - t1}ms` };
+    return { ok: true, thongBao: `${NHA_CUNG_CAP() === 'openai' ? 'OpenAI' : 'Claude'} · model ${MODEL()} · trả lời "${tl}" sau ${ms1}ms · đọc PDF: "${pdfTxt}" sau ${Date.now() - t1}ms` };
   });
 }

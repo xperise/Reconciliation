@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { BUCKET_TT } from './db';
 import { MODEL, skillHienHanh } from './agent';
+import { goiMoHinh } from './ai-provider';
 import { PhongBan, TEN_PHONG_BAN, ThamSoHopDong } from './types';
 
 /**
@@ -14,19 +15,10 @@ const PBS: PhongBan[] = ['ke_toan', 'demand', 'supply', 'ceo'];
 const TIEN_TO: Record<PhongBan, string> = { ke_toan: 'KT', demand: 'DM', supply: 'SP', ceo: 'CEO' };
 
 async function goiAPI(body: any): Promise<any> {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) throw new Error('Chưa cấu hình ANTHROPIC_API_KEY trên Vercel.');
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: MODEL(), ...body }),
-  });
-  const data: any = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`Claude API lỗi ${res.status}: ${data?.error?.message ?? 'không rõ'}`);
-  return data;
+  const { model: _m, ...req } = body;
+  return goiMoHinh(req);
 }
 
-/** Gọi lại một lần nếu lỗi tạm thời (quá tải, mạng). */
 class QuaDai extends Error {}
 async function thuLai<T>(fn: () => Promise<T>): Promise<T> {
   try { return await fn(); } catch (e) {

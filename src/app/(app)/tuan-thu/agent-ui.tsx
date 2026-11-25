@@ -252,5 +252,5 @@ export function GoiYSkill({ id }: { id: number }) {
 }
 
 export function KiemTraClaude() {
-  return <NutAI chay={() => kiemTraClaude()} nhan="Kiểm tra kết nối Claude API" dangNhan="Đang kiểm tra…" />;
+  return <NutAI chay={() => kiemTraClaude()} nhan="Kiểm tra kết nối AI" dangNhan="Đang kiểm tra…" />;
 }

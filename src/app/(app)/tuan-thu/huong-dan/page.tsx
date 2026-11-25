@@ -30,7 +30,7 @@ export default async function Page() {
   const P: { phan: string; buoc: Buoc[] }[] = [
     { phan: 'A · Cài đặt (admin, làm một lần)', buoc: [
       { ten: 'Chạy SQL 38 → 46', vai: 'Admin', lam: 'Supabase → SQL Editor: chạy lần lượt các file 38 đến 46 trong supabase/migrations (38_tuan_thu … 46_tuan_thu_mau_bang_ke).', kq: 'Có hợp đồng VCB, 32 quy tắc, skill v1 cho 4 phòng.', link: '/tuan-thu/quy-tac', xong: !!hd && (sk ?? []).length >= 4 },
-      { ten: 'Nhập Claude API key', vai: 'Admin', lam: 'Vercel → Settings → Environment Variables: thêm ANTHROPIC_API_KEY (tùy chọn ANTHROPIC_MODEL), rồi Redeploy.', kq: 'Nút agent AI trả lời được.', link: '/tuan-thu/agent', xong: (ai ?? []).length > 0 },
+      { ten: 'Nhập API key AI', vai: 'Admin', lam: 'Vercel → Settings → Environment Variables. Dùng OpenAI: AI_PROVIDER=openai, OPENAI_API_KEY, OPENAI_AGENT_MODEL. Dùng Claude: AI_PROVIDER=anthropic, ANTHROPIC_API_KEY (tùy chọn ANTHROPIC_MODEL). Rồi Redeploy và bấm Kiểm tra kết nối AI ở trang Agent.', kq: 'Nút agent AI trả lời được.', link: '/tuan-thu/agent', xong: (ai ?? []).length > 0 },
       { ten: 'Gán phòng ban cho 4 head', vai: 'Admin', lam: 'Mục Thành viên: gán Kế toán, Demand, Supply, CEO.', kq: 'Mỗi head thấy tab Tuân thủ và chỉ duyệt được bước của phòng mình.', link: '/tuan-thu/thanh-vien', xong: ['ke_toan', 'demand', 'supply', 'ceo'].every(coTv) },
       { ten: 'Gắn nhóm Master Data cho hợp đồng VCB', vai: 'Admin', lam: 'Hợp đồng & quy tắc: chọn nhóm Master Data (email đầu mối, CC). Khi thử nghiệm, gắn tạm nhóm có email nội bộ vì CEO duyệt là app gửi thư thật.', kq: 'Hiện email đầu mối dưới tên hợp đồng.', link: '/tuan-thu/quy-tac', xong: !!hd?.group_id },
     ] },
