@@ -10,12 +10,12 @@ export async function docCauHinhQuyTrinh(): Promise<QuyTrinhCauHinh> {
   try {
     const sb = supabaseAdmin();
     const [r1, r2] = await Promise.all([
-      sb.from('tt_role').select('key, ten, thu_tu').order('thu_tu'),
+      sb.from('tt_role').select('key, ten, thu_tu, kich_hoat').order('thu_tu'),
       sb.from('tt_buoc_quy_trinh').select('key, thu_tu, role_key, mode, ket_qua').order('thu_tu'),
     ]);
     if (r1.error || r2.error || !r1.data?.length || !r2.data?.length) return CAU_HINH_MAC_DINH;
     const c: QuyTrinhCauHinh = {
-      roles: r1.data.map((r: any) => ({ key: r.key, ten: r.ten, thuTu: r.thu_tu })),
+      roles: r1.data.map((r: any) => ({ key: r.key, ten: r.ten, thuTu: r.thu_tu, kichHoat: !!r.kich_hoat })),
       buoc: r2.data.map((b: any) => ({ key: b.key, thuTu: b.thu_tu, roleKey: b.role_key, mode: b.mode, ketQua: b.ket_qua })),
       quorumSuaDoi: 'all',
     };

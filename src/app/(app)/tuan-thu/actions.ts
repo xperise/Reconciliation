@@ -14,7 +14,7 @@ import { PhongBan, TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
 import { baoChoPhongBan } from '@/lib/tuan-thu/thong-bao';
 import { CauTrucMau, hocMau } from '@/lib/tuan-thu/mau-bang-ke';
 import { goiYGhepCot } from '@/lib/tuan-thu/mau-ai';
-import { coChan, coDuyet, trangThaiDuocDuyet, TRANG_THAI_CHO, vaiTroChiKiemSoat, vaiTroCoDuyet, vaiTroTheoTrangThai } from '@/lib/tuan-thu/cau-hinh';
+import { coChan, coDuyet, coQuyenKichHoat, trangThaiDuocDuyet, TRANG_THAI_CHO, vaiTroChiKiemSoat, vaiTroCoDuyet, vaiTroTheoTrangThai } from '@/lib/tuan-thu/cau-hinh';
 import { docCauHinhQuyTrinh } from '@/lib/tuan-thu/cau-hinh-db';
 
 type KQ = { ok: true; id?: string; thongBao?: string } | { ok: false; loi: string };
@@ -486,7 +486,7 @@ export async function taoHopDong(fd: FormData): Promise<KQ> {
 export async function kichHoatHopDong(id: string): Promise<KQ> {
   return lam(async () => {
     const n = await batBuoc();
-    if (!n.laAdmin && n.phong_ban !== 'ceo') throw new Error('Chỉ CEO hoặc admin kích hoạt hợp đồng.');
+    if (!n.laAdmin && !coQuyenKichHoat(await docCauHinhQuyTrinh(), n.phong_ban ?? '')) throw new Error('Chỉ CEO hoặc admin kích hoạt hợp đồng.');
     const sb = supabaseAdmin();
     const { data: hd } = await sb.from('tt_hop_dong').select('trang_thai').eq('id', id).single();
     if (hd?.trang_thai !== 'cho_chot') throw new Error('Hợp đồng không ở trạng thái chờ chốt.');

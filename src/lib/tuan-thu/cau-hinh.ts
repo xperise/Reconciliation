@@ -9,7 +9,7 @@
 export type CheDoDuyet = 'any' | 'all' | 'quorum';
 export type KetQuaBuoc = 'duyet' | 'tra_ve' | 'chan';
 
-export interface RoleCauHinh { key: string; ten: string; thuTu: number }
+export interface RoleCauHinh { key: string; ten: string; thuTu: number; kichHoat: boolean }
 export interface BuocCauHinh {
   key: string;
   thuTu: number;          // cùng thuTu = chạy song song (demand và supply)
@@ -25,10 +25,10 @@ export interface QuyTrinhCauHinh {
 
 export const CAU_HINH_MAC_DINH: QuyTrinhCauHinh = {
   roles: [
-    { key: 'ke_toan', ten: 'Kế toán', thuTu: 1 },
-    { key: 'demand', ten: 'Demand', thuTu: 2 },
-    { key: 'supply', ten: 'Supply', thuTu: 2 },
-    { key: 'ceo', ten: 'CEO', thuTu: 3 },
+    { key: 'ke_toan', ten: 'Kế toán', thuTu: 1, kichHoat: false },
+    { key: 'demand', ten: 'Demand', thuTu: 2, kichHoat: false },
+    { key: 'supply', ten: 'Supply', thuTu: 2, kichHoat: false },
+    { key: 'ceo', ten: 'CEO', thuTu: 3, kichHoat: true },
   ],
   buoc: [
     { key: 'ke_toan_duyet', thuTu: 1, roleKey: 'ke_toan', mode: 'any', ketQua: ['duyet', 'tra_ve'] },
@@ -54,6 +54,7 @@ export function kiemTraCauHinh(c: QuyTrinhCauHinh): string[] {
   if (!c.buoc.some((b) => b.thuTu === cuoi && b.ketQua.includes('duyet')))
     loi.push('Phải có ít nhất một bước duyệt ở vị trí cuối cùng (bước gửi).');
   if (c.quorumSuaDoi !== 'all') loi.push('Quorum sửa đổi không được thấp hơn mức sàn (tất cả).');
+  if (!c.roles.some((r) => r.kichHoat)) loi.push('Phải có ít nhất một role được kích hoạt hợp đồng.');
   return loi;
 }
 
@@ -108,4 +109,9 @@ export function vaiTroCoDuyet(c: QuyTrinhCauHinh): string[] {
 /** Role chỉ kiểm soát (không duyệt) và có việc ở giai đoạn đầu: nhận thông báo khi có bảng kê mới. */
 export function vaiTroChiKiemSoat(c: QuyTrinhCauHinh): string[] {
   return c.roles.map((r) => r.key).filter((k) => !coDuyet(c, k) && trangThaiDuocDuyet(c, k).includes(TRANG_THAI_CHO.dau));
+}
+
+/** Role được phép kích hoạt hợp đồng (ngoài admin). Mặc định: chỉ CEO. */
+export function coQuyenKichHoat(c: QuyTrinhCauHinh, roleKey: string): boolean {
+  return c.roles.some((r) => r.key === roleKey && r.kichHoat);
 }
