@@ -150,6 +150,8 @@ export async function goiClaudeCongCu(system: string, messages: any[], tools: an
     body: JSON.stringify({ model: MODEL(), max_tokens: maxTokens, system, messages, tools, ...(batBuocCongCu ? { tool_choice: { type: 'tool', name: batBuocCongCu } } : {}) }),
   });
   const data: any = await res.json().catch(() => ({}));
+  // Model không hỗ trợ ép gọi công cụ → gọi lại ở chế độ tự chọn
+  if (!res.ok && batBuocCongCu && /tool_choice/i.test(data?.error?.message ?? '')) return goiClaudeCongCu(system, messages, tools, maxTokens);
   if (!res.ok) throw new Error(`Claude API lỗi ${res.status}: ${data?.error?.message ?? 'không rõ'}`);
   return data;
 }

@@ -46,13 +46,25 @@ async function goiChu(system: string, docs: any[], yeuCau: string, maxTokens: nu
  * không phải tự đọc JSON trong chữ — tránh lỗi JSON hỏng hoặc bị cắt dở.
  */
 async function goiCauTruc(system: string, docs: any[], yeuCau: string, tool: { name: string; description: string; input_schema: any }, maxTokens: number): Promise<any> {
-  return thuLai(async () => {
-    const d = await goiAPI({ max_tokens: maxTokens, system, tools: [tool], tool_choice: { type: 'tool', name: tool.name },
-      messages: [{ role: 'user', content: [...docs, { type: 'text', text: yeuCau }] }] });
-    const u = (d.content ?? []).find((b: any) => b.type === 'tool_use');
+  const goi = async (epBuoc: boolean) => {
+    const d = await goiAPI({ max_tokens: maxTokens, system, tools: [tool], ...(epBuoc ? { tool_choice: { type: 'tool', name: tool.name } } : {}),
+      messages: [{ role: 'user', content: [...docs, { type: 'text', text: `${yeuCau}\n\nBẮT BUỘC: trả kết quả bằng cách gọi công cụ ${tool.name} đúng một lần; không viết câu trả lời dạng chữ.` }] }] });
     if (d.stop_reason === 'max_tokens') throw new Error(`Agent trả kết quả quá dài (${tool.name}) — hợp đồng có thể quá nhiều điều khoản; thử chia nhỏ file PDF.`);
-    if (!u?.input) throw new Error(`Agent không trả kết quả có cấu trúc (${tool.name}).`);
-    return u.input;
+    const u = (d.content ?? []).find((b: any) => b.type === 'tool_use' && b.name === tool.name);
+    if (u?.input) return u.input;
+    // Model không gọi công cụ: thử đọc JSON trong chữ (phương án cuối)
+    const t = (d.content ?? []).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n');
+    const a = t.indexOf('{'), z = t.lastIndexOf('}');
+    if (a >= 0 && z > a) { try { return JSON.parse(t.slice(a, z + 1)); } catch { /* bỏ qua */ } }
+    throw new Error(`Agent không trả kết quả có cấu trúc (${tool.name}).`);
+  };
+  return thuLai(async () => {
+    try { return await goi(true); }
+    catch (e) {
+      // Một số model không hỗ trợ ép gọi công cụ (tool_choice) → gọi lại ở chế độ tự chọn, kèm yêu cầu bắt buộc trong lời nhắn
+      if (e instanceof Error && /tool_choice/i.test(e.message)) return goi(false);
+      throw e;
+    }
   });
 }
 
