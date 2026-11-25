@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { boQuaHanhDong, goiYGiaiTrinh, kiemTraClaude, hoiAgent, luuSkill, phanTichSuaDoi, raSoatBuoc, taiChat, thucHienHanhDong, xoaChat, xuLyGoiY } from './actions-agent';
 import type { PhongBan } from '@/lib/tuan-thu/types';
+import { taiFileLen } from './tai-len';
 
 /** Hiển thị câu trả lời của agent: in đậm **…**, tiêu đề #, gạch đầu dòng. Không dùng innerHTML. */
 function DongChu({ t }: { t: string }) {
@@ -29,7 +30,7 @@ export function VanBan({ text }: { text: string }) {
 const TEN: Record<PhongBan, string> = { ke_toan: 'Kế toán', demand: 'Demand', supply: 'Supply', ceo: 'CEO' };
 
 type HD = { id: number; mo_ta: string; trang_thai: string; ket_qua: string | null };
-type TN = { vai: 'user' | 'assistant'; noi_dung: string; hanh_dong: HD[] };
+type TN = { vai: 'user' | 'assistant'; noi_dung: string; hanh_dong: HD[]; tep: { path: string; ten: string }[] };
 
 /** Thẻ thao tác agent đề xuất: chỉ chạy khi người dùng bấm Thực hiện. */
 function TheHanhDong({ h, capNhat }: { h: HD; capNhat: (h: HD) => void }) {
@@ -57,37 +58,62 @@ function TheHanhDong({ h, capNhat }: { h: HD; capNhat: (h: HD) => void }) {
 }
 
 /**
- * Khung làm việc với agent, có ở mọi trang của phần Tuân thủ (như Cowork).
- * Ở trang một lần chạy, agent tự gắn với lần chạy đó.
+ * Khung làm việc với agent, có ở mọi trang của phần Tuân thủ — dùng như Claude:
+ * gõ yêu cầu (Enter gửi, Shift+Enter xuống dòng), đính kèm tệp (nút kẹp giấy, kéo thả, dán ảnh),
+ * mở rộng toàn màn hình. Ở trang một lần chạy, agent tự gắn với lần chạy đó.
  */
 export function ChatAgent({ pbs }: { pbs: PhongBan[] }) {
   const path = usePathname() ?? '';
   const lanChayId = path.match(/^\/tuan-thu\/chay\/([0-9a-f-]{36})/)?.[1] ?? null;
   const [mo, setMo] = useState(false);
+  const [lon, setLon] = useState(false);
   const [pb, setPb] = useState<PhongBan>(pbs[0]);
   const [ds, setDs] = useState<TN[]>([]);
   const [q, setQ] = useState('');
+  const [teps, setTeps] = useState<File[]>([]);
+  const [keo, setKeo] = useState(false);
   const [dang, bat] = useTransition();
+  const [trangThai, setTrangThai] = useState('');
   const [loi, setLoi] = useState('');
   const cuon = useRef<HTMLDivElement>(null);
+  const oNhap = useRef<HTMLTextAreaElement>(null);
+  const oFile = useRef<HTMLInputElement>(null);
   useEffect(() => { if (mo && pbs.length) taiChat(lanChayId, pb).then(setDs).catch(() => setDs([])); }, [mo, pb, lanChayId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { cuon.current?.scrollTo(0, 1e9); }, [ds, mo, dang]);
+  useEffect(() => { const t = oNhap.current; if (t) { t.style.height = 'auto'; t.style.height = `${Math.min(t.scrollHeight, 200)}px`; } }, [q, mo]);
   if (!pbs.length) return null;
+  const them = (fs: FileList | File[] | null) => {
+    if (!fs) return;
+    const moi = Array.from(fs).filter((f) => f.size > 0);
+    const qua = moi.find((f) => f.size > 30 * 1024 * 1024);
+    if (qua) { setLoi(`${qua.name} lớn hơn 30MB.`); return; }
+    setTeps((x) => [...x, ...moi].slice(0, 8));
+  };
   const capNhatHd = (h: HD) => setDs((x) => x.map((m) => ({ ...m, hanh_dong: m.hanh_dong.map((y) => (y.id === h.id ? h : y)) })));
   const gui = (cau: string) => {
-    if (!cau.trim()) return;
-    setQ(''); setLoi('');
-    setDs((x) => [...x, { vai: 'user', noi_dung: cau, hanh_dong: [] }]);
+    if (!cau.trim() && !teps.length) return;
+    const dangGui = teps;
+    setQ(''); setTeps([]); setLoi('');
+    setDs((x) => [...x, { vai: 'user', noi_dung: cau, hanh_dong: [], tep: dangGui.map((f) => ({ path: '', ten: f.name })) }]);
     bat(async () => {
       let k: Awaited<ReturnType<typeof hoiAgent>>;
-      try { k = await hoiAgent(lanChayId, pb, cau); } catch (e) { k = { ok: false, loi: e instanceof Error ? e.message : String(e) }; }
-      if (k.ok) setDs((x) => [...x, { vai: 'assistant', noi_dung: k.text, hanh_dong: k.hanh_dong }]);
+      try {
+        let daTai: { path: string; ten: string }[] = [];
+        if (dangGui.length) { setTrangThai(`Đang tải ${dangGui.length} tệp lên…`); daTai = await taiFileLen(dangGui, 'chat', 'chat'); }
+        setTrangThai(dangGui.length ? 'Agent đang đọc tệp và làm việc…' : 'Agent đang làm việc…');
+        k = await hoiAgent(lanChayId, pb, cau, daTai);
+      } catch (e) { k = { ok: false, loi: e instanceof Error ? e.message : String(e) }; }
+      setTrangThai('');
+      if (k.ok) setDs((x) => [...x, { vai: 'assistant', noi_dung: k.text, hanh_dong: k.hanh_dong, tep: [] }]);
       else setLoi(k.loi);
     });
   };
   const goiY = lanChayId
     ? ['Tóm tắt lần chạy này và việc còn phải làm', 'Ghi giải trình cho các cảnh báo còn trống', 'Duyệt bước của tôi nếu đủ điều kiện']
-    : ['Lần chạy nào đang chờ tôi?', 'Hợp đồng VCB quy định định mức phòng thế nào?', 'Đề xuất sửa đổi nào đang chờ tôi duyệt?'];
+    : ['Lần chạy nào đang chờ tôi?', 'Hợp đồng VCB quy định định mức phòng thế nào?', 'Tôi đính kèm raw tháng này, tạo lần chạy giúp tôi'];
+  const khung: React.CSSProperties = lon
+    ? { position: 'fixed', inset: 'calc(16px + env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px)) 16px', zIndex: 60 }
+    : { position: 'fixed', right: 16, bottom: 'calc(16px + env(safe-area-inset-bottom, 0px))', zIndex: 50, width: 'min(520px, calc(100vw - 32px))', height: 'min(720px, calc(100vh - 100px))' };
   return (
     <>
       {!mo && <button type="button" className="btn btn-primary no-print" onClick={() => setMo(true)}
@@ -95,7 +121,9 @@ export function ChatAgent({ pbs }: { pbs: PhongBan[] }) {
         Làm việc với agent</button>}
       {mo && (
         <section aria-label="Làm việc với agent" className="card no-print"
-          style={{ position: 'fixed', right: 16, bottom: 'calc(16px + env(safe-area-inset-bottom, 0px))', zIndex: 50, width: 'min(480px, calc(100vw - 32px))', height: 'min(680px, calc(100vh - 110px))', display: 'flex', flexDirection: 'column', padding: 0, boxShadow: '0 12px 28px rgba(0,0,0,.2)' }}>
+          onDragOver={(e) => { e.preventDefault(); setKeo(true); }} onDragLeave={() => setKeo(false)}
+          onDrop={(e) => { e.preventDefault(); setKeo(false); them(e.dataTransfer.files); }}
+          style={{ ...khung, display: 'flex', flexDirection: 'column', padding: 0, boxShadow: '0 12px 28px rgba(0,0,0,.2)', outline: keo ? '2px dashed var(--accent, #00a693)' : undefined }}>
           <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--line)]">
             <b className="text-[13px]">Agent</b>
             {pbs.length > 1 ? (
@@ -104,30 +132,53 @@ export function ChatAgent({ pbs }: { pbs: PhongBan[] }) {
             ) : <span className="pill pill-neutral">{TEN[pb]}</span>}
             <span className="text-[11px] text-[var(--ink-3)] truncate">{lanChayId ? 'Lần chạy đang mở' : 'Chung'}</span>
             <span className="ml-auto" />
-            <button type="button" className="btn btn-sm" onClick={() => bat(async () => { await xoaChat(lanChayId, pb); setDs([]); })}>Xóa</button>
-            <button type="button" className="btn btn-sm" onClick={() => setMo(false)}>Đóng</button>
+            <button type="button" className="btn btn-sm" title="Cuộc trò chuyện mới" onClick={() => bat(async () => { await xoaChat(lanChayId, pb); setDs([]); })}>Mới</button>
+            <button type="button" className="btn btn-sm" onClick={() => setLon((x) => !x)}>{lon ? 'Thu nhỏ' : 'Mở rộng'}</button>
+            <button type="button" className="btn btn-sm" onClick={() => { setMo(false); setLon(false); }}>Đóng</button>
           </div>
-          <div ref={cuon} className="flex-1 overflow-auto px-4 py-3 flex flex-col gap-2">
+          <div ref={cuon} className="flex-1 overflow-auto px-4 py-3 flex flex-col gap-3" style={lon ? { paddingLeft: 'max(16px, calc(50% - 400px))', paddingRight: 'max(16px, calc(50% - 400px))' } : undefined}>
             {ds.length === 0 && (
-              <div className="text-[12px] text-[var(--ink-3)] flex flex-col gap-2">
-                <div>Nhắn cho agent {TEN[pb]} để hỏi hoặc giao việc: sửa ô bảng kê, ghi giải trình, duyệt, trả về, chặn, đề xuất sửa quy tắc… Agent chuẩn bị thao tác, anh/chị bấm Thực hiện thì mới chạy.</div>
-                <div className="flex flex-wrap gap-1">{goiY.map((g) => <button key={g} type="button" className="btn btn-sm" onClick={() => gui(g)}>{g}</button>)}</div>
+              <div className="text-[12.5px] text-[var(--ink-3)] flex flex-col gap-2">
+                <div>Nhắn cho agent {TEN[pb]} như với Claude: hỏi về hợp đồng, quy tắc, bảng kê; đính kèm tệp (PDF hợp đồng, raw Excel, ảnh, Word…) để agent đọc; giao việc — sửa ô, giải trình, duyệt, chặn, tạo lần chạy từ raw, thêm hợp đồng từ PDF. Thao tác chỉ chạy khi anh/chị bấm Thực hiện.</div>
+                <div className="flex flex-wrap gap-1">{goiY.map((g) => <button key={g} type="button" className="btn btn-sm" onClick={() => { setQ(g); oNhap.current?.focus(); }}>{g}</button>)}</div>
               </div>
             )}
             {ds.map((m, i) => (
-              <div key={i} className="flex flex-col gap-2" style={{ alignSelf: m.vai === 'user' ? 'flex-end' : 'stretch', maxWidth: m.vai === 'user' ? '92%' : '100%' }}>
-                <div className="text-[12.5px] rounded-xl px-3 py-2"
-                  style={{ whiteSpace: m.vai === 'user' ? 'pre-wrap' : 'normal', background: m.vai === 'user' ? 'var(--accent-soft, #edfaf8)' : 'var(--surface-2, #f0f0f2)' }}>
-                  {m.vai === 'user' ? m.noi_dung : <VanBan text={m.noi_dung} />}</div>
+              <div key={i} className="flex flex-col gap-2" style={{ alignSelf: m.vai === 'user' ? 'flex-end' : 'stretch', maxWidth: m.vai === 'user' ? '88%' : '100%' }}>
+                {m.tep.length > 0 && <div className="flex flex-wrap gap-1 justify-end">{m.tep.map((t, j) => <span key={j} className="pill pill-neutral text-[11px]">📎 {t.ten}</span>)}</div>}
+                {(m.noi_dung || m.vai === 'assistant') && (
+                  <div className="text-[13px] rounded-xl px-3 py-2"
+                    style={{ whiteSpace: m.vai === 'user' ? 'pre-wrap' : 'normal', background: m.vai === 'user' ? 'var(--accent-soft, #edfaf8)' : 'transparent', padding: m.vai === 'user' ? undefined : '2px 0' }}>
+                    {m.vai === 'user' ? m.noi_dung : <VanBan text={m.noi_dung} />}</div>
+                )}
                 {m.hanh_dong.map((h) => <TheHanhDong key={h.id} h={h} capNhat={capNhatHd} />)}
               </div>
             ))}
-            {dang && <div className="text-[12px] text-[var(--ink-3)]">Agent đang làm việc…</div>}
+            {dang && <div className="text-[12px] text-[var(--ink-3)]">{trangThai || 'Agent đang làm việc…'}</div>}
             {loi && <div className="text-[12px] text-red-600">{loi}</div>}
           </div>
-          <form className="flex gap-2 p-3 border-t border-[var(--line)]" onSubmit={(e) => { e.preventDefault(); gui(q); }}>
-            <input className="field flex-1" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nhắn cho agent…" disabled={dang} />
-            <button className="btn btn-primary" disabled={dang || !q.trim()}>Gửi</button>
+          <form className="p-3 border-t border-[var(--line)]" onSubmit={(e) => { e.preventDefault(); gui(q); }}
+            style={lon ? { paddingLeft: 'max(12px, calc(50% - 400px))', paddingRight: 'max(12px, calc(50% - 400px))' } : undefined}>
+            <div className="rounded-2xl border border-[var(--line)] px-3 py-2 flex flex-col gap-2" style={{ background: 'var(--surface, #fff)' }}>
+              {teps.length > 0 && (
+                <div className="flex flex-wrap gap-1">{teps.map((f, i) => (
+                  <span key={i} className="pill pill-neutral text-[11px] inline-flex items-center gap-1">📎 {f.name}
+                    <button type="button" aria-label={`Bỏ ${f.name}`} onClick={() => setTeps((x) => x.filter((_, j) => j !== i))} className="ml-1">×</button></span>))}</div>
+              )}
+              <textarea ref={oNhap} rows={1} value={q} disabled={dang} placeholder="Nhắn cho agent… (Enter gửi, Shift+Enter xuống dòng)"
+                className="w-full resize-none bg-transparent outline-none text-[13px]" style={{ minHeight: 24 }}
+                onChange={(e) => setQ(e.target.value)}
+                onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); them(e.clipboardData.files); } }}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !(e.nativeEvent as any).isComposing) { e.preventDefault(); gui(q); } }} />
+              <div className="flex items-center gap-2">
+                <input ref={oFile} type="file" multiple hidden accept=".pdf,.xlsx,.xlsm,.xls,.csv,.txt,.md,.docx,.png,.jpg,.jpeg,.webp,.gif"
+                  onChange={(e) => { them(e.target.files); e.target.value = ''; }} />
+                <button type="button" className="btn btn-sm" title="Đính kèm tệp" disabled={dang} onClick={() => oFile.current?.click()}>📎 Đính kèm</button>
+                <span className="text-[11px] text-[var(--ink-3)]">PDF, Excel, CSV, Word, ảnh · tối đa 8 tệp</span>
+                <span className="ml-auto" />
+                <button className="btn btn-primary btn-sm" disabled={dang || (!q.trim() && !teps.length)}>Gửi</button>
+              </div>
+            </div>
           </form>
         </section>
       )}

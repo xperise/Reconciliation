@@ -5,7 +5,9 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { writeAudit } from '@/lib/audit';
 import { batBuoc, duocLam } from '@/lib/tuan-thu/db';
 import { CONG_CU_DOC, CONG_CU_THAO_TAC, LA_THAO_TAC, chayCongCuDoc, moTa, phongBanCan } from '@/lib/tuan-thu/cong-cu';
-import { chanLanChay, chotQuyTac, deXuatSuaDoi, duyetBuoc, duyetSuaDoi, goChan, luuGiaiTrinh, suaBangKe, xacNhanThayDoi } from './actions';
+import { chanLanChay, chotQuyTac, deXuatSuaDoi, duyetBuoc, duyetSuaDoi, goChan, luuGiaiTrinh, suaBangKe, taiLaiRaw, taoHopDong, taoLanChay, xacNhanThayDoi } from './actions';
+import { khoiDinhKem, TepDinhKem } from '@/lib/tuan-thu/dinh-kem';
+import { docHopDong } from '@/lib/tuan-thu/doc-hop-dong';
 import { boiCanhLanChay, docJson, goiClaude, goiClaudeCongCu, heThong, MODEL, skillHienHanh } from '@/lib/tuan-thu/agent';
 import { GOI_Y_AGENT } from '@/lib/tuan-thu/de-xuat';
 import { PhongBan, TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
@@ -16,16 +18,18 @@ const lam = async (fn: () => Promise<KQ>): Promise<KQ> => {
 };
 
 export type HanhDongTT = { id: number; mo_ta: string; trang_thai: string; ket_qua: string | null };
-export type TinNhan = { vai: 'user' | 'assistant'; noi_dung: string; hanh_dong: HanhDongTT[] };
+export type TinNhan = { vai: 'user' | 'assistant'; noi_dung: string; hanh_dong: HanhDongTT[]; tep: { path: string; ten: string }[] };
 
 /**
  * Chat với agent (như Cowork): agent đọc dữ liệu bằng công cụ đọc và ĐỀ XUẤT thao tác bằng công cụ thao tác.
  * Thao tác không chạy ngay — thành thẻ chờ người dùng bấm Thực hiện.
  */
-export async function hoiAgent(lanChayId: string | null, pb: PhongBan, cauHoi: string): Promise<{ ok: true; text: string; hanh_dong: HanhDongTT[] } | { ok: false; loi: string }> {
+export async function hoiAgent(lanChayId: string | null, pb: PhongBan, cauHoi: string, tep: TepDinhKem[] = []): Promise<{ ok: true; text: string; hanh_dong: HanhDongTT[] } | { ok: false; loi: string }> {
   try {
     const n = await batBuoc(pb);
-    const q = cauHoi.trim(); if (!q) throw new Error('Nhập câu hỏi.');
+    const teps = tep.filter((t) => typeof t.path === 'string' && t.path.startsWith('tuan-thu/') && !t.path.includes('..'));
+    const q = cauHoi.trim() || (teps.length ? 'Đọc giúp tôi các tệp đính kèm.' : '');
+    if (!q) throw new Error('Nhập câu hỏi.');
     const sb = supabaseAdmin();
     let hopDongId: string | null = null, boiCanh = '';
     if (lanChayId) { const b = await boiCanhLanChay(lanChayId); hopDongId = b.hopDongId; boiCanh = b.text; }
@@ -39,12 +43,13 @@ LÀM VIỆC QUA CÔNG CỤ:
 - Khi người dùng muốn làm việc gì (sửa ô, ghi giải trình, duyệt, trả về, chặn, gỡ chặn, đề xuất/duyệt sửa đổi, chốt quy tắc, thêm skill), gọi đúng công cụ thao tác. Thao tác KHÔNG chạy ngay: người dùng sẽ thấy thẻ và tự bấm Thực hiện. Sau khi gọi, nói ngắn gọn thao tác đang chờ xác nhận; không nói là đã làm xong.
 - Hợp đồng mới upload qua màn hình Thêm hợp đồng (PDF); bạn giúp head đọc bản nháp, giải thích điểm còn mở, chốt quy tắc (chot_quy_tac, chot_nhieu_quy_tac). Kích hoạt hợp đồng do CEO bấm trên màn hình Hợp đồng & quy tắc.
 - Không tự đề xuất thao tác người dùng không yêu cầu, trừ khi hỏi lại để xác nhận. Nếu thiếu thông tin bắt buộc (lý do, giá trị mới), hỏi lại trước.
-- Duyệt của CEO sẽ gửi thư cho khách ngay khi người dùng xác nhận — nhắc rõ điều này.${lanChayId ? `\n- Lần chạy đang mở: ${lanChayId}.` : ''}`;
+- Duyệt của CEO sẽ gửi thư cho khách ngay khi người dùng xác nhận — nhắc rõ điều này.
+- Người dùng có thể đính kèm tệp (PDF, Excel, CSV, ảnh, Word). Đọc kỹ nội dung tệp trước khi trả lời. Tệp raw bảng kê (.xlsx) dùng được cho tao_lan_chay / tai_lai_raw; PDF hợp đồng dùng được cho tao_hop_dong — truyền đúng "đường dẫn để dùng trong công cụ" ghi cạnh tên tệp. Nếu thiếu thông tin bắt buộc (tháng, đợt, mã khách, số hợp đồng…) thì hỏi lại hoặc đọc từ chính tệp.${lanChayId ? `\n- Lần chạy đang mở: ${lanChayId}.` : ''}`;
 
-    let ls = sb.from('tt_chat').select('vai, noi_dung').eq('user_id', n.id).eq('phong_ban', pb).order('luc', { ascending: false }).limit(12);
+    let ls = sb.from('tt_chat').select('vai, noi_dung, tep').eq('user_id', n.id).eq('phong_ban', pb).order('luc', { ascending: false }).limit(12);
     ls = lanChayId ? ls.eq('lan_chay_id', lanChayId) : ls.is('lan_chay_id', null);
     const { data: cu } = await ls;
-    const lichSu = (cu ?? []).reverse().map((m: any) => ({ role: m.vai, content: m.noi_dung }));
+    const lichSu = (cu ?? []).reverse().map((m: any) => ({ role: m.vai, content: `${m.noi_dung}${(m.tep ?? []).length ? `\n(Đã đính kèm: ${(m.tep as any[]).map((t) => `${t.ten} — ${t.path}`).join('; ')})` : ''}` }));
     // API yêu cầu user/assistant xen kẽ: gộp các tin liền nhau cùng vai
     const messages: any[] = [];
     for (const m of [
@@ -56,6 +61,10 @@ LÀM VIỆC QUA CÔNG CỤ:
       const cuoi = messages[messages.length - 1];
       if (cuoi && cuoi.role === m.role) cuoi.content = `${cuoi.content}\n\n${m.content}`;
       else messages.push({ ...m });
+    }
+    if (teps.length) {
+      const cuoi = messages[messages.length - 1];
+      cuoi.content = [...(await khoiDinhKem(teps)), { type: 'text', text: String(cuoi.content) }];
     }
     const tools = [...CONG_CU_DOC, ...CONG_CU_THAO_TAC];
     const hd: HanhDongTT[] = [];
@@ -90,7 +99,7 @@ LÀM VIỆC QUA CÔNG CỤ:
     }
     if (!text) text = hd.length ? 'Tôi đã chuẩn bị thao tác bên dưới, anh/chị xem và bấm Thực hiện.' : '(Agent không có câu trả lời.)';
     await sb.from('tt_chat').insert([
-      { user_id: n.id, phong_ban: pb, lan_chay_id: lanChayId, vai: 'user', noi_dung: q },
+      { user_id: n.id, phong_ban: pb, lan_chay_id: lanChayId, vai: 'user', noi_dung: q, ...(teps.length ? { tep: teps } : {}) },
       { user_id: n.id, phong_ban: pb, lan_chay_id: lanChayId, vai: 'assistant', noi_dung: text, hanh_dong_ids: hd.map((x) => x.id) },
     ]);
     return { ok: true, text, hanh_dong: hd };
@@ -101,12 +110,12 @@ LÀM VIỆC QUA CÔNG CỤ:
 export async function taiChat(lanChayId: string | null, pb: PhongBan): Promise<TinNhan[]> {
   const n = await batBuoc(pb);
   const sb = supabaseAdmin();
-  let q = sb.from('tt_chat').select('vai, noi_dung, hanh_dong_ids').eq('user_id', n.id).eq('phong_ban', pb).order('luc').limit(60);
+  let q = sb.from('tt_chat').select('vai, noi_dung, hanh_dong_ids, tep').eq('user_id', n.id).eq('phong_ban', pb).order('luc').limit(60);
   q = lanChayId ? q.eq('lan_chay_id', lanChayId) : q.is('lan_chay_id', null);
   const { data } = await q;
   const ids = (data ?? []).flatMap((m: any) => m.hanh_dong_ids ?? []);
   const { data: hds } = ids.length ? await sb.from('tt_hanh_dong').select('id, mo_ta, trang_thai, ket_qua').in('id', ids) : { data: [] as any[] };
-  return (data ?? []).map((m: any) => ({ vai: m.vai, noi_dung: m.noi_dung,
+  return (data ?? []).map((m: any) => ({ vai: m.vai, noi_dung: m.noi_dung, tep: m.tep ?? [],
     hanh_dong: (m.hanh_dong_ids ?? []).map((i: number) => (hds ?? []).find((h: any) => h.id === i)).filter(Boolean) }));
 }
 
@@ -158,6 +167,30 @@ export async function thucHienHanhDong(id: number): Promise<KQ> {
         let ok = 0; const loi: string[] = [];
         for (const r of ds as any[]) { const k = await chotQuyTac(r.id, i.dong_y ? 'dong_y' : 'can_sua', String(i.y_kien ?? '')); if (k.ok) ok++; else loi.push(`${r.ma}: ${k.loi}`); }
         kq = loi.length && !ok ? { ok: false, loi: loi.join('; ') } : { ok: true, thongBao: `Đã ${i.dong_y ? 'đồng ý' : 'đánh dấu cần sửa'} ${ok} quy tắc.${loi.length ? ` Lỗi: ${loi.join('; ')}` : ''}` };
+        break;
+      }
+      case 'tao_lan_chay': {
+        const fd = new FormData();
+        fd.set('hop_dong_id', i.hop_dong_id); fd.set('thang', i.thang); fd.set('dot', i.dot ? String(i.dot) : '');
+        fd.set('raw_json', JSON.stringify((i.tep_paths ?? []).map((p: string) => ({ path: p, ten: p.split('/').pop() }))));
+        kq = await taoLanChay(fd);
+        if (kq.ok && kq.id) kq = { ok: true, thongBao: `Đã tạo và xử lý lần chạy — mở: /tuan-thu/chay/${kq.id}` };
+        break;
+      }
+      case 'tai_lai_raw': {
+        const fd = new FormData();
+        fd.set('id', i.lan_chay_id);
+        fd.set('raw_json', JSON.stringify((i.tep_paths ?? []).map((p: string) => ({ path: p, ten: p.split('/').pop() }))));
+        kq = await taiLaiRaw(fd); break;
+      }
+      case 'tao_hop_dong': {
+        const fd = new FormData();
+        for (const k of ['ma_khach', 'ten_khach', 'ten_cong_ty_raw', 'so_hop_dong', 'ngay_ky', 'hieu_luc_tu']) if (i[k]) fd.set(k, String(i[k]));
+        fd.set('tep_json', JSON.stringify((i.tep_paths ?? []).map((p: string) => ({ path: p, ten: p.split('/').pop() }))));
+        const t = await taoHopDong(fd);
+        if (!t.ok || !t.id) { kq = t; break; }
+        try { const d = await docHopDong(t.id); kq = { ok: true, thongBao: `Đã thêm hợp đồng, agent đọc xong: ${d.so_quy_tac} quy tắc nháp, ${d.cau_hoi_mo} điểm còn mở. Mở Hợp đồng & quy tắc để 4 head chốt.` }; }
+        catch (e) { kq = { ok: true, thongBao: `Đã lưu hợp đồng nhưng agent đọc lỗi: ${e instanceof Error ? e.message : String(e)}. Bấm "Agent đọc lại" ở trang Hợp đồng & quy tắc.` }; }
         break;
       }
       case 'bo_sung_skill': {

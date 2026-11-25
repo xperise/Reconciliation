@@ -8,6 +8,8 @@ import { duocLam } from '@/lib/tuan-thu/db';
 import type { PhongBan } from '@/lib/tuan-thu/types';
 
 export const dynamic = 'force-dynamic';
+// Thao tác qua agent có thể đọc PDF hợp đồng / xử lý raw lâu
+export const maxDuration = 300;
 
 export default async function TuanThuLayout({ children }: { children: React.ReactNode }) {
   let n;

@@ -493,7 +493,7 @@ export async function suaThamSoNhap(id: string, json: string): Promise<KQ> {
 // Tải file lớn thẳng từ trình duyệt lên Supabase Storage (qua link ký sẵn),
 // tránh giới hạn 4,5MB mỗi request của Vercel (PDF hợp đồng scan thường 5–20MB).
 // ---------------------------------------------------------------------
-export async function xinLinkTaiLen(loai: 'hop_dong' | 'raw', maKhach: string, tenTep: string[]): Promise<{ ok: true; ds: { path: string; token: string; ten: string }[] } | { ok: false; loi: string }> {
+export async function xinLinkTaiLen(loai: 'hop_dong' | 'raw' | 'chat', maKhach: string, tenTep: string[]): Promise<{ ok: true; ds: { path: string; token: string; ten: string }[] } | { ok: false; loi: string }> {
   try {
     await batBuoc(loai === 'raw' ? 'ke_toan' : undefined);
     const ma = maKhach.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '') || 'KHAC';
@@ -502,7 +502,8 @@ export async function xinLinkTaiLen(loai: 'hop_dong' | 'raw', maKhach: string, t
     for (const ten of tenTep.slice(0, 10)) {
       if (loai === 'hop_dong' && !/\.pdf$/i.test(ten)) throw new Error('Hợp đồng chỉ nhận file PDF.');
       if (loai === 'raw' && !/\.xlsx$/i.test(ten)) throw new Error('Raw chỉ nhận file .xlsx.');
-      const path = `tuan-thu/${ma}/${loai === 'hop_dong' ? 'hop-dong' : 'raw-tam'}/${lo}/${ten.normalize('NFC').replace(/[/\\?%*:|"<>]/g, '_').slice(0, 120)}`;
+      if (loai === 'chat' && !/\.(pdf|xlsx|xlsm|xls|csv|txt|md|docx|png|jpe?g|webp|gif)$/i.test(ten)) throw new Error(`Chưa hỗ trợ loại file ${ten}.`);
+      const path = `tuan-thu/${ma}/${loai === 'hop_dong' ? 'hop-dong' : loai === 'chat' ? 'chat' : 'raw-tam'}/${lo}/${ten.normalize('NFC').replace(/[/\\?%*:|"<>]/g, '_').slice(0, 120)}`;
       const { data, error } = await supabaseAdmin().storage.from(BUCKET_TT).createSignedUploadUrl(path);
       if (error || !data) throw new Error(`Không tạo được link tải lên: ${error?.message ?? ''}`);
       ds.push({ path: data.path, token: data.token, ten });
