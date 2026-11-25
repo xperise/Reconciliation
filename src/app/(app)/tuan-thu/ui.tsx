@@ -5,6 +5,14 @@ import { useRouter } from 'next/navigation';
 
 type KQ = { ok: true; id?: string; thongBao?: string } | { ok: false; loi: string };
 
+/** Lỗi mạng / máy chủ (ví dụ file quá lớn, hết thời gian) → câu báo dễ hiểu thay vì làm sập trang. */
+export function loiMang(e: unknown) {
+  const m = e instanceof Error ? e.message : String(e);
+  if (/unexpected response|413|body exceeded|too large/i.test(m)) return 'Máy chủ từ chối yêu cầu (thường do file quá lớn). Thử lại; nếu vẫn lỗi, chia nhỏ file.';
+  if (/timeout|504|failed to fetch|network/i.test(m)) return 'Mất kết nối hoặc máy chủ xử lý quá lâu. Tải lại trang để xem kết quả trước khi thử lại.';
+  return m;
+}
+
 /** Nút gọi server action, hiện lỗi/thông báo ngay dưới nút. */
 export function Nut({ chay, nhan, kieu = '', xacNhan, sau }: {
   chay: () => Promise<KQ>; nhan: string; kieu?: string; xacNhan?: string; sau?: (k: KQ) => void;
@@ -18,7 +26,8 @@ export function Nut({ chay, nhan, kieu = '', xacNhan, sau }: {
         onClick={() => {
           if (xacNhan && !confirm(xacNhan)) return;
           bat(async () => {
-            const k = await chay();
+            let k: KQ;
+            try { k = await chay(); } catch (e) { k = { ok: false, loi: loiMang(e) }; }
             setTb(k.ok ? (k.thongBao ? { loi: false, t: k.thongBao } : null) : { loi: true, t: k.loi });
             if (k.ok) { sau?.(k); router.refresh(); }
           });
@@ -40,7 +49,8 @@ export function FormHanhDong({ action, children, nhanNut, sau, kieu = 'btn-prima
       e.preventDefault();
       const fd = new FormData(e.currentTarget);
       bat(async () => {
-        const k = await action(fd);
+        let k: KQ;
+        try { k = await action(fd); } catch (err) { k = { ok: false, loi: loiMang(err) }; }
         setTb(k.ok ? { loi: false, t: k.thongBao ?? 'Đã lưu.' } : { loi: true, t: k.loi });
         if (k.ok) { sau?.(k); router.refresh(); }
       });

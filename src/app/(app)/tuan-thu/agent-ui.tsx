@@ -44,7 +44,8 @@ function TheHanhDong({ h, capNhat }: { h: HD; capNhat: (h: HD) => void }) {
       {h.trang_thai === 'cho' && (
         <div className="flex gap-2 mt-2">
           <button type="button" className="btn btn-sm btn-primary" disabled={dang} onClick={() => bat(async () => {
-            const k: any = await thucHienHanhDong(h.id);
+            let k: any;
+            try { k = await thucHienHanhDong(h.id); } catch (e) { k = { ok: false, loi: e instanceof Error ? e.message : String(e) }; }
             capNhat({ ...h, trang_thai: k.ok ? 'da_lam' : 'loi', ket_qua: k.ok ? k.thongBao ?? 'Đã thực hiện.' : k.loi });
             router.refresh();
           })}>{dang ? 'Đang thực hiện…' : 'Thực hiện'}</button>
@@ -78,7 +79,8 @@ export function ChatAgent({ pbs }: { pbs: PhongBan[] }) {
     setQ(''); setLoi('');
     setDs((x) => [...x, { vai: 'user', noi_dung: cau, hanh_dong: [] }]);
     bat(async () => {
-      const k = await hoiAgent(lanChayId, pb, cau);
+      let k: Awaited<ReturnType<typeof hoiAgent>>;
+      try { k = await hoiAgent(lanChayId, pb, cau); } catch (e) { k = { ok: false, loi: e instanceof Error ? e.message : String(e) }; }
       if (k.ok) setDs((x) => [...x, { vai: 'assistant', noi_dung: k.text, hanh_dong: k.hanh_dong }]);
       else setLoi(k.loi);
     });
@@ -140,7 +142,8 @@ function NutAI({ chay, nhan, dangNhan }: { chay: () => Promise<{ ok: boolean; lo
   return (
     <span className="inline-flex flex-col gap-1">
       <button type="button" className="btn btn-sm" disabled={dang} onClick={() => bat(async () => {
-        const k: any = await chay();
+        let k: any;
+        try { k = await chay(); } catch (e) { k = { ok: false, loi: e instanceof Error ? e.message : String(e) }; }
         setTb(k.ok ? (k.thongBao ? { loi: false, t: k.thongBao } : null) : { loi: true, t: k.loi });
         if (k.ok) router.refresh();
       })}>{dang ? dangNhan : nhan}</button>

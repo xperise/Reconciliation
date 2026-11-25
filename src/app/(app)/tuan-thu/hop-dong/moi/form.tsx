@@ -2,6 +2,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { taoHopDong } from '../../actions';
+import { taiLenTrucTiep } from '../../tai-len';
 
 export function FormHopDong({ nhom }: { nhom: { id: string; ten: string }[] }) {
   const router = useRouter();
@@ -15,14 +16,20 @@ export function FormHopDong({ nhom }: { nhom: { id: string; ten: string }[] }) {
       e.preventDefault(); setLoi('');
       const fd = new FormData(e.currentTarget);
       bat(async () => {
-        setBuoc('Đang tải file hợp đồng lên…');
-        const k = await taoHopDong(fd);
-        if (!k.ok) { setLoi(k.loi); setBuoc(''); return; }
-        setBuoc('Agent đang đọc hợp đồng: tóm tắt điều khoản, tham số và quy tắc của 4 phòng (thường 1–3 phút)…');
-        const r = await fetch('/api/tuan-thu/doc-hop-dong', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: k.id }) });
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok || !j.ok) { setLoi(`Đã lưu hợp đồng nhưng agent đọc lỗi: ${j.error ?? r.status}. Bấm "Agent đọc lại" ở trang Hợp đồng & quy tắc.`); setBuoc(''); router.push('/tuan-thu/quy-tac'); return; }
-        router.push(`/tuan-thu/quy-tac#hd-${k.id}`);
+        try {
+          setBuoc('Đang tải file hợp đồng lên…');
+          await taiLenTrucTiep(fd, 'tep', 'tep_json', 'hop_dong', String(fd.get('ma_khach') ?? ''));
+          setBuoc('Đang tạo hợp đồng…');
+          const k = await taoHopDong(fd);
+          if (!k.ok) { setLoi(k.loi); setBuoc(''); return; }
+          setBuoc('Agent đang đọc hợp đồng: tóm tắt điều khoản, tham số và quy tắc của 4 phòng (thường 1–3 phút)…');
+          const r = await fetch('/api/tuan-thu/doc-hop-dong', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: k.id }) });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok || !j.ok) { setLoi(`Đã lưu hợp đồng nhưng agent đọc lỗi: ${j.error ?? `HTTP ${r.status}`}. Bấm "Agent đọc lại" ở trang Hợp đồng & quy tắc.`); setBuoc(''); return; }
+          router.push(`/tuan-thu/quy-tac#hd-${k.id}`);
+        } catch (err) {
+          setLoi(err instanceof Error ? err.message : String(err)); setBuoc('');
+        }
       });
     }}>
       <div className="grid gap-3 md:grid-cols-3">

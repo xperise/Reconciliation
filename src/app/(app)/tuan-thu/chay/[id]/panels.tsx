@@ -2,6 +2,13 @@
 import { useState } from 'react';
 import { FormHanhDong, KhoiDuyet, Nut, OGhi } from '../../ui';
 import { chanLanChay, duyetBuoc, goChan, luuGiaiTrinh, taiLaiRaw, xacNhanThayDoi } from '../../actions';
+import { taiLenTrucTiep } from '../../tai-len';
+
+async function taiLaiQuaStorage(fd: FormData) {
+  try { await taiLenTrucTiep(fd, 'raw', 'raw_json', 'raw', 'raw'); }
+  catch (e) { return { ok: false as const, loi: e instanceof Error ? e.message : String(e) }; }
+  return taiLaiRaw(fd);
+}
 
 export function XacNhanTatCa({ lanId, con }: { lanId: string; con: number }) {
   if (!con) return <span className="pill pill-stable">Đã xác nhận hết</span>;
@@ -17,7 +24,7 @@ export function GiaiTrinh({ id, dau, sua }: { id: number; dau: string; sua: bool
 }
 export function TaiLai({ lanId }: { lanId: string }) {
   return (
-    <FormHanhDong action={taiLaiRaw} nhanNut="Tải lại raw đã sửa" kieu="">
+    <FormHanhDong action={taiLaiQuaStorage} nhanNut="Tải lại raw đã sửa" kieu="">
       <input type="hidden" name="id" value={lanId} />
       <input type="file" name="raw" accept=".xlsx" multiple required className="text-[12px]" />
       <span className="text-[11px] text-[var(--ink-3)]">Chọn lại đủ cả file khách sạn và vé. Mọi duyệt của vòng hiện tại sẽ mất hiệu lực.</span>

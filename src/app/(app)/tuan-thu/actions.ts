@@ -17,8 +17,9 @@ type KQ = { ok: true; id?: string; thongBao?: string } | { ok: false; loi: strin
 const loi = (e: unknown): KQ => ({ ok: false, loi: e instanceof Error ? e.message : String(e) });
 const lam = async (fn: () => Promise<KQ>): Promise<KQ> => { try { return await fn(); } catch (e) { return loi(e); } };
 
-async function ghiRaw(lanId: string, maKhach: string, thang: string, files: File[]) {
+async function ghiRaw(lanId: string, maKhach: string, thang: string, files: File[], daTai: { path: string; ten: string }[] = []) {
   const paths: Record<string, string> = {}, ten: Record<string, string> = {};
+  for (const t of daTai) { const k = `tep_${Object.keys(paths).length + 1}`; paths[k] = t.path; ten[k] = t.ten; }
   for (const f of files) {
     if (!f || !f.size) continue;
     const buf = Buffer.from(await f.arrayBuffer());
@@ -52,7 +53,7 @@ export async function taoLanChay(fd: FormData): Promise<KQ> {
     }).select('id').single();
     if (error || !lc) throw new Error(error?.message ?? 'Không tạo được lần chạy.');
     try {
-      const { paths, ten } = await ghiRaw(lc.id, hd.ma_khach, thang, fd.getAll('raw') as File[]);
+      const { paths, ten } = await ghiRaw(lc.id, hd.ma_khach, thang, fd.getAll('raw') as File[], tepDaTai(fd, 'raw_json'));
       await sb.from('tt_lan_chay').update({ raw_paths: paths, raw_ten: ten }).eq('id', lc.id);
       await xuLyLanChay(lc.id);
       await baoChoPhongBan(lc.id, ['demand', 'supply'], 'xu_ly');
@@ -74,7 +75,7 @@ export async function taiLaiRaw(fd: FormData): Promise<KQ> {
     const { data: lc } = await sb.from('tt_lan_chay').select('*, tt_hop_dong(ma_khach)').eq('id', id).single();
     if (!lc) throw new Error('Không tìm thấy lần chạy.');
     if (lc.buoc === 'da_gui') throw new Error('Bảng kê đã gửi, không tải lại được. Tạo lần chạy mới.');
-    const { paths, ten } = await ghiRaw(id, (lc as any).tt_hop_dong.ma_khach, lc.thang, fd.getAll('raw') as File[]);
+    const { paths, ten } = await ghiRaw(id, (lc as any).tt_hop_dong.ma_khach, lc.thang, fd.getAll('raw') as File[], tepDaTai(fd, 'raw_json'));
     const { phien_ban } = await thamSoHieuLuc(lc.hop_dong_id, lc.thang);
     await sb.from('tt_lan_chay').update({ raw_paths: paths, raw_ten: ten, vong: lc.vong + 1, buoc: 'cho_ke_toan', phien_ban_quy_tac: phien_ban }).eq('id', id);
     await xuLyLanChay(id);
@@ -427,8 +428,9 @@ export async function taoHopDong(fd: FormData): Promise<KQ> {
     const hieuLuc = String(fd.get('hieu_luc_tu') ?? '');
     if (!ma || !ten || !so) throw new Error('Nhập mã khách, tên khách và số hợp đồng.');
     if (!/^\d{4}-\d{2}$/.test(hieuLuc)) throw new Error('Chọn tháng bắt đầu áp dụng.');
+    const daTai = tepDaTai(fd, 'tep_json');
     const files = (fd.getAll('tep') as File[]).filter((f) => f && f.size);
-    if (!files.length) throw new Error('Chọn file PDF hợp đồng (và phụ lục).');
+    if (!files.length && !daTai.length) throw new Error('Chọn file PDF hợp đồng (và phụ lục).');
     if (files.some((f) => !/\.pdf$/i.test(f.name))) throw new Error('Chỉ nhận file PDF.');
     const { data: hd, error } = await sb.from('tt_hop_dong').insert({
       ma_khach: ma, ten_khach: ten, so_hop_dong: so, ngay_ky: String(fd.get('ngay_ky') ?? '') || null,
@@ -436,7 +438,7 @@ export async function taoHopDong(fd: FormData): Promise<KQ> {
       cc_them: String(fd.get('cc_them') ?? '').trim() || null, hieu_luc_tu: hieuLuc, trang_thai: 'dang_doc', tao_boi: n.id,
     }).select('id').single();
     if (error || !hd) throw new Error(/duplicate|unique/i.test(error?.message ?? '') ? 'Khách này đã có hợp đồng cùng số.' : /column/.test(error?.message ?? '') ? 'Cần chạy supabase/migrations/43_tuan_thu_them_hop_dong.sql.' : error?.message ?? 'Không tạo được hợp đồng.');
-    const teps: { path: string; ten: string }[] = [];
+    const teps: { path: string; ten: string }[] = [...daTai];
     for (const f of files) {
       const p = `tuan-thu/${ma}/hop-dong/${hd.id}/${Date.now().toString(36)}_${f.name.normalize('NFC').replace(/[/\\?%*:|"<>]/g, '_').slice(0, 120)}`;
       await luuTep(p, Buffer.from(await f.arrayBuffer()), 'application/pdf');
@@ -485,4 +487,34 @@ export async function suaThamSoNhap(id: string, json: string): Promise<KQ> {
     revalidatePath('/tuan-thu/quy-tac');
     return { ok: true, thongBao: 'Đã lưu tham số bản nháp.' };
   });
+}
+
+// ---------------------------------------------------------------------
+// Tải file lớn thẳng từ trình duyệt lên Supabase Storage (qua link ký sẵn),
+// tránh giới hạn 4,5MB mỗi request của Vercel (PDF hợp đồng scan thường 5–20MB).
+// ---------------------------------------------------------------------
+export async function xinLinkTaiLen(loai: 'hop_dong' | 'raw', maKhach: string, tenTep: string[]): Promise<{ ok: true; ds: { path: string; token: string; ten: string }[] } | { ok: false; loi: string }> {
+  try {
+    await batBuoc(loai === 'raw' ? 'ke_toan' : undefined);
+    const ma = maKhach.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '') || 'KHAC';
+    const lo = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    const ds = [];
+    for (const ten of tenTep.slice(0, 10)) {
+      if (loai === 'hop_dong' && !/\.pdf$/i.test(ten)) throw new Error('Hợp đồng chỉ nhận file PDF.');
+      if (loai === 'raw' && !/\.xlsx$/i.test(ten)) throw new Error('Raw chỉ nhận file .xlsx.');
+      const path = `tuan-thu/${ma}/${loai === 'hop_dong' ? 'hop-dong' : 'raw-tam'}/${lo}/${ten.normalize('NFC').replace(/[/\\?%*:|"<>]/g, '_').slice(0, 120)}`;
+      const { data, error } = await supabaseAdmin().storage.from(BUCKET_TT).createSignedUploadUrl(path);
+      if (error || !data) throw new Error(`Không tạo được link tải lên: ${error?.message ?? ''}`);
+      ds.push({ path: data.path, token: data.token, ten });
+    }
+    return { ok: true, ds };
+  } catch (e) { return { ok: false, loi: e instanceof Error ? e.message : String(e) }; }
+}
+
+/** Đọc danh sách file đã tải thẳng lên (JSON [{path, ten}]) từ FormData, chỉ nhận đường dẫn trong tuan-thu/. */
+function tepDaTai(fd: FormData, khoa: string): { path: string; ten: string }[] {
+  try {
+    const ds = JSON.parse(String(fd.get(khoa) ?? '[]')) as { path: string; ten: string }[];
+    return ds.filter((t) => typeof t.path === 'string' && t.path.startsWith('tuan-thu/') && !t.path.includes('..'));
+  } catch { return []; }
 }
