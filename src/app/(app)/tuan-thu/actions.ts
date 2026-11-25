@@ -337,8 +337,8 @@ export async function duyetSuaDoi(id: string, pb: PhongBan, quyetDinh: 'dong_y' 
     if ((ds ?? []).some((d: any) => d.quyet_dinh === 'khong_dong_y')) {
       await sb.from('tt_sua_doi').update({ trang_thai: 'tu_choi' }).eq('id', id);
       thongBao = 'Đề xuất bị từ chối.';
-    } else if ((['ke_toan', 'supply', 'demand', 'ceo'] as PhongBan[]).every((p) => (ds ?? []).some((d: any) => d.phong_ban === p && d.quyet_dinh === 'dong_y'))) {
-      // Đủ 4/4: áp lên bộ tham số (phiên bản mới) và cập nhật quy tắc dạng chữ
+    } else if ((await docCauHinhQuyTrinh()).roles.every((r) => (ds ?? []).some((d: any) => d.phong_ban === r.key && d.quyet_dinh === 'dong_y'))) {
+      // Đủ quorum (mọi role trong cấu hình đồng ý; mặc định 4/4): áp lên bộ tham số (phiên bản mới) và cập nhật quy tắc dạng chữ
       const { data: cuoi } = await sb.from('tt_bo_quy_tac').select('*').eq('hop_dong_id', sd.hop_dong_id).order('phien_ban', { ascending: false }).limit(1).single();
       if (sd.thay_doi_tham_so) {
         await sb.from('tt_bo_quy_tac').insert({ hop_dong_id: sd.hop_dong_id, phien_ban: (cuoi?.phien_ban ?? 0) + 1,
@@ -349,7 +349,7 @@ export async function duyetSuaDoi(id: string, pb: PhongBan, quyetDinh: 'dong_y' 
         can_cu: `SĐ-${String(sd.so).padStart(2, '0')} hiệu lực từ ${sd.hieu_luc_tu}${sd.can_cu ? ` — ${sd.can_cu}` : ''}`, chot: 'dong_y' })
         .eq('hop_dong_id', sd.hop_dong_id).eq('ma', sd.ma_quy_tac);
       await sb.from('tt_sua_doi').update({ trang_thai: 'hieu_luc' }).eq('id', id);
-      thongBao = 'Đủ 4/4 head đồng ý — sửa đổi đã có hiệu lực.';
+      thongBao = 'Đủ quorum head đồng ý — sửa đổi đã có hiệu lực.';
     }
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: `tuan_thu.sua_doi_${quyetDinh}`, entity: 'tt_sua_doi', entityId: id, after: { pb, yKien } });
     revalidatePath('/tuan-thu/sua-doi'); revalidatePath('/tuan-thu/quy-tac', 'layout');
