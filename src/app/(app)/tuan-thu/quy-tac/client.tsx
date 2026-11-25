@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Nut } from '../ui';
-import { capNhatHopDong, chotQuyTac, kichHoatHopDong, suaThamSoNhap } from '../actions';
+import { capNhatHopDong, chotQuyTac, chotTatCaQuyTac, kichHoatHopDong, suaThamSoNhap } from '../actions';
+import type { PhongBan } from '@/lib/tuan-thu/types';
 
 export function ChotQuyTac({ id, chot, yKien, hopDongId, ma }: { id: string; chot: string; yKien: string; hopDongId: string; ma: string }) {
   const [y, setY] = useState(yKien);
@@ -64,4 +65,9 @@ export function SuaThamSo({ id, dau }: { id: string; dau: string }) {
       <div className="mt-2"><Nut chay={() => suaThamSoNhap(id, t)} nhan="Lưu tham số" kieu="btn-primary" /></div>
     </details>
   );
+}
+
+export function ChotTatCa({ hopDongId, pb, con }: { hopDongId: string; pb: PhongBan; con: number }) {
+  return <Nut chay={() => chotTatCaQuyTac(hopDongId, pb, '')} nhan={`Đồng ý tất cả (${con} quy tắc còn chờ)`} kieu="btn-primary"
+    xacNhan={`Đồng ý một lần ${con} quy tắc còn chờ chốt của phòng này? Quy tắc nào cần sửa thì bấm Cần sửa / Đề xuất sửa riêng sau.`} />;
 }

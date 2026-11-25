@@ -3,7 +3,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { duocLam, fmtVnd, nguoiTT, NguoiTT } from '@/lib/tuan-thu/db';
 import { PhongBan, TEN_MUC_DO, TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
 import Link from 'next/link';
-import { ChotQuyTac, DocLai, KichHoat, SuaHopDong, SuaThamSo } from '../client';
+import { ChotQuyTac, ChotTatCa, DocLai, KichHoat, SuaHopDong, SuaThamSo } from '../client';
 import { VanBan } from '../../agent-ui';
 import { KhoiMau, KhoiSuaDoi } from './khoi-them';
 
@@ -89,7 +89,8 @@ async function KhoiHopDong({ hd, n, nhomDs }: { hd: any; n: NguoiTT; nhomDs: { i
             </div>
             {theoPb.map(({ pb, ds }) => (
               <div key={pb} className="card overflow-hidden mb-4">
-                <div className="card-hd px-4 py-2 font-semibold">{TEN_PHONG_BAN[pb]} · {ds.filter((q: any) => q.chot === 'dong_y').length}/{ds.length} đã chốt</div>
+                <div className="card-hd px-4 py-2 font-semibold flex items-center gap-3 flex-wrap">{TEN_PHONG_BAN[pb]} · {ds.filter((q: any) => q.chot === 'dong_y').length}/{ds.length} đã chốt
+                  {duocLam(n, pb) && ds.some((q: any) => q.chot !== 'dong_y') && <span className="ml-auto font-normal"><ChotTatCa hopDongId={hd.id} pb={pb} con={ds.filter((q: any) => q.chot !== 'dong_y').length} /></span>}</div>
                 <table className="tbl"><thead><tr><th>Mã</th><th>Quy tắc</th><th>Giá trị</th><th>Căn cứ</th><th>Cách kiểm</th><th>Mức độ</th><th>Head chốt</th><th style={{ minWidth: 240 }}></th></tr></thead>
                   <tbody>{ds.map((q: any) => (
                     <tr key={q.id}>

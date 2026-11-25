@@ -618,3 +618,17 @@ export async function duyetMauBangKe(id: string): Promise<KQ> {
     return { ok: true, thongBao: `Mẫu v${m.phien_ban} của ${m.ma_khach} có hiệu lực — lần chạy từ raw tiếp theo dựng đúng mẫu này.` };
   });
 }
+
+/** Head đồng ý một lần toàn bộ quy tắc còn chờ chốt của phòng mình trong một hợp đồng. */
+export async function chotTatCaQuyTac(hopDongId: string, pb: PhongBan, yKien: string): Promise<KQ> {
+  return lam(async () => {
+    const n = await batBuoc(pb);
+    const sb = supabaseAdmin();
+    const { data, error } = await sb.from('tt_quy_tac').update({ chot: 'dong_y', chot_y_kien: yKien.trim() || null, chot_boi: n.id, chot_luc: new Date().toISOString() })
+      .eq('hop_dong_id', hopDongId).eq('phong_ban', pb).neq('chot', 'dong_y').select('ma');
+    if (error) throw new Error(error.message);
+    await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.chot_tat_ca', entity: 'tt_hop_dong', entityId: hopDongId, after: { pb, so: data?.length ?? 0 } });
+    revalidatePath('/tuan-thu/quy-tac', 'layout');
+    return { ok: true, thongBao: `Đã đồng ý ${data?.length ?? 0} quy tắc của ${TEN_PHONG_BAN[pb]}.` };
+  });
+}
