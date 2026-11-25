@@ -1,3 +1,5 @@
+import { xoaHopDong } from '../actions';
+import { XoaNut } from '../xoa-nut';
 import Link from 'next/link';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { PageHeader } from '@/components/PageHeader';
@@ -33,7 +35,7 @@ export default async function Page() {
           <thead><tr><th>Khách</th><th>Số hợp đồng</th><th>Trạng thái</th><th>Quy tắc</th>
             {PB.map((p) => <th key={p} className="text-right">{TEN_PHONG_BAN[p]} đã chốt</th>)}<th>Sửa đổi chờ</th><th></th></tr></thead>
           <tbody>
-            {ds.length === 0 && <tr><td colSpan={9} className="empty">Chưa có hợp đồng nào.</td></tr>}
+            {ds.length === 0 && <tr><td colSpan={10} className="empty">Chưa có hợp đồng nào.</td></tr>}
             {khach.map((ma) => ds.filter((h) => h.ma_khach === ma).map((h, i) => {
               const tt = TT_HD[h.trang_thai ?? 'hieu_luc'] ?? TT_HD.hieu_luc;
               const can = (pb: PhongBan) => (n.laAdmin || n.phong_ban === pb) && h.trang_thai === 'cho_chot' && dem(h.id, pb).da < dem(h.id, pb).tong;
@@ -45,7 +47,7 @@ export default async function Page() {
                   <td className="text-[12px]">v{ver(h.id) || '—'}{h.trang_thai === 'cho_chot' ? ' (nháp)' : ''}</td>
                   {PB.map((p) => { const d = dem(h.id, p); return <td key={p} className={`text-right text-[12px] ${can(p) ? 'font-semibold text-[var(--critical)]' : ''}`}>{d.tong ? `${d.da}/${d.tong}` : '—'}</td>; })}
                   <td>{cho(h.id) ? <Link href={`/tuan-thu/quy-tac/${h.id}#sua-doi`} className="pill pill-watch">{cho(h.id)}</Link> : '—'}</td>
-                  <td className="text-right"><Link href={`/tuan-thu/quy-tac/${h.id}`} className="btn btn-sm">Xem chi tiết</Link></td>
+                  <td className="text-right"><Link href={`/tuan-thu/quy-tac/${h.id}`} className="btn btn-sm">Xem chi tiết</Link>{n.laAdmin && <span className="ml-2"><XoaNut id={h.id} xoa={xoaHopDong} xacNhan={`Xoá hợp đồng ${h.so_hop_dong}? Quy tắc, sửa đổi và lần chạy của hợp đồng này sẽ bị xoá.`} /></span>}</td>
                 </tr>
               );
             }))}

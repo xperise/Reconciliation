@@ -3,6 +3,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { PageHeader } from '@/components/PageHeader';
 import { fmtVnd, nhanThang, TEN_BUOC } from '@/lib/tuan-thu/db';
 import { TaoLanChay } from './tao-lan-chay';
+import { xoaLanChay } from './actions';
+import { XoaNut } from './xoa-nut';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,9 +27,9 @@ export default async function Page() {
       </section>
       <div className="card overflow-hidden">
         <table className="tbl">
-          <thead><tr><th>Khách</th><th>Kỳ</th><th>Quy tắc</th><th>Bước</th><th className="text-right">Tổng gửi khách</th><th>Tạo lúc</th><th></th></tr></thead>
+          <thead><tr><th>Khách</th><th>Kỳ</th><th>Quy tắc</th><th>Bước</th><th className="text-right">Tổng gửi khách</th><th>Tạo lúc</th><th></th><th></th></tr></thead>
           <tbody>
-            {(ds ?? []).length === 0 && <tr><td colSpan={7} className="empty">Chưa có lần chạy nào.</td></tr>}
+            {(ds ?? []).length === 0 && <tr><td colSpan={8} className="empty">Chưa có lần chạy nào.</td></tr>}
             {(ds ?? []).map((r: any) => (
               <tr key={r.id}>
                 <td className="font-semibold">{r.tt_hop_dong?.ma_khach}</td>
@@ -40,6 +42,7 @@ export default async function Page() {
                 <td className="text-right mono">{fmtVnd(r.tong_hop?.tong_cong)}</td>
                 <td className="text-xs">{new Date(r.created_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</td>
                 <td className="text-right"><Link className="btn btn-sm" href={`/tuan-thu/chay/${r.id}`}>Mở</Link></td>
+                <td className="text-right">{r.buoc !== 'da_gui' && <XoaNut id={r.id} xoa={xoaLanChay} xacNhan="Xoá lần chạy này? Lịch sử xử lý và bảng kê của lần chạy sẽ mất." />}</td>
               </tr>
             ))}
           </tbody>

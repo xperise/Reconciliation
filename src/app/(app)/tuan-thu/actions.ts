@@ -634,3 +634,38 @@ export async function chotTatCaQuyTac(hopDongId: string, pb: PhongBan, yKien: st
     return { ok: true, thongBao: `Đã đồng ý ${data?.length ?? 0} quy tắc của ${TEN_PHONG_BAN[pb]}.` };
   });
 }
+
+/** Xoá lần chạy bảng kê (kế toán hoặc Admin). Không xoá bảng kê đã gửi khách, để giữ đối chiếu. File trên storage giữ lại. */
+export async function xoaLanChay(lanId: string): Promise<KQ> {
+  return lam(async () => {
+    const n = await batBuoc('ke_toan');
+    const sb = supabaseAdmin();
+    const { data: lc } = await sb.from('tt_lan_chay').select('id, buoc, thang').eq('id', lanId).single();
+    if (!lc) throw new Error('Không tìm thấy lần chạy.');
+    if (lc.buoc === 'da_gui') throw new Error('Bảng kê đã gửi khách, không xoá được để giữ đối chiếu.');
+    const { error } = await sb.from('tt_lan_chay').delete().eq('id', lanId);
+    if (error) throw new Error(error.message);
+    await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.xoa_lan_chay', entity: 'tt_lan_chay', entityId: lanId, after: { thang: lc.thang } });
+    revalidatePath('/tuan-thu');
+    return { ok: true, thongBao: 'Đã xoá lần chạy.' };
+  });
+}
+
+/** Xoá hợp đồng cùng bộ quy tắc, sửa đổi và lần chạy (chỉ Admin). Từ chối nếu đã có bảng kê gửi khách. */
+export async function xoaHopDong(hopDongId: string): Promise<KQ> {
+  return lam(async () => {
+    const n = await nguoiTT();
+    if (!n?.laAdmin) throw new Error('Chỉ Admin được xoá hợp đồng.');
+    const sb = supabaseAdmin();
+    const { data: hd } = await sb.from('tt_hop_dong').select('id, ma_khach, so_hop_dong').eq('id', hopDongId).single();
+    if (!hd) throw new Error('Không tìm thấy hợp đồng.');
+    const { count } = await sb.from('tt_lan_chay').select('id', { count: 'exact', head: true }).eq('hop_dong_id', hopDongId).eq('buoc', 'da_gui');
+    if (count) throw new Error(`Hợp đồng đã có ${count} bảng kê gửi khách, không xoá được để giữ đối chiếu.`);
+    const { error } = await sb.from('tt_hop_dong').delete().eq('id', hopDongId);
+    if (error) throw new Error(error.message);
+    await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.xoa_hop_dong', entity: 'tt_hop_dong', entityId: hopDongId, after: { ma_khach: hd.ma_khach, so_hop_dong: hd.so_hop_dong } });
+    revalidatePath('/tuan-thu');
+    revalidatePath('/tuan-thu/quy-tac');
+    return { ok: true, thongBao: `Đã xoá hợp đồng ${hd.so_hop_dong}.` };
+  });
+}
