@@ -94,3 +94,18 @@ export function trangThaiDuocDuyet(c: QuyTrinhCauHinh, roleKey: string): string[
   }
   return [...new Set(c.buoc.map((b) => trangThaiCuaBuoc(c, b)))];
 }
+
+/** Role (theo thứ tự trong cấu hình) thao tác được ở một trạng thái chờ. */
+export function vaiTroTheoTrangThai(c: QuyTrinhCauHinh, trangThai: string): string[] {
+  return c.roles.map((r) => r.key).filter((k) => trangThaiDuocDuyet(c, k).includes(trangThai));
+}
+
+/** Role có bước duyệt: nhận thông báo khi bị chặn hoặc gỡ chặn. */
+export function vaiTroCoDuyet(c: QuyTrinhCauHinh): string[] {
+  return c.roles.map((r) => r.key).filter((k) => coDuyet(c, k));
+}
+
+/** Role chỉ kiểm soát (không duyệt) và có việc ở giai đoạn đầu: nhận thông báo khi có bảng kê mới. */
+export function vaiTroChiKiemSoat(c: QuyTrinhCauHinh): string[] {
+  return c.roles.map((r) => r.key).filter((k) => !coDuyet(c, k) && trangThaiDuocDuyet(c, k).includes(TRANG_THAI_CHO.dau));
+}
