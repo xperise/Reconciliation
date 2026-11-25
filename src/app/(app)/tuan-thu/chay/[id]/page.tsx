@@ -7,7 +7,7 @@ import { deXuatBuoc, DeXuat } from '@/lib/tuan-thu/de-xuat';
 import { TEN_DICH_VU, TEN_MUC_DO, TEN_PHONG_BAN, PhongBan, LoaiDichVu } from '@/lib/tuan-thu/types';
 import { thongTinGui } from '../../actions';
 import { Duyet, GiaiTrinh, GoChan, KiemSoat, TaiLai, XacNhanMot, XacNhanTatCa } from './panels';
-import { ChatAgent, GoiYGiaiTrinh, RaSoat } from '../../agent-ui';
+import { GoiYGiaiTrinh, RaSoat } from '../../agent-ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,14 +37,14 @@ export default async function Page({ params }: { params: { id: string } }) {
   const canhBao = (cb ?? []) as any[], thayDoi = (td ?? []) as any[], dy = ((dyAll ?? []) as any[]);
   // Agent AI (SQL 39): kết quả rà soát mới nhất của vòng hiện tại + lịch sử chat của người đang xem
   const pbs = (['ke_toan', 'demand', 'supply', 'ceo'] as PhongBan[]).filter((p) => duocLam(n, p));
-  const [{ data: aiKq }, { data: chat }] = await Promise.all([
+  const [{ data: aiKq }, { data: suaTay }] = await Promise.all([
     sb.from('tt_ai_ket_qua').select('phong_ban, noi_dung, luc, skill_phien_ban, vong').eq('lan_chay_id', params.id).eq('loai', 'ra_soat').order('luc', { ascending: false }),
-    sb.from('tt_chat').select('phong_ban, vai, noi_dung').eq('user_id', n.id).eq('lan_chay_id', params.id).order('luc'),
+    sb.from('tt_sua_tay').select('*').eq('lan_chay_id', params.id).order('id'),
   ]);
   const { data: chanAll } = await sb.from('tt_chan').select('*').eq('lan_chay_id', params.id).order('luc', { ascending: false });
   const chanDs = (chanAll ?? []) as any[], dangChanDs = chanDs.filter((c) => !c.go_luc);
   const raSoat = (b: string) => ((aiKq ?? []) as any[]).find((k) => k.phong_ban === b && k.vong === lc.vong) ?? null;
-  const lichSu: any = {}; for (const m of (chat ?? []) as any[]) (lichSu[m.phong_ban] ??= []).push({ vai: m.vai, noi_dung: m.noi_dung });
+
   const dyVong = dy.filter((d) => d.vong === lc.vong);
   const hd: any = lc.tt_hop_dong;
   const th: any = lc.tong_hop ?? {};
@@ -117,6 +117,17 @@ export default async function Page({ params }: { params: { id: string } }) {
         )}
       </section>
 
+      {/* Sửa tay (thường qua agent) */}
+      {(suaTay ?? []).length > 0 && (
+        <section className="card card-pad mb-5">
+          <h2 className="card-title mb-2">Kế toán sửa tay ({(suaTay ?? []).length} ô)</h2>
+          <table className="tbl"><thead><tr><th>Dịch vụ</th><th>Dòng raw</th><th>Cột</th><th>Giá trị cũ</th><th>Giá trị mới</th><th>Lý do</th><th>Người · lúc</th></tr></thead>
+            <tbody>{((suaTay ?? []) as any[]).map((x) => (
+              <tr key={x.id}><td>{TEN_DICH_VU[x.loai as LoaiDichVu]}</td><td>{x.dong}</td><td>{x.cot}</td><td className="text-[12px]">{x.gia_tri_cu}</td><td className="text-[12px] font-semibold">{x.gia_tri_moi}</td>
+                <td className="text-[12px]">{x.ly_do}</td><td className="text-[11px]">{x.nguoi_email} · {new Date(x.luc).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</td></tr>))}</tbody></table>
+        </section>
+      )}
+
       {/* Cảnh báo */}
       <section className="card card-pad mb-5">
         <h2 className="card-title mb-2">Cảnh báo theo bộ quy tắc ({canhBao.length})</h2>
@@ -187,7 +198,8 @@ export default async function Page({ params }: { params: { id: string } }) {
               <ul className="m-0 pl-4">
                 <li>App tự sửa {thayDoi.length} ô, kế toán đã xác nhận {thayDoi.length - chuaXn}.</li>
                 {[...nhomSua.entries()].map(([k, g]) => <li key={k}>{k}: {g.n} ô, chênh {fmtVnd(g.chenh)}đ</li>)}
-                <li>Số lần tải lại raw: {lc.vong - 1}</li>
+                <li>Kế toán sửa tay {(suaTay ?? []).length} ô (xem bảng Kế toán sửa tay).</li>
+                <li>Số vòng làm lại: {lc.vong - 1}</li>
               </ul>
               <p className="label mt-3 mb-1">Demand & Supply kiểm soát</p>
               <ul className="m-0 pl-4">{chanDs.length === 0 ? <li>Không có lần chặn nào.</li> : chanDs.map((c) => <li key={c.id}>{TEN_PHONG_BAN[c.phong_ban as PhongBan]} {c.go_luc ? 'đã chặn rồi gỡ' : 'đang chặn'}: {c.ly_do}{c.go_ghi_chu ? ` — gỡ: ${c.go_ghi_chu}` : ''}</li>)}</ul>
@@ -221,7 +233,6 @@ export default async function Page({ params }: { params: { id: string } }) {
         )}
       </section>
       <p className="mt-4"><Link href="/tuan-thu" className="text-[12px] underline">← Danh sách lần chạy</Link></p>
-      <ChatAgent lanChayId={lc.id} pbs={pbs} lichSu={lichSu} nhanNgCanh={`${hd.ma_khach} ${nhanThang(lc.thang, lc.dot)}`} />
     </>
   );
 }

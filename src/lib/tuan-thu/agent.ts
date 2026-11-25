@@ -139,6 +139,20 @@ ${(dy ?? []).map((d: any) => `- ${TEN_PHONG_BAN[d.buoc as PhongBan]}: ${d.quyet_
   return { text, hopDongId: lc.hop_dong_id, vong: lc.vong };
 }
 
+/** Gọi Claude có công cụ; trả nguyên phản hồi để xử lý tool_use. */
+export async function goiClaudeCongCu(system: string, messages: any[], tools: any[], maxTokens = 1500): Promise<any> {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) throw new Error('Chưa cấu hình ANTHROPIC_API_KEY trên Vercel — agent AI chưa chạy được.');
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: MODEL(), max_tokens: maxTokens, system, messages, tools }),
+  });
+  const data: any = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`Claude API lỗi ${res.status}: ${data?.error?.message ?? 'không rõ'}`);
+  return data;
+}
+
 /** Lấy JSON từ câu trả lời của model (bỏ rào ```json nếu có). */
 export function docJson<T>(s: string): T {
   const t = s.replace(/```json|```/g, '').trim();

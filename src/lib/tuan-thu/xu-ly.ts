@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { BUCKET_TT, thamSoHieuLuc } from './db';
-import { docRaw } from './raw';
+import { COT_SO, docRaw } from './raw';
 import { khoangKy, tongHop, tuSua } from './tinh';
 import { kiemTra } from './kiem';
 import { taoBangKe } from './bang-ke';
@@ -42,6 +42,15 @@ export async function xuLyLanChay(lanChayId: string) {
     dong.push(...kq.dong); thieu[kq.loai] = kq.thieu_cot;
   }
 
+  // Sửa tay qua agent (SQL 42): áp sau khi đọc raw, trước khi app tự sửa theo quy tắc
+  const { data: suaTay } = await sb.from('tt_sua_tay').select('*').eq('lan_chay_id', lc.id).order('id');
+  for (const st of (suaTay ?? []) as any[]) {
+    const d = dong.find((x) => x.loai === st.loai && x.dong === st.dong);
+    if (!d) continue;
+    const so = COT_SO.includes(st.cot);
+    d.v[st.cot] = st.gia_tri_moi === null || st.gia_tri_moi === '' ? null : so ? Number(String(st.gia_tri_moi).replace(/[^\d.-]/g, '')) : st.gia_tri_moi;
+  }
+
   const thayDoi = tuSua(dong, ts);
   const { data: pb } = await sb.from('tt_phong_ban_khach').select('ten, ma_cost_center, thu_tu')
     .eq('hop_dong_id', hd.id).order('thu_tu');
@@ -74,4 +83,18 @@ export async function xuLyLanChay(lanChayId: string) {
     phien_ban_quy_tac: phien_ban, bang_ke_path: `${goc}/${tenBk}`, bao_cao_path: `${goc}/bao_cao_kiem_tra.xlsx`,
     tong_hop: { ...th, nhan_ky: nhanKy }, loi: null,
   }).eq('id', lc.id);
+}
+
+/** Đọc lại raw của một lần chạy (đã áp sửa tay) — dùng cho công cụ xem dòng của agent. */
+export async function docDongLanChay(lanChayId: string): Promise<DongRaw[]> {
+  const sb = supabaseAdmin();
+  const { data: lc } = await sb.from('tt_lan_chay').select('raw_paths').eq('id', lanChayId).single();
+  const dong: DongRaw[] = [];
+  for (const p of Object.values((lc?.raw_paths ?? {}) as Record<string, string>)) dong.push(...(await docRaw(await tai(p))).dong);
+  const { data: suaTay } = await sb.from('tt_sua_tay').select('*').eq('lan_chay_id', lanChayId).order('id');
+  for (const st of (suaTay ?? []) as any[]) {
+    const d = dong.find((x) => x.loai === st.loai && x.dong === st.dong);
+    if (d) d.v[st.cot] = COT_SO.includes(st.cot) ? Number(st.gia_tri_moi) : st.gia_tri_moi;
+  }
+  return dong;
 }

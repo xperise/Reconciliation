@@ -3,8 +3,10 @@
 import { revalidatePath } from 'next/cache';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { writeAudit } from '@/lib/audit';
-import { batBuoc } from '@/lib/tuan-thu/db';
-import { boiCanhLanChay, docJson, goiClaude, heThong, MODEL, skillHienHanh } from '@/lib/tuan-thu/agent';
+import { batBuoc, duocLam } from '@/lib/tuan-thu/db';
+import { CONG_CU_DOC, CONG_CU_THAO_TAC, LA_THAO_TAC, chayCongCuDoc, moTa, phongBanCan } from '@/lib/tuan-thu/cong-cu';
+import { chanLanChay, chotQuyTac, deXuatSuaDoi, duyetBuoc, duyetSuaDoi, goChan, luuGiaiTrinh, suaBangKe, xacNhanThayDoi } from './actions';
+import { boiCanhLanChay, docJson, goiClaude, goiClaudeCongCu, heThong, MODEL, skillHienHanh } from '@/lib/tuan-thu/agent';
 import { GOI_Y_AGENT } from '@/lib/tuan-thu/de-xuat';
 import { PhongBan, TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
 
@@ -13,34 +15,158 @@ const lam = async (fn: () => Promise<KQ>): Promise<KQ> => {
   try { return await fn(); } catch (e) { return { ok: false, loi: e instanceof Error ? e.message : String(e) }; }
 };
 
-/** Chat với agent của một phòng ban, theo lần chạy (nếu có). Lưu cả câu hỏi và trả lời. */
-export async function hoiAgent(lanChayId: string | null, pb: PhongBan, cauHoi: string): Promise<KQ> {
-  return lam(async () => {
+export type HanhDongTT = { id: number; mo_ta: string; trang_thai: string; ket_qua: string | null };
+export type TinNhan = { vai: 'user' | 'assistant'; noi_dung: string; hanh_dong: HanhDongTT[] };
+
+/**
+ * Chat với agent (như Cowork): agent đọc dữ liệu bằng công cụ đọc và ĐỀ XUẤT thao tác bằng công cụ thao tác.
+ * Thao tác không chạy ngay — thành thẻ chờ người dùng bấm Thực hiện.
+ */
+export async function hoiAgent(lanChayId: string | null, pb: PhongBan, cauHoi: string): Promise<{ ok: true; text: string; hanh_dong: HanhDongTT[] } | { ok: false; loi: string }> {
+  try {
     const n = await batBuoc(pb);
     const q = cauHoi.trim(); if (!q) throw new Error('Nhập câu hỏi.');
     const sb = supabaseAdmin();
     let hopDongId: string | null = null, boiCanh = '';
     if (lanChayId) { const b = await boiCanhLanChay(lanChayId); hopDongId = b.hopDongId; boiCanh = b.text; }
     else { const { data } = await sb.from('tt_hop_dong').select('id').order('ma_khach').limit(1); hopDongId = data?.[0]?.id ?? null; }
-    const { system } = await heThong(pb, hopDongId);
+    const { system: sys0 } = await heThong(pb, hopDongId);
+    const system = `${sys0}
 
-    let ls = sb.from('tt_chat').select('vai, noi_dung').eq('user_id', n.id).eq('phong_ban', pb).order('luc', { ascending: false }).limit(10);
+LÀM VIỆC QUA CÔNG CỤ:
+- Bạn đang làm việc cho ${n.full_name || n.email}, vai trò ${n.phong_ban ? TEN_PHONG_BAN[n.phong_ban] : 'admin (làm thay được mọi phòng)'}, đang nói chuyện với tư cách agent ${TEN_PHONG_BAN[pb]}.
+- Dùng công cụ đọc (ds_lan_chay, xem_lan_chay, xem_dong, ds_sua_doi) để lấy số liệu trước khi trả lời hoặc đề xuất; không đoán id, số dòng, tên cột.
+- Khi người dùng muốn làm việc gì (sửa ô, ghi giải trình, duyệt, trả về, chặn, gỡ chặn, đề xuất/duyệt sửa đổi, chốt quy tắc, thêm skill), gọi đúng công cụ thao tác. Thao tác KHÔNG chạy ngay: người dùng sẽ thấy thẻ và tự bấm Thực hiện. Sau khi gọi, nói ngắn gọn thao tác đang chờ xác nhận; không nói là đã làm xong.
+- Không tự đề xuất thao tác người dùng không yêu cầu, trừ khi hỏi lại để xác nhận. Nếu thiếu thông tin bắt buộc (lý do, giá trị mới), hỏi lại trước.
+- Duyệt của CEO sẽ gửi thư cho khách ngay khi người dùng xác nhận — nhắc rõ điều này.${lanChayId ? `\n- Lần chạy đang mở: ${lanChayId}.` : ''}`;
+
+    let ls = sb.from('tt_chat').select('vai, noi_dung').eq('user_id', n.id).eq('phong_ban', pb).order('luc', { ascending: false }).limit(12);
     ls = lanChayId ? ls.eq('lan_chay_id', lanChayId) : ls.is('lan_chay_id', null);
     const { data: cu } = await ls;
     const lichSu = (cu ?? []).reverse().map((m: any) => ({ role: m.vai, content: m.noi_dung }));
-    // Tin nhắn đầu luôn mang bối cảnh mới nhất của lần chạy
-    const messages = [
-      { role: 'user' as const, content: `${boiCanh ? boiCanh + '\n\n' : ''}(Bối cảnh ở trên là dữ liệu hiện tại; dùng nó để trả lời các câu hỏi tiếp theo.)` },
-      { role: 'assistant' as const, content: 'Tôi đã đọc dữ liệu. Anh/chị cần gì?' },
+    // API yêu cầu user/assistant xen kẽ: gộp các tin liền nhau cùng vai
+    const messages: any[] = [];
+    for (const m of [
+      { role: 'user', content: `${boiCanh ? boiCanh + '\n\n' : ''}(Bối cảnh hiện tại. Dùng công cụ để đọc thêm khi cần.)` },
+      { role: 'assistant', content: 'Tôi đã đọc bối cảnh. Anh/chị cần gì?' },
       ...lichSu,
-      { role: 'user' as const, content: q },
-    ];
-    const tl = await goiClaude(system, messages, 1200);
+      { role: 'user', content: q },
+    ]) {
+      const cuoi = messages[messages.length - 1];
+      if (cuoi && cuoi.role === m.role) cuoi.content = `${cuoi.content}\n\n${m.content}`;
+      else messages.push({ ...m });
+    }
+    const tools = [...CONG_CU_DOC, ...CONG_CU_THAO_TAC];
+    const hd: HanhDongTT[] = [];
+    let text = '';
+    for (let vong = 0; vong < 6; vong++) {
+      const r = await goiClaudeCongCu(system, messages, tools, 1500);
+      const blocks: any[] = r.content ?? [];
+      text = blocks.filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
+      const uses = blocks.filter((b) => b.type === 'tool_use');
+      if (r.stop_reason !== 'tool_use' || !uses.length) break;
+      messages.push({ role: 'assistant', content: blocks });
+      const results: any[] = [];
+      for (const u of uses) {
+        let out: string;
+        try {
+          if (LA_THAO_TAC.has(u.name)) {
+            const can = phongBanCan(u.name, u.input, pb);
+            if (!duocLam(n, can)) out = `Người dùng không có quyền thao tác thay phòng ${TEN_PHONG_BAN[can]}.`;
+            else {
+              const mt = moTa(u.name, u.input);
+              const { data: row, error } = await sb.from('tt_hanh_dong').insert({ user_id: n.id, phong_ban: pb, lan_chay_id: u.input?.lan_chay_id ?? lanChayId,
+                cong_cu: u.name, tham_so: u.input ?? {}, mo_ta: mt }).select('id').single();
+              if (error || !row) throw new Error(error?.message ?? 'Không tạo được thao tác (cần SQL 42).');
+              hd.push({ id: row.id, mo_ta: mt, trang_thai: 'cho', ket_qua: null });
+              out = `Đã tạo thẻ thao tác #${row.id} chờ người dùng bấm Thực hiện: ${mt}`;
+            }
+          } else out = await chayCongCuDoc(u.name, u.input ?? {});
+        } catch (e) { out = `Lỗi: ${e instanceof Error ? e.message : String(e)}`; }
+        results.push({ type: 'tool_result', tool_use_id: u.id, content: out.slice(0, 20000) });
+      }
+      messages.push({ role: 'user', content: results });
+    }
+    if (!text) text = hd.length ? 'Tôi đã chuẩn bị thao tác bên dưới, anh/chị xem và bấm Thực hiện.' : '(Agent không có câu trả lời.)';
     await sb.from('tt_chat').insert([
       { user_id: n.id, phong_ban: pb, lan_chay_id: lanChayId, vai: 'user', noi_dung: q },
-      { user_id: n.id, phong_ban: pb, lan_chay_id: lanChayId, vai: 'assistant', noi_dung: tl },
+      { user_id: n.id, phong_ban: pb, lan_chay_id: lanChayId, vai: 'assistant', noi_dung: text, hanh_dong_ids: hd.map((x) => x.id) },
     ]);
-    return { ok: true, text: tl };
+    return { ok: true, text, hanh_dong: hd };
+  } catch (e) { return { ok: false, loi: e instanceof Error ? e.message : String(e) }; }
+}
+
+/** Lịch sử chat kèm trạng thái các thẻ thao tác. */
+export async function taiChat(lanChayId: string | null, pb: PhongBan): Promise<TinNhan[]> {
+  const n = await batBuoc(pb);
+  const sb = supabaseAdmin();
+  let q = sb.from('tt_chat').select('vai, noi_dung, hanh_dong_ids').eq('user_id', n.id).eq('phong_ban', pb).order('luc').limit(60);
+  q = lanChayId ? q.eq('lan_chay_id', lanChayId) : q.is('lan_chay_id', null);
+  const { data } = await q;
+  const ids = (data ?? []).flatMap((m: any) => m.hanh_dong_ids ?? []);
+  const { data: hds } = ids.length ? await sb.from('tt_hanh_dong').select('id, mo_ta, trang_thai, ket_qua').in('id', ids) : { data: [] as any[] };
+  return (data ?? []).map((m: any) => ({ vai: m.vai, noi_dung: m.noi_dung,
+    hanh_dong: (m.hanh_dong_ids ?? []).map((i: number) => (hds ?? []).find((h: any) => h.id === i)).filter(Boolean) }));
+}
+
+/** Người dùng bấm Thực hiện: chạy thao tác bằng quyền của chính người đó. */
+export async function thucHienHanhDong(id: number): Promise<KQ> {
+  return lam(async () => {
+    const sb = supabaseAdmin();
+    const { data: h } = await sb.from('tt_hanh_dong').select('*').eq('id', id).single();
+    if (!h) throw new Error('Không tìm thấy thao tác.');
+    const n = await batBuoc();
+    if (h.user_id !== n.id) throw new Error('Thao tác này do người khác tạo.');
+    if (h.trang_thai !== 'cho') throw new Error('Thao tác đã xử lý.');
+    const i = h.tham_so ?? {};
+    let kq: any;
+    const hdMa = async (ma?: string) => { const { data } = await sb.from('tt_hop_dong').select('id').eq('ma_khach', ma || 'VCB').single(); if (!data) throw new Error('Không tìm thấy hợp đồng.'); return data.id; };
+    switch (h.cong_cu) {
+      case 'sua_o_bang_ke': kq = await suaBangKe(i.lan_chay_id, i.thay_doi ?? [], i.ly_do ?? ''); break;
+      case 'ghi_giai_trinh': kq = await luuGiaiTrinh(Number(i.canh_bao_id), String(i.noi_dung ?? '')); break;
+      case 'xac_nhan_o_tu_sua': kq = await xacNhanThayDoi(i.lan_chay_id, 'tat_ca'); break;
+      case 'duyet_buoc': kq = await duyetBuoc(i.lan_chay_id, i.buoc, 'duyet', String(i.y_kien ?? '')); break;
+      case 'tra_ve_ke_toan': kq = await duyetBuoc(i.lan_chay_id, i.phong_ban, 'tra_ve', String(i.ly_do ?? '')); break;
+      case 'chan_bang_ke': kq = await chanLanChay(i.lan_chay_id, i.phong_ban, String(i.ly_do ?? '')); break;
+      case 'go_chan': kq = await goChan(Number(i.chan_id), String(i.ghi_chu ?? '')); break;
+      case 'de_xuat_sua_doi': {
+        const fd = new FormData();
+        fd.set('hop_dong_id', await hdMa(i.ma_khach)); fd.set('ma_quy_tac', i.ma_quy_tac); fd.set('noi_dung_moi', i.noi_dung_moi ?? '');
+        fd.set('gia_tri_moi', i.gia_tri_moi ?? ''); fd.set('ly_do', i.ly_do ?? ''); fd.set('can_cu', i.can_cu ?? ''); fd.set('hieu_luc_tu', i.hieu_luc_tu ?? '');
+        fd.set('phong_ban', h.phong_ban); fd.set('loai_tham_so', i.loai_tham_so ?? '');
+        for (const k of ['ngay_cat', 'ck_ks', 'ck_vmb', 'phi_ks', 'phi_vmb', 'tk_so', 'tk_ngan_hang', 'han_muc']) if (i[k] !== undefined) fd.set(k, String(i[k]));
+        kq = await deXuatSuaDoi(fd); break;
+      }
+      case 'duyet_sua_doi': kq = await duyetSuaDoi(i.sua_doi_id, h.phong_ban as PhongBan, i.dong_y ? 'dong_y' : 'khong_dong_y', String(i.y_kien ?? '')); break;
+      case 'chot_quy_tac': {
+        const { data: qt } = await sb.from('tt_quy_tac').select('id').eq('hop_dong_id', await hdMa(i.ma_khach)).eq('ma', i.ma).single();
+        if (!qt) throw new Error(`Không có quy tắc ${i.ma}.`);
+        kq = await chotQuyTac(qt.id, i.dong_y ? 'dong_y' : 'can_sua', String(i.y_kien ?? '')); break;
+      }
+      case 'bo_sung_skill': {
+        const cu = await skillHienHanh(h.phong_ban as PhongBan);
+        kq = await luuSkill(h.phong_ban as PhongBan, `${cu.noi_dung}\n- ${i.noi_dung_them}`, i.ly_do ? `Qua agent: ${i.ly_do}` : 'Qua agent'); break;
+      }
+      default: throw new Error('Thao tác không hỗ trợ.');
+    }
+    const ok = !!kq?.ok;
+    const ketQua = ok ? (kq.thongBao ?? 'Đã thực hiện.') : kq?.loi ?? 'Lỗi không rõ.';
+    await sb.from('tt_hanh_dong').update({ trang_thai: ok ? 'da_lam' : 'loi', ket_qua: ketQua, xu_ly_luc: new Date().toISOString() }).eq('id', id);
+    await sb.from('tt_chat').insert({ user_id: n.id, phong_ban: h.phong_ban, lan_chay_id: h.lan_chay_id, vai: 'assistant', noi_dung: `${ok ? '✓ Đã thực hiện' : '✗ Không thực hiện được'}: ${h.mo_ta}\nKết quả: ${ketQua}` });
+    await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.agent_thuc_hien', entity: 'tt_hanh_dong', entityId: String(id), after: { cong_cu: h.cong_cu, ok, ketQua } });
+    if (!ok) return { ok: false, loi: ketQua };
+    return { ok: true, thongBao: ketQua };
+  });
+}
+
+export async function boQuaHanhDong(id: number): Promise<KQ> {
+  return lam(async () => {
+    const n = await batBuoc();
+    const sb = supabaseAdmin();
+    const { data: h } = await sb.from('tt_hanh_dong').select('user_id, trang_thai').eq('id', id).single();
+    if (!h || h.user_id !== n.id) throw new Error('Không tìm thấy thao tác.');
+    if (h.trang_thai === 'cho') await sb.from('tt_hanh_dong').update({ trang_thai: 'bo_qua', xu_ly_luc: new Date().toISOString() }).eq('id', id);
+    return { ok: true };
   });
 }
 

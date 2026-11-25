@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
-import { goiYGiaiTrinh, hoiAgent, luuSkill, phanTichSuaDoi, raSoatBuoc, xoaChat, xuLyGoiY } from './actions-agent';
+import { usePathname, useRouter } from 'next/navigation';
+import { boQuaHanhDong, goiYGiaiTrinh, hoiAgent, luuSkill, phanTichSuaDoi, raSoatBuoc, taiChat, thucHienHanhDong, xoaChat, xuLyGoiY } from './actions-agent';
 import type { PhongBan } from '@/lib/tuan-thu/types';
 
 /** Hiển thị câu trả lời của agent: in đậm **…**, tiêu đề #, gạch đầu dòng. Không dùng innerHTML. */
@@ -27,62 +27,104 @@ export function VanBan({ text }: { text: string }) {
 }
 
 const TEN: Record<PhongBan, string> = { ke_toan: 'Kế toán', demand: 'Demand', supply: 'Supply', ceo: 'CEO' };
-type M = { vai: 'user' | 'assistant'; noi_dung: string };
 
-/** Nút nổi + khung chat với agent của phòng ban mình (admin chọn được phòng). */
-export function ChatAgent({ lanChayId, pbs, lichSu, nhanNgCanh }: {
-  lanChayId: string | null; pbs: PhongBan[]; lichSu: Partial<Record<PhongBan, M[]>>; nhanNgCanh: string;
-}) {
+type HD = { id: number; mo_ta: string; trang_thai: string; ket_qua: string | null };
+type TN = { vai: 'user' | 'assistant'; noi_dung: string; hanh_dong: HD[] };
+
+/** Thẻ thao tác agent đề xuất: chỉ chạy khi người dùng bấm Thực hiện. */
+function TheHanhDong({ h, capNhat }: { h: HD; capNhat: (h: HD) => void }) {
+  const [dang, bat] = useTransition();
+  const router = useRouter();
+  const nhan: Record<string, [string, string]> = { cho: ['Chờ xác nhận', 'pill-watch'], da_lam: ['Đã thực hiện', 'pill-stable'], bo_qua: ['Đã bỏ qua', 'pill-neutral'], loi: ['Lỗi', 'pill-critical'] };
+  return (
+    <div className="rounded-xl border border-[var(--line)] px-3 py-2 text-[12.5px]" style={{ background: 'var(--surface, #fff)' }}>
+      <div className="flex items-center gap-2 mb-1"><b>Thao tác #{h.id}</b><span className={`pill ${nhan[h.trang_thai]?.[1]}`}>{nhan[h.trang_thai]?.[0]}</span></div>
+      <div>{h.mo_ta}</div>
+      {h.ket_qua && <div className="text-[11.5px] mt-1">{h.ket_qua}</div>}
+      {h.trang_thai === 'cho' && (
+        <div className="flex gap-2 mt-2">
+          <button type="button" className="btn btn-sm btn-primary" disabled={dang} onClick={() => bat(async () => {
+            const k: any = await thucHienHanhDong(h.id);
+            capNhat({ ...h, trang_thai: k.ok ? 'da_lam' : 'loi', ket_qua: k.ok ? k.thongBao ?? 'Đã thực hiện.' : k.loi });
+            router.refresh();
+          })}>{dang ? 'Đang thực hiện…' : 'Thực hiện'}</button>
+          <button type="button" className="btn btn-sm" disabled={dang} onClick={() => bat(async () => { await boQuaHanhDong(h.id); capNhat({ ...h, trang_thai: 'bo_qua' }); })}>Bỏ qua</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Khung làm việc với agent, có ở mọi trang của phần Tuân thủ (như Cowork).
+ * Ở trang một lần chạy, agent tự gắn với lần chạy đó.
+ */
+export function ChatAgent({ pbs }: { pbs: PhongBan[] }) {
+  const path = usePathname() ?? '';
+  const lanChayId = path.match(/^\/tuan-thu\/chay\/([0-9a-f-]{36})/)?.[1] ?? null;
   const [mo, setMo] = useState(false);
   const [pb, setPb] = useState<PhongBan>(pbs[0]);
-  const [ds, setDs] = useState<Partial<Record<PhongBan, M[]>>>(lichSu);
+  const [ds, setDs] = useState<TN[]>([]);
   const [q, setQ] = useState('');
   const [dang, bat] = useTransition();
   const [loi, setLoi] = useState('');
   const cuon = useRef<HTMLDivElement>(null);
-  useEffect(() => { cuon.current?.scrollTo(0, 1e9); }, [ds, mo, pb, dang]);
+  useEffect(() => { if (mo && pbs.length) taiChat(lanChayId, pb).then(setDs).catch(() => setDs([])); }, [mo, pb, lanChayId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { cuon.current?.scrollTo(0, 1e9); }, [ds, mo, dang]);
   if (!pbs.length) return null;
-  const msgs = ds[pb] ?? [];
-  const gui = () => {
-    const cau = q.trim(); if (!cau) return;
+  const capNhatHd = (h: HD) => setDs((x) => x.map((m) => ({ ...m, hanh_dong: m.hanh_dong.map((y) => (y.id === h.id ? h : y)) })));
+  const gui = (cau: string) => {
+    if (!cau.trim()) return;
     setQ(''); setLoi('');
-    setDs((x) => ({ ...x, [pb]: [...(x[pb] ?? []), { vai: 'user', noi_dung: cau }] }));
+    setDs((x) => [...x, { vai: 'user', noi_dung: cau, hanh_dong: [] }]);
     bat(async () => {
       const k = await hoiAgent(lanChayId, pb, cau);
-      if (k.ok) setDs((x) => ({ ...x, [pb]: [...(x[pb] ?? []), { vai: 'assistant', noi_dung: k.text ?? '' }] }));
+      if (k.ok) setDs((x) => [...x, { vai: 'assistant', noi_dung: k.text, hanh_dong: k.hanh_dong }]);
       else setLoi(k.loi);
     });
   };
+  const goiY = lanChayId
+    ? ['Tóm tắt lần chạy này và việc còn phải làm', 'Ghi giải trình cho các cảnh báo còn trống', 'Duyệt bước của tôi nếu đủ điều kiện']
+    : ['Lần chạy nào đang chờ tôi?', 'Hợp đồng VCB quy định định mức phòng thế nào?', 'Đề xuất sửa đổi nào đang chờ tôi duyệt?'];
   return (
     <>
       {!mo && <button type="button" className="btn btn-primary no-print" onClick={() => setMo(true)}
         style={{ position: 'fixed', right: 16, bottom: 'calc(16px + env(safe-area-inset-bottom, 0px))', zIndex: 40, borderRadius: 999, padding: '10px 18px', boxShadow: '0 8px 24px rgba(0,0,0,.18)' }}>
-        Hỏi agent {TEN[pb]}</button>}
+        Làm việc với agent</button>}
       {mo && (
-        <section aria-label="Chat với agent" className="card no-print"
-          style={{ position: 'fixed', right: 16, bottom: 'calc(16px + env(safe-area-inset-bottom, 0px))', zIndex: 50, width: 'min(440px, calc(100vw - 32px))', height: 'min(620px, calc(100vh - 120px))', display: 'flex', flexDirection: 'column', padding: 0, boxShadow: '0 12px 28px rgba(0,0,0,.2)' }}>
+        <section aria-label="Làm việc với agent" className="card no-print"
+          style={{ position: 'fixed', right: 16, bottom: 'calc(16px + env(safe-area-inset-bottom, 0px))', zIndex: 50, width: 'min(480px, calc(100vw - 32px))', height: 'min(680px, calc(100vh - 110px))', display: 'flex', flexDirection: 'column', padding: 0, boxShadow: '0 12px 28px rgba(0,0,0,.2)' }}>
           <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--line)]">
             <b className="text-[13px]">Agent</b>
             {pbs.length > 1 ? (
               <select className="field !py-1 !w-auto text-[12px]" value={pb} onChange={(e) => setPb(e.target.value as PhongBan)}>
                 {pbs.map((p) => <option key={p} value={p}>{TEN[p]}</option>)}</select>
             ) : <span className="pill pill-neutral">{TEN[pb]}</span>}
-            <span className="text-[11px] text-[var(--ink-3)] truncate">{nhanNgCanh}</span>
+            <span className="text-[11px] text-[var(--ink-3)] truncate">{lanChayId ? 'Lần chạy đang mở' : 'Chung'}</span>
             <span className="ml-auto" />
-            <button type="button" className="btn btn-sm" onClick={() => { bat(async () => { await xoaChat(lanChayId, pb); setDs((x) => ({ ...x, [pb]: [] })); }); }}>Xóa</button>
+            <button type="button" className="btn btn-sm" onClick={() => bat(async () => { await xoaChat(lanChayId, pb); setDs([]); })}>Xóa</button>
             <button type="button" className="btn btn-sm" onClick={() => setMo(false)}>Đóng</button>
           </div>
           <div ref={cuon} className="flex-1 overflow-auto px-4 py-3 flex flex-col gap-2">
-            {msgs.length === 0 && <div className="text-[12px] text-[var(--ink-3)]">Hỏi agent {TEN[pb]} bất cứ điều gì về hợp đồng, bộ quy tắc của cả 4 phòng{lanChayId ? ', cảnh báo và ô app tự sửa của lần chạy này' : ''}. Agent nắm toàn bộ hợp đồng; nhận định theo chuyên môn trong skill của phòng {TEN[pb]}.</div>}
-            {msgs.map((m, i) => (
-              <div key={i} className="text-[12.5px] rounded-xl px-3 py-2"
-                style={{ whiteSpace: m.vai === 'user' ? 'pre-wrap' : 'normal', alignSelf: m.vai === 'user' ? 'flex-end' : 'flex-start', maxWidth: '92%', background: m.vai === 'user' ? 'var(--accent-soft, #edfaf8)' : 'var(--surface-2, #f0f0f2)' }}>{m.vai === 'user' ? m.noi_dung : <VanBan text={m.noi_dung} />}</div>
+            {ds.length === 0 && (
+              <div className="text-[12px] text-[var(--ink-3)] flex flex-col gap-2">
+                <div>Nhắn cho agent {TEN[pb]} để hỏi hoặc giao việc: sửa ô bảng kê, ghi giải trình, duyệt, trả về, chặn, đề xuất sửa quy tắc… Agent chuẩn bị thao tác, anh/chị bấm Thực hiện thì mới chạy.</div>
+                <div className="flex flex-wrap gap-1">{goiY.map((g) => <button key={g} type="button" className="btn btn-sm" onClick={() => gui(g)}>{g}</button>)}</div>
+              </div>
+            )}
+            {ds.map((m, i) => (
+              <div key={i} className="flex flex-col gap-2" style={{ alignSelf: m.vai === 'user' ? 'flex-end' : 'stretch', maxWidth: m.vai === 'user' ? '92%' : '100%' }}>
+                <div className="text-[12.5px] rounded-xl px-3 py-2"
+                  style={{ whiteSpace: m.vai === 'user' ? 'pre-wrap' : 'normal', background: m.vai === 'user' ? 'var(--accent-soft, #edfaf8)' : 'var(--surface-2, #f0f0f2)' }}>
+                  {m.vai === 'user' ? m.noi_dung : <VanBan text={m.noi_dung} />}</div>
+                {m.hanh_dong.map((h) => <TheHanhDong key={h.id} h={h} capNhat={capNhatHd} />)}
+              </div>
             ))}
-            {dang && <div className="text-[12px] text-[var(--ink-3)]">Agent đang đọc dữ liệu…</div>}
+            {dang && <div className="text-[12px] text-[var(--ink-3)]">Agent đang làm việc…</div>}
             {loi && <div className="text-[12px] text-red-600">{loi}</div>}
           </div>
-          <form className="flex gap-2 p-3 border-t border-[var(--line)]" onSubmit={(e) => { e.preventDefault(); gui(); }}>
-            <input className="field flex-1" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nhập câu hỏi…" disabled={dang} />
+          <form className="flex gap-2 p-3 border-t border-[var(--line)]" onSubmit={(e) => { e.preventDefault(); gui(q); }}>
+            <input className="field flex-1" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nhắn cho agent…" disabled={dang} />
             <button className="btn btn-primary" disabled={dang || !q.trim()}>Gửi</button>
           </form>
         </section>

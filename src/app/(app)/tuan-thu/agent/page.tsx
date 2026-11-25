@@ -3,7 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { PageHeader } from '@/components/PageHeader';
 import { duocLam, nguoiTT } from '@/lib/tuan-thu/db';
 import { PhongBan, TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
-import { ChatAgent, GoiYSkill, SuaSkill } from '../agent-ui';
+import { GoiYSkill, SuaSkill } from '../agent-ui';
 
 export const dynamic = 'force-dynamic';
 const PB: PhongBan[] = ['ke_toan', 'demand', 'supply', 'ceo'];
@@ -13,15 +13,13 @@ export default async function Page({ searchParams }: { searchParams: { pb?: stri
   const choPhep = PB.filter((p) => duocLam(n, p));
   const pb = (choPhep.includes(searchParams.pb as PhongBan) ? searchParams.pb : n.phong_ban ?? choPhep[0]) as PhongBan;
   const sb = supabaseAdmin();
-  const [{ data: sk, error }, { data: gy }, { data: chat }, { data: dung }] = await Promise.all([
+  const [{ data: sk, error }, { data: gy }, { data: dung }] = await Promise.all([
     sb.from('tt_skill').select('*').eq('phong_ban', pb).order('phien_ban', { ascending: false }),
     sb.from('tt_skill_goi_y').select('*').eq('phong_ban', pb).eq('trang_thai', 'cho').order('luc', { ascending: false }),
-    sb.from('tt_chat').select('phong_ban, vai, noi_dung').eq('user_id', n.id).is('lan_chay_id', null).order('luc'),
     sb.from('tt_duyet').select('skill_phien_ban').eq('buoc', pb),
   ]);
   if (error) return <div className="callout callout-high">Chưa chạy <code>supabase/migrations/39_tuan_thu_agent.sql</code> — chưa có bảng skill.</div>;
   const hienHanh = (sk ?? [])[0] as any;
-  const lichSu: any = {}; for (const m of (chat ?? []) as any[]) (lichSu[m.phong_ban] ??= []).push({ vai: m.vai, noi_dung: m.noi_dung });
   const soLanDung = (v: number) => ((dung ?? []) as any[]).filter((d) => d.skill_phien_ban === v).length;
   return (
     <>
@@ -53,7 +51,6 @@ export default async function Page({ searchParams }: { searchParams: { pb?: stri
           </section>
         </div>
       </div>
-      <ChatAgent lanChayId={null} pbs={[pb]} lichSu={lichSu} nhanNgCanh="Bộ quy tắc" />
     </>
   );
 }

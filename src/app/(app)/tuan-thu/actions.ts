@@ -5,7 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { writeAudit } from '@/lib/audit';
 import { sendMail } from '@/lib/google/gmail';
 import { batBuoc, BuocDuyet, duocLam, gopSau, nguoiTT, thamSoHieuLuc, BUCKET_TT, fmtVnd, dsDangChan } from '@/lib/tuan-thu/db';
-import { luuTep, xuLyLanChay } from '@/lib/tuan-thu/xu-ly';
+import { docDongLanChay, luuTep, xuLyLanChay } from '@/lib/tuan-thu/xu-ly';
 import { deXuatBuoc, textDeXuat } from '@/lib/tuan-thu/de-xuat';
 import { PhongBan, TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
 import { baoChoPhongBan } from '@/lib/tuan-thu/thong-bao';
@@ -355,5 +355,36 @@ export async function goChan(chanId: number, ghiChu: string): Promise<KQ> {
     await baoChoPhongBan(c.lan_chay_id, ['ke_toan', 'ceo'], 'go_chan', `${TEN_PHONG_BAN[c.phong_ban as PhongBan]} đã gỡ chặn${ghiChu.trim() ? `: ${ghiChu.trim()}` : ''}`);
     revalidatePath(`/tuan-thu/chay/${c.lan_chay_id}`); revalidatePath('/tuan-thu');
     return { ok: true, thongBao: 'Đã gỡ chặn.' };
+  });
+}
+
+// ---------------------------------------------------------------------
+// Kế toán sửa tay ô bảng kê (thường làm qua agent)
+// ---------------------------------------------------------------------
+export async function suaBangKe(lanId: string, thayDoi: { loai: 'khach_san' | 've_may_bay'; dong: number; cot: string; gia_tri_moi: string }[], lyDo: string): Promise<KQ> {
+  return lam(async () => {
+    const n = await batBuoc('ke_toan');
+    if (!lyDo.trim()) throw new Error('Sửa bảng kê phải ghi lý do.');
+    if (!thayDoi.length) throw new Error('Không có ô nào cần sửa.');
+    const sb = supabaseAdmin();
+    const { data: lc } = await sb.from('tt_lan_chay').select('*').eq('id', lanId).single();
+    if (!lc) throw new Error('Không tìm thấy lần chạy.');
+    if (lc.buoc === 'da_gui') throw new Error('Bảng kê đã gửi, không sửa được. Tạo lần chạy mới.');
+    const dong = await docDongLanChay(lanId);
+    const rows = thayDoi.map((t) => {
+      const d = dong.find((x) => x.loai === t.loai && x.dong === Number(t.dong));
+      if (!d) throw new Error(`Không có dòng ${t.dong} (${t.loai}) trong raw.`);
+      if (!(t.cot in d.v)) throw new Error(`Raw không có cột "${t.cot}".`);
+      const cu = d.v[t.cot];
+      return { lan_chay_id: lanId, loai: t.loai, dong: Number(t.dong), cot: t.cot, gia_tri_cu: cu === null || cu === undefined ? null : String(cu instanceof Date ? cu.toISOString().slice(0, 10) : cu),
+        gia_tri_moi: String(t.gia_tri_moi ?? ''), ly_do: lyDo.trim(), nguoi: n.id, nguoi_email: n.email };
+    });
+    const { error } = await sb.from('tt_sua_tay').insert(rows);
+    if (error) throw new Error(/tt_sua_tay/.test(error.message) ? 'Cần chạy supabase/migrations/42_tuan_thu_agent_hanh_dong.sql.' : error.message);
+    await sb.from('tt_lan_chay').update({ vong: lc.vong + 1, buoc: 'cho_ke_toan' }).eq('id', lanId);
+    await xuLyLanChay(lanId);
+    await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.sua_tay', entity: 'tt_lan_chay', entityId: lanId, after: { thayDoi, lyDo } });
+    revalidatePath(`/tuan-thu/chay/${lanId}`); revalidatePath('/tuan-thu');
+    return { ok: true, thongBao: `Đã sửa ${rows.length} ô và xử lý lại bảng kê (vòng ${lc.vong + 1}).` };
   });
 }

@@ -3,6 +3,9 @@ import { redirect } from 'next/navigation';
 import { nguoiTT } from '@/lib/tuan-thu/db';
 import { TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
 import { SubNav } from './subnav';
+import { ChatAgent } from './agent-ui';
+import { duocLam } from '@/lib/tuan-thu/db';
+import type { PhongBan } from '@/lib/tuan-thu/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +26,7 @@ export default async function TuanThuLayout({ children }: { children: React.Reac
     <>
       <SubNav laAdmin={n.laAdmin} vaiTro={n.phong_ban ? TEN_PHONG_BAN[n.phong_ban] : 'Admin (làm thay mọi phòng)'} />
       <main className="page">{children}</main>
+      <ChatAgent pbs={(['ke_toan', 'demand', 'supply', 'ceo'] as PhongBan[]).filter((p) => duocLam(n!, p))} />
     </>
   );
 }
