@@ -58,7 +58,7 @@ async function KhoiHopDong({ hd, n, nhomDs }: { hd: any; n: NguoiTT; nhomDs: { i
               {(hd.tep_hop_dong ?? []).length > 0 && <p className="text-[12px] mb-2">File: {(hd.tep_hop_dong as any[]).map((t, i) => <a key={i} className="underline mr-3" href={`/api/tuan-thu/tep?path=${encodeURIComponent(t.path)}`}>{t.ten}</a>)}</p>}
               {hd.trang_thai !== 'hieu_luc' && hd.trang_thai !== 'het_hieu_luc' && (
                 <div className="callout callout-accent text-[12.5px] mb-3">
-                  <b>Bản nháp chờ chốt.</b> 4 head chốt hết quy tắc của phòng mình (có thể nhờ agent: "chốt các quy tắc {hd.ma_khach} của tôi"), rồi CEO kích hoạt. Chưa kích hoạt thì chưa chạy bảng kê được.
+                  {hd.trang_thai === 'loi' ? <b>Agent chưa đọc được hợp đồng — bấm đọc lại.</b> : hd.trang_thai === 'dang_doc' ? <b>Agent đang đọc. Quá 5 phút vẫn ở trạng thái này thì bấm đọc lại.</b> : <b>Bản nháp chờ chốt.</b>} 4 head chốt hết quy tắc của phòng mình (có thể nhờ agent: "chốt các quy tắc {hd.ma_khach} của tôi"), rồi CEO kích hoạt. Chưa kích hoạt thì chưa chạy bảng kê được.
                   <div className="flex gap-2 mt-2 flex-wrap items-start"><DocLai id={hd.id} />{hd.trang_thai === 'cho_chot' && <KichHoat id={hd.id} />}</div>
                 </div>
               )}

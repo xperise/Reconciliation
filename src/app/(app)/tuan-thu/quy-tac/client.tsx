@@ -45,8 +45,10 @@ export function DocLai({ id }: { id: string }) {
         if (!confirm('Cho agent đọc lại hợp đồng? Bản nháp quy tắc hiện tại (kể cả các chốt) sẽ bị thay.')) return;
         setDang(true); setTb('Agent đang đọc lại (1–3 phút)…');
         const r = await fetch('/api/tuan-thu/doc-hop-dong', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id }) });
-        const j = await r.json().catch(() => ({}));
-        setDang(false); setTb(j.ok ? `Xong: ${j.so_quy_tac} quy tắc, ${j.cau_hoi_mo} điểm còn mở.` : `Lỗi: ${j.error ?? r.status}`);
+        const j: any = await r.json().catch(() => null);
+        setDang(false);
+        if (!j) { setTb(`Máy chủ không trả kết quả (HTTP ${r.status}) — thường do xử lý quá thời gian. Tải lại trang sau 1–2 phút: nếu hợp đồng đã sang "Chờ chốt" là đã đọc xong; nếu vẫn lỗi thì bấm đọc lại.`); return; }
+        setTb(j.ok ? `Xong: ${j.so_quy_tac} quy tắc, ${j.cau_hoi_mo} điểm còn mở.` : `Lỗi: ${j.error ?? r.status}`);
         if (j.ok) location.reload();
       }}>{dang ? 'Đang đọc…' : 'Agent đọc lại hợp đồng'}</button>
       {tb && <span className="text-[11.5px]">{tb}</span>}

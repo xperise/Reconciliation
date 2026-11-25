@@ -24,8 +24,9 @@ export function FormHopDong({ nhom }: { nhom: { id: string; ten: string }[] }) {
           if (!k.ok) { setLoi(k.loi); setBuoc(''); return; }
           setBuoc('Agent đang đọc hợp đồng: tóm tắt điều khoản, tham số và quy tắc của 4 phòng (thường 1–3 phút)…');
           const r = await fetch('/api/tuan-thu/doc-hop-dong', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: k.id }) });
-          const j = await r.json().catch(() => ({}));
-          if (!r.ok || !j.ok) { setLoi(`Đã lưu hợp đồng nhưng agent đọc lỗi: ${j.error ?? `HTTP ${r.status}`}. Bấm "Agent đọc lại" ở trang Hợp đồng & quy tắc.`); setBuoc(''); return; }
+          const j: any = await r.json().catch(() => null);
+          if (!j) { router.push(`/tuan-thu/quy-tac/${k.id}`); return; }   // máy chủ không trả kết quả (quá thời gian): xem trạng thái ở trang hợp đồng
+          if (!r.ok || !j.ok) { setLoi(`Đã lưu hợp đồng nhưng agent đọc lỗi: ${j.error ?? `HTTP ${r.status}`}. Bấm "Agent đọc lại" ở trang hợp đồng.`); setBuoc(''); return; }
           router.push(`/tuan-thu/quy-tac/${k.id}`);
         } catch (err) {
           setLoi(err instanceof Error ? err.message : String(err)); setBuoc('');

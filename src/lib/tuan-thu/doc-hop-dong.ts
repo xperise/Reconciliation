@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { BUCKET_TT } from './db';
-import { docJson, MODEL, skillHienHanh } from './agent';
+import { MODEL, skillHienHanh } from './agent';
 import { PhongBan, TEN_PHONG_BAN, ThamSoHopDong } from './types';
 
 /**
@@ -13,18 +13,93 @@ import { PhongBan, TEN_PHONG_BAN, ThamSoHopDong } from './types';
 const PBS: PhongBan[] = ['ke_toan', 'demand', 'supply', 'ceo'];
 const TIEN_TO: Record<PhongBan, string> = { ke_toan: 'KT', demand: 'DM', supply: 'SP', ceo: 'CEO' };
 
-async function goiTaiLieu(system: string, docs: any[], yeuCau: string, maxTokens: number): Promise<string> {
+async function goiAPI(body: any): Promise<any> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error('Chưa cấu hình ANTHROPIC_API_KEY trên Vercel.');
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: MODEL(), max_tokens: maxTokens, system, messages: [{ role: 'user', content: [...docs, { type: 'text', text: yeuCau }] }] }),
+    body: JSON.stringify({ model: MODEL(), ...body }),
   });
   const data: any = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`Claude API lỗi ${res.status}: ${data?.error?.message ?? 'không rõ'}`);
-  return (data.content ?? []).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n');
+  return data;
 }
+
+/** Gọi lại một lần nếu lỗi tạm thời (quá tải, mạng). */
+async function thuLai<T>(fn: () => Promise<T>): Promise<T> {
+  try { return await fn(); } catch (e) {
+    await new Promise((r) => setTimeout(r, 2000));
+    return fn();
+  }
+}
+
+/** Đọc tài liệu, trả lời dạng chữ (dùng cho tóm tắt điều khoản — không ép JSON nên không vỡ định dạng). */
+async function goiChu(system: string, docs: any[], yeuCau: string, maxTokens: number): Promise<string> {
+  const d = await thuLai(() => goiAPI({ max_tokens: maxTokens, system, messages: [{ role: 'user', content: [...docs, { type: 'text', text: yeuCau }] }] }));
+  const t = (d.content ?? []).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n').trim();
+  return d.stop_reason === 'max_tokens' ? `${t}\n…(tóm tắt bị cắt do quá dài — xem bản PDF gốc cho phần còn lại)` : t;
+}
+
+/**
+ * Đọc tài liệu, trả kết quả có cấu trúc qua "công cụ" (tool use bắt buộc): API trả về object đã parse sẵn,
+ * không phải tự đọc JSON trong chữ — tránh lỗi JSON hỏng hoặc bị cắt dở.
+ */
+async function goiCauTruc(system: string, docs: any[], yeuCau: string, tool: { name: string; description: string; input_schema: any }, maxTokens: number): Promise<any> {
+  return thuLai(async () => {
+    const d = await goiAPI({ max_tokens: maxTokens, system, tools: [tool], tool_choice: { type: 'tool', name: tool.name },
+      messages: [{ role: 'user', content: [...docs, { type: 'text', text: yeuCau }] }] });
+    const u = (d.content ?? []).find((b: any) => b.type === 'tool_use');
+    if (d.stop_reason === 'max_tokens') throw new Error(`Agent trả kết quả quá dài (${tool.name}) — hợp đồng có thể quá nhiều điều khoản; thử chia nhỏ file PDF.`);
+    if (!u?.input) throw new Error(`Agent không trả kết quả có cấu trúc (${tool.name}).`);
+    return u.input;
+  });
+}
+
+const CONG_CU_THAM_SO = {
+  name: 'ghi_tham_so_hop_dong',
+  description: 'Ghi các tham số máy đọc được từ hợp đồng và các điểm còn mở.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      so_hop_dong: { type: 'string' }, ngay_ky: { type: ['string', 'null'], description: 'YYYY-MM-DD' },
+      tham_so: {
+        type: 'object',
+        properties: {
+          ty_le_chiet_khau: { type: 'object', properties: { khach_san: { type: 'number' }, ve_may_bay: { type: 'number' } }, description: 'số thập phân, 0.05 = 5%; 0 nếu hợp đồng không quy định' },
+          phi_dich_vu: { type: 'object', properties: { khach_san: { type: 'number' }, ve_may_bay: { type: 'number' } }, description: 'đồng/dòng chưa VAT; 0 nếu không quy định' },
+          ky: { type: 'object', properties: { kieu: { type: 'string', enum: ['thang', 'hai_dot'] }, ngay_cat: { type: 'integer' } } },
+          tai_khoan: { type: 'object', properties: { so: { type: 'string' }, ngan_hang: { type: 'string' } } },
+          ben_ban: { type: 'object', properties: { ten: { type: 'string' }, mst: { type: 'string' }, dia_chi: { type: 'string' }, dien_thoai: { type: 'string' } } },
+          ben_mua: { type: 'object', properties: { ten: { type: 'string' }, mst: { type: 'string' }, dia_chi: { type: 'string' }, dien_thoai: { type: 'string' } } },
+          han_muc_thang: { type: ['number', 'null'] },
+          dinh_muc_phong: { type: 'array', items: { type: 'object', properties: {
+            nhom: { type: 'string' }, tu_khoa: { type: 'array', items: { type: 'string' } },
+            muc: { type: ['array', 'null'], items: { type: 'number' }, description: '[mức nhóm địa bàn cao, mức nhóm địa bàn thấp] đồng/đêm đã gồm thuế; null = Suite / không giới hạn' } } },
+            description: '[] nếu không có; nhóm "Các đối tượng khác" để tu_khoa [] và đặt cuối' },
+          dia_ban_nhom_1_2: { type: 'array', items: { type: 'string' }, description: 'địa danh không dấu viết thường thuộc nhóm địa bàn mức cao; [] nếu không có' },
+        },
+      },
+      cau_hoi_mo: { type: 'array', items: { type: 'string' }, description: 'điểm chưa rõ / mâu thuẫn mà head cần quyết, kèm điều khoản' },
+    },
+    required: ['tham_so', 'cau_hoi_mo'],
+  },
+};
+
+const CONG_CU_QUY_TAC = {
+  name: 'ghi_quy_tac',
+  description: 'Ghi các quy tắc kiểm bảng kê thuộc scope của phòng.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      quy_tac: { type: 'array', items: { type: 'object', properties: {
+        ma: { type: 'string' }, nhom: { type: 'string' }, noi_dung: { type: 'string' }, gia_tri: { type: 'string' }, can_cu: { type: 'string' },
+        cach_kiem: { type: 'string', enum: ['tu_dong', 'head_xem', 'gd2'] }, muc_do: { type: 'string', enum: ['chan_gui', 'giai_trinh', 'theo_doi'] }, du_lieu: { type: 'string' },
+      }, required: ['ma', 'noi_dung'] } },
+    },
+    required: ['quy_tac'],
+  },
+};
 
 const MAC_DINH: Partial<ThamSoHopDong> = {
   ty_le_chiet_khau: { khach_san: 0, ve_may_bay: 0 }, phi_dich_vu: { khach_san: 0, ve_may_bay: 0 }, ky: { kieu: 'thang' },
@@ -54,37 +129,26 @@ export async function docHopDong(hopDongId: string) {
     const { data: qtMau } = mau?.length ? await sb.from('tt_quy_tac').select('ma, phong_ban, nhom, noi_dung, cach_kiem, muc_do').eq('hop_dong_id', mau[0].id).order('ma') : { data: [] as any[] };
 
     const sysChung = `Bạn là agent pháp chế - vận hành của Xperise (Công ty Cổ phần Universal Travel Solutions Network). Đọc hợp đồng khách hàng để hệ thống kiểm bảng kê gửi khách tuân thủ đúng hợp đồng. Chỉ dựa trên văn bản; không suy đoán. Trả lời tiếng Việt.`;
-    const yeuCauChung = `Đọc toàn bộ hợp đồng và phụ lục đính kèm. Trả về DUY NHẤT một JSON:
-{
- "so_hop_dong": "...", "ngay_ky": "YYYY-MM-DD hoặc null",
- "tom_tat_dieu_khoan": "tóm tắt đầy đủ theo từng điều và phụ lục (các bên, MST, địa chỉ, tài khoản nhận tiền; phạm vi dịch vụ; giá, phí, chiết khấu; hạn mức; kỳ và hạn gửi bảng kê, hồ sơ thanh toán; thời hạn phản hồi và thanh toán; tạm ứng; định mức/chính sách chi của khách nếu có — ghi đủ con số; phạt, chấm dứt, khiếu nại; SLA; điều khoản sửa đổi). Viết như văn bản tham chiếu, giữ nguyên con số.",
- "tham_so": {
-   "ty_le_chiet_khau": {"khach_san": số thập phân (0.05 = 5%), "ve_may_bay": số} — 0 nếu hợp đồng không quy định mức chiết khấu,
-   "phi_dich_vu": {"khach_san": đồng/dòng chưa VAT, "ve_may_bay": ...} — 0 nếu không quy định,
-   "ky": {"kieu": "thang"} hoặc {"kieu": "hai_dot", "ngay_cat": số},
-   "tai_khoan": {"so": "...", "ngan_hang": "..."},
-   "ben_ban": {"ten": "...", "mst": "...", "dia_chi": "...", "dien_thoai": "..."},
-   "ben_mua": {"ten": "...", "mst": "...", "dia_chi": "...", "dien_thoai": "..."},
-   "han_muc_thang": số đồng hoặc null,
-   "dinh_muc_phong": [{"nhom": "tên nhóm đối tượng", "tu_khoa": ["từ khóa chức danh viết thường"], "muc": [mức nhóm địa bàn cao, mức nhóm địa bàn thấp] hoặc null nếu phòng Suite/không giới hạn}] — [] nếu không có; nhóm "Các đối tượng khác" để tu_khoa [] và đặt CUỐI,
-   "dia_ban_nhom_1_2": ["địa danh không dấu viết thường thuộc nhóm địa bàn mức cao"] — [] nếu không có
- },
- "cau_hoi_mo": ["điểm chưa rõ hoặc mâu thuẫn trong hợp đồng mà head cần quyết, kèm điều khoản"]
-}`;
-    const tasks: Promise<any>[] = [goiTaiLieu(sysChung, docs, yeuCauChung, 8000).then((t) => docJson<any>(t))];
+    const yeuCauTomTat = `Đọc toàn bộ hợp đồng và phụ lục đính kèm. Viết TÓM TẮT ĐIỀU KHOẢN đầy đủ theo từng điều và phụ lục để làm văn bản tham chiếu: các bên (tên, MST, địa chỉ, tài khoản nhận tiền); phạm vi dịch vụ; giá, phí, chiết khấu; hạn mức; kỳ và hạn gửi bảng kê, hồ sơ thanh toán; thời hạn phản hồi và thanh toán; tạm ứng; định mức / chính sách chi của khách nếu có (ghi đủ con số); phạt, chấm dứt, khiếu nại; SLA; điều khoản sửa đổi. Giữ nguyên con số, ghi rõ số điều. Chỉ trả về văn bản tóm tắt.`;
+    const yeuCauThamSo = `Đọc hợp đồng và phụ lục đính kèm, rồi gọi công cụ ghi_tham_so_hop_dong với các tham số máy để kiểm bảng kê và các điểm còn mở. Điều hợp đồng không quy định: chiết khấu/phí = 0, hạn mức = null, định mức = [], và nêu trong cau_hoi_mo nếu cần head quyết.`;
+    const tasks: Promise<any>[] = [
+      goiChu(sysChung, docs, yeuCauTomTat, 12000),
+      goiCauTruc(sysChung, docs, yeuCauThamSo, CONG_CU_THAM_SO, 6000),
+    ];
     for (const pb of PBS) {
       tasks.push((async () => {
         const sk = await skillHienHanh(pb);
         const mauPb = (qtMau ?? []).filter((q: any) => q.phong_ban === pb).map((q: any) => `${q.ma} [${q.nhom}] ${q.noi_dung} (${q.cach_kiem}, ${q.muc_do})`).join('\n');
-        const t = await goiTaiLieu(`${sk.noi_dung}\n\nBạn đang đọc hợp đồng của một khách mới để lập bộ quy tắc kiểm bảng kê trong scope ${TEN_PHONG_BAN[pb]}. Chỉ dựa trên văn bản hợp đồng; điều hợp đồng không quy định thì ghi rõ "Hợp đồng không quy định" và nêu cách hiểu an toàn. Trả lời tiếng Việt.`, docs,
-          `Rút các quy tắc thuộc scope ${TEN_PHONG_BAN[pb]} để kiểm bảng kê và hồ sơ thanh toán của khách này.
+        const out = await goiCauTruc(`${sk.noi_dung}\n\nBạn đang đọc hợp đồng của một khách mới để lập bộ quy tắc kiểm bảng kê trong scope ${TEN_PHONG_BAN[pb]}. Chỉ dựa trên văn bản hợp đồng; điều hợp đồng không quy định thì ghi rõ "Hợp đồng không quy định" và nêu cách hiểu an toàn. Trả lời tiếng Việt.`, docs,
+          `Rút các quy tắc thuộc scope ${TEN_PHONG_BAN[pb]} để kiểm bảng kê và hồ sơ thanh toán của khách này, rồi gọi công cụ ghi_quy_tac.
 Bộ quy tắc mẫu của phòng (dùng lại đúng MÃ nếu cùng loại kiểm tra; loại mới thì đánh mã ${TIEN_TO[pb]}-xx tiếp theo):
 ${mauPb || '(chưa có mẫu)'}
-Trả về DUY NHẤT JSON: {"quy_tac":[{"ma":"${TIEN_TO[pb]}-01","nhom":"...","noi_dung":"quy tắc","gia_tri":"giá trị/ngưỡng cụ thể","can_cu":"Điều/Phụ lục","cach_kiem":"tu_dong|head_xem|gd2","muc_do":"chan_gui|giai_trinh|theo_doi","du_lieu":"dữ liệu cần để kiểm"}]}`, 6000);
-        return { pb, ds: docJson<any>(t).quy_tac ?? [] };
+Mỗi quy tắc: nội dung ngắn gọn, giá trị/ngưỡng cụ thể, căn cứ (Điều/Phụ lục), cách kiểm (tu_dong | head_xem | gd2), mức độ (chan_gui | giai_trinh | theo_doi).`, CONG_CU_QUY_TAC, 8000);
+        return { pb, ds: out.quy_tac ?? [] };
       })());
     }
-    const [chung, ...theoPb] = await Promise.all(tasks);
+    const [tomTat, thamSoKq, ...theoPb] = await Promise.all(tasks);
+    const chung = { ...(thamSoKq ?? {}), tom_tat_dieu_khoan: tomTat };
 
     // Ghi bản nháp (xóa bản nháp cũ nếu đọc lại)
     await sb.from('tt_quy_tac').delete().eq('hop_dong_id', hopDongId);
