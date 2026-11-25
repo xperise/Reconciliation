@@ -145,8 +145,8 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
     const dongDuyet: any = { lan_chay_id: lanId, vong: lc.vong, buoc, quyet_dinh: quyetDinh, y_kien: yKien.trim() || null,
       de_xuat_agent: textDeXuat(dx), nguoi: n.id, nguoi_email: n.email };
     if (sk?.length) dongDuyet.skill_phien_ban = sk[0].phien_ban;
-    let ins = await sb.from('tt_duyet').insert(dongDuyet);
-    if (ins.error && /skill_phien_ban/.test(ins.error.message)) { delete dongDuyet.skill_phien_ban; ins = await sb.from('tt_duyet').insert(dongDuyet); }
+    let ins = await sb.from('tt_duyet').insert(dongDuyet).select('id').single();
+    if (ins.error && /skill_phien_ban/.test(ins.error.message)) { delete dongDuyet.skill_phien_ban; ins = await sb.from('tt_duyet').insert(dongDuyet).select('id').single(); }
     if (ins.error) throw new Error(ins.error.message);
     // Học từ quyết định: head duyệt trong khi agent AI (lần rà soát mới nhất của bước này) đề xuất trả về
     const { data: aiMoi } = await sb.from('tt_ai_ket_qua').select('noi_dung').eq('lan_chay_id', lanId).eq('vong', lc.vong)
@@ -164,7 +164,14 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
     if (quyetDinh === 'tra_ve') {
       await sb.from('tt_lan_chay').update({ buoc: 'cho_ke_toan', vong: lc.vong + 1 }).eq('id', lanId);
     } else if (buoc === 'ceo') {
-      await guiBangKe(lanId);
+      try { await guiBangKe(lanId); }
+      catch (e) {
+        // Gửi thất bại: bỏ dòng duyệt vừa ghi để CEO bấm lại sau khi sửa nguyên nhân
+        if (ins.data?.id) await sb.from('tt_duyet').delete().eq('id', ins.data.id);
+        const m = e instanceof Error ? e.message : String(e);
+        if (/invalid_grant/i.test(m)) throw new Error('Chưa gửi được: kết nối Gmail của hệ thống đã hết hiệu lực (invalid_grant). Admin vào Cài đặt → Kết nối lại Google bằng hộp thư gửi (cs@uts.network), rồi CEO bấm duyệt lại. Bảng kê vẫn đang chờ CEO.');
+        throw new Error(`Chưa gửi được bảng kê: ${m}. Bảng kê vẫn đang chờ CEO.`);
+      }
     } else {
       await sb.from('tt_lan_chay').update({ buoc: 'cho_ceo' }).eq('id', lanId);
       await baoChoPhongBan(lanId, ['ceo', 'demand', 'supply'], 'cho_ceo');
