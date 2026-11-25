@@ -238,7 +238,7 @@ export async function chotQuyTac(id: string, chot: 'dong_y' | 'can_sua' | 'cho',
     if (!qt) throw new Error('Không tìm thấy quy tắc.');
     const n = await batBuoc(qt.phong_ban as PhongBan);
     await sb.from('tt_quy_tac').update({ chot, chot_y_kien: yKien.trim() || null, chot_boi: n.id, chot_luc: new Date().toISOString() }).eq('id', id);
-    revalidatePath('/tuan-thu/quy-tac');
+    revalidatePath('/tuan-thu/quy-tac', 'layout');
     return { ok: true };
   });
 }
@@ -249,7 +249,7 @@ export async function capNhatHopDong(id: string, groupId: string | null, ccThem:
     if (!n.laAdmin) throw new Error('Chỉ admin sửa thông tin hợp đồng.');
     const { error } = await supabaseAdmin().from('tt_hop_dong').update({ group_id: groupId || null, cc_them: ccThem.trim() || null }).eq('id', id);
     if (error) throw new Error(error.message);
-    revalidatePath('/tuan-thu/quy-tac');
+    revalidatePath('/tuan-thu/quy-tac', 'layout');
     return { ok: true };
   });
 }
@@ -326,7 +326,7 @@ export async function duyetSuaDoi(id: string, pb: PhongBan, quyetDinh: 'dong_y' 
       thongBao = 'Đủ 4/4 head đồng ý — sửa đổi đã có hiệu lực.';
     }
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: `tuan_thu.sua_doi_${quyetDinh}`, entity: 'tt_sua_doi', entityId: id, after: { pb, yKien } });
-    revalidatePath('/tuan-thu/sua-doi'); revalidatePath('/tuan-thu/quy-tac');
+    revalidatePath('/tuan-thu/sua-doi'); revalidatePath('/tuan-thu/quy-tac', 'layout');
     return { ok: true, thongBao };
   });
 }
@@ -450,7 +450,7 @@ export async function taoHopDong(fd: FormData): Promise<KQ> {
       .map((x, i) => { const [t, m] = x.split(/[;\t]/); return { hop_dong_id: hd.id, ten: t.trim(), ma_cost_center: m?.trim() || null, thu_tu: i + 1 }; });
     if (pb.length) await sb.from('tt_phong_ban_khach').upsert(pb);
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.tao_hop_dong', entity: 'tt_hop_dong', entityId: hd.id, after: { ma, so } });
-    revalidatePath('/tuan-thu/quy-tac');
+    revalidatePath('/tuan-thu/quy-tac', 'layout');
     return { ok: true, id: hd.id };
   });
 }
@@ -468,7 +468,7 @@ export async function kichHoatHopDong(id: string): Promise<KQ> {
     if (chua.length) throw new Error(`Còn ${chua.length} quy tắc chưa được head đồng ý (${[...new Set(chua.map((q: any) => TEN_PHONG_BAN[q.phong_ban as PhongBan]))].join(', ')}).`);
     await sb.from('tt_hop_dong').update({ trang_thai: 'hieu_luc' }).eq('id', id);
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.kich_hoat_hop_dong', entity: 'tt_hop_dong', entityId: id });
-    revalidatePath('/tuan-thu/quy-tac'); revalidatePath('/tuan-thu');
+    revalidatePath('/tuan-thu/quy-tac', 'layout'); revalidatePath('/tuan-thu');
     return { ok: true, thongBao: 'Đã kích hoạt — chạy bảng kê được theo hợp đồng này.' };
   });
 }
@@ -484,7 +484,7 @@ export async function suaThamSoNhap(id: string, json: string): Promise<KQ> {
     const { error } = await sb.from('tt_bo_quy_tac').update({ tham_so: ts }).eq('hop_dong_id', id).eq('phien_ban', 1);
     if (error) throw new Error(error.message);
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.sua_tham_so_nhap', entity: 'tt_hop_dong', entityId: id });
-    revalidatePath('/tuan-thu/quy-tac');
+    revalidatePath('/tuan-thu/quy-tac', 'layout');
     return { ok: true, thongBao: 'Đã lưu tham số bản nháp.' };
   });
 }

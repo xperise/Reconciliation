@@ -1,101 +1,58 @@
+import Link from 'next/link';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { PageHeader } from '@/components/PageHeader';
-import { duocLam, fmtVnd, nguoiTT, NguoiTT } from '@/lib/tuan-thu/db';
-import { PhongBan, TEN_MUC_DO, TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
-import Link from 'next/link';
-import { ChotQuyTac, DocLai, KichHoat, SuaHopDong, SuaThamSo } from './client';
-import { VanBan } from '../agent-ui';
+import { nguoiTT } from '@/lib/tuan-thu/db';
+import { PhongBan, TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
 
 export const dynamic = 'force-dynamic';
-const CACH: Record<string, string> = { tu_dong: 'Tự động', head_xem: 'Head xem', gd2: 'Giai đoạn 2' };
+const PB: PhongBan[] = ['ke_toan', 'demand', 'supply', 'ceo'];
 const TT_HD: Record<string, [string, string]> = { dang_doc: ['Agent đang đọc', 'pill-watch'], cho_chot: ['Chờ chốt', 'pill-high'], hieu_luc: ['Đang hiệu lực', 'pill-stable'], het_hieu_luc: ['Hết hiệu lực', 'pill-neutral'], loi: ['Lỗi đọc', 'pill-critical'] };
-const CHOT: Record<string, [string, string]> = { cho: ['Chờ chốt', 'pill-watch'], dong_y: ['Đã đồng ý', 'pill-stable'], can_sua: ['Cần sửa', 'pill-high'] };
 
-function tomTatThamSo(t: any) {
-  const pct = (x: number) => `${(x * 100).toLocaleString('vi-VN')}%`;
-  return [
-    ['Kỳ bảng kê', t.ky?.kieu === 'hai_dot' ? `2 đợt (1–${t.ky.ngay_cat}, ${t.ky.ngay_cat + 1}–cuối tháng)` : '1 kỳ/tháng'],
-    ['Chiết khấu', `Khách sạn ${pct(t.ty_le_chiet_khau?.khach_san ?? 0)} · Vé ${pct(t.ty_le_chiet_khau?.ve_may_bay ?? 0)}`],
-    ['Phí dịch vụ', `Khách sạn ${fmtVnd(t.phi_dich_vu?.khach_san)}đ · Vé ${fmtVnd(t.phi_dich_vu?.ve_may_bay)}đ`],
-    ['Tài khoản nhận tiền', t.tai_khoan?.so ? `${t.tai_khoan.so} — ${t.tai_khoan.ngan_hang ?? ''}` : 'Hợp đồng không ghi'],
-    ['Hạn mức tháng', t.han_muc_thang ? `${fmtVnd(t.han_muc_thang)}đ` : 'Không quy định'],
-    ['Định mức tiền phòng', (t.dinh_muc_phong ?? []).length ? `${t.dinh_muc_phong.length} nhóm đối tượng` : 'Không có — không kiểm'],
-  ];
-}
-
+/** Danh sách khách hàng / hợp đồng — bấm vào để xem chi tiết. */
 export default async function Page() {
-  const sb = supabaseAdmin();
   const n = (await nguoiTT())!;
-  const [{ data: hds }, { data: nhom }] = await Promise.all([
-    sb.from('tt_hop_dong').select('*, billing_groups(ten_nhom, email_l1)').order('ma_khach').order('created_at', { ascending: false }),
-    sb.from('billing_groups').select('id, ten_nhom, ma_he_thong').order('ten_nhom'),
+  const sb = supabaseAdmin();
+  const [{ data: hds }, { data: qt }, { data: bo }, { data: sd }] = await Promise.all([
+    sb.from('tt_hop_dong').select('id, ma_khach, ten_khach, so_hop_dong, ngay_ky, trang_thai, hieu_luc_tu, billing_groups(ten_nhom)').order('ma_khach').order('created_at', { ascending: false }),
+    sb.from('tt_quy_tac').select('hop_dong_id, phong_ban, chot'),
+    sb.from('tt_bo_quy_tac').select('hop_dong_id, phien_ban'),
+    sb.from('tt_sua_doi').select('hop_dong_id, trang_thai').eq('trang_thai', 'cho_duyet'),
   ]);
-  const nhomDs = (nhom ?? []).map((g: any) => ({ id: g.id, ten: `${g.ten_nhom} (${g.ma_he_thong})` }));
+  const ds = (hds ?? []) as any[];
+  const dem = (id: string, pb: PhongBan) => { const x = ((qt ?? []) as any[]).filter((q) => q.hop_dong_id === id && q.phong_ban === pb); return { da: x.filter((q) => q.chot === 'dong_y').length, tong: x.length }; };
+  const ver = (id: string) => Math.max(0, ...((bo ?? []) as any[]).filter((b) => b.hop_dong_id === id).map((b) => b.phien_ban));
+  const cho = (id: string) => ((sd ?? []) as any[]).filter((x) => x.hop_dong_id === id).length;
+  const khach = [...new Set(ds.map((h) => h.ma_khach))];
   return (
     <>
       <PageHeader eyebrow="Tuân thủ bảng kê" title="Hợp đồng & bộ quy tắc"
-        description="Mỗi head chốt quy tắc thuộc phòng mình. Hợp đồng mới: agent đọc PDF ra bản nháp → 4 head chốt → CEO kích hoạt. Hợp đồng đã kích hoạt muốn đổi quy tắc: bấm Đề xuất sửa — cần đủ 4/4 head đồng ý."
+        description="Danh sách khách hàng và hợp đồng. Bấm vào một hợp đồng để xem tóm tắt điều khoản, tham số máy và quy tắc của 4 phòng."
         action={<Link href="/tuan-thu/hop-dong/moi" className="btn btn-primary btn-sm">+ Thêm hợp đồng / khách mới</Link>} />
-      {(hds ?? []).map((hd: any) => <KhoiHopDong key={hd.id} hd={hd} n={n} nhomDs={nhomDs} />)}
+      <div className="card overflow-hidden">
+        <table className="tbl">
+          <thead><tr><th>Khách</th><th>Số hợp đồng</th><th>Trạng thái</th><th>Quy tắc</th>
+            {PB.map((p) => <th key={p} className="text-right">{TEN_PHONG_BAN[p]} đã chốt</th>)}<th>Sửa đổi chờ</th><th></th></tr></thead>
+          <tbody>
+            {ds.length === 0 && <tr><td colSpan={9} className="empty">Chưa có hợp đồng nào.</td></tr>}
+            {khach.map((ma) => ds.filter((h) => h.ma_khach === ma).map((h, i) => {
+              const tt = TT_HD[h.trang_thai ?? 'hieu_luc'] ?? TT_HD.hieu_luc;
+              const can = (pb: PhongBan) => (n.laAdmin || n.phong_ban === pb) && h.trang_thai === 'cho_chot' && dem(h.id, pb).da < dem(h.id, pb).tong;
+              return (
+                <tr key={h.id}>
+                  <td>{i === 0 ? <><b className="mono">{h.ma_khach}</b> <span className="text-[12px]">{h.ten_khach}</span>{h.billing_groups?.ten_nhom ? <div className="text-[11px] text-[var(--ink-3)]">{h.billing_groups.ten_nhom}</div> : null}</> : null}</td>
+                  <td className="text-[12px]"><Link href={`/tuan-thu/quy-tac/${h.id}`} className="underline">{h.so_hop_dong}</Link>{h.ngay_ky ? <div className="text-[11px] text-[var(--ink-3)]">ký {new Date(h.ngay_ky).toLocaleDateString('vi-VN')}</div> : null}</td>
+                  <td><span className={`pill ${tt[1]}`}>{tt[0]}</span></td>
+                  <td className="text-[12px]">v{ver(h.id) || '—'}{h.trang_thai === 'cho_chot' ? ' (nháp)' : ''}</td>
+                  {PB.map((p) => { const d = dem(h.id, p); return <td key={p} className={`text-right text-[12px] ${can(p) ? 'font-semibold text-[var(--critical)]' : ''}`}>{d.tong ? `${d.da}/${d.tong}` : '—'}</td>; })}
+                  <td>{cho(h.id) ? <Link href="/tuan-thu/sua-doi" className="pill pill-watch">{cho(h.id)}</Link> : '—'}</td>
+                  <td className="text-right"><Link href={`/tuan-thu/quy-tac/${h.id}`} className="btn btn-sm">Xem chi tiết</Link></td>
+                </tr>
+              );
+            }))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-[11.5px] text-[var(--ink-3)] mt-2">Số in đậm đỏ: phòng của bạn còn quy tắc chưa chốt ở hợp đồng chờ chốt.</p>
     </>
   );
-}
-
-async function KhoiHopDong({ hd, n, nhomDs }: { hd: any; n: NguoiTT; nhomDs: { id: string; ten: string }[] }) {
-  const sb = supabaseAdmin();
-        const [{ data: qt }, { data: bo }] = await Promise.all([
-          sb.from('tt_quy_tac').select('*').eq('hop_dong_id', hd.id).order('ma'),
-          sb.from('tt_bo_quy_tac').select('*').eq('hop_dong_id', hd.id).order('phien_ban', { ascending: false }),
-        ]);
-        const hienHanh = (bo ?? [])[0];
-        const theoPb = (['ke_toan', 'demand', 'supply', 'ceo'] as PhongBan[]).map((pb) => ({ pb, ds: (qt ?? []).filter((q: any) => q.phong_ban === pb) }));
-        return (
-          <section key={hd.id} id={`hd-${hd.id}`} className="mb-8">
-            <div className="card card-pad mb-4">
-              <h2 className="card-title mb-1">{hd.ten_khach} — HĐ {hd.so_hop_dong}{hd.ngay_ky ? ` ký ${new Date(hd.ngay_ky).toLocaleDateString('vi-VN')}` : ''}{' '}
-                <span className={`pill ${TT_HD[hd.trang_thai ?? 'hieu_luc']?.[1]}`}>{TT_HD[hd.trang_thai ?? 'hieu_luc']?.[0]}</span></h2>
-              {hd.trang_thai === 'loi' && <div className="callout callout-critical text-[12px] mb-2">Agent đọc hợp đồng lỗi: {hd.loi_doc}</div>}
-              {hd.trang_thai === 'dang_doc' && <div className="callout callout-high text-[12px] mb-2">Agent đang đọc hợp đồng… tải lại trang sau 1–3 phút.</div>}
-              {(hd.tep_hop_dong ?? []).length > 0 && <p className="text-[12px] mb-2">File: {(hd.tep_hop_dong as any[]).map((t, i) => <a key={i} className="underline mr-3" href={`/api/tuan-thu/tep?path=${encodeURIComponent(t.path)}`}>{t.ten}</a>)}</p>}
-              {hd.trang_thai !== 'hieu_luc' && hd.trang_thai !== 'het_hieu_luc' && (
-                <div className="callout callout-accent text-[12.5px] mb-3">
-                  <b>Bản nháp chờ chốt.</b> 4 head chốt hết quy tắc của phòng mình (có thể nhờ agent: "chốt các quy tắc {hd.ma_khach} của tôi"), rồi CEO kích hoạt. Chưa kích hoạt thì chưa chạy bảng kê được.
-                  <div className="flex gap-2 mt-2 flex-wrap items-start"><DocLai id={hd.id} />{hd.trang_thai === 'cho_chot' && <KichHoat id={hd.id} />}</div>
-                </div>
-              )}
-              {(hd.cau_hoi_mo ?? []).length > 0 && hd.trang_thai !== 'hieu_luc' && (
-                <div className="callout callout-high text-[12.5px] mb-3"><b>Điểm hợp đồng còn mở (agent nêu khi đọc):</b><ul className="m-0 pl-4">{(hd.cau_hoi_mo as string[]).map((c, i) => <li key={i}>{c}</li>)}</ul></div>
-              )}
-              {hd.tom_tat_dieu_khoan && <details className="mb-3"><summary className="text-[12px] cursor-pointer">Tóm tắt điều khoản hợp đồng (agent dùng để trả lời)</summary><div className="text-[12.5px] mt-2"><VanBan text={hd.tom_tat_dieu_khoan} /></div></details>}
-              <p className="text-[12px] mb-3">Nhóm Master Data: <b>{hd.billing_groups?.ten_nhom ?? 'chưa gắn'}</b> · Email đầu mối: {hd.billing_groups?.email_l1 ?? '—'}</p>
-              {n.laAdmin && <SuaHopDong id={hd.id} groupId={hd.group_id} ccThem={hd.cc_them ?? ''} nhom={nhomDs} />}
-              <div className="grid gap-4 md:grid-cols-2 mt-4">
-                <div>
-                  <p className="label mb-1">Tham số máy đang áp dụng — v{hienHanh?.phien_ban} (từ {hienHanh?.hieu_luc_tu})</p>
-                  <table className="tbl"><tbody>{hienHanh && tomTatThamSo(hienHanh.tham_so).map(([k, v]) => <tr key={k}><td className="w-[40%]">{k}</td><td>{v}</td></tr>)}</tbody></table>
-                  {hienHanh && hd.trang_thai !== 'hieu_luc' && <SuaThamSo id={hd.id} dau={JSON.stringify(hienHanh.tham_so, null, 2)} />}
-                </div>
-                <div>
-                  <p className="label mb-1">Các phiên bản</p>
-                  <table className="tbl"><tbody>{(bo ?? []).map((b: any) => (
-                    <tr key={b.id}><td>v{b.phien_ban}</td><td>từ {b.hieu_luc_tu}</td><td className="text-[12px]">{b.ghi_chu}</td></tr>))}</tbody></table>
-                </div>
-              </div>
-            </div>
-            {theoPb.map(({ pb, ds }) => (
-              <div key={pb} className="card overflow-hidden mb-4">
-                <div className="card-hd px-4 py-2 font-semibold">{TEN_PHONG_BAN[pb]} · {ds.filter((q: any) => q.chot === 'dong_y').length}/{ds.length} đã chốt</div>
-                <table className="tbl"><thead><tr><th>Mã</th><th>Quy tắc</th><th>Giá trị</th><th>Căn cứ</th><th>Cách kiểm</th><th>Mức độ</th><th>Head chốt</th><th style={{ minWidth: 240 }}></th></tr></thead>
-                  <tbody>{ds.map((q: any) => (
-                    <tr key={q.id}>
-                      <td className="mono">{q.ma}</td><td className="text-[12px]">{q.noi_dung}</td><td className="text-[12px]">{q.gia_tri}</td>
-                      <td className="text-[11.5px]">{q.can_cu}</td><td className="text-[12px]">{CACH[q.cach_kiem] ?? q.cach_kiem}</td>
-                      <td className="text-[12px]">{TEN_MUC_DO[q.muc_do as keyof typeof TEN_MUC_DO]}</td>
-                      <td><span className={`pill ${CHOT[q.chot][1]}`}>{CHOT[q.chot][0]}</span>{q.chot_y_kien && <div className="text-[11px]">{q.chot_y_kien}</div>}</td>
-                      <td>{duocLam(n, pb) ? <ChotQuyTac id={q.id} chot={q.chot} yKien={q.chot_y_kien ?? ''} hopDongId={hd.id} ma={q.ma} /> : null}</td>
-                    </tr>))}</tbody></table>
-              </div>
-            ))}
-          </section>
-        );
 }
