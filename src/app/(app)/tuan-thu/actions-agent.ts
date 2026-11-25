@@ -304,3 +304,27 @@ export async function xuLyGoiY(id: number, nhan: boolean): Promise<KQ> {
     return { ok: true, thongBao: nhan ? 'Đã thêm vào skill.' : 'Đã bỏ qua.' };
   });
 }
+
+/** Kiểm tra kết nối Claude API: key, model, thời gian phản hồi, và đọc được PDF. */
+export async function kiemTraClaude(): Promise<KQ> {
+  return lam(async () => {
+    await batBuoc();
+    const t0 = Date.now();
+    const tl = await goiClaude('Trả lời đúng một từ.', [{ role: 'user', content: 'Trả lời: OK' }], 20);
+    const ms1 = Date.now() - t0;
+    // PDF nhỏ dựng sẵn để kiểm tra khả năng đọc tài liệu
+    const pdf = Buffer.from('JVBERi0xLjQKMSAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFI+PgplbmRvYmoKMiAwIG9iago8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PgplbmRvYmoKMyAwIG9iago8PC9UeXBlL1BhZ2UvUGFyZW50IDIgMCBSL01lZGlhQm94WzAgMCAzMDAgMTAwXS9Db250ZW50cyA0IDAgUi9SZXNvdXJjZXM8PC9Gb250PDwvRjEgNSAwIFI+Pj4+Pj4KZW5kb2JqCjQgMCBvYmoKPDwvTGVuZ3RoIDQ3Pj5zdHJlYW0KQlQgL0YxIDE4IFRmIDIwIDQwIFRkIChIT1AgRE9ORyBURVNUIDEyMykgVGogRVQKZW5kc3RyZWFtCmVuZG9iago1IDAgb2JqCjw8L1R5cGUvRm9udC9TdWJ0eXBlL1R5cGUxL0Jhc2VGb250L0hlbHZldGljYT4+CmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1NCAwMDAwMCBuIAowMDAwMDAwMTA1IDAwMDAwIG4gCjAwMDAwMDAyMTcgMDAwMDAgbiAKMDAwMDAwMDMxMSAwMDAwMCBuIAp0cmFpbGVyCjw8L1NpemUgNi9Sb290IDEgMCBSPj4Kc3RhcnR4cmVmCjM3NAolJUVPRgo=', 'base64');
+    const t1 = Date.now();
+    const key = process.env.ANTHROPIC_API_KEY!;
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: MODEL(), max_tokens: 40, messages: [{ role: 'user', content: [
+        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdf.toString('base64') } },
+        { type: 'text', text: 'Chép lại đúng dòng chữ trong tài liệu.' }] }] }),
+    });
+    const j: any = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(`Gọi thường OK (${ms1}ms) nhưng đọc PDF lỗi ${res.status}: ${j?.error?.message ?? ''}`);
+    const pdfTxt = (j.content ?? []).map((b: any) => b.text ?? '').join(' ').trim();
+    return { ok: true, thongBao: `Model ${MODEL()} · trả lời "${tl}" sau ${ms1}ms · đọc PDF: "${pdfTxt}" sau ${Date.now() - t1}ms` };
+  });
+}

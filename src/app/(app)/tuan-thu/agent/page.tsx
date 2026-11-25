@@ -3,7 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { PageHeader } from '@/components/PageHeader';
 import { duocLam, nguoiTT } from '@/lib/tuan-thu/db';
 import { PhongBan, TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
-import { GoiYSkill, SuaSkill } from '../agent-ui';
+import { GoiYSkill, KiemTraClaude, SuaSkill } from '../agent-ui';
 
 export const dynamic = 'force-dynamic';
 const PB: PhongBan[] = ['ke_toan', 'demand', 'supply', 'ceo'];
@@ -26,6 +26,7 @@ export default async function Page({ searchParams }: { searchParams: { pb?: stri
       <PageHeader eyebrow="Tuân thủ bảng kê" title={`Agent ${TEN_PHONG_BAN[pb]}`}
         description="Skill là bộ hướng dẫn agent đọc mỗi lần làm việc (chat, rà soát bước duyệt, phân tích sửa đổi). Sửa skill tạo phiên bản mới; mỗi lần duyệt ghi lại phiên bản skill đang dùng. Khi head duyệt khác đề xuất của agent, app tạo gợi ý bổ sung skill để head nhận hoặc bỏ qua."
         action={choPhep.length > 1 ? <div className="flex gap-1">{choPhep.map((p) => <Link key={p} href={`/tuan-thu/agent?pb=${p}`} className={`btn btn-sm ${p === pb ? 'btn-primary' : ''}`}>{TEN_PHONG_BAN[p]}</Link>)}</div> : undefined} />
+      <div className="card card-pad mb-4 flex items-start gap-3 flex-wrap"><KiemTraClaude /><span className="text-[12px] text-[var(--ink-3)]">Gọi thử Claude API: kiểm tra key, model đang dùng, và khả năng đọc PDF (cần cho Thêm hợp đồng).</span></div>
       <div className="grid gap-4 md:grid-cols-2">
         <section className="card card-pad">
           <h2 className="card-title mb-2">Skill hiện hành — v{hienHanh?.phien_ban}</h2>

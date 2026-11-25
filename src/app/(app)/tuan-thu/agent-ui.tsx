@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { boQuaHanhDong, goiYGiaiTrinh, hoiAgent, luuSkill, phanTichSuaDoi, raSoatBuoc, taiChat, thucHienHanhDong, xoaChat, xuLyGoiY } from './actions-agent';
+import { boQuaHanhDong, goiYGiaiTrinh, kiemTraClaude, hoiAgent, luuSkill, phanTichSuaDoi, raSoatBuoc, taiChat, thucHienHanhDong, xoaChat, xuLyGoiY } from './actions-agent';
 import type { PhongBan } from '@/lib/tuan-thu/types';
 
 /** Hiển thị câu trả lời của agent: in đậm **…**, tiêu đề #, gạch đầu dòng. Không dùng innerHTML. */
@@ -195,4 +195,8 @@ export function GoiYSkill({ id }: { id: number }) {
       <NutAI chay={() => xuLyGoiY(id, false)} nhan="Bỏ qua" dangNhan="…" />
     </span>
   );
+}
+
+export function KiemTraClaude() {
+  return <NutAI chay={() => kiemTraClaude()} nhan="Kiểm tra kết nối Claude API" dangNhan="Đang kiểm tra…" />;
 }
