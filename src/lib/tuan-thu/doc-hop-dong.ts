@@ -27,8 +27,10 @@ async function goiAPI(body: any): Promise<any> {
 }
 
 /** Gọi lại một lần nếu lỗi tạm thời (quá tải, mạng). */
+class QuaDai extends Error {}
 async function thuLai<T>(fn: () => Promise<T>): Promise<T> {
   try { return await fn(); } catch (e) {
+    if (e instanceof QuaDai) throw e;   // quá dài: thử lại y hệt cũng vậy → để bên gọi rút gọn yêu cầu
     await new Promise((r) => setTimeout(r, 2000));
     return fn();
   }
@@ -49,7 +51,7 @@ async function goiCauTruc(system: string, docs: any[], yeuCau: string, tool: { n
   const goi = async (epBuoc: boolean) => {
     const d = await goiAPI({ max_tokens: maxTokens, system, tools: [tool], ...(epBuoc ? { tool_choice: { type: 'tool', name: tool.name } } : {}),
       messages: [{ role: 'user', content: [...docs, { type: 'text', text: `${yeuCau}\n\nBẮT BUỘC: trả kết quả bằng cách gọi công cụ ${tool.name} đúng một lần; không viết câu trả lời dạng chữ.` }] }] });
-    if (d.stop_reason === 'max_tokens') throw new Error(`Agent trả kết quả quá dài (${tool.name}) — hợp đồng có thể quá nhiều điều khoản; thử chia nhỏ file PDF.`);
+    if (d.stop_reason === 'max_tokens') throw new QuaDai(`Agent trả kết quả quá dài (${tool.name}).`);
     const u = (d.content ?? []).find((b: any) => b.type === 'tool_use' && b.name === tool.name);
     if (u?.input) return u.input;
     // Model không gọi công cụ: thử đọc JSON trong chữ (phương án cuối)
@@ -145,17 +147,26 @@ export async function docHopDong(hopDongId: string) {
     const yeuCauThamSo = `Đọc hợp đồng và phụ lục đính kèm, rồi gọi công cụ ghi_tham_so_hop_dong với các tham số máy để kiểm bảng kê và các điểm còn mở. Điều hợp đồng không quy định: chiết khấu/phí = 0, hạn mức = null, định mức = [], và nêu trong cau_hoi_mo nếu cần head quyết.`;
     const tasks: Promise<any>[] = [
       goiChu(sysChung, docs, yeuCauTomTat, 12000),
-      goiCauTruc(sysChung, docs, yeuCauThamSo, CONG_CU_THAM_SO, 6000),
+      goiCauTruc(sysChung, docs, yeuCauThamSo, CONG_CU_THAM_SO, 8000),
     ];
     for (const pb of PBS) {
       tasks.push((async () => {
         const sk = await skillHienHanh(pb);
         const mauPb = (qtMau ?? []).filter((q: any) => q.phong_ban === pb).map((q: any) => `${q.ma} [${q.nhom}] ${q.noi_dung} (${q.cach_kiem}, ${q.muc_do})`).join('\n');
-        const out = await goiCauTruc(`${sk.noi_dung}\n\nBạn đang đọc hợp đồng của một khách mới để lập bộ quy tắc kiểm bảng kê trong scope ${TEN_PHONG_BAN[pb]}. Chỉ dựa trên văn bản hợp đồng; điều hợp đồng không quy định thì ghi rõ "Hợp đồng không quy định" và nêu cách hiểu an toàn. Trả lời tiếng Việt.`, docs,
-          `Rút các quy tắc thuộc scope ${TEN_PHONG_BAN[pb]} để kiểm bảng kê và hồ sơ thanh toán của khách này, rồi gọi công cụ ghi_quy_tac.
+        const sys = `${sk.noi_dung}\n\nBạn đang đọc hợp đồng của một khách mới để lập bộ quy tắc kiểm bảng kê trong scope ${TEN_PHONG_BAN[pb]}. Chỉ dựa trên văn bản hợp đồng; điều hợp đồng không quy định thì ghi rõ "Hợp đồng không quy định" và nêu cách hiểu an toàn. Trả lời tiếng Việt.`;
+        const yeuCau = (gioiHan: string) => `Rút các quy tắc thuộc scope ${TEN_PHONG_BAN[pb]} để kiểm bảng kê và hồ sơ thanh toán của khách này, rồi gọi công cụ ghi_quy_tac.
 Bộ quy tắc mẫu của phòng (dùng lại đúng MÃ nếu cùng loại kiểm tra; loại mới thì đánh mã ${TIEN_TO[pb]}-xx tiếp theo):
 ${mauPb || '(chưa có mẫu)'}
-Mỗi quy tắc: nội dung ngắn gọn, giá trị/ngưỡng cụ thể, căn cứ (Điều/Phụ lục), cách kiểm (tu_dong | head_xem | gd2), mức độ (chan_gui | giai_trinh | theo_doi).`, CONG_CU_QUY_TAC, 8000);
+Mỗi quy tắc: nội dung, giá trị/ngưỡng cụ thể, căn cứ (Điều/Phụ lục), cách kiểm (tu_dong | head_xem | gd2), mức độ (chan_gui | giai_trinh | theo_doi).
+VIẾT GỌN: ${gioiHan}`;
+        let out: any;
+        try {
+          out = await goiCauTruc(sys, docs, yeuCau('tối đa 25 quy tắc quan trọng nhất cho việc kiểm bảng kê; nội dung ≤ 35 từ, giá trị ≤ 20 từ, căn cứ chỉ ghi số Điều/Phụ lục, bỏ trống du_lieu nếu không cần; gộp các điều khoản cùng loại vào một quy tắc.'), CONG_CU_QUY_TAC, 16000);
+        } catch (e) {
+          if (!(e instanceof QuaDai)) throw e;
+          // Vẫn quá dài → rút gọn mạnh hơn: chỉ giữ quy tắc quan trọng nhất, mỗi trường thật ngắn
+          out = await goiCauTruc(sys, docs, yeuCau('tối đa 12 quy tắc quan trọng nhất; mỗi trường 1 câu ngắn (≤ 15 từ); căn cứ chỉ ghi số Điều; không ghi du_lieu. Điều khoản chưa đưa vào thì head bổ sung sau.'), CONG_CU_QUY_TAC, 16000);
+        }
         return { pb, ds: out.quy_tac ?? [] };
       })());
     }
