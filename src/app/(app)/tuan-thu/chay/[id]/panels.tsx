@@ -1,11 +1,11 @@
 'use client';
 import { useState } from 'react';
 import { FormHanhDong, KhoiDuyet, Nut, OGhi } from '../../ui';
-import { chanLanChay, duyetBuoc, goChan, luuGiaiTrinh, taiLaiRaw, xacNhanThayDoi } from '../../actions';
+import { chanLanChay, chonBanGui, duyetBuoc, goChan, luuGiaiTrinh, taiLaiRaw, xacNhanThayDoi } from '../../actions';
 import { taiLenTrucTiep } from '../../tai-len';
 
 async function taiLaiQuaStorage(fd: FormData) {
-  try { await taiLenTrucTiep(fd, 'raw', 'raw_json', 'raw', 'raw'); }
+  try { await taiLenTrucTiep(fd, 'bk', 'bk_json', 'raw', 'bk'); await taiLenTrucTiep(fd, 'raw', 'raw_json', 'raw', 'raw'); }
   catch (e) { return { ok: false as const, loi: e instanceof Error ? e.message : String(e) }; }
   return taiLaiRaw(fd);
 }
@@ -22,13 +22,23 @@ export function GiaiTrinh({ id, dau, sua }: { id: number; dau: string; sua: bool
   if (!sua) return <span className="text-[12px]">{dau || <i className="text-[var(--ink-3)]">Chưa có giải trình</i>}</span>;
   return <OGhi dau={dau} luu={(t) => luuGiaiTrinh(id, t)} placeholder="Giải trình của kế toán (hoặc: đã sửa raw và tải lại)" />;
 }
-export function TaiLai({ lanId }: { lanId: string }) {
+export function TaiLai({ lanId, daFormat }: { lanId: string; daFormat?: boolean }) {
   return (
-    <FormHanhDong action={taiLaiQuaStorage} nhanNut="Tải lại raw đã sửa" kieu="">
+    <FormHanhDong action={taiLaiQuaStorage} nhanNut={daFormat ? 'Tải lại bảng kê đã sửa' : 'Tải lại raw đã sửa'} kieu="">
       <input type="hidden" name="id" value={lanId} />
-      <input type="file" name="raw" accept=".xlsx" multiple required className="text-[12px]" />
-      <span className="text-[11px] text-[var(--ink-3)]">Chọn lại đủ cả file khách sạn và vé. Mọi duyệt của vòng hiện tại sẽ mất hiệu lực.</span>
+      {daFormat && <label className="text-[12px] flex flex-col gap-1">Bảng kê đã sửa (.xlsx)<input type="file" name="bk" accept=".xlsx" className="text-[12px]" /></label>}
+      <label className="text-[12px] flex flex-col gap-1">{daFormat ? 'Raw để đối chiếu (không bắt buộc)' : 'File raw (chọn đủ khách sạn và vé)'}<input type="file" name="raw" accept=".xlsx" multiple className="text-[12px]" /></label>
+      <span className="text-[11px] text-[var(--ink-3)]">Mọi duyệt của vòng hiện tại sẽ mất hiệu lực, app xử lý lại từ đầu.</span>
     </FormHanhDong>
+  );
+}
+export function ChonBan({ lanId, banGui, coBanSua }: { lanId: string; banGui: string | null; coBanSua: boolean }) {
+  return (
+    <div className="flex gap-2 flex-wrap items-start">
+      <Nut chay={() => chonBanGui(lanId, 'da_sua')} nhan={`${banGui === 'da_sua' ? '✓ ' : ''}Gửi bản đã sửa theo quy tắc`} kieu={banGui === 'da_sua' ? 'btn-primary' : ''} />
+      <Nut chay={() => chonBanGui(lanId, 'goc')} nhan={`${banGui === 'goc' ? '✓ ' : ''}Gửi bảng kê kế toán upload`} kieu={banGui === 'goc' ? 'btn-primary' : ''}
+        xacNhan={coBanSua ? 'Gửi bản kế toán tự format: các ô sai quy tắc sẽ giữ nguyên trong file gửi khách và phải có giải trình. Tiếp tục?' : undefined} />
+    </div>
   );
 }
 export function Duyet({ lanId, buoc, nhan, xacNhan }: { lanId: string; buoc: 'ke_toan' | 'demand' | 'supply' | 'ceo'; nhan?: string; xacNhan?: string }) {

@@ -48,13 +48,21 @@ export async function taoLanChay(fd: FormData): Promise<KQ> {
     if (!hd) throw new Error('Không tìm thấy hợp đồng.');
     if (hd.trang_thai && hd.trang_thai !== 'hieu_luc') throw new Error('Hợp đồng chưa kích hoạt — 4 head phải chốt quy tắc và CEO kích hoạt trước.');
     const { phien_ban } = await thamSoHieuLuc(hopDongId, thang);
+    const cheDo = String(fd.get('che_do') ?? 'raw') === 'da_format' ? 'da_format' : 'raw';
+    const bk = tepDaTai(fd, 'bk_json');
+    if (cheDo === 'da_format' && !bk.length) throw new Error('Chọn file bảng kê đã format.');
     const { data: lc, error } = await sb.from('tt_lan_chay').insert({
       hop_dong_id: hopDongId, thang, dot: dotS ? Number(dotS) : null, phien_ban_quy_tac: phien_ban, created_by: n.id,
+      ...(cheDo === 'da_format' ? { che_do: cheDo, bk_goc_path: bk[0].path, bk_goc_ten: bk[0].ten } : {}),
     }).select('id').single();
+    if (error && /che_do|bk_goc/.test(error.message)) throw new Error('Cần chạy supabase/migrations/45_tuan_thu_bang_ke_da_format.sql.');
     if (error || !lc) throw new Error(error?.message ?? 'Không tạo được lần chạy.');
     try {
-      const { paths, ten } = await ghiRaw(lc.id, hd.ma_khach, thang, fd.getAll('raw') as File[], tepDaTai(fd, 'raw_json'));
-      await sb.from('tt_lan_chay').update({ raw_paths: paths, raw_ten: ten }).eq('id', lc.id);
+      const rawFiles = (fd.getAll('raw') as File[]).filter((f) => f && f.size), rawDaTai = tepDaTai(fd, 'raw_json');
+      if (cheDo === 'raw' || rawFiles.length || rawDaTai.length) {
+        const { paths, ten } = await ghiRaw(lc.id, hd.ma_khach, thang, rawFiles, rawDaTai);
+        await sb.from('tt_lan_chay').update({ raw_paths: paths, raw_ten: ten }).eq('id', lc.id);
+      }
       await xuLyLanChay(lc.id);
       await baoChoPhongBan(lc.id, ['demand', 'supply'], 'xu_ly');
     } catch (e) {
@@ -75,9 +83,15 @@ export async function taiLaiRaw(fd: FormData): Promise<KQ> {
     const { data: lc } = await sb.from('tt_lan_chay').select('*, tt_hop_dong(ma_khach)').eq('id', id).single();
     if (!lc) throw new Error('Không tìm thấy lần chạy.');
     if (lc.buoc === 'da_gui') throw new Error('Bảng kê đã gửi, không tải lại được. Tạo lần chạy mới.');
-    const { paths, ten } = await ghiRaw(id, (lc as any).tt_hop_dong.ma_khach, lc.thang, fd.getAll('raw') as File[], tepDaTai(fd, 'raw_json'));
     const { phien_ban } = await thamSoHieuLuc(lc.hop_dong_id, lc.thang);
-    await sb.from('tt_lan_chay').update({ raw_paths: paths, raw_ten: ten, vong: lc.vong + 1, buoc: 'cho_ke_toan', phien_ban_quy_tac: phien_ban }).eq('id', id);
+    const capNhat: any = { vong: lc.vong + 1, buoc: 'cho_ke_toan', phien_ban_quy_tac: phien_ban };
+    const bk = tepDaTai(fd, 'bk_json');
+    if (lc.che_do === 'da_format' && bk.length) Object.assign(capNhat, { bk_goc_path: bk[0].path, bk_goc_ten: bk[0].ten, ban_gui: null, bang_ke_path: null });
+    const rawFiles = (fd.getAll('raw') as File[]).filter((f) => f && f.size), rawDaTai = tepDaTai(fd, 'raw_json');
+    if (rawFiles.length || rawDaTai.length) { const { paths, ten } = await ghiRaw(id, (lc as any).tt_hop_dong.ma_khach, lc.thang, rawFiles, rawDaTai); Object.assign(capNhat, { raw_paths: paths, raw_ten: ten }); }
+    else if (lc.che_do !== 'da_format') throw new Error('Chưa chọn file raw.');
+    else if (!bk.length) throw new Error('Chọn file bảng kê đã sửa (và raw nếu có).');
+    await sb.from('tt_lan_chay').update(capNhat).eq('id', id);
     await xuLyLanChay(id);
     await baoChoPhongBan(id, ['demand', 'supply'], 'xu_ly');
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.tai_lai_raw', entity: 'tt_lan_chay', entityId: id });
@@ -134,7 +148,8 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
       sb.from('tt_duyet').select('buoc, quyet_dinh').eq('lan_chay_id', lanId).eq('vong', lc.vong),
     ]);
     const chan = await dsDangChan(lanId);
-    const dx = deXuatBuoc(buoc, (cb ?? []) as any, (td ?? []) as any, (dy ?? []) as any, chan);
+    const dx = deXuatBuoc(buoc, (cb ?? []) as any, (td ?? []) as any, (dy ?? []) as any, chan,
+      { chuaChonBan: lc.che_do === 'da_format' && !lc.ban_gui, banGui: lc.ban_gui });
     // Điều kiện cứng: không duyệt được khi còn việc bắt buộc (chỉ cho phép ghi đè ở bước demand/supply bằng ý kiến)
     if (quyetDinh === 'duyet' && dx.ket_luan === 'tra_ve' && (buoc === 'ke_toan' || buoc === 'ceo'))
       throw new Error('Chưa đủ điều kiện duyệt: ' + dx.ly_do.join(' '));
@@ -518,4 +533,20 @@ function tepDaTai(fd: FormData, khoa: string): { path: string; ten: string }[] {
     const ds = JSON.parse(String(fd.get(khoa) ?? '[]')) as { path: string; ten: string }[];
     return ds.filter((t) => typeof t.path === 'string' && t.path.startsWith('tuan-thu/') && !t.path.includes('..'));
   } catch { return []; }
+}
+
+/** Kế toán chọn bản gửi khách (lần chạy từ bảng kê đã format): file kế toán upload hay bản đã sửa theo quy tắc. */
+export async function chonBanGui(lanId: string, ban: 'goc' | 'da_sua'): Promise<KQ> {
+  return lam(async () => {
+    const n = await batBuoc('ke_toan');
+    const sb = supabaseAdmin();
+    const { data: lc } = await sb.from('tt_lan_chay').select('*').eq('id', lanId).single();
+    if (!lc || lc.che_do !== 'da_format') throw new Error('Lần chạy không phải loại bảng kê đã format.');
+    if (lc.buoc !== 'cho_ke_toan') throw new Error('Chỉ chọn được khi lần chạy đang chờ kế toán.');
+    if (ban === 'da_sua' && !lc.bk_sua_path) throw new Error('Không có bản đã sửa (file đã đúng quy tắc).');
+    await sb.from('tt_lan_chay').update({ ban_gui: ban, bang_ke_path: ban === 'da_sua' ? lc.bk_sua_path : lc.bk_goc_path }).eq('id', lanId);
+    await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.chon_ban_gui', entity: 'tt_lan_chay', entityId: lanId, after: { ban } });
+    revalidatePath(`/tuan-thu/chay/${lanId}`);
+    return { ok: true, thongBao: ban === 'da_sua' ? 'Sẽ gửi bản đã sửa theo quy tắc.' : 'Sẽ gửi bảng kê kế toán upload (giữ nguyên).' };
+  });
 }

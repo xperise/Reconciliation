@@ -6,7 +6,7 @@ import { duocLam, fmtVnd, nguoiTT, nhanThang, TEN_BUOC } from '@/lib/tuan-thu/db
 import { deXuatBuoc, DeXuat } from '@/lib/tuan-thu/de-xuat';
 import { TEN_DICH_VU, TEN_MUC_DO, TEN_PHONG_BAN, PhongBan, LoaiDichVu } from '@/lib/tuan-thu/types';
 import { thongTinGui } from '../../actions';
-import { Duyet, GiaiTrinh, GoChan, KiemSoat, TaiLai, XacNhanMot, XacNhanTatCa } from './panels';
+import { ChonBan, Duyet, GiaiTrinh, GoChan, KiemSoat, TaiLai, XacNhanMot, XacNhanTatCa } from './panels';
 import { GoiYGiaiTrinh, RaSoat } from '../../agent-ui';
 
 export const dynamic = 'force-dynamic';
@@ -49,7 +49,8 @@ export default async function Page({ params }: { params: { id: string } }) {
   const hd: any = lc.tt_hop_dong;
   const th: any = lc.tong_hop ?? {};
   const daDuyet = (b: string) => dyVong.find((d) => d.buoc === b && d.quyet_dinh === 'duyet');
-  const dx = (b: string) => deXuatBuoc(b, canhBao, thayDoi, dyVong, b === 'ceo' ? dangChanDs : []);
+  const daFormat = lc.che_do === 'da_format';
+  const dx = (b: string) => deXuatBuoc(b, canhBao, thayDoi, dyVong, b === 'ceo' ? dangChanDs : [], { chuaChonBan: daFormat && !lc.ban_gui, banGui: lc.ban_gui });
   const chuaXn = thayDoi.filter((t) => !t.xac_nhan).length;
   const suaKeToan = duocLam(n, 'ke_toan') && lc.buoc === 'cho_ke_toan';
   const gui = lc.buoc === 'cho_ceo' || lc.buoc === 'da_gui' ? await thongTinGui(lc.id) : null;
@@ -68,12 +69,22 @@ export default async function Page({ params }: { params: { id: string } }) {
         title={`Bảng kê ${hd.ten_khach} ${nhanThang(lc.thang, lc.dot)}`}
         description={th.nhan_ky}
         action={<div className="flex gap-2 flex-wrap">
-          {tep(lc.bang_ke_path) && <a className="btn btn-sm btn-primary" href={tep(lc.bang_ke_path)!}>Tải bảng kê</a>}
+          {daFormat ? <>
+            {tep(lc.bk_goc_path) && <a className="btn btn-sm" href={tep(lc.bk_goc_path)!}>Bảng kê kế toán upload</a>}
+            {tep(lc.bk_sua_path) && <a className="btn btn-sm btn-primary" href={tep(lc.bk_sua_path)!}>Bản đã sửa theo quy tắc</a>}
+          </> : tep(lc.bang_ke_path) && <a className="btn btn-sm btn-primary" href={tep(lc.bang_ke_path)!}>Tải bảng kê</a>}
           {tep(lc.bao_cao_path) && <a className="btn btn-sm" href={tep(lc.bao_cao_path)!}>Tải báo cáo kiểm tra</a>}
           {Object.entries(lc.raw_paths ?? {}).map(([k, p]) => <a key={k} className="btn btn-sm" href={tep(p as string)!}>Raw: {(lc.raw_ten ?? {})[k] ?? k}</a>)}
         </div>} />
 
-      {lc.loi && <div className="callout callout-critical mb-4"><b>Lỗi xử lý raw:</b> {lc.loi}</div>}
+      {lc.loi && <div className="callout callout-critical mb-4"><b>Lỗi xử lý:</b> {lc.loi}</div>}
+      {daFormat && !lc.loi && (
+        <div className="callout callout-accent mb-4 text-[12.5px]">
+          <b>Lần chạy từ bảng kê kế toán đã format.</b> Tổng file kế toán upload: {fmtVnd(th.goc?.tong_cong)}đ (chiết khấu {fmtVnd(th.goc?.chiet_khau)}đ){lc.bk_sua_path ? <> · bản đã sửa theo quy tắc: <b>{fmtVnd(th.tong_cong)}đ</b></> : ' · file đã đúng quy tắc, không có bản sửa'}.{' '}
+          Bản gửi khách: <b>{lc.ban_gui === 'da_sua' ? 'bản đã sửa theo quy tắc' : lc.ban_gui === 'goc' ? 'bảng kê kế toán upload' : 'chưa chọn'}</b>.
+          {lc.buoc === 'cho_ke_toan' && lc.bk_sua_path && duocLam(n, 'ke_toan') && <div className="mt-2"><ChonBan lanId={lc.id} banGui={lc.ban_gui} coBanSua={!!lc.bk_sua_path} /></div>}
+        </div>
+      )}
 
       {/* Trạng thái các cổng: kế toán duyệt → (Demand/Supply kiểm soát) → CEO duyệt & gửi */}
       <div className="grid gap-3 md:grid-cols-4 mb-5">
@@ -98,7 +109,7 @@ export default async function Page({ params }: { params: { id: string } }) {
       {/* Nhật ký app tự sửa */}
       <section className="card card-pad mb-5">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="card-title m-0">App tự sửa theo bộ quy tắc ({thayDoi.length} ô)</h2>
+          <h2 className="card-title m-0">{daFormat ? `Bản đã sửa thay đổi so với file kế toán (${thayDoi.length} ô)` : `App tự sửa theo bộ quy tắc (${thayDoi.length} ô)`}</h2>
           {suaKeToan && <XacNhanTatCa lanId={lc.id} con={chuaXn} />}
         </div>
         {thayDoi.length === 0 ? <p className="empty">Raw đã đúng quy tắc, app không phải sửa ô nào.</p> : (
@@ -153,7 +164,7 @@ export default async function Page({ params }: { params: { id: string } }) {
           {duocLam(n, 'ke_toan') ? (
             <div className="grid gap-5 md:grid-cols-2">
               <div><p className="label mb-1">Duyệt chuyển sang Demand & Supply</p><Duyet lanId={lc.id} buoc="ke_toan" nhan="Duyệt, chuyển CEO" /></div>
-              <div><p className="label mb-1">Kế toán tự sửa raw rồi tải lại</p><TaiLai lanId={lc.id} /></div>
+              <div><p className="label mb-1">{daFormat ? 'Kế toán sửa file rồi tải lại' : 'Kế toán tự sửa raw rồi tải lại'}</p><TaiLai lanId={lc.id} daFormat={daFormat} /></div>
             </div>
           ) : <p className="text-[12px]">Chờ kế toán.</p>}
         </section>
@@ -210,7 +221,7 @@ export default async function Page({ params }: { params: { id: string } }) {
             <div>
               <p className="label mb-1">Thư sẽ gửi</p>
               <div className="text-[12px]"><b>Từ:</b> cs@uts.network<br /><b>Đến:</b> {gui.to || <span className="text-red-600">chưa có email đầu mối</span>}<br />
-                <b>CC:</b> {gui.cc || '—'}<br /><b>Tiêu đề:</b> {gui.subject}<br /><b>Đính kèm:</b> {lc.bang_ke_path?.split('/').pop()}</div>
+                <b>CC:</b> {gui.cc || '—'}<br /><b>Tiêu đề:</b> {gui.subject}<br /><b>Đính kèm:</b> {lc.bang_ke_path?.split('/').pop() ?? <span className="text-red-600">chưa chọn bản gửi</span>}{daFormat && lc.ban_gui ? ` (${lc.ban_gui === 'da_sua' ? 'bản đã sửa theo quy tắc' : 'bản kế toán upload'})` : ''}</div>
               <iframe title="Xem trước thư gửi khách" className="mt-2 w-full rounded-lg border border-[var(--line)]" style={{ height: 560, background: '#f5f5f5' }} sandbox="" srcDoc={gui.html} />
               <p className="text-[11px] text-[var(--ink-3)] mt-1">Mẫu thư giống WF1; file bảng kê được đính kèm, nút Xem bảng kê dùng liên kết tải có thời hạn tạo lúc gửi.</p>
               {lc.buoc === 'da_gui' && <div className="callout callout-stable mt-2">Đã gửi lúc {new Date(lc.gui_luc).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}.</div>}

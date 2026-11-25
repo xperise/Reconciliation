@@ -16,7 +16,7 @@ export default async function Page() {
   const [{ data: tv }, { data: qt }, { data: runs }, { data: sd }, { data: sk }, { data: ai }, { data: chan }] = await Promise.all([
     sb.from('tt_thanh_vien').select('phong_ban'),
     sb.from('tt_quy_tac').select('phong_ban, chot').eq('hop_dong_id', hdId),
-    sb.from('tt_lan_chay').select('id, dot, buoc, vong, loi').eq('hop_dong_id', hdId),
+    sb.from('tt_lan_chay').select('*').eq('hop_dong_id', hdId),
     sb.from('tt_sua_doi').select('ma_quy_tac, trang_thai').eq('hop_dong_id', hdId),
     sb.from('tt_skill').select('phong_ban, phien_ban, ly_do'),
     sb.from('tt_ai_ket_qua').select('loai').limit(200),
@@ -29,7 +29,7 @@ export default async function Page() {
   const dm01 = (sd ?? []).find((x: any) => x.ma_quy_tac === 'DM-01');
   const P: { phan: string; buoc: Buoc[] }[] = [
     { phan: 'A · Cài đặt (admin, làm một lần)', buoc: [
-      { ten: 'Chạy SQL 38 → 43', vai: 'Admin', lam: 'Supabase → SQL Editor: chạy lần lượt các file 38_tuan_thu, 39_tuan_thu_agent, 40_tuan_thu_chan, 41_tuan_thu_hop_dong_day_du, 42_tuan_thu_agent_hanh_dong, 43_tuan_thu_them_hop_dong trong supabase/migrations.', kq: 'Có hợp đồng VCB, 32 quy tắc, skill v1 cho 4 phòng.', link: '/tuan-thu/quy-tac', xong: !!hd && (sk ?? []).length >= 4 },
+      { ten: 'Chạy SQL 38 → 45', vai: 'Admin', lam: 'Supabase → SQL Editor: chạy lần lượt các file 38 đến 45 trong supabase/migrations (38_tuan_thu … 45_tuan_thu_bang_ke_da_format).', kq: 'Có hợp đồng VCB, 32 quy tắc, skill v1 cho 4 phòng.', link: '/tuan-thu/quy-tac', xong: !!hd && (sk ?? []).length >= 4 },
       { ten: 'Nhập Claude API key', vai: 'Admin', lam: 'Vercel → Settings → Environment Variables: thêm ANTHROPIC_API_KEY (tùy chọn ANTHROPIC_MODEL), rồi Redeploy.', kq: 'Nút agent AI trả lời được.', link: '/tuan-thu/agent', xong: (ai ?? []).length > 0 },
       { ten: 'Gán phòng ban cho 4 head', vai: 'Admin', lam: 'Mục Thành viên: gán Kế toán, Demand, Supply, CEO.', kq: 'Mỗi head thấy tab Tuân thủ và chỉ duyệt được bước của phòng mình.', link: '/tuan-thu/thanh-vien', xong: ['ke_toan', 'demand', 'supply', 'ceo'].every(coTv) },
       { ten: 'Gắn nhóm Master Data cho hợp đồng VCB', vai: 'Admin', lam: 'Hợp đồng & quy tắc: chọn nhóm Master Data (email đầu mối, CC). Khi thử nghiệm, gắn tạm nhóm có email nội bộ vì CEO duyệt là app gửi thư thật.', kq: 'Hiện email đầu mối dưới tên hợp đồng.', link: '/tuan-thu/quy-tac', xong: !!hd?.group_id },
@@ -42,6 +42,10 @@ export default async function Page() {
       { ten: 'Kế toán xác nhận ô app tự sửa và giải trình', vai: 'Kế toán', lam: 'Xác nhận app sửa đúng (hoặc tự sửa raw rồi tải lại). Điền giải trình cho cảnh báo; có thể bấm Nhờ agent Kế toán gợi ý giải trình rồi sửa lại. Bấm Agent AI rà soát trước khi duyệt.', kq: 'Agent đề xuất DUYỆT; bước chuyển sang Chờ CEO, Demand/Supply/CEO nhận thông báo.', link: '/tuan-thu', xong: thang.some((r) => r.buoc !== 'cho_ke_toan') },
       { ten: 'Demand và Supply nhận cảnh báo, thử chặn rồi gỡ', vai: 'Demand, Supply', lam: 'Không cần duyệt. Mỗi head nhận chuông và email cảnh báo thuộc scope, mở lần chạy, bấm Agent AI rà soát. Thử Chặn bảng kê kèm lý do (CEO sẽ không duyệt được), rồi Gỡ chặn kèm ghi chú đã xử lý.', kq: 'Lịch sử chặn và gỡ chặn hiện trong khung kiểm soát và ở màn hình CEO.', link: '/tuan-thu', xong: ((chan ?? []) as any[]).some((c) => c.go_luc) },
       { ten: 'CEO duyệt và gửi', vai: 'CEO', lam: 'Xem thay đổi so với raw, ngoại lệ kèm giải trình, thư sẽ gửi; bấm Agent AI rà soát; Duyệt & gửi.', kq: 'Trạng thái Đã gửi khách; thư đi từ cs@uts.network.', link: '/tuan-thu', xong: thang.some((r) => r.buoc === 'da_gui') },
+    ] },
+    { phan: 'C2 · Kiểm tra bảng kê kế toán đã format', buoc: [
+      { ten: 'Upload bảng kê đã format', vai: 'Kế toán', lam: 'Lần chạy bảng kê → chọn "Bảng kê kế toán đã format", chọn file bảng kê (raw để đối chiếu: không bắt buộc). App kiểm tra đầu trang, tài khoản, chiết khấu, phí, số học, dòng tổng, sheet tổng hợp, định mức, kỳ; tạo bản đã sửa theo quy tắc giữ nguyên mẫu file.', kq: 'Có cảnh báo, bảng các ô bản đã sửa thay đổi, và 2 file để tải: bản kế toán upload và bản đã sửa.', link: '/tuan-thu', xong: R.some((r) => r.che_do === 'da_format') },
+      { ten: 'Chọn bản gửi khách, duyệt', vai: 'Kế toán → CEO', lam: 'Kế toán chọn gửi bản đã sửa theo quy tắc hoặc bản tự format (chọn bản tự format thì các cảnh báo phải có giải trình), rồi duyệt; CEO duyệt là app gửi đúng bản đã chọn.', kq: 'Thư gửi khách đính kèm đúng bản đã chọn.', link: '/tuan-thu', xong: R.some((r) => r.che_do === 'da_format' && r.buoc === 'da_gui') },
     ] },
     { phan: 'D · Sửa đổi quy tắc: VCB nhận bảng kê 2 đợt', buoc: [
       { ten: 'Demand đề xuất sửa DM-01', vai: 'Demand', lam: 'Sửa đổi quy tắc: chọn DM-01, nội dung "Chia 2 đợt theo ngày giao dịch", tham số Kỳ bảng kê: chia 2 đợt, ngày cắt 15, hiệu lực từ 2026-10, căn cứ là email/phụ lục VCB.', kq: 'SĐ ở trạng thái Chờ duyệt.', link: '/tuan-thu/sua-doi', xong: !!dm01 },

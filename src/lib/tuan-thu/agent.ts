@@ -120,6 +120,7 @@ export async function boiCanhLanChay(lanChayId: string): Promise<{ text: string;
   const hd: any = lc.tt_hop_dong;
   const text = `LẦN CHẠY BẢNG KÊ ${hd.ten_khach} — HĐ ${hd.so_hop_dong} — ${th.nhan_ky ?? lc.thang}${lc.dot ? ` (đợt ${lc.dot})` : ''}
 Quy tắc phiên bản v${lc.phien_ban_quy_tac}, bước hiện tại: ${lc.buoc}, vòng ${lc.vong}${lc.loi ? `, LỖI XỬ LÝ: ${lc.loi}` : ''}.
+Nguồn: ${lc.che_do === 'da_format' ? `BẢNG KÊ KẾ TOÁN ĐÃ FORMAT (${lc.bk_goc_ten ?? ''}); tổng file kế toán ${fmtVnd(th.goc?.tong_cong)}đ, chiết khấu ${fmtVnd(th.goc?.chiet_khau)}đ; ${lc.bk_sua_path ? `có bản đã sửa theo quy tắc (tổng ${fmtVnd(th.tong_cong)}đ)` : 'file đã đúng quy tắc'}; bản gửi khách: ${lc.ban_gui === 'da_sua' ? 'bản đã sửa' : lc.ban_gui === 'goc' ? 'bản kế toán upload' : 'CHƯA CHỌN'}. "App tự sửa" = các ô bản đã sửa khác file kế toán.` : 'raw, app format theo mẫu'}
 Tổng: vé ${fmtVnd(th.tong?.ve_may_bay)}đ (${th.so_dong?.ve_may_bay ?? 0} dòng), khách sạn ${fmtVnd(th.tong?.khach_san)}đ (${th.so_dong?.khach_san ?? 0} dòng), tổng gửi khách ${fmtVnd(th.tong_cong)}đ, chiết khấu ${fmtVnd((th.chiet_khau?.khach_san ?? 0) + (th.chiet_khau?.ve_may_bay ?? 0))}đ.
 
 APP TỰ SỬA THEO QUY TẮC:

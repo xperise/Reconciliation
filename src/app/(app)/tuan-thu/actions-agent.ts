@@ -5,7 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { writeAudit } from '@/lib/audit';
 import { batBuoc, duocLam } from '@/lib/tuan-thu/db';
 import { CONG_CU_DOC, CONG_CU_THAO_TAC, LA_THAO_TAC, chayCongCuDoc, moTa, phongBanCan } from '@/lib/tuan-thu/cong-cu';
-import { chanLanChay, chotQuyTac, deXuatSuaDoi, duyetBuoc, duyetSuaDoi, goChan, luuGiaiTrinh, suaBangKe, taiLaiRaw, taoHopDong, taoLanChay, xacNhanThayDoi } from './actions';
+import { chanLanChay, chonBanGui, chotQuyTac, deXuatSuaDoi, duyetBuoc, duyetSuaDoi, goChan, luuGiaiTrinh, suaBangKe, taiLaiRaw, taoHopDong, taoLanChay, xacNhanThayDoi } from './actions';
 import { khoiDinhKem, TepDinhKem } from '@/lib/tuan-thu/dinh-kem';
 import { docHopDong } from '@/lib/tuan-thu/doc-hop-dong';
 import { boiCanhLanChay, docJson, goiClaude, goiClaudeCongCu, heThong, MODEL, skillHienHanh } from '@/lib/tuan-thu/agent';
@@ -44,7 +44,7 @@ LÀM VIỆC QUA CÔNG CỤ:
 - Hợp đồng mới upload qua màn hình Thêm hợp đồng (PDF); bạn giúp head đọc bản nháp, giải thích điểm còn mở, chốt quy tắc (chot_quy_tac, chot_nhieu_quy_tac). Kích hoạt hợp đồng do CEO bấm trên màn hình Hợp đồng & quy tắc.
 - Không tự đề xuất thao tác người dùng không yêu cầu, trừ khi hỏi lại để xác nhận. Nếu thiếu thông tin bắt buộc (lý do, giá trị mới), hỏi lại trước.
 - Duyệt của CEO sẽ gửi thư cho khách ngay khi người dùng xác nhận — nhắc rõ điều này.
-- Người dùng có thể đính kèm tệp (PDF, Excel, CSV, ảnh, Word). Đọc kỹ nội dung tệp trước khi trả lời. Tệp raw bảng kê (.xlsx) dùng được cho tao_lan_chay / tai_lai_raw; PDF hợp đồng dùng được cho tao_hop_dong — truyền đúng "đường dẫn để dùng trong công cụ" ghi cạnh tên tệp. Nếu thiếu thông tin bắt buộc (tháng, đợt, mã khách, số hợp đồng…) thì hỏi lại hoặc đọc từ chính tệp.${lanChayId ? `\n- Lần chạy đang mở: ${lanChayId}.` : ''}`;
+- Người dùng có thể đính kèm tệp (PDF, Excel, CSV, ảnh, Word). Đọc kỹ nội dung tệp trước khi trả lời. Tệp raw (.xlsx) dùng cho tao_lan_chay (tep_paths) / tai_lai_raw; bảng kê kế toán ĐÃ FORMAT dùng cho tao_lan_chay với bang_ke_path (raw kèm theo chỉ để đối chiếu) — phân biệt bằng nội dung tệp (bảng kê đã format có đầu trang Tên đơn vị bán hàng, các sheet theo mẫu khách); PDF hợp đồng dùng được cho tao_hop_dong — truyền đúng "đường dẫn để dùng trong công cụ" ghi cạnh tên tệp. Nếu thiếu thông tin bắt buộc (tháng, đợt, mã khách, số hợp đồng…) thì hỏi lại hoặc đọc từ chính tệp.${lanChayId ? `\n- Lần chạy đang mở: ${lanChayId}.` : ''}`;
 
     let ls = sb.from('tt_chat').select('vai, noi_dung, tep').eq('user_id', n.id).eq('phong_ban', pb).order('luc', { ascending: false }).limit(12);
     ls = lanChayId ? ls.eq('lan_chay_id', lanChayId) : ls.is('lan_chay_id', null);
@@ -172,11 +172,13 @@ export async function thucHienHanhDong(id: number): Promise<KQ> {
       case 'tao_lan_chay': {
         const fd = new FormData();
         fd.set('hop_dong_id', i.hop_dong_id); fd.set('thang', i.thang); fd.set('dot', i.dot ? String(i.dot) : '');
+        if (i.bang_ke_path) { fd.set('che_do', 'da_format'); fd.set('bk_json', JSON.stringify([{ path: i.bang_ke_path, ten: String(i.bang_ke_path).split('/').pop() }])); }
         fd.set('raw_json', JSON.stringify((i.tep_paths ?? []).map((p: string) => ({ path: p, ten: p.split('/').pop() }))));
         kq = await taoLanChay(fd);
         if (kq.ok && kq.id) kq = { ok: true, thongBao: `Đã tạo và xử lý lần chạy — mở: /tuan-thu/chay/${kq.id}` };
         break;
       }
+      case 'chon_ban_gui': kq = await chonBanGui(i.lan_chay_id, i.ban); break;
       case 'tai_lai_raw': {
         const fd = new FormData();
         fd.set('id', i.lan_chay_id);

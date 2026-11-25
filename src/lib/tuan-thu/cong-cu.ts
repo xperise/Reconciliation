@@ -42,8 +42,11 @@ export const CONG_CU_THAO_TAC: Tool[] = [
   { name: 'chot_quy_tac', description: 'Chốt một quy tắc thuộc phòng của người dùng: đồng ý hoặc cần sửa.', input_schema: obj({ hop_dong_id: S('id hợp đồng (ưu tiên dùng)'), ma_khach: S('mặc định VCB'), ma: S('mã quy tắc'), dong_y: { type: 'boolean' }, y_kien: S('ý kiến') }, ['ma', 'dong_y']) },
   { name: 'chot_nhieu_quy_tac', description: 'Chốt nhiều quy tắc thuộc phòng của người dùng trong một lần (ví dụ toàn bộ quy tắc nháp của một hợp đồng mới).',
     input_schema: obj({ hop_dong_id: S('id hợp đồng (lấy từ ds_hop_dong)'), ma: { type: 'array', items: { type: 'string' }, description: 'danh sách mã; để trống = mọi quy tắc của phòng đang chờ chốt' }, dong_y: { type: 'boolean' }, y_kien: S('ý kiến') }, ['hop_dong_id', 'dong_y']) },
-  { name: 'tao_lan_chay', description: 'Kế toán: tạo lần chạy bảng kê từ file raw người dùng vừa đính kèm (.xlsx), rồi app xử lý ngay.',
-    input_schema: obj({ hop_dong_id: S('id hợp đồng đang hiệu lực (lấy từ ds_hop_dong)'), thang: S('YYYY-MM'), dot: { type: 'integer', enum: [1, 2], description: 'chỉ khi bộ quy tắc chia 2 đợt' }, tep_paths: { type: 'array', items: { type: 'string' }, description: 'đường dẫn các file raw đính kèm' } }, ['hop_dong_id', 'thang', 'tep_paths']) },
+  { name: 'tao_lan_chay', description: 'Kế toán: tạo lần chạy bảng kê từ file đính kèm (.xlsx). Có raw → app format; có bảng kê đã format (bang_ke_path) → app kiểm tra và tạo bản đã sửa theo quy tắc, raw (tep_paths) chỉ để đối chiếu, không bắt buộc.',
+    input_schema: obj({ hop_dong_id: S('id hợp đồng đang hiệu lực (lấy từ ds_hop_dong)'), thang: S('YYYY-MM'), dot: { type: 'integer', enum: [1, 2], description: 'chỉ khi bộ quy tắc chia 2 đợt' },
+      bang_ke_path: S('đường dẫn file bảng kê ĐÃ FORMAT đính kèm (nếu kế toán gửi bảng kê đã format)'), tep_paths: { type: 'array', items: { type: 'string' }, description: 'đường dẫn các file raw đính kèm' } }, ['hop_dong_id', 'thang']) },
+  { name: 'chon_ban_gui', description: 'Kế toán: chọn bản gửi khách cho lần chạy từ bảng kê đã format — "da_sua" (bản đã sửa theo quy tắc) hoặc "goc" (bảng kê kế toán upload).',
+    input_schema: obj({ lan_chay_id: S('id lần chạy'), ban: { type: 'string', enum: ['da_sua', 'goc'] } }, ['lan_chay_id', 'ban']) },
   { name: 'tai_lai_raw', description: 'Kế toán: thay raw của một lần chạy bằng file raw vừa đính kèm và xử lý lại (mở vòng mới).',
     input_schema: obj({ lan_chay_id: S('id lần chạy'), tep_paths: { type: 'array', items: { type: 'string' } } }, ['lan_chay_id', 'tep_paths']) },
   { name: 'tao_hop_dong', description: 'Thêm hợp đồng / khách mới từ PDF hợp đồng (và phụ lục) vừa đính kèm; agent đọc ra bản nháp quy tắc để 4 head chốt.',
@@ -101,7 +104,7 @@ export async function chayCongCuDoc(ten: string, input: any): Promise<string> {
 
 /** Phòng ban cần có quyền cho thao tác (để báo lỗi sớm nếu người dùng không có quyền). */
 export function phongBanCan(ten: string, input: any, macDinh: PhongBan): PhongBan {
-  if (['sua_o_bang_ke', 'ghi_giai_trinh', 'xac_nhan_o_tu_sua', 'tao_lan_chay', 'tai_lai_raw'].includes(ten)) return 'ke_toan';
+  if (['sua_o_bang_ke', 'ghi_giai_trinh', 'xac_nhan_o_tu_sua', 'tao_lan_chay', 'tai_lai_raw', 'chon_ban_gui'].includes(ten)) return 'ke_toan';
   if (ten === 'duyet_buoc') return input.buoc;
   if (ten === 'tra_ve_ke_toan' || ten === 'chan_bang_ke') return input.phong_ban;
   return macDinh;
@@ -121,7 +124,10 @@ export function moTa(ten: string, i: any): string {
     case 'duyet_sua_doi': return `${i.dong_y ? 'Đồng ý' : 'Không đồng ý'} đề xuất sửa đổi${i.y_kien ? ` — ${i.y_kien}` : ''}.`;
     case 'chot_quy_tac': return `${i.dong_y ? 'Đồng ý' : 'Đánh dấu cần sửa'} quy tắc ${i.ma}${i.y_kien ? ` — ${i.y_kien}` : ''}.`;
     case 'chot_nhieu_quy_tac': return `${i.dong_y ? 'Đồng ý' : 'Đánh dấu cần sửa'} ${i.ma?.length ? `${i.ma.length} quy tắc (${i.ma.slice(0, 6).join(', ')}${i.ma.length > 6 ? '…' : ''})` : 'mọi quy tắc đang chờ chốt của phòng'} trong hợp đồng ${i.hop_dong_id}${i.y_kien ? ` — ${i.y_kien}` : ''}.`;
-    case 'tao_lan_chay': return `Tạo lần chạy bảng kê tháng ${i.thang}${i.dot ? ` đợt ${i.dot}` : ''} cho hợp đồng ${i.hop_dong_id} từ ${i.tep_paths?.length ?? 0} file raw: ${(i.tep_paths ?? []).map((p: string) => p.split('/').pop()).join(', ')}.`;
+    case 'tao_lan_chay': return i.bang_ke_path
+      ? `Kiểm tra bảng kê đã format ${String(i.bang_ke_path).split('/').pop()} — tháng ${i.thang}${i.dot ? ` đợt ${i.dot}` : ''}, hợp đồng ${i.hop_dong_id}${(i.tep_paths ?? []).length ? `, đối chiếu raw: ${(i.tep_paths as string[]).map((p) => p.split('/').pop()).join(', ')}` : ', không đối chiếu raw'}.`
+      : `Tạo lần chạy bảng kê tháng ${i.thang}${i.dot ? ` đợt ${i.dot}` : ''} cho hợp đồng ${i.hop_dong_id} từ ${i.tep_paths?.length ?? 0} file raw: ${(i.tep_paths ?? []).map((p: string) => p.split('/').pop()).join(', ')}.`;
+    case 'chon_ban_gui': return `Chọn gửi khách: ${i.ban === 'da_sua' ? 'bản đã sửa theo quy tắc' : 'bảng kê kế toán upload (giữ nguyên)'} cho lần chạy ${i.lan_chay_id}.`;
     case 'tai_lai_raw': return `Thay raw của lần chạy ${i.lan_chay_id} bằng: ${(i.tep_paths ?? []).map((p: string) => p.split('/').pop()).join(', ')} và xử lý lại (duyệt vòng hiện tại mất hiệu lực).`;
     case 'tao_hop_dong': return `Thêm hợp đồng ${i.so_hop_dong} cho khách ${i.ma_khach} — ${i.ten_khach}, áp dụng từ ${i.hieu_luc_tu}, từ ${(i.tep_paths ?? []).map((p: string) => p.split('/').pop()).join(', ')}; agent đọc ra bản nháp (1–3 phút).`;
     case 'bo_sung_skill': return `Thêm vào skill: "${i.noi_dung_them}"${i.ly_do ? ` (lý do: ${i.ly_do})` : ''}.`;

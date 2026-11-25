@@ -1,11 +1,12 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { BUCKET_TT, thamSoHieuLuc } from './db';
-import { COT_SO, docRaw } from './raw';
+import { COT_SO, docRaw, ngayISO } from './raw';
 import { khoangKy, tongHop, tuSua } from './tinh';
+import { docBangKeDaFormat, doiChieuRaw, kiemBangKeDaFormat, taoBanDaSua } from './bang-ke-doc';
 import { kiemTra } from './kiem';
 import { taoBangKe } from './bang-ke';
 import { taoBaoCao } from './bao-cao';
-import { DongRaw, LoaiDichVu } from './types';
+import { DongRaw, LoaiDichVu, ThamSoHopDong } from './types';
 
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
@@ -32,6 +33,8 @@ export async function xuLyLanChay(lanChayId: string) {
 
   if (ts.ky?.kieu === 'hai_dot' && !lc.dot) throw new Error('Bộ quy tắc hiện hành chia 2 đợt: hãy chọn đợt 1 hoặc 2.');
   if (ts.ky?.kieu !== 'hai_dot' && lc.dot) throw new Error('Bộ quy tắc hiện hành gửi 1 kỳ/tháng: không chọn đợt.');
+
+  if (lc.che_do === 'da_format') return xuLyDaFormat(lc, hd, ts, phien_ban);
 
   const dong: DongRaw[] = [];
   const thieu: Record<LoaiDichVu, string[]> = { khach_san: [], ve_may_bay: [] };
@@ -97,4 +100,60 @@ export async function docDongLanChay(lanChayId: string): Promise<DongRaw[]> {
     if (d) d.v[st.cot] = COT_SO.includes(st.cot) ? Number(st.gia_tri_moi) : st.gia_tri_moi;
   }
   return dong;
+}
+
+/**
+ * Lần chạy từ bảng kê kế toán ĐÃ FORMAT: kiểm tra file theo bộ quy tắc (+ đối chiếu raw nếu có),
+ * tạo "bản đã sửa theo quy tắc" bằng cách vá đúng ô trong chính file đó. Kế toán chọn bản gửi.
+ */
+async function xuLyDaFormat(lc: any, hd: any, ts: ThamSoHopDong, phien_ban: number) {
+  const sb = supabaseAdmin();
+  if (!lc.bk_goc_path) throw new Error('Chưa có file bảng kê đã format.');
+  const goc = await tai(lc.bk_goc_path);
+  const kq = await docBangKeDaFormat(goc);
+  if (!kq.dong.length) throw new Error(`Không nhận ra giao dịch nào trong file (sheet không nhận ra: ${kq.khongNhanRa.join(', ') || 'không'}). Cần sheet chi tiết có dòng tiêu đề bắt đầu bằng "STT" và cột "Tên khách sạn" hoặc "Tên dịch vụ (Hành trình)".`);
+  const tongGoc = tongHop(kq.dong);
+  const canhBaoFile = kiemBangKeDaFormat(kq, ts);
+  const thayDoi = tuSua(kq.dong, ts);
+  const { data: pb } = await sb.from('tt_phong_ban_khach').select('ten').eq('hop_dong_id', hd.id);
+  const canhBao = [...canhBaoFile, ...kiemTra({ dong: kq.dong, ts, thang: lc.thang, dot: lc.dot ?? undefined,
+    danh_muc_phong_ban: (pb ?? []).map((x: any) => x.ten), thieu_cot: { khach_san: [], ve_may_bay: [] }, ten_cong_ty: hd.ten_cong_ty_raw || hd.ten_khach })];
+  // Đối chiếu raw (không bắt buộc): chỉ lấy giao dịch trong kỳ của lần chạy
+  const rawPaths = Object.values((lc.raw_paths ?? {}) as Record<string, string>);
+  if (rawPaths.length) {
+    const ky = khoangKy(ts, lc.thang, lc.dot ?? undefined);
+    const raw: DongRaw[] = [];
+    for (const p of rawPaths) raw.push(...(await docRaw(await tai(p))).dong);
+    const trongKy = raw.filter((d) => { const i = ngayISO(d.v['Ngày giao dịch']); return i >= ky.tu && i <= ky.den; });
+    canhBao.push(...doiChieuRaw(kq.dong, trongKy));
+  } else canhBao.push({ ma_quy_tac: 'KT-05', phong_ban: 'ke_toan', muc_do: 'theo_doi', dong: [], noi_dung: 'Không upload raw kèm — chưa đối chiếu được giao dịch thiếu / thừa / lệch so với raw.' });
+
+  const coSua = thayDoi.length > 0 || canhBaoFile.some((c) => c.ma_quy_tac === 'KT-06' || (c.ma_quy_tac === 'KT-10' && c.loai));
+  const nhanKy = khoangKy(ts, lc.thang, lc.dot ?? undefined).nhan;
+  const thuMuc = `tuan-thu/${hd.ma_khach}/${lc.thang}${lc.dot ? `-dot${lc.dot}` : ''}/${lc.id}/v${lc.vong}`;
+  const tenGoc = lc.bk_goc_ten || lc.bk_goc_path.split('/').pop();
+  let bkSua: string | null = null;
+  if (coSua) { bkSua = `${thuMuc}/da-sua/${tenGoc}`; await luuTep(bkSua, await taoBanDaSua(goc, kq, thayDoi, ts)); }
+  await luuTep(`${thuMuc}/bao_cao_kiem_tra.xlsx`, await taoBaoCao({ nhanKy, dong: kq.dong, canhBao, thayDoi }));
+
+  await sb.from('tt_canh_bao').delete().eq('lan_chay_id', lc.id);
+  await sb.from('tt_thay_doi').delete().eq('lan_chay_id', lc.id);
+  if (canhBao.length) {
+    const r = await sb.from('tt_canh_bao').insert(canhBao.map((c) => ({ lan_chay_id: lc.id, ma_quy_tac: c.ma_quy_tac, phong_ban: c.phong_ban, muc_do: c.muc_do,
+      loai: c.loai ?? null, dong: c.dong, noi_dung: c.noi_dung, so_tien: c.so_tien ?? null })));
+    if (r.error) throw new Error(r.error.message);
+  }
+  for (let i = 0; i < thayDoi.length; i += 500) {
+    const r = await sb.from('tt_thay_doi').insert(thayDoi.slice(i, i + 500).map((t) => ({ lan_chay_id: lc.id, ma_quy_tac: t.ma_quy_tac, loai: t.loai, dong: t.dong,
+      ma_giao_dich: t.ma_giao_dich, cot: t.cot, truoc: t.truoc, sau: t.sau })));
+    if (r.error) throw new Error(r.error.message);
+  }
+  const th = tongHop(kq.dong);
+  // Không có bản sửa → chỉ có một bản để gửi
+  const banGui = coSua ? null : 'goc';
+  await sb.from('tt_lan_chay').update({
+    phien_ban_quy_tac: phien_ban, bk_sua_path: bkSua, ban_gui: banGui,
+    bang_ke_path: banGui === 'goc' ? lc.bk_goc_path : null, bao_cao_path: `${thuMuc}/bao_cao_kiem_tra.xlsx`,
+    tong_hop: { ...th, nhan_ky: nhanKy, goc: { tong_cong: tongGoc.tong_cong, chiet_khau: tongGoc.chiet_khau.khach_san + tongGoc.chiet_khau.ve_may_bay } }, loi: null,
+  }).eq('id', lc.id);
 }
