@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
+import { aiChat, aiReady } from "@/lib/ai-provider";
 import { guideUser, isJourney, loadLibrary } from "@/lib/guide/server";
 import { buildIndex, search } from "@/lib/guide/search";
 
@@ -20,7 +20,7 @@ export async function POST(req: Request) {
   const { q } = (await req.json()) as { q?: string };
   const query = String(q || "").trim().slice(0, 300);
   if (query.length < 3) return NextResponse.json({ error: "Câu hỏi quá ngắn" }, { status: 400 });
-  if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: "Chưa cấu hình OPENAI_API_KEY trên Vercel nên chưa hỏi trợ lý được — dùng kết quả tìm kiếm bên dưới." }, { status: 503 });
+  if (!aiReady()) return NextResponse.json({ error: "Chưa cấu hình khoá AI trên Vercel (AI_PROVIDER + khoá của nhà cung cấp đang chọn) nên chưa hỏi trợ lý được — dùng kết quả tìm kiếm bên dưới." }, { status: 503 });
 
   const { guides } = await loadLibrary(g.edit);
   const J = guides.find(isJourney);
@@ -31,12 +31,7 @@ export async function POST(req: Request) {
 
   const docs = hits.map((h, i) => `[${i + 1}] ${h.c.guide} › ${h.c.title}${h.c.head ? " › " + h.c.head : ""}${h.c.at ? ` (Chặng ${h.c.at.k + 1}: ${h.c.at.stage})` : ""}\n${h.c.text.slice(0, 1400)}`).join("\n\n");
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const r = await openai.chat.completions.create({
-      model: process.env.OPENAI_MODEL || "gpt-4o-mini", temperature: 0.1, max_tokens: 700,
-      messages: [{ role: "system", content: SYSTEM }, { role: "user", content: `CÂU HỎI: ${query}\n\nĐOẠN TÀI LIỆU:\n${docs}` }],
-    });
-    const answer = r.choices[0]?.message?.content?.trim() || "";
+    const answer = (await aiChat({ system: SYSTEM, user: `CÂU HỎI: ${query}\n\nĐOẠN TÀI LIỆU:\n${docs}`, temperature: 0.1, maxTokens: 700 })).trim();
     const sources = hits.map((h, i) => ({ n: i + 1, g: h.c.g, s: h.c.s, title: h.c.title, head: h.c.head, guide: h.c.guide, at: h.c.at || null, terms: h.terms }));
     return NextResponse.json({ answer, sources, journey: J?.slug || null }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {

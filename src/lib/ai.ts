@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import { aiChat, aiReady } from './ai-provider';
 
 /** Bốn action chuẩn theo sheet "3. Quy định chung SLA". */
 export type ActionKhach = 'dong_y' | 'tu_choi' | 'trao_doi_them' | 'review';
@@ -52,21 +52,10 @@ export async function classifyReply(emailBody: string): Promise<Classification> 
     .trim()
     .slice(0, 6000);
 
-  if (!process.env.OPENAI_API_KEY) return classifyByKeyword(clean);
+  if (!aiReady()) return classifyByKeyword(clean);
 
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const res = await openai.chat.completions.create({
-      model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-      temperature: 0,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: clean },
-      ],
-    });
-
-    const raw = res.choices[0]?.message?.content ?? '{}';
+    const raw = (await aiChat({ system: SYSTEM_PROMPT, user: clean, json: true, temperature: 0, maxTokens: 300 })) || '{}';
     const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
 
     const valid: ActionKhach[] = ['dong_y', 'tu_choi', 'trao_doi_them', 'review'];

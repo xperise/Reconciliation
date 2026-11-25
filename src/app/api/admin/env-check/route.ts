@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { guard, adminClient } from "@/lib/dashboard/server";
 import { dec, hasKey } from "@/lib/dashboard/cards";
+import { aiProvider } from "@/lib/ai-provider";
 
 export const dynamic = "force-dynamic";
 type Row = { key: string; ok: boolean | null; note: string };
@@ -40,6 +41,11 @@ export async function GET(req: Request) {
   add("GOOGLE_REDIRECT_URI", gr ? gr === `${host}/api/google/callback` : false, !gr ? "Chưa đặt" : gr === `${host}/api/google/callback` ? "Khớp domain đang chạy" : `Nên là ${host}/api/google/callback (đang là ${gr})`);
   add("OPENAI_API_KEY", E.OPENAI_API_KEY ? true : null, E.OPENAI_API_KEY ? "Đã đặt" : "Chưa đặt (tuỳ chọn — nút Hỏi trợ lý ở Hướng dẫn sẽ tắt)");
   add("OPENAI_MODEL", null, E.OPENAI_MODEL ? `= ${E.OPENAI_MODEL}` : "Chưa đặt (tuỳ chọn — mặc định gpt-4o-mini)");
+  const ap = aiProvider();
+  add("AI_PROVIDER", null, E.AI_PROVIDER ? `= ${E.AI_PROVIDER} → đang dùng ${ap === "anthropic" ? "Claude" : "GPT (OpenAI)"}` : "Chưa đặt → mặc định dùng GPT (OpenAI)");
+  add("OPENAI_AGENT_MODEL", null, E.OPENAI_AGENT_MODEL ? `= ${E.OPENAI_AGENT_MODEL}` : "Chưa đặt (fallback OPENAI_MODEL, rồi gpt-4o-mini)");
+  add("ANTHROPIC_API_KEY", E.ANTHROPIC_API_KEY ? true : null, E.ANTHROPIC_API_KEY ? "Đã đặt" : "Chưa đặt (chỉ cần khi AI_PROVIDER=anthropic)");
+  add("ANTHROPIC_MODEL", E.ANTHROPIC_MODEL ? true : null, E.ANTHROPIC_MODEL ? `= ${E.ANTHROPIC_MODEL}` : "Chưa đặt (chỉ cần khi AI_PROVIDER=anthropic)");
   add("CRON_SECRET", E.CRON_SECRET ? true : null, E.CRON_SECRET ? "Đã đặt" : "Chưa đặt (tuỳ chọn — cần nếu chạy lịch tự động /api/cron/tick)");
   const ic = (v: boolean | null) => v === true ? "✅" : v === false ? "❌" : "⚪";
   const html = `<!doctype html><meta charset="utf-8"><title>Kiểm tra cấu hình</title><body style="font:14px system-ui;max-width:900px;margin:32px auto;padding:0 16px">
