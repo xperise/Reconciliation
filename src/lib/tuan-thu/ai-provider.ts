@@ -1,6 +1,6 @@
 /**
  * Lớp gọi mô hình AI cho phần Tuân thủ bảng kê — chọn nhà cung cấp bằng biến môi trường:
- *   AI_PROVIDER = 'openai' | 'anthropic'   (không đặt: có OPENAI_API_KEY mà không có ANTHROPIC_API_KEY thì dùng OpenAI)
+ *   AI_PROVIDER = 'openai' | 'anthropic'   (không đặt: có OPENAI_API_KEY thì dùng OpenAI, không thì Anthropic)
  *   OpenAI:    OPENAI_API_KEY, OPENAI_AGENT_MODEL (không đặt thì dùng OPENAI_MODEL, rồi 'gpt-4.1')
  *   Anthropic: ANTHROPIC_API_KEY, ANTHROPIC_MODEL (mặc định claude-sonnet-5-5)
  *
@@ -14,7 +14,7 @@ export type KetQuaAI = { content: any[]; stop_reason: string; model: string };
 export const NHA_CUNG_CAP = (): 'openai' | 'anthropic' => {
   const p = (process.env.AI_PROVIDER ?? '').toLowerCase();
   if (p === 'openai' || p === 'anthropic') return p;
-  return process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY ? 'openai' : 'anthropic';
+  return process.env.OPENAI_API_KEY ? 'openai' : 'anthropic';
 };
 export const TEN_MO_HINH = () => (NHA_CUNG_CAP() === 'openai'
   ? (process.env.OPENAI_AGENT_MODEL || process.env.OPENAI_MODEL || 'gpt-4.1')
