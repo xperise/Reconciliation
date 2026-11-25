@@ -14,6 +14,8 @@ import { PhongBan, TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
 import { baoChoPhongBan } from '@/lib/tuan-thu/thong-bao';
 import { CauTrucMau, hocMau } from '@/lib/tuan-thu/mau-bang-ke';
 import { goiYGhepCot } from '@/lib/tuan-thu/mau-ai';
+import { coChan, coDuyet, trangThaiDuocDuyet } from '@/lib/tuan-thu/cau-hinh';
+import { docCauHinhQuyTrinh } from '@/lib/tuan-thu/cau-hinh-db';
 
 type KQ = { ok: true; id?: string; thongBao?: string } | { ok: false; loi: string };
 const loi = (e: unknown): KQ => ({ ok: false, loi: e instanceof Error ? e.message : String(e) });
@@ -135,7 +137,6 @@ export async function luuGiaiTrinh(canhBaoId: number, text: string): Promise<KQ>
  * Quy trình: kế toán duyệt → CEO duyệt & gửi.
  * Demand và Supply không duyệt; họ chỉ TRẢ VỀ kế toán (khi chưa gửi) hoặc CHẶN (xem chanLanChay).
  */
-const BUOC_DANG: Record<BuocDuyet, string[]> = { ke_toan: ['cho_ke_toan'], demand: ['cho_ke_toan', 'cho_ceo'], supply: ['cho_ke_toan', 'cho_ceo'], ceo: ['cho_ceo'] };
 
 
 export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duyet' | 'tra_ve', yKien: string): Promise<KQ> {
@@ -145,8 +146,9 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
     const { data: lc } = await sb.from('tt_lan_chay').select('*').eq('id', lanId).single();
     if (!lc) throw new Error('Không tìm thấy lần chạy.');
     if (lc.loi) throw new Error('Lần chạy đang lỗi xử lý raw, hãy tải lại raw.');
-    if (!BUOC_DANG[buoc].includes(lc.buoc)) throw new Error('Lần chạy không ở bước này.');
-    if ((buoc === 'demand' || buoc === 'supply') && quyetDinh === 'duyet') throw new Error('Demand và Supply không duyệt bảng kê — chỉ chặn hoặc trả về khi cần.');
+    const cauHinh = await docCauHinhQuyTrinh();
+    if (!trangThaiDuocDuyet(cauHinh, buoc).includes(lc.buoc)) throw new Error('Lần chạy không ở bước này.');
+    if (quyetDinh === 'duyet' && !coDuyet(cauHinh, buoc)) throw new Error('Demand và Supply không duyệt bảng kê — chỉ chặn hoặc trả về khi cần.');
     if (quyetDinh === 'tra_ve' && !yKien.trim()) throw new Error('Trả về phải ghi lý do.');
 
     const [{ data: cb }, { data: td }, { data: dy }] = await Promise.all([
@@ -373,9 +375,10 @@ export async function ganThanhVien(userId: string, phongBan: string): Promise<KQ
 // ---------------------------------------------------------------------
 // Demand / Supply kiểm soát: chặn và gỡ chặn
 // ---------------------------------------------------------------------
-export async function chanLanChay(lanId: string, pb: 'demand' | 'supply', lyDo: string): Promise<KQ> {
+export async function chanLanChay(lanId: string, pb: PhongBan, lyDo: string): Promise<KQ> {
   return lam(async () => {
     const n = await batBuoc(pb);
+    if (!coChan(await docCauHinhQuyTrinh(), pb)) throw new Error('Phòng này không có quyền chặn bảng kê.');
     if (!lyDo.trim()) throw new Error('Chặn phải ghi lý do.');
     const sb = supabaseAdmin();
     const { data: lc } = await sb.from('tt_lan_chay').select('buoc').eq('id', lanId).single();

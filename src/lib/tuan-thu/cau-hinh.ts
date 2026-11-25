@@ -56,3 +56,41 @@ export function kiemTraCauHinh(c: QuyTrinhCauHinh): string[] {
   if (c.quorumSuaDoi !== 'all') loi.push('Quorum sửa đổi không được thấp hơn mức sàn (tất cả).');
   return loi;
 }
+
+/**
+ * Trạng thái chờ của lần chạy (máy trạng thái hai giai đoạn hiện tại):
+ * - giai đoạn đầu (bước có thuTu nhỏ nhất) → 'cho_ke_toan'
+ * - các giai đoạn sau → 'cho_ceo'
+ * Mã trạng thái giữ nguyên để không đổi dữ liệu đang chạy.
+ */
+export const TRANG_THAI_CHO = { dau: 'cho_ke_toan', sau: 'cho_ceo' } as const;
+
+function trangThaiCuaBuoc(c: QuyTrinhCauHinh, b: BuocCauHinh): string {
+  const min = Math.min(...c.buoc.map((x) => x.thuTu));
+  return b.thuTu === min ? TRANG_THAI_CHO.dau : TRANG_THAI_CHO.sau;
+}
+
+/** Role có bước duyệt (ketQua chứa 'duyet') không. Demand/Supply thì không. */
+export function coDuyet(c: QuyTrinhCauHinh, roleKey: string): boolean {
+  return c.buoc.some((b) => b.roleKey === roleKey && b.ketQua.includes('duyet'));
+}
+
+/** Role có quyền chặn bảng kê (ketQua chứa 'chan') không. */
+export function coChan(c: QuyTrinhCauHinh, roleKey: string): boolean {
+  return c.buoc.some((b) => b.roleKey === roleKey && b.ketQua.includes('chan'));
+}
+
+/**
+ * Các trạng thái chờ mà role được thao tác.
+ * - Role có bước duyệt: chỉ thao tác ở trạng thái của bước đó.
+ * - Role chỉ chặn/trả về: thao tác ở mọi trạng thái chờ (có thể trả về khi chưa gửi, chặn khi CEO đang chờ).
+ * Với cấu hình mặc định, cho kết quả trùng BUOC_DANG cũ.
+ */
+export function trangThaiDuocDuyet(c: QuyTrinhCauHinh, roleKey: string): string[] {
+  const cuaRole = c.buoc.filter((b) => b.roleKey === roleKey);
+  if (cuaRole.length === 0) return [];
+  if (cuaRole.some((b) => b.ketQua.includes('duyet'))) {
+    return [...new Set(cuaRole.filter((b) => b.ketQua.includes('duyet')).map((b) => trangThaiCuaBuoc(c, b)))];
+  }
+  return [...new Set(c.buoc.map((b) => trangThaiCuaBuoc(c, b)))];
+}
