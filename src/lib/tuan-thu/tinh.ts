@@ -32,14 +32,14 @@ export function tuSua(dong: DongRaw[], ts: ThamSoHopDong): ThayDoi[] {
       }
     };
     // KT-01 chiết khấu
-    const ck = Math.round(base * ts.ty_le_chiet_khau[d.loai]);
+    const ck = Math.round(base * (ts.ty_le_chiet_khau?.[d.loai] ?? 0));
     const vatCk = Math.round(ck * thueSuat);
     dat('Chiết khấu trước VAT', ck, 'KT-01');
     dat('VAT chiết khấu', vatCk, 'KT-01');
     dat('Tổng tiền chiết khấu', ck + vatCk, 'KT-01');
     // KT-02 phí dịch vụ (chỉ khi raw có cột phí)
     if ('Phí dịch vụ chưa VAT' in v) {
-      const phi = Math.round(ts.phi_dich_vu[d.loai]);
+      const phi = Math.round(ts.phi_dich_vu?.[d.loai] ?? 0);
       const vatPhi = Math.round(phi * thueSuat);
       dat('Phí dịch vụ chưa VAT', phi, 'KT-02');
       dat('VAT phí dịch vụ', vatPhi, 'KT-02');
@@ -58,7 +58,7 @@ export function khoangKy(ts: ThamSoHopDong, thang: string, dot?: 1 | 2): { tu: s
   const cuoi = new Date(Date.UTC(y, m, 0)).getUTCDate();
   const f = (d: number) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   const vn = (d: number) => `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
-  if (ts.ky.kieu === 'hai_dot' && dot) {
+  if (ts.ky?.kieu === 'hai_dot' && dot) {
     const cat = ts.ky.ngay_cat;
     const [a, b] = dot === 1 ? [1, cat] : [cat + 1, cuoi];
     return { tu: f(a), den: f(b), nhan: `Từ ngày ${vn(a)} Đến ngày ${vn(b)}` };

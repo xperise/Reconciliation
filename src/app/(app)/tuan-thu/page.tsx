@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 export default async function Page() {
   const sb = supabaseAdmin();
   const [{ data: hd }, { data: ds }, { data: chan }] = await Promise.all([
-    sb.from('tt_hop_dong').select('id, ma_khach, ten_khach, so_hop_dong').order('ma_khach'),
+    sb.from('tt_hop_dong').select('id, ma_khach, ten_khach, so_hop_dong, trang_thai').order('ma_khach'),
     sb.from('tt_lan_chay').select('id, thang, dot, buoc, vong, tong_hop, loi, created_at, phien_ban_quy_tac, tt_hop_dong(ma_khach)')
       .order('created_at', { ascending: false }).limit(100),
     sb.from('tt_chan').select('lan_chay_id').is('go_luc', null),
@@ -21,7 +21,7 @@ export default async function Page() {
         description="Kế toán upload raw → app format theo mẫu khách và tự sửa theo bộ quy tắc hợp đồng (có ghi nhật ký) → kế toán xác nhận và duyệt → CEO duyệt là app gửi bảng kê. Demand và Supply không duyệt: nhận cảnh báo và chỉ chặn hoặc trả về khi cần kiểm soát." />
       <section className="card card-pad mb-5">
         <h2 className="card-title mb-3">Tạo lần chạy mới</h2>
-        <TaoLanChay hopDong={(hd ?? []) as any} />
+        <TaoLanChay hopDong={((hd ?? []) as any[]).filter((h) => !h.trang_thai || h.trang_thai === 'hieu_luc')} />
       </section>
       <div className="card overflow-hidden">
         <table className="tbl">

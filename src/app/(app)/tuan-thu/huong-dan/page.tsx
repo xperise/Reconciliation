@@ -10,7 +10,8 @@ type Buoc = { ten: string; vai: string; lam: string; kq: string; link: string; x
 export default async function Page() {
   await nguoiTT();
   const sb = supabaseAdmin();
-  const { data: hd } = await sb.from('tt_hop_dong').select('id, group_id').eq('ma_khach', 'VCB').maybeSingle();
+  const { data: hdDs } = await sb.from('tt_hop_dong').select('id, group_id').eq('ma_khach', 'VCB').order('created_at').limit(1);
+  const hd = (hdDs ?? [])[0] as any;
   const hdId = hd?.id ?? '00000000-0000-0000-0000-000000000000';
   const [{ data: tv }, { data: qt }, { data: runs }, { data: sd }, { data: sk }, { data: ai }, { data: chan }] = await Promise.all([
     sb.from('tt_thanh_vien').select('phong_ban'),
@@ -28,7 +29,7 @@ export default async function Page() {
   const dm01 = (sd ?? []).find((x: any) => x.ma_quy_tac === 'DM-01');
   const P: { phan: string; buoc: Buoc[] }[] = [
     { phan: 'A · Cài đặt (admin, làm một lần)', buoc: [
-      { ten: 'Chạy SQL 38 → 42', vai: 'Admin', lam: 'Supabase → SQL Editor: chạy lần lượt các file 38_tuan_thu, 39_tuan_thu_agent, 40_tuan_thu_chan, 41_tuan_thu_hop_dong_day_du, 42_tuan_thu_agent_hanh_dong trong supabase/migrations.', kq: 'Có hợp đồng VCB, 32 quy tắc, skill v1 cho 4 phòng.', link: '/tuan-thu/quy-tac', xong: !!hd && (sk ?? []).length >= 4 },
+      { ten: 'Chạy SQL 38 → 43', vai: 'Admin', lam: 'Supabase → SQL Editor: chạy lần lượt các file 38_tuan_thu, 39_tuan_thu_agent, 40_tuan_thu_chan, 41_tuan_thu_hop_dong_day_du, 42_tuan_thu_agent_hanh_dong, 43_tuan_thu_them_hop_dong trong supabase/migrations.', kq: 'Có hợp đồng VCB, 32 quy tắc, skill v1 cho 4 phòng.', link: '/tuan-thu/quy-tac', xong: !!hd && (sk ?? []).length >= 4 },
       { ten: 'Nhập Claude API key', vai: 'Admin', lam: 'Vercel → Settings → Environment Variables: thêm ANTHROPIC_API_KEY (tùy chọn ANTHROPIC_MODEL), rồi Redeploy.', kq: 'Nút agent AI trả lời được.', link: '/tuan-thu/agent', xong: (ai ?? []).length > 0 },
       { ten: 'Gán phòng ban cho 4 head', vai: 'Admin', lam: 'Mục Thành viên: gán Kế toán, Demand, Supply, CEO.', kq: 'Mỗi head thấy tab Tuân thủ và chỉ duyệt được bước của phòng mình.', link: '/tuan-thu/thanh-vien', xong: ['ke_toan', 'demand', 'supply', 'ceo'].every(coTv) },
       { ten: 'Gắn nhóm Master Data cho hợp đồng VCB', vai: 'Admin', lam: 'Hợp đồng & quy tắc: chọn nhóm Master Data (email đầu mối, CC). Khi thử nghiệm, gắn tạm nhóm có email nội bộ vì CEO duyệt là app gửi thư thật.', kq: 'Hiện email đầu mối dưới tên hợp đồng.', link: '/tuan-thu/quy-tac', xong: !!hd?.group_id },
@@ -52,6 +53,10 @@ export default async function Page() {
     ] },
     { phan: 'F0 · Làm việc qua agent (như Cowork)', buoc: [
       { ten: 'Giao việc cho agent bằng tin nhắn', vai: 'Head bất kỳ', lam: 'Bấm Làm việc với agent (góc phải, có ở mọi trang). Ví dụ kế toán nhắn: "sửa mã cán bộ dòng 25 vé máy bay thành 1234, lý do nhập sai", "ghi giải trình cho các cảnh báo thiếu hóa đơn", "duyệt bước của tôi"; Demand nhắn "chặn bảng kê vì 12 phòng vượt định mức chưa có tờ trình"; CEO nhắn "duyệt và gửi". Agent đọc dữ liệu, chuẩn bị thẻ thao tác; bấm Thực hiện thì mới chạy.', kq: 'Thẻ chuyển Đã thực hiện; thao tác ghi vào nhật ký và lịch sử lần chạy.', link: '/tuan-thu', xong: false },
+    ] },
+    { phan: 'G · Thêm hợp đồng / khách mới', buoc: [
+      { ten: 'Upload hợp đồng, agent đọc', vai: 'Bất kỳ head', lam: 'Hợp đồng & quy tắc → Thêm hợp đồng / khách mới: nhập mã khách, tên ở cột Tên công ty của raw, số HĐ, tháng áp dụng, nhóm Master Data; chọn PDF hợp đồng và phụ lục. Agent đọc ra tóm tắt điều khoản, tham số máy, điểm còn mở và quy tắc của 4 phòng.', kq: 'Hợp đồng ở trạng thái Chờ chốt với bộ quy tắc nháp.', link: '/tuan-thu/hop-dong/moi', xong: false },
+      { ten: '4 head chốt, CEO kích hoạt', vai: 'Cả 4, CEO', lam: 'Mỗi head đọc và chốt quy tắc của phòng (hoặc nhắn agent: chốt các quy tắc <mã khách> của tôi); xem các điểm còn mở; sửa tham số bản nháp nếu agent đọc chưa đúng. CEO bấm Kích hoạt hợp đồng.', kq: 'Hợp đồng Đang hiệu lực, xuất hiện trong danh sách khi tạo lần chạy.', link: '/tuan-thu/quy-tac', xong: false },
     ] },
     { phan: 'F · Trả về, tải lại raw và học từ quyết định', buoc: [
       { ten: 'Trả về và tải lại raw', vai: 'Demand → Kế toán', lam: 'Ở một lần chạy chưa gửi, Demand bấm Trả về kế toán kèm lý do; kế toán tải lại raw đã sửa.', kq: 'Lần chạy sang vòng 2, lịch sử giữ đủ.', link: '/tuan-thu', xong: R.some((r) => r.vong > 1) },

@@ -42,6 +42,7 @@ export async function taoLanChay(fd: FormData): Promise<KQ> {
     if (!/^\d{4}-\d{2}$/.test(thang)) throw new Error('Chọn tháng.');
     const { data: hd } = await sb.from('tt_hop_dong').select('*').eq('id', hopDongId).single();
     if (!hd) throw new Error('Không tìm thấy hợp đồng.');
+    if (hd.trang_thai && hd.trang_thai !== 'hieu_luc') throw new Error('Hợp đồng chưa kích hoạt — 4 head phải chốt quy tắc và CEO kích hoạt trước.');
     const { phien_ban } = await thamSoHieuLuc(hopDongId, thang);
     const { data: lc, error } = await sb.from('tt_lan_chay').insert({
       hop_dong_id: hopDongId, thang, dot: dotS ? Number(dotS) : null, phien_ban_quy_tac: phien_ban, created_by: n.id,
@@ -386,5 +387,78 @@ export async function suaBangKe(lanId: string, thayDoi: { loai: 'khach_san' | 'v
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.sua_tay', entity: 'tt_lan_chay', entityId: lanId, after: { thayDoi, lyDo } });
     revalidatePath(`/tuan-thu/chay/${lanId}`); revalidatePath('/tuan-thu');
     return { ok: true, thongBao: `Đã sửa ${rows.length} ô và xử lý lại bảng kê (vòng ${lc.vong + 1}).` };
+  });
+}
+
+// ---------------------------------------------------------------------
+// Thêm hợp đồng / khách mới
+// ---------------------------------------------------------------------
+export async function taoHopDong(fd: FormData): Promise<KQ> {
+  return lam(async () => {
+    const n = await batBuoc();
+    const sb = supabaseAdmin();
+    const ma = String(fd.get('ma_khach') ?? '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+    const ten = String(fd.get('ten_khach') ?? '').trim();
+    const so = String(fd.get('so_hop_dong') ?? '').trim();
+    const hieuLuc = String(fd.get('hieu_luc_tu') ?? '');
+    if (!ma || !ten || !so) throw new Error('Nhập mã khách, tên khách và số hợp đồng.');
+    if (!/^\d{4}-\d{2}$/.test(hieuLuc)) throw new Error('Chọn tháng bắt đầu áp dụng.');
+    const files = (fd.getAll('tep') as File[]).filter((f) => f && f.size);
+    if (!files.length) throw new Error('Chọn file PDF hợp đồng (và phụ lục).');
+    if (files.some((f) => !/\.pdf$/i.test(f.name))) throw new Error('Chỉ nhận file PDF.');
+    const { data: hd, error } = await sb.from('tt_hop_dong').insert({
+      ma_khach: ma, ten_khach: ten, so_hop_dong: so, ngay_ky: String(fd.get('ngay_ky') ?? '') || null,
+      ten_cong_ty_raw: String(fd.get('ten_cong_ty_raw') ?? '').trim() || ten, group_id: String(fd.get('group_id') ?? '') || null,
+      cc_them: String(fd.get('cc_them') ?? '').trim() || null, hieu_luc_tu: hieuLuc, trang_thai: 'dang_doc', tao_boi: n.id,
+    }).select('id').single();
+    if (error || !hd) throw new Error(/duplicate|unique/i.test(error?.message ?? '') ? 'Khách này đã có hợp đồng cùng số.' : /column/.test(error?.message ?? '') ? 'Cần chạy supabase/migrations/43_tuan_thu_them_hop_dong.sql.' : error?.message ?? 'Không tạo được hợp đồng.');
+    const teps: { path: string; ten: string }[] = [];
+    for (const f of files) {
+      const p = `tuan-thu/${ma}/hop-dong/${hd.id}/${Date.now().toString(36)}_${f.name.normalize('NFC').replace(/[/\\?%*:|"<>]/g, '_').slice(0, 120)}`;
+      await luuTep(p, Buffer.from(await f.arrayBuffer()), 'application/pdf');
+      teps.push({ path: p, ten: f.name });
+    }
+    await sb.from('tt_hop_dong').update({ tep_hop_dong: teps }).eq('id', hd.id);
+    // Danh mục phòng ban (tùy chọn): mỗi dòng "Tên phòng ban;mã cost center"
+    const pb = String(fd.get('phong_ban') ?? '').split('\n').map((x) => x.trim()).filter(Boolean)
+      .map((x, i) => { const [t, m] = x.split(/[;\t]/); return { hop_dong_id: hd.id, ten: t.trim(), ma_cost_center: m?.trim() || null, thu_tu: i + 1 }; });
+    if (pb.length) await sb.from('tt_phong_ban_khach').upsert(pb);
+    await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.tao_hop_dong', entity: 'tt_hop_dong', entityId: hd.id, after: { ma, so } });
+    revalidatePath('/tuan-thu/quy-tac');
+    return { ok: true, id: hd.id };
+  });
+}
+
+export async function kichHoatHopDong(id: string): Promise<KQ> {
+  return lam(async () => {
+    const n = await batBuoc();
+    if (!n.laAdmin && n.phong_ban !== 'ceo') throw new Error('Chỉ CEO hoặc admin kích hoạt hợp đồng.');
+    const sb = supabaseAdmin();
+    const { data: hd } = await sb.from('tt_hop_dong').select('trang_thai').eq('id', id).single();
+    if (hd?.trang_thai !== 'cho_chot') throw new Error('Hợp đồng không ở trạng thái chờ chốt.');
+    const { data: qt } = await sb.from('tt_quy_tac').select('phong_ban, chot').eq('hop_dong_id', id);
+    const chua = (qt ?? []).filter((q: any) => q.chot !== 'dong_y');
+    if (!(qt ?? []).length) throw new Error('Chưa có quy tắc nào.');
+    if (chua.length) throw new Error(`Còn ${chua.length} quy tắc chưa được head đồng ý (${[...new Set(chua.map((q: any) => TEN_PHONG_BAN[q.phong_ban as PhongBan]))].join(', ')}).`);
+    await sb.from('tt_hop_dong').update({ trang_thai: 'hieu_luc' }).eq('id', id);
+    await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.kich_hoat_hop_dong', entity: 'tt_hop_dong', entityId: id });
+    revalidatePath('/tuan-thu/quy-tac'); revalidatePath('/tuan-thu');
+    return { ok: true, thongBao: 'Đã kích hoạt — chạy bảng kê được theo hợp đồng này.' };
+  });
+}
+
+/** Sửa tham số máy khi hợp đồng còn là bản nháp (sau khi kích hoạt phải đi luồng sửa đổi 4/4). */
+export async function suaThamSoNhap(id: string, json: string): Promise<KQ> {
+  return lam(async () => {
+    const n = await batBuoc();
+    const sb = supabaseAdmin();
+    const { data: hd } = await sb.from('tt_hop_dong').select('trang_thai').eq('id', id).single();
+    if (hd?.trang_thai === 'hieu_luc') throw new Error('Hợp đồng đã kích hoạt — đổi tham số qua luồng sửa đổi.');
+    let ts: any; try { ts = JSON.parse(json); } catch { throw new Error('JSON không hợp lệ.'); }
+    const { error } = await sb.from('tt_bo_quy_tac').update({ tham_so: ts }).eq('hop_dong_id', id).eq('phien_ban', 1);
+    if (error) throw new Error(error.message);
+    await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.sua_tham_so_nhap', entity: 'tt_hop_dong', entityId: id });
+    revalidatePath('/tuan-thu/quy-tac');
+    return { ok: true, thongBao: 'Đã lưu tham số bản nháp.' };
   });
 }

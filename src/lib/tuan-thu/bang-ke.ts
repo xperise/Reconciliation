@@ -46,19 +46,19 @@ const NEN_TIEU_DE = { type: 'pattern' as const, pattern: 'solid' as const, fgCol
 const SO = '#,##0;(#,##0);"-"';
 
 function dauTrang(ws: ExcelJS.Worksheet, ts: ThamSoHopDong, nhanKy: string, rongCot: number) {
-  const b = ts.ben_ban, m = ts.ben_mua;
+  const b = ts.ben_ban ?? ({} as any), m = ts.ben_mua ?? ({} as any);
   const dong = [
-    `Tên đơn vị bán hàng (Seller): ${b.ten}`, `Mã số thuế (Tax code): ${b.mst}`, `Địa chỉ (Address): ${b.dia_chi}`,
-    `Điện thoại (Tel.): ${b.dien_thoai}`, `Số tài khoản (A/C No.): ${ts.tai_khoan.so} tại ${ts.tai_khoan.ngan_hang}`,
+    `Tên đơn vị bán hàng (Seller): ${b.ten ?? ''}`, `Mã số thuế (Tax code): ${b.mst ?? ''}`, `Địa chỉ (Address): ${b.dia_chi ?? ''}`,
+    `Điện thoại (Tel.): ${b.dien_thoai ?? ''}`, `Số tài khoản (A/C No.): ${ts.tai_khoan?.so ?? ''} tại ${ts.tai_khoan?.ngan_hang ?? ''}`,
   ];
   dong.forEach((t, i) => { const c = ws.getCell(i + 1, 1); c.value = t; c.font = { ...FONT, size: 10 }; });
-  const tieuDe: [number, string, boolean][] = [[7, 'BẢNG KÊ DỊCH VỤ', true], [8, m.ten, true], [9, nhanKy, false]];
+  const tieuDe: [number, string, boolean][] = [[7, 'BẢNG KÊ DỊCH VỤ', true], [8, m.ten ?? '', true], [9, nhanKy, false]];
   for (const [r, t, dam] of tieuDe) {
     ws.mergeCells(r, 1, r, Math.min(rongCot, 13));
     const c = ws.getCell(r, 1); c.value = t; c.alignment = { horizontal: 'center' };
     c.font = { ...FONT, size: r === 7 ? 14 : 11, bold: dam };
   }
-  const kh: [string, string][] = [['Địa chỉ:', m.dia_chi], ['Mã số thuế (Tax code):', m.mst], ['Số điện thoại (Tel.):', m.dien_thoai]];
+  const kh: [string, string][] = [['Địa chỉ:', m.dia_chi ?? ''], ['Mã số thuế (Tax code):', m.mst ?? ''], ['Số điện thoại (Tel.):', m.dien_thoai ?? '']];
   kh.forEach(([a, v], i) => {
     ws.getCell(10 + i, 1).value = a; ws.getCell(10 + i, 1).font = { ...FONT, size: 10 };
     ws.getCell(10 + i, 3).value = v; ws.getCell(10 + i, 3).font = { ...FONT, size: 10 };
@@ -85,7 +85,7 @@ function sheetChiTiet(wb: ExcelJS.Workbook, ten: string, nhanMuc: string, cot: [
       if (nguon === '#') v = stt;
       else if (nguon === '@trang_thai') {
         const k = `${loai}:${String(d.v['Trạng thái'] ?? '').trim().toLowerCase()}`;
-        v = ts.ten_trang_thai[k] ?? d.v['Trạng thái'];
+        v = ts.ten_trang_thai?.[k] ?? d.v['Trạng thái'];
       } else v = d.v[nguon];
       if (v instanceof Date || /Ngày/.test(nhan)) v = chuoiNgay(v);
       const c = ws.getCell(r, i + 1); c.value = v ?? null; c.font = FONT; c.border = KHUNG;

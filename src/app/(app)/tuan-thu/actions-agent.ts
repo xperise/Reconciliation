@@ -35,8 +35,9 @@ export async function hoiAgent(lanChayId: string | null, pb: PhongBan, cauHoi: s
 
 LÀM VIỆC QUA CÔNG CỤ:
 - Bạn đang làm việc cho ${n.full_name || n.email}, vai trò ${n.phong_ban ? TEN_PHONG_BAN[n.phong_ban] : 'admin (làm thay được mọi phòng)'}, đang nói chuyện với tư cách agent ${TEN_PHONG_BAN[pb]}.
-- Dùng công cụ đọc (ds_lan_chay, xem_lan_chay, xem_dong, ds_sua_doi) để lấy số liệu trước khi trả lời hoặc đề xuất; không đoán id, số dòng, tên cột.
+- Dùng công cụ đọc (ds_lan_chay, xem_lan_chay, xem_dong, ds_hop_dong, xem_hop_dong, ds_sua_doi) để lấy số liệu trước khi trả lời hoặc đề xuất; không đoán id, số dòng, tên cột.
 - Khi người dùng muốn làm việc gì (sửa ô, ghi giải trình, duyệt, trả về, chặn, gỡ chặn, đề xuất/duyệt sửa đổi, chốt quy tắc, thêm skill), gọi đúng công cụ thao tác. Thao tác KHÔNG chạy ngay: người dùng sẽ thấy thẻ và tự bấm Thực hiện. Sau khi gọi, nói ngắn gọn thao tác đang chờ xác nhận; không nói là đã làm xong.
+- Hợp đồng mới upload qua màn hình Thêm hợp đồng (PDF); bạn giúp head đọc bản nháp, giải thích điểm còn mở, chốt quy tắc (chot_quy_tac, chot_nhieu_quy_tac). Kích hoạt hợp đồng do CEO bấm trên màn hình Hợp đồng & quy tắc.
 - Không tự đề xuất thao tác người dùng không yêu cầu, trừ khi hỏi lại để xác nhận. Nếu thiếu thông tin bắt buộc (lý do, giá trị mới), hỏi lại trước.
 - Duyệt của CEO sẽ gửi thư cho khách ngay khi người dùng xác nhận — nhắc rõ điều này.${lanChayId ? `\n- Lần chạy đang mở: ${lanChayId}.` : ''}`;
 
@@ -120,7 +121,13 @@ export async function thucHienHanhDong(id: number): Promise<KQ> {
     if (h.trang_thai !== 'cho') throw new Error('Thao tác đã xử lý.');
     const i = h.tham_so ?? {};
     let kq: any;
-    const hdMa = async (ma?: string) => { const { data } = await sb.from('tt_hop_dong').select('id').eq('ma_khach', ma || 'VCB').single(); if (!data) throw new Error('Không tìm thấy hợp đồng.'); return data.id; };
+    // Một khách có thể có nhiều hợp đồng: ưu tiên hợp đồng chờ chốt mới nhất (đang làm việc), rồi tới hợp đồng hiệu lực mới nhất
+    const hdMa = async (ma?: string, id?: string) => {
+      if (id) return id;
+      const { data } = await sb.from('tt_hop_dong').select('id, trang_thai').eq('ma_khach', (ma || 'VCB').toUpperCase()).order('created_at', { ascending: false });
+      const ds = (data ?? []) as any[]; const h = ds.find((x) => x.trang_thai === 'cho_chot') ?? ds.find((x) => !x.trang_thai || x.trang_thai === 'hieu_luc') ?? ds[0];
+      if (!h) throw new Error('Không tìm thấy hợp đồng.'); return h.id;
+    };
     switch (h.cong_cu) {
       case 'sua_o_bang_ke': kq = await suaBangKe(i.lan_chay_id, i.thay_doi ?? [], i.ly_do ?? ''); break;
       case 'ghi_giai_trinh': kq = await luuGiaiTrinh(Number(i.canh_bao_id), String(i.noi_dung ?? '')); break;
@@ -139,9 +146,19 @@ export async function thucHienHanhDong(id: number): Promise<KQ> {
       }
       case 'duyet_sua_doi': kq = await duyetSuaDoi(i.sua_doi_id, h.phong_ban as PhongBan, i.dong_y ? 'dong_y' : 'khong_dong_y', String(i.y_kien ?? '')); break;
       case 'chot_quy_tac': {
-        const { data: qt } = await sb.from('tt_quy_tac').select('id').eq('hop_dong_id', await hdMa(i.ma_khach)).eq('ma', i.ma).single();
+        const { data: qt } = await sb.from('tt_quy_tac').select('id').eq('hop_dong_id', await hdMa(i.ma_khach, i.hop_dong_id)).eq('ma', i.ma).single();
         if (!qt) throw new Error(`Không có quy tắc ${i.ma}.`);
         kq = await chotQuyTac(qt.id, i.dong_y ? 'dong_y' : 'can_sua', String(i.y_kien ?? '')); break;
+      }
+      case 'chot_nhieu_quy_tac': {
+        let q = sb.from('tt_quy_tac').select('id, ma, phong_ban, chot').eq('hop_dong_id', i.hop_dong_id).eq('phong_ban', h.phong_ban);
+        if (Array.isArray(i.ma) && i.ma.length) q = q.in('ma', i.ma); else q = q.neq('chot', 'dong_y');
+        const { data: ds } = await q;
+        if (!(ds ?? []).length) throw new Error('Không có quy tắc nào khớp thuộc phòng này.');
+        let ok = 0; const loi: string[] = [];
+        for (const r of ds as any[]) { const k = await chotQuyTac(r.id, i.dong_y ? 'dong_y' : 'can_sua', String(i.y_kien ?? '')); if (k.ok) ok++; else loi.push(`${r.ma}: ${k.loi}`); }
+        kq = loi.length && !ok ? { ok: false, loi: loi.join('; ') } : { ok: true, thongBao: `Đã ${i.dong_y ? 'đồng ý' : 'đánh dấu cần sửa'} ${ok} quy tắc.${loi.length ? ` Lỗi: ${loi.join('; ')}` : ''}` };
+        break;
       }
       case 'bo_sung_skill': {
         const cu = await skillHienHanh(h.phong_ban as PhongBan);

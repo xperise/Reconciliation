@@ -30,8 +30,8 @@ export async function xuLyLanChay(lanChayId: string) {
   const hd = lc.tt_hop_dong as any;
   const { phien_ban, tham_so: ts } = await thamSoHieuLuc(hd.id, lc.thang);
 
-  if (ts.ky.kieu === 'hai_dot' && !lc.dot) throw new Error('Bộ quy tắc hiện hành chia 2 đợt: hãy chọn đợt 1 hoặc 2.');
-  if (ts.ky.kieu === 'thang' && lc.dot) throw new Error('Bộ quy tắc hiện hành gửi 1 kỳ/tháng: không chọn đợt.');
+  if (ts.ky?.kieu === 'hai_dot' && !lc.dot) throw new Error('Bộ quy tắc hiện hành chia 2 đợt: hãy chọn đợt 1 hoặc 2.');
+  if (ts.ky?.kieu !== 'hai_dot' && lc.dot) throw new Error('Bộ quy tắc hiện hành gửi 1 kỳ/tháng: không chọn đợt.');
 
   const dong: DongRaw[] = [];
   const thieu: Record<LoaiDichVu, string[]> = { khach_san: [], ve_may_bay: [] };
@@ -56,7 +56,7 @@ export async function xuLyLanChay(lanChayId: string) {
     .eq('hop_dong_id', hd.id).order('thu_tu');
   const danhMuc = (pb ?? []).map((x: any) => ({ ten: x.ten, ma_cost_center: x.ma_cost_center }));
   const canhBao = kiemTra({ dong, ts, thang: lc.thang, dot: lc.dot ?? undefined,
-    danh_muc_phong_ban: danhMuc.map((x) => x.ten), thieu_cot: thieu, ten_cong_ty: hd.ten_khach });
+    danh_muc_phong_ban: danhMuc.map((x) => x.ten), thieu_cot: thieu, ten_cong_ty: hd.ten_cong_ty_raw || hd.ten_khach });
 
   const nhanKy = khoangKy(ts, lc.thang, lc.dot ?? undefined).nhan;
   const goc = `tuan-thu/${hd.ma_khach}/${lc.thang}${lc.dot ? `-dot${lc.dot}` : ''}/${lc.id}/v${lc.vong}`;

@@ -108,7 +108,7 @@ export function kiemTra(x: DauVaoKiem): CanhBao[] {
   const khongDau = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase();
   const laNhom12 = (diaChi: string) => {
     const a = ` ${khongDau(diaChi).replace(/[^a-z0-9]+/g, ' ')} `;
-    return ts.dia_ban_nhom_1_2.some((k) => k === 'vinh'
+    return (ts.dia_ban_nhom_1_2 ?? []).some((k) => k === 'vinh'
       ? / vinh (?!long|phuc|yen|hy|chau|loi)/.test(a) : a.includes(` ${k} `));
   };
   const vuot: number[] = [], canXem: number[] = [];
@@ -119,8 +119,8 @@ export function kiemTra(x: DauVaoKiem): CanhBao[] {
     if (!dem) continue;
     const moiDem = n(d.v['Thành tiền (đã VAT)']) / dem;
     const chucDanh = String(d.v['Chức danh hành khách'] ?? '').toLowerCase();
-    const nhom = ts.dinh_muc_phong.find((g) => g.tu_khoa.length === 0 || g.tu_khoa.some((k) => chucDanh.includes(k)))!;
-    if (!nhom.muc) continue;
+    const nhom = (ts.dinh_muc_phong ?? []).find((g) => g.tu_khoa.length === 0 || g.tu_khoa.some((k) => chucDanh.includes(k)));
+    if (!nhom || !nhom.muc) continue;   // hợp đồng không có định mức → không kiểm
     const [cao, thap] = nhom.muc;
     const muc = laNhom12(String(d.v['Địa bàn'] ?? '') + ' ' + String(d.v['Tên khách sạn'] ?? '')) ? cao : thap;
     if (moiDem > cao + 1) { vuot.push(d.dong); tienVuot += (moiDem - cao) * dem; }
@@ -133,7 +133,7 @@ export function kiemTra(x: DauVaoKiem): CanhBao[] {
 
   // DM-03 hạn mức tháng
   const th = tongHop(dong);
-  if (th.tong_cong > ts.han_muc_thang) add({ ma_quy_tac: 'DM-03', phong_ban: 'demand', muc_do: 'giai_trinh', dong: [], so_tien: th.tong_cong,
+  if (ts.han_muc_thang && th.tong_cong > ts.han_muc_thang) add({ ma_quy_tac: 'DM-03', phong_ban: 'demand', muc_do: 'giai_trinh', dong: [], so_tien: th.tong_cong,
     noi_dung: `Tổng kỳ ${fmt(th.tong_cong)}đ vượt hạn mức tháng ${fmt(ts.han_muc_thang)}đ` });
 
   // Dòng có tiền nhưng trống phòng ban: vẫn vào sheet tổng hợp ở mục '(Chưa có phòng ban)'
@@ -146,7 +146,7 @@ export function kiemTra(x: DauVaoKiem): CanhBao[] {
   const dm = new Set(x.danh_muc_phong_ban.map((s) => s.trim()));
   const moi = new Map<string, number[]>();
   for (const d of dong) { const p = String(d.v['Phòng ban'] ?? '').trim(); if (p && !dm.has(p)) moi.set(p, [...(moi.get(p) ?? []), d.dong]); }
-  if (moi.size) add({ ma_quy_tac: 'KT-10', phong_ban: 'ke_toan', muc_do: 'giai_trinh', dong: [...moi.values()].flat(),
+  if (dm.size && moi.size) add({ ma_quy_tac: 'KT-10', phong_ban: 'ke_toan', muc_do: 'giai_trinh', dong: [...moi.values()].flat(),
     noi_dung: `${moi.size} phòng ban chưa có trong danh mục Chi phí phòng ban: ${[...moi.keys()].join('; ')}` });
 
   // Giai đoạn 2: nói rõ là CHƯA kiểm, không im lặng coi như đạt

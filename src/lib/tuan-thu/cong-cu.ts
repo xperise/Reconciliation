@@ -20,6 +20,8 @@ export const CONG_CU_DOC: Tool[] = [
   { name: 'xem_lan_chay', description: 'Xem đầy đủ một lần chạy: tổng tiền, ô app tự sửa, cảnh báo (kèm id cảnh báo và số dòng raw), giải trình, duyệt, lần chặn (kèm id chặn), sửa tay.', input_schema: obj({ lan_chay_id: S('id lần chạy') }, ['lan_chay_id']) },
   { name: 'xem_dong', description: 'Đọc nội dung các dòng raw của một lần chạy (đã áp sửa tay). Dùng trước khi đề xuất sửa ô. Tối đa 30 dòng mỗi lần; có thể tìm theo chuỗi (mã giao dịch, số vé, tên khách).',
     input_schema: obj({ lan_chay_id: S('id lần chạy'), loai: { type: 'string', enum: ['khach_san', 've_may_bay'] }, dong: { type: 'array', items: { type: 'integer' }, description: 'số dòng trong file raw' }, tim: S('chuỗi cần tìm (không bắt buộc)') }, ['lan_chay_id']) },
+  { name: 'ds_hop_dong', description: 'Liệt kê các hợp đồng (id, mã khách, số HĐ, trạng thái, số quy tắc đã chốt theo phòng).', input_schema: obj({}) },
+  { name: 'xem_hop_dong', description: 'Đọc đầy đủ một hợp đồng: tóm tắt điều khoản, tham số máy, toàn bộ quy tắc của 4 phòng kèm trạng thái chốt, điểm còn mở. Dùng khi hỏi về khách khác với hợp đồng trong bối cảnh.', input_schema: obj({ hop_dong_id: S('id hợp đồng') }, ['hop_dong_id']) },
   { name: 'ds_sua_doi', description: 'Liệt kê các đề xuất sửa đổi quy tắc (id, quy tắc, nội dung, trạng thái, phòng nào đã đồng ý).', input_schema: obj({}) },
 ];
 
@@ -37,7 +39,9 @@ export const CONG_CU_THAO_TAC: Tool[] = [
       loai_tham_so: { type: 'string', enum: ['', 'ky_hai_dot', 'ky_thang', 'chiet_khau', 'phi', 'tai_khoan', 'han_muc'] }, ngay_cat: I('ngày cuối đợt 1 khi ky_hai_dot'), ck_ks: { type: 'number', description: '% chiết khấu khách sạn' }, ck_vmb: { type: 'number', description: '% chiết khấu vé' },
       phi_ks: { type: 'number' }, phi_vmb: { type: 'number' }, tk_so: S('số tài khoản'), tk_ngan_hang: S('ngân hàng'), han_muc: { type: 'number' } }, ['ma_quy_tac', 'noi_dung_moi', 'ly_do', 'hieu_luc_tu']) },
   { name: 'duyet_sua_doi', description: 'Đồng ý hoặc không đồng ý một đề xuất sửa đổi thay cho phòng của người dùng.', input_schema: obj({ sua_doi_id: S('id đề xuất'), dong_y: { type: 'boolean' }, y_kien: S('ý kiến (bắt buộc khi không đồng ý)') }, ['sua_doi_id', 'dong_y']) },
-  { name: 'chot_quy_tac', description: 'Chốt một quy tắc thuộc phòng của người dùng: đồng ý hoặc cần sửa.', input_schema: obj({ ma_khach: S('mặc định VCB'), ma: S('mã quy tắc'), dong_y: { type: 'boolean' }, y_kien: S('ý kiến') }, ['ma', 'dong_y']) },
+  { name: 'chot_quy_tac', description: 'Chốt một quy tắc thuộc phòng của người dùng: đồng ý hoặc cần sửa.', input_schema: obj({ hop_dong_id: S('id hợp đồng (ưu tiên dùng)'), ma_khach: S('mặc định VCB'), ma: S('mã quy tắc'), dong_y: { type: 'boolean' }, y_kien: S('ý kiến') }, ['ma', 'dong_y']) },
+  { name: 'chot_nhieu_quy_tac', description: 'Chốt nhiều quy tắc thuộc phòng của người dùng trong một lần (ví dụ toàn bộ quy tắc nháp của một hợp đồng mới).',
+    input_schema: obj({ hop_dong_id: S('id hợp đồng (lấy từ ds_hop_dong)'), ma: { type: 'array', items: { type: 'string' }, description: 'danh sách mã; để trống = mọi quy tắc của phòng đang chờ chốt' }, dong_y: { type: 'boolean' }, y_kien: S('ý kiến') }, ['hop_dong_id', 'dong_y']) },
   { name: 'bo_sung_skill', description: 'Thêm một dòng hướng dẫn vào skill của phòng (tạo phiên bản skill mới).', input_schema: obj({ noi_dung_them: S('dòng hướng dẫn cần thêm'), ly_do: S('lý do') }, ['noi_dung_them']) },
 ];
 
@@ -65,6 +69,22 @@ export async function chayCongCuDoc(ten: string, input: any): Promise<string> {
     if (input.tim) { const t = String(input.tim).toLowerCase(); ds = ds.filter((d) => JSON.stringify(d.v).toLowerCase().includes(t)); }
     const out = ds.slice(0, 30).map((d) => `[${TEN_DICH_VU[d.loai]} · dòng ${d.dong}] ` + Object.entries(d.v).filter(([, v]) => v !== null && v !== '').map(([k, v]) => `${k}: ${v instanceof Date ? v.toISOString().slice(0, 10) : v}`).join(' | '));
     return out.join('\n') || 'Không tìm thấy dòng nào.';
+  }
+  if (ten === 'ds_hop_dong') {
+    const { data } = await sb.from('tt_hop_dong').select('id, ma_khach, ten_khach, so_hop_dong, trang_thai, cau_hoi_mo, tt_quy_tac(phong_ban, chot)').order('ma_khach');
+    return (data ?? []).map((h: any) => {
+      const dem = (['ke_toan', 'demand', 'supply', 'ceo'] as PhongBan[]).map((p) => { const ds = (h.tt_quy_tac ?? []).filter((q: any) => q.phong_ban === p); return `${TEN_PHONG_BAN[p]} ${ds.filter((q: any) => q.chot === 'dong_y').length}/${ds.length}`; }).join(', ');
+      return `${h.id} | ${h.ma_khach} — ${h.ten_khach} | HĐ ${h.so_hop_dong} | ${h.trang_thai ?? 'hieu_luc'} | đã chốt: ${dem}${(h.cau_hoi_mo ?? []).length ? ` | điểm còn mở: ${(h.cau_hoi_mo as string[]).join(' / ')}` : ''}`;
+    }).join('\n') || 'Chưa có hợp đồng.';
+  }
+  if (ten === 'xem_hop_dong') {
+    const [{ data: h }, { data: qt }, { data: bo }] = await Promise.all([
+      sb.from('tt_hop_dong').select('*').eq('id', input.hop_dong_id).single(),
+      sb.from('tt_quy_tac').select('ma, phong_ban, noi_dung, gia_tri, can_cu, muc_do, chot').eq('hop_dong_id', input.hop_dong_id).order('ma'),
+      sb.from('tt_bo_quy_tac').select('phien_ban, hieu_luc_tu, tham_so').eq('hop_dong_id', input.hop_dong_id).order('phien_ban', { ascending: false }).limit(1),
+    ]);
+    if (!h) return 'Không tìm thấy hợp đồng.';
+    return `${h.ma_khach} — ${h.ten_khach} | HĐ ${h.so_hop_dong} | trạng thái ${h.trang_thai ?? 'hieu_luc'}\nTÓM TẮT:\n${h.tom_tat_dieu_khoan ?? '(chưa có)'}\n\nĐIỂM CÒN MỞ: ${((h.cau_hoi_mo ?? []) as string[]).join(' / ') || 'không'}\n\nTHAM SỐ v${bo?.[0]?.phien_ban ?? '?'}: ${JSON.stringify(bo?.[0]?.tham_so ?? {})}\n\nQUY TẮC:\n${(qt ?? []).map((q: any) => `${q.ma} [${TEN_PHONG_BAN[q.phong_ban as PhongBan]}] ${q.noi_dung} | ${q.gia_tri ?? ''} | ${q.can_cu ?? ''} | ${q.muc_do} | chốt: ${q.chot}`).join('\n')}`;
   }
   if (ten === 'ds_sua_doi') {
     const { data } = await sb.from('tt_sua_doi').select('id, so, ma_quy_tac, noi_dung_moi, trang_thai, hieu_luc_tu, tt_sua_doi_duyet(phong_ban, quyet_dinh)').order('so');
@@ -94,6 +114,7 @@ export function moTa(ten: string, i: any): string {
     case 'de_xuat_sua_doi': return `Đề xuất sửa ${i.ma_quy_tac}: ${i.noi_dung_moi}${i.gia_tri_moi ? ` — ${i.gia_tri_moi}` : ''}; hiệu lực từ ${i.hieu_luc_tu}; lý do: ${i.ly_do}${i.loai_tham_so ? `; tham số: ${i.loai_tham_so}` : ''}.`;
     case 'duyet_sua_doi': return `${i.dong_y ? 'Đồng ý' : 'Không đồng ý'} đề xuất sửa đổi${i.y_kien ? ` — ${i.y_kien}` : ''}.`;
     case 'chot_quy_tac': return `${i.dong_y ? 'Đồng ý' : 'Đánh dấu cần sửa'} quy tắc ${i.ma}${i.y_kien ? ` — ${i.y_kien}` : ''}.`;
+    case 'chot_nhieu_quy_tac': return `${i.dong_y ? 'Đồng ý' : 'Đánh dấu cần sửa'} ${i.ma?.length ? `${i.ma.length} quy tắc (${i.ma.slice(0, 6).join(', ')}${i.ma.length > 6 ? '…' : ''})` : 'mọi quy tắc đang chờ chốt của phòng'} trong hợp đồng ${i.hop_dong_id}${i.y_kien ? ` — ${i.y_kien}` : ''}.`;
     case 'bo_sung_skill': return `Thêm vào skill: "${i.noi_dung_them}"${i.ly_do ? ` (lý do: ${i.ly_do})` : ''}.`;
     default: return ten;
   }
