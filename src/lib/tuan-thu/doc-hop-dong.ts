@@ -3,6 +3,7 @@ import { BUCKET_TT } from './db';
 import { MODEL, skillHienHanh } from './agent';
 import { goiMoHinh } from './ai-provider';
 import { PhongBan, TEN_PHONG_BAN, ThamSoHopDong } from './types';
+import { docCauHinhQuyTrinh } from './cau-hinh-db';
 
 /**
  * Agent đọc hợp đồng mới upload (PDF hợp đồng + phụ lục):
@@ -11,8 +12,9 @@ import { PhongBan, TEN_PHONG_BAN, ThamSoHopDong } from './types';
  * Kết quả là BẢN NHÁP: hợp đồng ở trạng thái chờ chốt, mọi quy tắc "chờ chốt", chưa chạy bảng kê được.
  */
 
-const PBS: PhongBan[] = ['ke_toan', 'demand', 'supply', 'ceo'];
-const TIEN_TO: Record<PhongBan, string> = { ke_toan: 'KT', demand: 'DM', supply: 'SP', ceo: 'CEO' };
+/** Tiền tố mã quy tắc của các role mặc định. Role khác dùng 2 ký tự đầu của mã role. */
+const TIEN_TO_MAC_DINH: Record<string, string> = { ke_toan: 'KT', demand: 'DM', supply: 'SP', ceo: 'CEO' };
+const tienTo = (pb: PhongBan) => TIEN_TO_MAC_DINH[pb] ?? pb.slice(0, 2).toUpperCase();
 
 async function goiAPI(body: any): Promise<any> {
   const { model: _m, ...req } = body;
@@ -141,13 +143,15 @@ export async function docHopDong(hopDongId: string) {
       goiChu(sysChung, docs, yeuCauTomTat, 12000),
       goiCauTruc(sysChung, docs, yeuCauThamSo, CONG_CU_THAM_SO, 8000),
     ];
+    const cauHinh = await docCauHinhQuyTrinh();
+    const PBS: PhongBan[] = cauHinh.roles.map((r) => r.key);
     for (const pb of PBS) {
       tasks.push((async () => {
         const sk = await skillHienHanh(pb);
         const mauPb = (qtMau ?? []).filter((q: any) => q.phong_ban === pb).map((q: any) => `${q.ma} [${q.nhom}] ${q.noi_dung} (${q.cach_kiem}, ${q.muc_do})`).join('\n');
-        const sys = `${sk.noi_dung}\n\nBạn đang đọc hợp đồng của một khách mới để lập bộ quy tắc kiểm bảng kê trong scope ${TEN_PHONG_BAN[pb]}. Chỉ dựa trên văn bản hợp đồng; điều hợp đồng không quy định thì ghi rõ "Hợp đồng không quy định" và nêu cách hiểu an toàn. Trả lời tiếng Việt.`;
-        const yeuCau = (gioiHan: string) => `Rút các quy tắc thuộc scope ${TEN_PHONG_BAN[pb]} để kiểm bảng kê và hồ sơ thanh toán của khách này, rồi gọi công cụ ghi_quy_tac.
-Bộ quy tắc mẫu của phòng (dùng lại đúng MÃ nếu cùng loại kiểm tra; loại mới thì đánh mã ${TIEN_TO[pb]}-xx tiếp theo):
+        const sys = `${sk.noi_dung}\n\nBạn đang đọc hợp đồng của một khách mới để lập bộ quy tắc kiểm bảng kê trong scope ${(cauHinh.roles.find((r) => r.key === pb)?.ten ?? pb)}. Chỉ dựa trên văn bản hợp đồng; điều hợp đồng không quy định thì ghi rõ "Hợp đồng không quy định" và nêu cách hiểu an toàn. Trả lời tiếng Việt.`;
+        const yeuCau = (gioiHan: string) => `Rút các quy tắc thuộc scope ${(cauHinh.roles.find((r) => r.key === pb)?.ten ?? pb)} để kiểm bảng kê và hồ sơ thanh toán của khách này, rồi gọi công cụ ghi_quy_tac.
+Bộ quy tắc mẫu của phòng (dùng lại đúng MÃ nếu cùng loại kiểm tra; loại mới thì đánh mã ${tienTo(pb)}-xx tiếp theo):
 ${mauPb || '(chưa có mẫu)'}
 Mỗi quy tắc: nội dung, giá trị/ngưỡng cụ thể, căn cứ (Điều/Phụ lục), cách kiểm (tu_dong | head_xem | gd2), mức độ (chan_gui | giai_trinh | theo_doi).
 VIẾT GỌN: ${gioiHan}`;

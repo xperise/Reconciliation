@@ -10,7 +10,7 @@ export async function docCauHinhQuyTrinh(): Promise<QuyTrinhCauHinh> {
   try {
     const sb = supabaseAdmin();
     const [r1, r2] = await Promise.all([
-      sb.from('tt_role').select('key, ten, thu_tu, kich_hoat').order('thu_tu'),
+      sb.from('tt_role').select('key, ten, thu_tu, kich_hoat').order('thu_tu').order('key'),
       sb.from('tt_buoc_quy_trinh').select('key, thu_tu, role_key, mode, ket_qua').order('thu_tu'),
     ]);
     if (r1.error || r2.error || !r1.data?.length || !r2.data?.length) return CAU_HINH_MAC_DINH;
