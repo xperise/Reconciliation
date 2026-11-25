@@ -7,7 +7,7 @@ import { sendMail } from '@/lib/google/gmail';
 import { refSubject, tplBangKe } from '@/lib/email-templates';
 import { periodFull } from '@/lib/period';
 import { signedUrl } from '@/lib/storage';
-import { batBuoc, BuocDuyet, duocLam, gopSau, nguoiTT, thamSoHieuLuc, BUCKET_TT, dsDangChan } from '@/lib/tuan-thu/db';
+import { batBuoc, BuocDuyet, duocLam, gopSau, nguoiTT, thamSoHieuLuc, BUCKET_TT, dsDangChan, tenAnToan } from '@/lib/tuan-thu/db';
 import { docDongLanChay, luuTep, xuLyLanChay } from '@/lib/tuan-thu/xu-ly';
 import { deXuatBuoc, textDeXuat } from '@/lib/tuan-thu/de-xuat';
 import { PhongBan, TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
@@ -25,7 +25,7 @@ async function ghiRaw(lanId: string, maKhach: string, thang: string, files: File
   for (const f of files) {
     if (!f || !f.size) continue;
     const buf = Buffer.from(await f.arrayBuffer());
-    const safe = f.name.normalize('NFC').replace(/[/\\?%*:|"<>]/g, '_').slice(0, 120);
+    const safe = tenAnToan(f.name);
     const p = `tuan-thu/${maKhach}/${thang}/${lanId}/raw/${Date.now().toString(36)}_${safe}`;
     await luuTep(p, buf);
     const k = `tep_${Object.keys(paths).length + 1}`;
@@ -239,7 +239,9 @@ async function guiBangKe(lanId: string) {
   const sb = supabaseAdmin();
   const { data: lc0 } = await sb.from('tt_lan_chay').select('bang_ke_path').eq('id', lanId).single();
   if (!lc0?.bang_ke_path) throw new Error('Chưa có file bảng kê.');
-  const tenTep = lc0.bang_ke_path.split('/').pop()!;
+  // Tên file đính kèm thư: giữ tên gốc kế toán đặt (có dấu) nếu là bảng kê kế toán upload / bản đã sửa
+  const { data: lcTen } = await sb.from('tt_lan_chay').select('che_do, bk_goc_ten').eq('id', lanId).single();
+  const tenTep = (lcTen?.che_do === 'da_format' && lcTen?.bk_goc_ten) ? lcTen.bk_goc_ten : lc0.bang_ke_path.split('/').pop()!;
   const link = await signedUrl(lc0.bang_ke_path, tenTep);
   const { to, cc, subject, html } = await thongTinGui(lanId, link);
   if (!to.includes('@')) throw new Error('Hợp đồng chưa gắn nhóm Master Data có email đầu mối khách (email_l1). Gắn ở trang Hợp đồng & quy tắc.');
@@ -462,7 +464,7 @@ export async function taoHopDong(fd: FormData): Promise<KQ> {
     if (error || !hd) throw new Error(/duplicate|unique/i.test(error?.message ?? '') ? 'Khách này đã có hợp đồng cùng số.' : /column/.test(error?.message ?? '') ? 'Cần chạy supabase/migrations/43_tuan_thu_them_hop_dong.sql.' : error?.message ?? 'Không tạo được hợp đồng.');
     const teps: { path: string; ten: string }[] = [...daTai];
     for (const f of files) {
-      const p = `tuan-thu/${ma}/hop-dong/${hd.id}/${Date.now().toString(36)}_${f.name.normalize('NFC').replace(/[/\\?%*:|"<>]/g, '_').slice(0, 120)}`;
+      const p = `tuan-thu/${ma}/hop-dong/${hd.id}/${Date.now().toString(36)}_${tenAnToan(f.name)}`;
       await luuTep(p, Buffer.from(await f.arrayBuffer()), 'application/pdf');
       teps.push({ path: p, ten: f.name });
     }
@@ -525,7 +527,7 @@ export async function xinLinkTaiLen(loai: 'hop_dong' | 'raw' | 'chat', maKhach: 
       if (loai === 'hop_dong' && !/\.pdf$/i.test(ten)) throw new Error('Hợp đồng chỉ nhận file PDF.');
       if (loai === 'raw' && !/\.xlsx$/i.test(ten)) throw new Error('Raw chỉ nhận file .xlsx.');
       if (loai === 'chat' && !/\.(pdf|xlsx|xlsm|xls|csv|txt|md|docx|png|jpe?g|webp|gif)$/i.test(ten)) throw new Error(`Chưa hỗ trợ loại file ${ten}.`);
-      const path = `tuan-thu/${ma}/${loai === 'hop_dong' ? 'hop-dong' : loai === 'chat' ? 'chat' : 'raw-tam'}/${lo}/${ten.normalize('NFC').replace(/[/\\?%*:|"<>]/g, '_').slice(0, 120)}`;
+      const path = `tuan-thu/${ma}/${loai === 'hop_dong' ? 'hop-dong' : loai === 'chat' ? 'chat' : 'raw-tam'}/${lo}/${tenAnToan(ten)}`;
       const { data, error } = await supabaseAdmin().storage.from(BUCKET_TT).createSignedUploadUrl(path);
       if (error || !data) throw new Error(`Không tạo được link tải lên: ${error?.message ?? ''}`);
       ds.push({ path: data.path, token: data.token, ten });

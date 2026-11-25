@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { BUCKET_TT, thamSoHieuLuc } from './db';
+import { BUCKET_TT, tenAnToan, thamSoHieuLuc } from './db';
 import { COT_SO, docRaw, ngayISO } from './raw';
 import { khoangKy, tongHop, tuSua } from './tinh';
 import { docBangKeDaFormat, doiChieuRaw, kiemBangKeDaFormat, taoBanDaSua } from './bang-ke-doc';
@@ -140,7 +140,7 @@ async function xuLyDaFormat(lc: any, hd: any, ts: ThamSoHopDong, phien_ban: numb
   const thuMuc = `tuan-thu/${hd.ma_khach}/${lc.thang}${lc.dot ? `-dot${lc.dot}` : ''}/${lc.id}/v${lc.vong}`;
   const tenGoc = lc.bk_goc_ten || lc.bk_goc_path.split('/').pop();
   let bkSua: string | null = null;
-  if (coSua) { bkSua = `${thuMuc}/da-sua/${tenGoc}`; await luuTep(bkSua, await taoBanDaSua(goc, kq, thayDoi, ts));
+  if (coSua) { bkSua = `${thuMuc}/da-sua/${tenAnToan(tenGoc)}`; await luuTep(bkSua, await taoBanDaSua(goc, kq, thayDoi, ts));
     await sb.from('tt_tep_lan_chay').insert({ lan_chay_id: lc.id, vong: lc.vong, loai: 'bk_sua', path: bkSua, ten: `${tenGoc} (bản đã sửa theo quy tắc)` }); }
   await luuTep(`${thuMuc}/bao_cao_kiem_tra.xlsx`, await taoBaoCao({ nhanKy, dong: kq.dong, canhBao, thayDoi }));
 

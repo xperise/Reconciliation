@@ -65,3 +65,15 @@ export async function dsDangChan(lanId: string): Promise<any[]> {
   const { data, error } = await supabaseAdmin().from('tt_chan').select('*').eq('lan_chay_id', lanId).is('go_luc', null).order('luc');
   return error ? [] : (data ?? []);
 }
+
+/**
+ * Tên file an toàn cho khóa Supabase Storage: bỏ dấu tiếng Việt, đổi khoảng trắng và ký tự lạ thành "_".
+ * (Storage từ chối khóa có dấu / ký tự đặc biệt — lỗi "Invalid key".) Tên gốc giữ riêng để hiển thị và đính kèm thư.
+ */
+export function tenAnToan(ten: string): string {
+  const cham = ten.lastIndexOf('.');
+  const goc = cham > 0 ? ten.slice(0, cham) : ten, duoi = cham > 0 ? ten.slice(cham + 1) : '';
+  const sach = (x: string) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D')
+    .replace(/[^A-Za-z0-9._-]+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+  return `${sach(goc).slice(0, 100) || 'tep'}${duoi ? `.${sach(duoi).toLowerCase()}` : ''}`;
+}
