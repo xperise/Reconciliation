@@ -42,6 +42,10 @@ export default async function Page({ params }: { params: { id: string } }) {
     sb.from('tt_sua_tay').select('*').eq('lan_chay_id', params.id).order('id'),
   ]);
   const { data: chanAll } = await sb.from('tt_chan').select('*').eq('lan_chay_id', params.id).order('luc', { ascending: false });
+  const [{ data: lichSuTep }, { data: mauDung }] = await Promise.all([
+    sb.from('tt_tep_lan_chay').select('*').eq('lan_chay_id', params.id).order('luc', { ascending: false }),
+    lc.mau_id ? sb.from('tt_mau_bang_ke').select('phien_ban, ten_tep').eq('id', lc.mau_id).maybeSingle() : Promise.resolve({ data: null } as any),
+  ]);
   const chanDs = (chanAll ?? []) as any[], dangChanDs = chanDs.filter((c) => !c.go_luc);
   const raSoat = (b: string) => ((aiKq ?? []) as any[]).find((k) => k.phong_ban === b && k.vong === lc.vong) ?? null;
 
@@ -164,7 +168,7 @@ export default async function Page({ params }: { params: { id: string } }) {
           {duocLam(n, 'ke_toan') ? (
             <div className="grid gap-5 md:grid-cols-2">
               <div><p className="label mb-1">Duyệt chuyển sang Demand & Supply</p><Duyet lanId={lc.id} buoc="ke_toan" nhan="Duyệt, chuyển CEO" /></div>
-              <div><p className="label mb-1">{daFormat ? 'Kế toán sửa file rồi tải lại' : 'Kế toán tự sửa raw rồi tải lại'}</p><TaiLai lanId={lc.id} daFormat={daFormat} /></div>
+              <div><p className="label mb-1">Kế toán chỉnh file rồi tải lại (bao nhiêu lần cũng được)</p><TaiLai lanId={lc.id} daFormat={daFormat} /></div>
             </div>
           ) : <p className="text-[12px]">Chờ kế toán.</p>}
         </section>
@@ -232,6 +236,19 @@ export default async function Page({ params }: { params: { id: string } }) {
             : <p className="text-[12px]">Chờ CEO.</p>)}
         </section>
       )}
+
+      {/* Lịch sử file */}
+      <section className="card card-pad mb-5">
+        <h2 className="card-title mb-2">Lịch sử file</h2>
+        {!daFormat && <p className="text-[12px] mb-2">Bảng kê dựng {mauDung ? <>theo <b>mẫu riêng của khách v{(mauDung as any).phien_ban}</b> ({(mauDung as any).ten_tep})</> : <>theo <b>mẫu chuẩn</b> (khách chưa có mẫu riêng — học mẫu ở trang hợp đồng)</>}.</p>}
+        {(lichSuTep ?? []).length === 0 ? <p className="empty">Chưa có.</p> : (
+          <table className="tbl"><thead><tr><th>Vòng</th><th>Loại</th><th>File</th><th>Người</th><th>Lúc</th></tr></thead>
+            <tbody>{((lichSuTep ?? []) as any[]).map((t) => (
+              <tr key={t.id}><td>{t.vong}</td><td className="text-[12px]">{({ raw: 'Raw', bk_upload: 'Bảng kê kế toán upload', bk_app: 'Bảng kê app dựng', bk_sua: 'Bản đã sửa theo quy tắc' } as any)[t.loai]}</td>
+                <td className="text-[12px]"><a className="underline" href={tep(t.path)!}>{t.ten ?? t.path.split('/').pop()}</a></td>
+                <td className="text-xs">{t.nguoi_email ?? 'app'}</td><td className="text-xs">{new Date(t.luc).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</td></tr>))}</tbody></table>
+        )}
+      </section>
 
       {/* Lịch sử */}
       <section className="card card-pad">

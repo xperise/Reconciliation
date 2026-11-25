@@ -5,6 +5,7 @@ import { PhongBan, TEN_MUC_DO, TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
 import Link from 'next/link';
 import { ChotQuyTac, DocLai, KichHoat, SuaHopDong, SuaThamSo } from '../client';
 import { VanBan } from '../../agent-ui';
+import { KhoiMau, KhoiSuaDoi } from './khoi-them';
 
 export const dynamic = 'force-dynamic';
 const CACH: Record<string, string> = { tu_dong: 'Tự động', head_xem: 'Head xem', gd2: 'Giai đoạn 2' };
@@ -23,7 +24,7 @@ function tomTatThamSo(t: any) {
   ];
 }
 
-export default async function Page({ params }: { params: { id: string } }) {
+export default async function Page({ params, searchParams }: { params: { id: string }; searchParams: { ma?: string } }) {
   const sb = supabaseAdmin();
   const n = (await nguoiTT())!;
   const [{ data: hds }, { data: nhom }] = await Promise.all([
@@ -35,7 +36,12 @@ export default async function Page({ params }: { params: { id: string } }) {
     <>
       <p className="mb-3"><Link href="/tuan-thu/quy-tac" className="text-[12px] underline">← Danh sách khách hàng</Link></p>
       {(hds ?? []).length === 0 && <div className="callout callout-high">Không tìm thấy hợp đồng.</div>}
-      {(hds ?? []).map((hd: any) => <KhoiHopDong key={hd.id} hd={hd} n={n} nhomDs={nhomDs} />)}
+      {(hds ?? []).map((hd: any) => <div key={hd.id}>
+        <nav className="flex gap-3 text-[12px] mb-3"><a href="#quy-tac" className="underline">Quy tắc</a><a href="#sua-doi" className="underline">Sửa đổi quy tắc</a><a href="#mau" className="underline">Mẫu bảng kê</a></nav>
+        <div id="quy-tac"><KhoiHopDong hd={hd} n={n} nhomDs={nhomDs} /></div>
+        <KhoiSuaDoi hd={hd} n={n} maChon={searchParams.ma} />
+        <KhoiMau hd={hd} n={n} />
+      </div>)}
     </>
   );
 }

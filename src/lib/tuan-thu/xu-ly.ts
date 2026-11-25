@@ -5,6 +5,7 @@ import { khoangKy, tongHop, tuSua } from './tinh';
 import { docBangKeDaFormat, doiChieuRaw, kiemBangKeDaFormat, taoBanDaSua } from './bang-ke-doc';
 import { kiemTra } from './kiem';
 import { taoBangKe } from './bang-ke';
+import { apDungMau, CauTrucMau } from './mau-bang-ke';
 import { taoBaoCao } from './bao-cao';
 import { DongRaw, LoaiDichVu, ThamSoHopDong } from './types';
 
@@ -64,7 +65,13 @@ export async function xuLyLanChay(lanChayId: string) {
   const nhanKy = khoangKy(ts, lc.thang, lc.dot ?? undefined).nhan;
   const goc = `tuan-thu/${hd.ma_khach}/${lc.thang}${lc.dot ? `-dot${lc.dot}` : ''}/${lc.id}/v${lc.vong}`;
   const tenBk = `${hd.ma_khach}_bang_ke_${lc.thang}${lc.dot ? `_dot${lc.dot}` : ''}.xlsx`;
-  await luuTep(`${goc}/${tenBk}`, await taoBangKe({ ts, nhanKy, dong, danhMucPhongBan: danhMuc, tenSheet: hd.ten_sheet }));
+  // Mẫu riêng của khách (đã duyệt) → dựng đúng mẫu; chưa có → mẫu chuẩn
+  const { data: mau } = await sb.from('tt_mau_bang_ke').select('id, path, cau_truc, phien_ban').eq('ma_khach', hd.ma_khach).eq('trang_thai', 'hieu_luc').order('phien_ban', { ascending: false }).limit(1);
+  const m = (mau ?? [])[0] as any;
+  const bkBuf = m ? await apDungMau(await tai(m.path), m.cau_truc as CauTrucMau, dong, ts, nhanKy)
+    : await taoBangKe({ ts, nhanKy, dong, danhMucPhongBan: danhMuc, tenSheet: hd.ten_sheet });
+  await luuTep(`${goc}/${tenBk}`, bkBuf);
+  await sb.from('tt_tep_lan_chay').insert({ lan_chay_id: lc.id, vong: lc.vong, loai: 'bk_app', path: `${goc}/${tenBk}`, ten: m ? `${tenBk} (mẫu khách v${m.phien_ban})` : `${tenBk} (mẫu chuẩn)` });
   await luuTep(`${goc}/bao_cao_kiem_tra.xlsx`, await taoBaoCao({ nhanKy, dong, canhBao, thayDoi }));
 
   await sb.from('tt_canh_bao').delete().eq('lan_chay_id', lc.id);
@@ -84,7 +91,7 @@ export async function xuLyLanChay(lanChayId: string) {
   const th = tongHop(dong);
   await sb.from('tt_lan_chay').update({
     phien_ban_quy_tac: phien_ban, bang_ke_path: `${goc}/${tenBk}`, bao_cao_path: `${goc}/bao_cao_kiem_tra.xlsx`,
-    tong_hop: { ...th, nhan_ky: nhanKy }, loi: null,
+    tong_hop: { ...th, nhan_ky: nhanKy }, loi: null, mau_id: m?.id ?? null,
   }).eq('id', lc.id);
 }
 
@@ -133,7 +140,8 @@ async function xuLyDaFormat(lc: any, hd: any, ts: ThamSoHopDong, phien_ban: numb
   const thuMuc = `tuan-thu/${hd.ma_khach}/${lc.thang}${lc.dot ? `-dot${lc.dot}` : ''}/${lc.id}/v${lc.vong}`;
   const tenGoc = lc.bk_goc_ten || lc.bk_goc_path.split('/').pop();
   let bkSua: string | null = null;
-  if (coSua) { bkSua = `${thuMuc}/da-sua/${tenGoc}`; await luuTep(bkSua, await taoBanDaSua(goc, kq, thayDoi, ts)); }
+  if (coSua) { bkSua = `${thuMuc}/da-sua/${tenGoc}`; await luuTep(bkSua, await taoBanDaSua(goc, kq, thayDoi, ts));
+    await sb.from('tt_tep_lan_chay').insert({ lan_chay_id: lc.id, vong: lc.vong, loai: 'bk_sua', path: bkSua, ten: `${tenGoc} (bản đã sửa theo quy tắc)` }); }
   await luuTep(`${thuMuc}/bao_cao_kiem_tra.xlsx`, await taoBaoCao({ nhanKy, dong: kq.dong, canhBao, thayDoi }));
 
   await sb.from('tt_canh_bao').delete().eq('lan_chay_id', lc.id);

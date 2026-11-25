@@ -24,11 +24,12 @@ export function GiaiTrinh({ id, dau, sua }: { id: number; dau: string; sua: bool
 }
 export function TaiLai({ lanId, daFormat }: { lanId: string; daFormat?: boolean }) {
   return (
-    <FormHanhDong action={taiLaiQuaStorage} nhanNut={daFormat ? 'Tải lại bảng kê đã sửa' : 'Tải lại raw đã sửa'} kieu="">
+    <FormHanhDong action={taiLaiQuaStorage} nhanNut="Tải lại & xử lý lại" kieu="">
       <input type="hidden" name="id" value={lanId} />
-      {daFormat && <label className="text-[12px] flex flex-col gap-1">Bảng kê đã sửa (.xlsx)<input type="file" name="bk" accept=".xlsx" className="text-[12px]" /></label>}
-      <label className="text-[12px] flex flex-col gap-1">{daFormat ? 'Raw để đối chiếu (không bắt buộc)' : 'File raw (chọn đủ khách sạn và vé)'}<input type="file" name="raw" accept=".xlsx" multiple className="text-[12px]" /></label>
-      <span className="text-[11px] text-[var(--ink-3)]">Mọi duyệt của vòng hiện tại sẽ mất hiệu lực, app xử lý lại từ đầu.</span>
+      <label className="text-[12px] flex flex-col gap-1">{daFormat ? 'Bảng kê đã chỉnh (.xlsx)' : 'Bảng kê đã chỉnh tay (.xlsx, không bắt buộc) — upload thì app chuyển sang kiểm tra chính file này'}
+        <input type="file" name="bk" accept=".xlsx" className="text-[12px]" /></label>
+      <label className="text-[12px] flex flex-col gap-1">{daFormat ? 'Raw để đối chiếu (không bắt buộc)' : 'Hoặc raw mới (chọn đủ khách sạn và vé)'}<input type="file" name="raw" accept=".xlsx" multiple className="text-[12px]" /></label>
+      <span className="text-[11px] text-[var(--ink-3)]">Tải lại bao nhiêu lần cũng được cho tới khi ra bản hoàn chỉnh; mỗi lần là một vòng mới, duyệt của vòng trước mất hiệu lực, các file cũ vẫn giữ trong lịch sử.</span>
     </FormHanhDong>
   );
 }

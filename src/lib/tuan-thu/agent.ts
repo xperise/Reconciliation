@@ -141,13 +141,13 @@ ${(dy ?? []).map((d: any) => `- ${TEN_PHONG_BAN[d.buoc as PhongBan]}: ${d.quyet_
 }
 
 /** Gọi Claude có công cụ; trả nguyên phản hồi để xử lý tool_use. */
-export async function goiClaudeCongCu(system: string, messages: any[], tools: any[], maxTokens = 1500): Promise<any> {
+export async function goiClaudeCongCu(system: string, messages: any[], tools: any[], maxTokens = 1500, batBuocCongCu?: string): Promise<any> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error('Chưa cấu hình ANTHROPIC_API_KEY trên Vercel — agent AI chưa chạy được.');
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: MODEL(), max_tokens: maxTokens, system, messages, tools }),
+    body: JSON.stringify({ model: MODEL(), max_tokens: maxTokens, system, messages, tools, ...(batBuocCongCu ? { tool_choice: { type: 'tool', name: batBuocCongCu } } : {}) }),
   });
   const data: any = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`Claude API lỗi ${res.status}: ${data?.error?.message ?? 'không rõ'}`);

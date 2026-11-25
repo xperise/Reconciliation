@@ -12,6 +12,8 @@ import { docDongLanChay, luuTep, xuLyLanChay } from '@/lib/tuan-thu/xu-ly';
 import { deXuatBuoc, textDeXuat } from '@/lib/tuan-thu/de-xuat';
 import { PhongBan, TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
 import { baoChoPhongBan } from '@/lib/tuan-thu/thong-bao';
+import { CauTrucMau, hocMau } from '@/lib/tuan-thu/mau-bang-ke';
+import { goiYGhepCot } from '@/lib/tuan-thu/mau-ai';
 
 type KQ = { ok: true; id?: string; thongBao?: string } | { ok: false; loi: string };
 const loi = (e: unknown): KQ => ({ ok: false, loi: e instanceof Error ? e.message : String(e) });
@@ -62,7 +64,9 @@ export async function taoLanChay(fd: FormData): Promise<KQ> {
       if (cheDo === 'raw' || rawFiles.length || rawDaTai.length) {
         const { paths, ten } = await ghiRaw(lc.id, hd.ma_khach, thang, rawFiles, rawDaTai);
         await sb.from('tt_lan_chay').update({ raw_paths: paths, raw_ten: ten }).eq('id', lc.id);
+        await ghiLichSuTep(lc.id, 1, 'raw', Object.entries(paths).map(([k, p]) => ({ path: p, ten: ten[k] })), n.email);
       }
+      if (bk.length) await ghiLichSuTep(lc.id, 1, 'bk_upload', bk, n.email);
       await xuLyLanChay(lc.id);
       await baoChoPhongBan(lc.id, ['demand', 'supply'], 'xu_ly');
     } catch (e) {
@@ -86,11 +90,14 @@ export async function taiLaiRaw(fd: FormData): Promise<KQ> {
     const { phien_ban } = await thamSoHieuLuc(lc.hop_dong_id, lc.thang);
     const capNhat: any = { vong: lc.vong + 1, buoc: 'cho_ke_toan', phien_ban_quy_tac: phien_ban };
     const bk = tepDaTai(fd, 'bk_json');
-    if (lc.che_do === 'da_format' && bk.length) Object.assign(capNhat, { bk_goc_path: bk[0].path, bk_goc_ten: bk[0].ten, ban_gui: null, bang_ke_path: null });
+    // Kế toán upload bảng kê chỉnh tay (kể cả lần chạy đang từ raw) → kiểm tra file đó, tạo bản đã sửa nếu cần
+    if (bk.length) Object.assign(capNhat, { che_do: 'da_format', bk_goc_path: bk[0].path, bk_goc_ten: bk[0].ten, ban_gui: null, bang_ke_path: null, bk_sua_path: null });
     const rawFiles = (fd.getAll('raw') as File[]).filter((f) => f && f.size), rawDaTai = tepDaTai(fd, 'raw_json');
-    if (rawFiles.length || rawDaTai.length) { const { paths, ten } = await ghiRaw(id, (lc as any).tt_hop_dong.ma_khach, lc.thang, rawFiles, rawDaTai); Object.assign(capNhat, { raw_paths: paths, raw_ten: ten }); }
-    else if (lc.che_do !== 'da_format') throw new Error('Chưa chọn file raw.');
-    else if (!bk.length) throw new Error('Chọn file bảng kê đã sửa (và raw nếu có).');
+    let rawMoi: { path: string; ten: string }[] = [];
+    if (rawFiles.length || rawDaTai.length) { const { paths, ten } = await ghiRaw(id, (lc as any).tt_hop_dong.ma_khach, lc.thang, rawFiles, rawDaTai); Object.assign(capNhat, { raw_paths: paths, raw_ten: ten }); rawMoi = Object.entries(paths).map(([k, p]) => ({ path: p, ten: ten[k] })); }
+    else if (!bk.length) throw new Error(lc.che_do === 'da_format' ? 'Chọn file bảng kê đã sửa (và raw nếu có).' : 'Chọn file raw, hoặc bảng kê đã chỉnh tay.');
+    if (bk.length) await ghiLichSuTep(id, lc.vong + 1, 'bk_upload', bk, n.email);
+    if (rawMoi.length) await ghiLichSuTep(id, lc.vong + 1, 'raw', rawMoi, n.email);
     await sb.from('tt_lan_chay').update(capNhat).eq('id', id);
     await xuLyLanChay(id);
     await baoChoPhongBan(id, ['demand', 'supply'], 'xu_ly');
@@ -548,5 +555,66 @@ export async function chonBanGui(lanId: string, ban: 'goc' | 'da_sua'): Promise<
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.chon_ban_gui', entity: 'tt_lan_chay', entityId: lanId, after: { ban } });
     revalidatePath(`/tuan-thu/chay/${lanId}`);
     return { ok: true, thongBao: ban === 'da_sua' ? 'Sẽ gửi bản đã sửa theo quy tắc.' : 'Sẽ gửi bảng kê kế toán upload (giữ nguyên).' };
+  });
+}
+
+async function ghiLichSuTep(lanId: string, vong: number, loai: 'raw' | 'bk_upload' | 'bk_app' | 'bk_sua', teps: { path: string; ten: string }[], email: string) {
+  if (!teps.length) return;
+  await supabaseAdmin().from('tt_tep_lan_chay').insert(teps.map((t) => ({ lan_chay_id: lanId, vong, loai, path: t.path, ten: t.ten, nguoi_email: email })));
+}
+
+// ---------------------------------------------------------------------
+// Mẫu bảng kê riêng của khách
+// ---------------------------------------------------------------------
+export async function hocMauBangKe(fd: FormData): Promise<KQ> {
+  return lam(async () => {
+    const n = await batBuoc('ke_toan');
+    const sb = supabaseAdmin();
+    const ma = String(fd.get('ma_khach') ?? '').trim().toUpperCase();
+    const t = tepDaTai(fd, 'mau_json')[0];
+    if (!ma || !t) throw new Error('Chọn khách và file bảng kê mẫu (.xlsx).');
+    const { data: f } = await sb.storage.from(BUCKET_TT).download(t.path);
+    if (!f) throw new Error('Không tải được file mẫu.');
+    let ct = await hocMau(Buffer.from(await f.arrayBuffer()));
+    if (!ct.sheets.length) throw new Error(`Không nhận ra sheet nào trong file mẫu. ${ct.ghiChu.join(' ')}`);
+    const g = await goiYGhepCot(ct); ct = g.ct;
+    const { data: cu } = await sb.from('tt_mau_bang_ke').select('phien_ban').eq('ma_khach', ma).order('phien_ban', { ascending: false }).limit(1);
+    const { data: m, error } = await sb.from('tt_mau_bang_ke').insert({ ma_khach: ma, phien_ban: ((cu ?? [])[0]?.phien_ban ?? 0) + 1, ten_tep: t.ten, path: t.path, cau_truc: ct, tao_boi: n.id }).select('id').single();
+    if (error || !m) throw new Error(/tt_mau_bang_ke/.test(error?.message ?? '') ? 'Cần chạy supabase/migrations/46_tuan_thu_mau_bang_ke.sql.' : error?.message ?? 'Không lưu được mẫu.');
+    await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.hoc_mau', entity: 'tt_mau_bang_ke', entityId: m.id, after: { ma, sheets: ct.sheets.map((x) => x.ten) } });
+    revalidatePath('/tuan-thu/quy-tac', 'layout');
+    const chuaGhep = ct.sheets.reduce((a, x) => a + (x.loai === 'tong_hop' ? 0 : x.cot.filter((c) => !c.nguon).length), 0);
+    return { ok: true, id: m.id, thongBao: `Đã học mẫu: ${ct.sheets.length} sheet${g.daGoiY ? `, agent ghép thêm ${g.daGoiY} cột` : ''}${chuaGhep ? `, còn ${chuaGhep} cột để trống — xem và sửa ghép cột trước khi duyệt` : ''}.` };
+  });
+}
+
+export async function suaGhepCotMau(id: string, sheet: string, so: number, nguon: string): Promise<KQ> {
+  return lam(async () => {
+    await batBuoc('ke_toan');
+    const sb = supabaseAdmin();
+    const { data: m } = await sb.from('tt_mau_bang_ke').select('cau_truc, trang_thai').eq('id', id).single();
+    if (!m) throw new Error('Không tìm thấy mẫu.');
+    if (m.trang_thai !== 'cho_duyet') throw new Error('Mẫu đã duyệt — muốn đổi thì học lại mẫu mới.');
+    const ct = m.cau_truc as CauTrucMau; const c = ct.sheets.find((x) => x.ten === sheet)?.cot.find((x) => x.so === so);
+    if (!c) throw new Error('Không tìm thấy cột.');
+    c.nguon = nguon;
+    await sb.from('tt_mau_bang_ke').update({ cau_truc: ct }).eq('id', id);
+    revalidatePath('/tuan-thu/quy-tac', 'layout');
+    return { ok: true };
+  });
+}
+
+export async function duyetMauBangKe(id: string): Promise<KQ> {
+  return lam(async () => {
+    const n = await batBuoc('ke_toan');
+    const sb = supabaseAdmin();
+    const { data: m } = await sb.from('tt_mau_bang_ke').select('ma_khach, phien_ban, trang_thai').eq('id', id).single();
+    if (!m) throw new Error('Không tìm thấy mẫu.');
+    if (m.trang_thai !== 'cho_duyet') throw new Error('Mẫu không ở trạng thái chờ duyệt.');
+    await sb.from('tt_mau_bang_ke').update({ trang_thai: 'thay_the' }).eq('ma_khach', m.ma_khach).eq('trang_thai', 'hieu_luc');
+    await sb.from('tt_mau_bang_ke').update({ trang_thai: 'hieu_luc', duyet_boi: n.id, duyet_luc: new Date().toISOString() }).eq('id', id);
+    await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.duyet_mau', entity: 'tt_mau_bang_ke', entityId: id });
+    revalidatePath('/tuan-thu/quy-tac', 'layout');
+    return { ok: true, thongBao: `Mẫu v${m.phien_ban} của ${m.ma_khach} có hiệu lực — lần chạy từ raw tiếp theo dựng đúng mẫu này.` };
   });
 }

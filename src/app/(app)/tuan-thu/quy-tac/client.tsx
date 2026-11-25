@@ -12,7 +12,7 @@ export function ChotQuyTac({ id, chot, yKien, hopDongId, ma }: { id: string; cho
       <div className="flex gap-1 flex-wrap">
         {chot !== 'dong_y' && <Nut chay={() => chotQuyTac(id, 'dong_y', y)} nhan="Đồng ý" kieu="btn-primary" />}
         {chot !== 'can_sua' && <Nut chay={() => chotQuyTac(id, 'can_sua', y)} nhan="Cần sửa" />}
-        <Link className="btn btn-sm" href={`/tuan-thu/sua-doi?hd=${hopDongId}&ma=${ma}`}>Đề xuất sửa</Link>
+        <Link className="btn btn-sm" href={`/tuan-thu/quy-tac/${hopDongId}?ma=${ma}#sua-doi`}>Đề xuất sửa</Link>
       </div>
     </div>
   );

@@ -47,8 +47,12 @@ export const CONG_CU_THAO_TAC: Tool[] = [
       bang_ke_path: S('đường dẫn file bảng kê ĐÃ FORMAT đính kèm (nếu kế toán gửi bảng kê đã format)'), tep_paths: { type: 'array', items: { type: 'string' }, description: 'đường dẫn các file raw đính kèm' } }, ['hop_dong_id', 'thang']) },
   { name: 'chon_ban_gui', description: 'Kế toán: chọn bản gửi khách cho lần chạy từ bảng kê đã format — "da_sua" (bản đã sửa theo quy tắc) hoặc "goc" (bảng kê kế toán upload).',
     input_schema: obj({ lan_chay_id: S('id lần chạy'), ban: { type: 'string', enum: ['da_sua', 'goc'] } }, ['lan_chay_id', 'ban']) },
-  { name: 'tai_lai_raw', description: 'Kế toán: thay raw của một lần chạy bằng file raw vừa đính kèm và xử lý lại (mở vòng mới).',
-    input_schema: obj({ lan_chay_id: S('id lần chạy'), tep_paths: { type: 'array', items: { type: 'string' } } }, ['lan_chay_id', 'tep_paths']) },
+  { name: 'tai_lai_raw', description: 'Kế toán: tải lại file cho một lần chạy và xử lý lại (mở vòng mới): raw mới (tep_paths) và/hoặc bảng kê đã chỉnh tay (bang_ke_path — app chuyển sang kiểm tra chính file này). Làm lại bao nhiêu lần cũng được.',
+    input_schema: obj({ lan_chay_id: S('id lần chạy'), tep_paths: { type: 'array', items: { type: 'string' } }, bang_ke_path: S('đường dẫn bảng kê đã chỉnh tay đính kèm') }, ['lan_chay_id']) },
+  { name: 'hoc_mau_bang_ke', description: 'Kế toán: học mẫu bảng kê riêng của một khách từ bảng kê mẫu vừa đính kèm (.xlsx). Mẫu ở trạng thái chờ duyệt.',
+    input_schema: obj({ ma_khach: S('mã khách'), tep_path: S('đường dẫn file mẫu đính kèm') }, ['ma_khach', 'tep_path']) },
+  { name: 'duyet_mau_bang_ke', description: 'Kế toán: duyệt mẫu bảng kê đang chờ duyệt (id lấy từ xem_hop_dong) — các lần chạy từ raw sau đó dựng đúng mẫu.',
+    input_schema: obj({ mau_id: S('id mẫu') }, ['mau_id']) },
   { name: 'tao_hop_dong', description: 'Thêm hợp đồng / khách mới từ PDF hợp đồng (và phụ lục) vừa đính kèm; agent đọc ra bản nháp quy tắc để 4 head chốt.',
     input_schema: obj({ ma_khach: S('mã khách viết tắt không dấu'), ten_khach: S('tên khách'), ten_cong_ty_raw: S('tên ở cột Tên công ty của raw'), so_hop_dong: S('số hợp đồng'), ngay_ky: S('YYYY-MM-DD'), hieu_luc_tu: S('YYYY-MM: áp dụng cho bảng kê từ tháng'), tep_paths: { type: 'array', items: { type: 'string' }, description: 'đường dẫn PDF đính kèm' } }, ['ma_khach', 'ten_khach', 'so_hop_dong', 'hieu_luc_tu', 'tep_paths']) },
   { name: 'bo_sung_skill', description: 'Thêm một dòng hướng dẫn vào skill của phòng (tạo phiên bản skill mới).', input_schema: obj({ noi_dung_them: S('dòng hướng dẫn cần thêm'), ly_do: S('lý do') }, ['noi_dung_them']) },
@@ -93,7 +97,9 @@ export async function chayCongCuDoc(ten: string, input: any): Promise<string> {
       sb.from('tt_bo_quy_tac').select('phien_ban, hieu_luc_tu, tham_so').eq('hop_dong_id', input.hop_dong_id).order('phien_ban', { ascending: false }).limit(1),
     ]);
     if (!h) return 'Không tìm thấy hợp đồng.';
-    return `${h.ma_khach} — ${h.ten_khach} | HĐ ${h.so_hop_dong} | trạng thái ${h.trang_thai ?? 'hieu_luc'}\nTÓM TẮT:\n${h.tom_tat_dieu_khoan ?? '(chưa có)'}\n\nĐIỂM CÒN MỞ: ${((h.cau_hoi_mo ?? []) as string[]).join(' / ') || 'không'}\n\nTHAM SỐ v${bo?.[0]?.phien_ban ?? '?'}: ${JSON.stringify(bo?.[0]?.tham_so ?? {})}\n\nQUY TẮC:\n${(qt ?? []).map((q: any) => `${q.ma} [${TEN_PHONG_BAN[q.phong_ban as PhongBan]}] ${q.noi_dung} | ${q.gia_tri ?? ''} | ${q.can_cu ?? ''} | ${q.muc_do} | chốt: ${q.chot}`).join('\n')}`;
+    const { data: maus } = await sb.from('tt_mau_bang_ke').select('id, phien_ban, ten_tep, trang_thai').eq('ma_khach', h.ma_khach).order('phien_ban', { ascending: false });
+    const dongMau = (maus ?? []).map((m: any) => `${m.id} v${m.phien_ban} ${m.ten_tep} (${m.trang_thai})`).join('; ') || 'chưa có (dùng mẫu chuẩn)';
+    return `${h.ma_khach} — ${h.ten_khach} | HĐ ${h.so_hop_dong} | trạng thái ${h.trang_thai ?? 'hieu_luc'}\nTÓM TẮT:\n${h.tom_tat_dieu_khoan ?? '(chưa có)'}\nMẪU BẢNG KÊ: ${dongMau}\n\nĐIỂM CÒN MỞ: ${((h.cau_hoi_mo ?? []) as string[]).join(' / ') || 'không'}\n\nTHAM SỐ v${bo?.[0]?.phien_ban ?? '?'}: ${JSON.stringify(bo?.[0]?.tham_so ?? {})}\n\nQUY TẮC:\n${(qt ?? []).map((q: any) => `${q.ma} [${TEN_PHONG_BAN[q.phong_ban as PhongBan]}] ${q.noi_dung} | ${q.gia_tri ?? ''} | ${q.can_cu ?? ''} | ${q.muc_do} | chốt: ${q.chot}`).join('\n')}`;
   }
   if (ten === 'ds_sua_doi') {
     const { data } = await sb.from('tt_sua_doi').select('id, so, ma_quy_tac, noi_dung_moi, trang_thai, hieu_luc_tu, tt_sua_doi_duyet(phong_ban, quyet_dinh)').order('so');
@@ -104,7 +110,7 @@ export async function chayCongCuDoc(ten: string, input: any): Promise<string> {
 
 /** Phòng ban cần có quyền cho thao tác (để báo lỗi sớm nếu người dùng không có quyền). */
 export function phongBanCan(ten: string, input: any, macDinh: PhongBan): PhongBan {
-  if (['sua_o_bang_ke', 'ghi_giai_trinh', 'xac_nhan_o_tu_sua', 'tao_lan_chay', 'tai_lai_raw', 'chon_ban_gui'].includes(ten)) return 'ke_toan';
+  if (['sua_o_bang_ke', 'ghi_giai_trinh', 'xac_nhan_o_tu_sua', 'tao_lan_chay', 'tai_lai_raw', 'chon_ban_gui', 'hoc_mau_bang_ke', 'duyet_mau_bang_ke'].includes(ten)) return 'ke_toan';
   if (ten === 'duyet_buoc') return input.buoc;
   if (ten === 'tra_ve_ke_toan' || ten === 'chan_bang_ke') return input.phong_ban;
   return macDinh;
@@ -128,7 +134,9 @@ export function moTa(ten: string, i: any): string {
       ? `Kiểm tra bảng kê đã format ${String(i.bang_ke_path).split('/').pop()} — tháng ${i.thang}${i.dot ? ` đợt ${i.dot}` : ''}, hợp đồng ${i.hop_dong_id}${(i.tep_paths ?? []).length ? `, đối chiếu raw: ${(i.tep_paths as string[]).map((p) => p.split('/').pop()).join(', ')}` : ', không đối chiếu raw'}.`
       : `Tạo lần chạy bảng kê tháng ${i.thang}${i.dot ? ` đợt ${i.dot}` : ''} cho hợp đồng ${i.hop_dong_id} từ ${i.tep_paths?.length ?? 0} file raw: ${(i.tep_paths ?? []).map((p: string) => p.split('/').pop()).join(', ')}.`;
     case 'chon_ban_gui': return `Chọn gửi khách: ${i.ban === 'da_sua' ? 'bản đã sửa theo quy tắc' : 'bảng kê kế toán upload (giữ nguyên)'} cho lần chạy ${i.lan_chay_id}.`;
-    case 'tai_lai_raw': return `Thay raw của lần chạy ${i.lan_chay_id} bằng: ${(i.tep_paths ?? []).map((p: string) => p.split('/').pop()).join(', ')} và xử lý lại (duyệt vòng hiện tại mất hiệu lực).`;
+    case 'tai_lai_raw': return `Tải lại cho lần chạy ${i.lan_chay_id}: ${[i.bang_ke_path ? `bảng kê đã chỉnh ${String(i.bang_ke_path).split('/').pop()}` : '', (i.tep_paths ?? []).length ? `raw ${(i.tep_paths as string[]).map((p) => p.split('/').pop()).join(', ')}` : ''].filter(Boolean).join(' + ')} — xử lý lại, duyệt vòng hiện tại mất hiệu lực.`;
+    case 'hoc_mau_bang_ke': return `Học mẫu bảng kê của khách ${i.ma_khach} từ ${String(i.tep_path).split('/').pop()} (chờ kế toán xem ghép cột và duyệt).`;
+    case 'duyet_mau_bang_ke': return `Duyệt mẫu bảng kê ${i.mau_id} — các lần chạy từ raw sau đó dựng đúng mẫu.`;
     case 'tao_hop_dong': return `Thêm hợp đồng ${i.so_hop_dong} cho khách ${i.ma_khach} — ${i.ten_khach}, áp dụng từ ${i.hieu_luc_tu}, từ ${(i.tep_paths ?? []).map((p: string) => p.split('/').pop()).join(', ')}; agent đọc ra bản nháp (1–3 phút).`;
     case 'bo_sung_skill': return `Thêm vào skill: "${i.noi_dung_them}"${i.ly_do ? ` (lý do: ${i.ly_do})` : ''}.`;
     default: return ten;

@@ -44,7 +44,7 @@ export default async function Page() {
                   <td><span className={`pill ${tt[1]}`}>{tt[0]}</span></td>
                   <td className="text-[12px]">v{ver(h.id) || '—'}{h.trang_thai === 'cho_chot' ? ' (nháp)' : ''}</td>
                   {PB.map((p) => { const d = dem(h.id, p); return <td key={p} className={`text-right text-[12px] ${can(p) ? 'font-semibold text-[var(--critical)]' : ''}`}>{d.tong ? `${d.da}/${d.tong}` : '—'}</td>; })}
-                  <td>{cho(h.id) ? <Link href="/tuan-thu/sua-doi" className="pill pill-watch">{cho(h.id)}</Link> : '—'}</td>
+                  <td>{cho(h.id) ? <Link href={`/tuan-thu/quy-tac/${h.id}#sua-doi`} className="pill pill-watch">{cho(h.id)}</Link> : '—'}</td>
                   <td className="text-right"><Link href={`/tuan-thu/quy-tac/${h.id}`} className="btn btn-sm">Xem chi tiết</Link></td>
                 </tr>
               );
