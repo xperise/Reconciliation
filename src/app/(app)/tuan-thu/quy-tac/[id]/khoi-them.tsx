@@ -19,7 +19,7 @@ export async function KhoiMau({ hd, n }: { hd: any; n: NguoiTT }) {
   return (
     <section id="mau" className="card card-pad mb-6">
       <h2 className="card-title mb-1">Mẫu bảng kê của {hd.ma_khach}</h2>
-      <p className="text-[12px] text-[var(--ink-3)] mb-3">Upload một bảng kê đã gửi khách (đúng mẫu khách dùng). App học cấu trúc: sheet, tiêu đề, cột, dòng tổng, chân trang, danh sách phòng ban; cột nào khớp raw thì tự ghép, cột lạ thì agent gợi ý. Kế toán xem lại ghép cột rồi duyệt — từ đó lần chạy từ raw của khách này ra đúng mẫu.</p>
+      <p className="text-[12px] text-[var(--ink-3)] mb-3">Upload một bảng kê đã gửi khách — file có nhiều sheet (bản cũ, sheet ẩn, "Copy of…") cũng được: app tự chọn sheet đang dùng làm mẫu. App học cấu trúc: sheet, tiêu đề, cột, dòng tổng, chân trang, danh sách phòng ban; cột nào khớp raw thì tự ghép, cột lạ thì agent gợi ý. Kế toán xem lại ghép cột rồi duyệt — từ đó lần chạy từ raw của khách này ra đúng mẫu.</p>
       {error && <div className="callout callout-high text-[12px] mb-2">Cần chạy supabase/migrations/46_tuan_thu_mau_bang_ke.sql.</div>}
       {ke && <HocMau maKhach={hd.ma_khach} />}
       {ds.length === 0 ? <p className="empty">Chưa có mẫu riêng — đang dùng mẫu chuẩn.</p> : ds.map((m) => {
@@ -34,8 +34,8 @@ export async function KhoiMau({ hd, n }: { hd: any; n: NguoiTT }) {
                 <div className="overflow-x-auto"><table className="tbl"><thead><tr><th>Cột mẫu</th><th>Lấy từ cột raw</th><th>Giá trị mẫu</th></tr></thead><tbody>
                   {s.cot.map((c) => (
                     <tr key={c.so}><td className="text-[12px]">{c.so}. {c.ten}</td>
-                      <td>{m.trang_thai === 'cho_duyet' && ke ? <GhepCot id={m.id} sheet={s.ten} so={c.so} nguon={c.nguon} luaChon={COT_RAW[s.loai as LoaiDichVu]} />
-                        : <span className={`text-[12px] ${c.nguon ? '' : 'text-[var(--ink-3)]'}`}>{c.nguon === '#' ? 'Số thứ tự' : c.nguon === '@trang_thai' ? 'Trạng thái (theo tên hiển thị của hợp đồng)' : c.nguon || 'Để trống'}</span>}</td>
+                      <td>{m.trang_thai === 'cho_duyet' && ke ? <GhepCot id={m.id} sheet={s.ten} so={c.so} nguon={c.nguon} luaChon={COT_RAW[s.loai as LoaiDichVu]} congThuc={c.congThuc} />
+                        : <span className={`text-[12px] ${c.nguon ? '' : 'text-[var(--ink-3)]'}`}>{c.nguon === '#' ? 'Số thứ tự' : c.nguon === '@trang_thai' ? 'Trạng thái (theo tên hiển thị của hợp đồng)' : c.nguon === '@cong_thuc' ? `Giữ công thức của mẫu (=${c.congThuc})` : c.nguon || 'Để trống'}</span>}</td>
                       <td className="text-[11.5px] text-[var(--ink-3)]">{(c.mau ?? []).join(' ; ')}</td></tr>))}
                 </tbody></table></div>
               </div>

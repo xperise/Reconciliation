@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs';
 import { COT_SO } from './raw';
 import { tongHop, tuSua } from './tinh';
 import { CanhBao, DongRaw, LoaiDichVu, ThamSoHopDong, ThayDoi, TEN_DICH_VU } from './types';
+import { CauTrucMau, ghepCot, nhanLoai } from './mau-bang-ke';
 
 /**
  * Đọc bảng kê kế toán ĐÃ FORMAT (mẫu của khách: sheet chi tiết vé, khách sạn, sheet tổng hợp phòng ban),
@@ -36,11 +37,12 @@ export type KetQuaDocBK = { dong: DongRaw[]; chiTiet: SheetCT[]; tongHopPB: Shee
 const KHOA_TH: [string, RegExp][] = [['pb', /^phòng ban/i], ['dv', /^dịch vụ/i], ['chua_vat', /^thành tiền/i], ['phi', /^phí dịch vụ/i], ['ck', /^chiết khấu/i],
   ['tong_chua_vat', /^tổng tiền/i], ['vat', /^thuế gtgt/i], ['tong', /^tổng cộng/i]];
 
-export async function docBangKeDaFormat(buf: Buffer): Promise<KetQuaDocBK> {
+export async function docBangKeDaFormat(buf: Buffer, mau?: CauTrucMau | null): Promise<KetQuaDocBK> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buf as any);
   const out: KetQuaDocBK = { dong: [], chiTiet: [], tongHopPB: null, dauTrang: [], khongNhanRa: [] };
   for (const ws of wb.worksheets) {
+    if (ws.state && ws.state !== 'visible') { out.khongNhanRa.push(`${ws.name} (sheet ẩn — không kiểm)`); continue; }
     let hr = 0;
     for (let r = 1; r <= Math.min(ws.rowCount, 40); r++) if (/^STT/i.test(chuan(gt(ws.getRow(r).getCell(1).value)))) { hr = r; break; }
     if (!hr) { out.khongNhanRa.push(ws.name); continue; }
@@ -56,8 +58,21 @@ export async function docBangKeDaFormat(buf: Buffer): Promise<KetQuaDocBK> {
       duoi.eachCell({ includeEmpty: false }, (c, i) => { const t = chuan(gt(c.value)); if (t) cot[t] = i; });
       hrCuoi = hr + 1;
     }
+    // Mẫu của khách khác tên cột → ghép tên cột mẫu sang tên cột raw (theo mẫu đã duyệt, hoặc tên gọi khác thường gặp)
+    const tenGoc = Object.keys(cot);
+    const nhanMuc = chuan(gt(ws.getRow(hrCuoi + 1).getCell(1).value));
+    const mauSh = mau?.sheets.find((x) => x.ten === ws.name && x.loai !== 'tong_hop');
+    const loaiDoan = tenGoc.includes('Tên khách sạn') ? 'khach_san' : tenGoc.includes('Tên dịch vụ (Hành trình)') ? 've_may_bay' : (mauSh?.loai ?? nhanLoai(tenGoc, nhanMuc, ws.name));
+    if (loaiDoan === 'khach_san' || loaiDoan === 've_may_bay') {
+      for (const t of tenGoc) {
+        const m = mauSh?.cot.find((c) => c.ten === t);
+        const g = m && m.nguon && !m.nguon.startsWith('@') && m.nguon !== '#' ? m.nguon : ghepCot(t, loaiDoan);
+        if (g && !g.startsWith('@') && g !== '#' && !(g in cot)) cot[g] = cot[t];
+        if (g === '@trang_thai' && !('Trạng thái' in cot)) cot['Trạng thái'] = cot[t];
+      }
+    }
     const ten = Object.keys(cot);
-    const loai: LoaiDichVu | null = ten.includes('Tên khách sạn') ? 'khach_san' : ten.includes('Tên dịch vụ (Hành trình)') ? 've_may_bay' : null;
+    const loai: LoaiDichVu | null = loaiDoan === 'khach_san' || loaiDoan === 've_may_bay' ? loaiDoan : null;
     if (!loai) {
       if (ten.some((t) => /^phòng ban/i.test(t))) {
         const c: Record<string, number> = {};

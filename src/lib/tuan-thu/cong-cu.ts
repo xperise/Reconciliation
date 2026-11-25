@@ -49,7 +49,7 @@ export const CONG_CU_THAO_TAC: Tool[] = [
     input_schema: obj({ lan_chay_id: S('id lần chạy'), ban: { type: 'string', enum: ['da_sua', 'goc'] } }, ['lan_chay_id', 'ban']) },
   { name: 'tai_lai_raw', description: 'Kế toán: tải lại file cho một lần chạy và xử lý lại (mở vòng mới): raw mới (tep_paths) và/hoặc bảng kê đã chỉnh tay (bang_ke_path — app chuyển sang kiểm tra chính file này). Làm lại bao nhiêu lần cũng được.',
     input_schema: obj({ lan_chay_id: S('id lần chạy'), tep_paths: { type: 'array', items: { type: 'string' } }, bang_ke_path: S('đường dẫn bảng kê đã chỉnh tay đính kèm') }, ['lan_chay_id']) },
-  { name: 'hoc_mau_bang_ke', description: 'Kế toán: học mẫu bảng kê riêng của một khách từ bảng kê mẫu vừa đính kèm (.xlsx). Mẫu ở trạng thái chờ duyệt.',
+  { name: 'hoc_mau_bang_ke', description: 'Kế toán: học mẫu bảng kê riêng của một khách từ bảng kê đính kèm (.xlsx). File nhiều sheet (bản cũ, sheet ẩn, Copy of…) vẫn dùng được: app tự chọn sheet đang dùng làm mẫu, tự ghép cột khác tên. Mẫu ở trạng thái chờ duyệt.',
     input_schema: obj({ ma_khach: S('mã khách'), tep_path: S('đường dẫn file mẫu đính kèm') }, ['ma_khach', 'tep_path']) },
   { name: 'duyet_mau_bang_ke', description: 'Kế toán: duyệt mẫu bảng kê đang chờ duyệt (id lấy từ xem_hop_dong) — các lần chạy từ raw sau đó dựng đúng mẫu.',
     input_schema: obj({ mau_id: S('id mẫu') }, ['mau_id']) },

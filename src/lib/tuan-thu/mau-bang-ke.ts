@@ -8,7 +8,7 @@ import { DongRaw, LoaiDichVu, ThamSoHopDong } from './types';
  * rồi lần sau dựng bảng kê từ raw ra đúng mẫu đó — chép nguyên phần đầu trang, định dạng, độ rộng cột,
  * chữ ký cuối trang; chỉ thay dữ liệu, dòng tổng, kỳ và tài khoản theo hợp đồng.
  */
-export type CotMau = { so: number; ten: string; nguon: string; mau?: string[] };   // nguon: tên cột raw | '#' (STT) | '@trang_thai' | '' (để trống)
+export type CotMau = { so: number; ten: string; nguon: string; mau?: string[]; congThuc?: string };   // nguon '@cong_thuc' = giữ công thức của mẫu   // nguon: tên cột raw | '#' (STT) | '@trang_thai' | '' (để trống)
 export type SheetMau = {
   ten: string; loai: LoaiDichVu | 'tong_hop';
   hangTieuDe: number; hangDuLieuDau: number; hangDuLieuCuoi: number; hangTong: number[]; hangTongTren: number[]; hangCuoi: number;
@@ -46,9 +46,32 @@ export function ghepCot(ten: string, loai: LoaiDichVu): string {
   if (/^(trang thai|tinh trang su dung)$/.test(k)) return '@trang_thai';
   const thay = COT_RAW[loai].find((c) => khongDau(c) === k);
   if (thay) return thay;
-  const dong: Record<string, string> = { 'thanh tien da vat': loai === 've_may_bay' ? 'Thành tiền' : 'Thành tiền (đã VAT)', 'ho ten khach': 'Họ và tên Khách', 'ma giao dich': loai === 'khach_san' ? 'Mã giao dịch' : 'Mã giao dịch (Chiều đi)' };
-  return dong[k] ?? '';
+  // Tên gọi khác thường gặp trong mẫu của khách
+  const chung: Record<string, string> = {
+    'thanh tien da vat': loai === 've_may_bay' ? 'Thành tiền' : 'Thành tiền (đã VAT)', 'thanh tien': loai === 've_may_bay' ? 'Thành tiền' : 'Thành tiền (đã VAT)',
+    'tong thanh tien da vat': 'Tổng thành tiền', 'ho ten khach': 'Họ và tên Khách', 'ho va ten': 'Họ và tên Khách', 'ten khach': 'Họ và tên Khách', 'khach': 'Họ và tên Khách',
+    'ma giao dich': loai === 'khach_san' ? 'Mã giao dịch' : 'Mã giao dịch (Chiều đi)', 'ma dat cho': loai === 'khach_san' ? 'Mã giao dịch' : 'Mã giao dịch (Chiều đi)',
+    'chiet khau': 'Chiết khấu trước VAT', 'chiet khau chua vat': 'Chiết khấu trước VAT', 'tien chiet khau': 'Chiết khấu trước VAT',
+    'tien thue gtgt': 'VAT', 'thue gtgt': 'VAT', 'thue vat': 'VAT', 'tien vat': 'VAT', 'vat 8%': 'VAT', 'vat 10%': 'VAT',
+    'so hoa don': 'Số hóa đơn', 'hoa don': 'Số hóa đơn', 'hoa don so': 'Số hóa đơn', 'so hd': 'Số hóa đơn', 'link hoa don': 'Link hóa đơn', 'ma can bo': 'Mã cán bộ', 'ma nhan vien': 'Mã cán bộ', 'phong ban': 'Phòng ban', 'don vi': 'Phòng ban',
+  };
+  const rieng: Record<string, string> = loai === 'khach_san'
+    ? { 'ten dich vu': 'Tên khách sạn', 'khach san': 'Tên khách sạn', 'ten ks': 'Tên khách sạn', 'ngay check in': 'Ngày checkin/Ngày đi', 'ngay nhan phong': 'Ngày checkin/Ngày đi',
+        'ngay check out': 'Ngày checkout/Ngày về', 'ngay tra phong': 'Ngày checkout/Ngày về', 'don gia sau giam': 'Đơn giá', 'so dem': 'Số lượng đêm', 'so phong': 'Số lượng phòng', 'dia chi': 'Địa bàn' }
+    : { 'ten dich vu': 'Tên dịch vụ (Hành trình)', 'hanh trinh': 'Tên dịch vụ (Hành trình)', 'ngay bay': 'Ngày checkin/Ngày đi', 'ngay di': 'Ngày checkin/Ngày đi', 'ngay ve': 'Ngày checkout/Ngày về',
+        'so ve': 'Số vé', 'hang ve': 'Hạng vé', 'gia ve': 'Đơn giá' };
+  return rieng[k] ?? chung[k] ?? '';
 }
+
+/** Nhận loại sheet: theo tên cột, dòng nhãn mục ngay dưới tiêu đề ("Dịch vụ khách sạn"…), tên sheet. */
+export function nhanLoai(ten: string[], nhanMuc: string, tenSheet: string): SheetMau['loai'] | null {
+  const k = khongDau([...ten, nhanMuc, tenSheet].join(' | '));
+  if (ten.some((t) => /^phòng ban/i.test(t)) && /(thanh tien|tong cong)/.test(k) && !/(so ve|check ?in)/.test(k)) return 'tong_hop';
+  if (/(ten khach san|khach san|check ?in|so luong dem|hang phong|\bks\b)/.test(k)) return 'khach_san';
+  if (/(hanh trinh|so ve|hang ve|ve may bay|\bvmb\b|chuyen bay)/.test(k)) return 've_may_bay';
+  return null;
+}
+const COT_TEN_DV: Record<LoaiDichVu, RegExp> = { khach_san: /^(tên khách sạn|tên dịch vụ|khách sạn|tên ks)/i, ve_may_bay: /^(tên dịch vụ|hành trình|chặng)/i };
 
 export async function hocMau(buf: Buffer): Promise<CauTrucMau> {
   const wb = new ExcelJS.Workbook(); await wb.xlsx.load(buf as any);
@@ -56,33 +79,43 @@ export async function hocMau(buf: Buffer): Promise<CauTrucMau> {
   for (const ws of wb.worksheets) {
     let hr = 0;
     for (let r = 1; r <= Math.min(ws.rowCount, 40); r++) if (/^STT/i.test(chuan(gt(ws.getRow(r).getCell(1).value)))) { hr = r; break; }
-    if (!hr) { out.ghiChu.push(`Sheet "${ws.name}" không có dòng tiêu đề bắt đầu bằng STT — giữ nguyên, không điền dữ liệu.`); continue; }
+    if (!hr) { out.ghiChu.push(`Sheet "${ws.name}" không có dòng tiêu đề bắt đầu bằng STT — bỏ qua.`); continue; }
     const ten: Record<number, string> = {};
     ws.getRow(hr).eachCell({ includeEmpty: false }, (c, i) => { const t = chuan(gt(c.value)); if (t) ten[i] = t; });
     let hrCuoi = hr;
     const duoi = ws.getRow(hr + 1);
-    if (!chuan(gt(duoi.getCell(1).value)) && (duoi.values as any[]).slice(2).some((x) => typeof gt(x) === 'string' && chuan(gt(x)))) {
+    const nhanMuc = chuan(gt(duoi.getCell(1).value));
+    if (!nhanMuc && (duoi.values as any[]).slice(2).some((x) => typeof gt(x) === 'string' && chuan(gt(x)))) {
       duoi.eachCell({ includeEmpty: false }, (c, i) => { const t = chuan(gt(c.value)); if (t) ten[i] = t; }); hrCuoi = hr + 1;
     }
     const tens = Object.values(ten);
-    const loai: SheetMau['loai'] | null = tens.includes('Tên khách sạn') ? 'khach_san' : tens.includes('Tên dịch vụ (Hành trình)') ? 've_may_bay' : tens.some((t) => /^phòng ban/i.test(t)) ? 'tong_hop' : null;
-    if (!loai) { out.ghiChu.push(`Sheet "${ws.name}" không nhận ra loại (khách sạn / vé / tổng hợp phòng ban) — giữ nguyên.`); continue; }
+    const loai = nhanLoai(tens, nhanMuc, ws.name);
+    if (!loai) { out.ghiChu.push(`Sheet "${ws.name}" không nhận ra loại (khách sạn / vé / tổng hợp phòng ban) — bỏ qua.`); continue; }
     const soDong = ws.rowCount;
+    const cotTenSo = loai === 'tong_hop' ? Number(Object.entries(ten).find(([, t]) => /^phòng ban/i.test(t))![0])
+      : Number(Object.entries(ten).find(([, t]) => COT_TEN_DV[loai].test(t))?.[0] ?? 2);
     let dau = 0, cuoi = 0; const tong: number[] = [], tongTren: number[] = [];
-    const cotTen = loai === 'tong_hop' ? Number(Object.entries(ten).find(([, t]) => /^phòng ban/i.test(t))![0]) : Number(Object.entries(ten).find(([, t]) => t === (loai === 'khach_san' ? 'Tên khách sạn' : 'Tên dịch vụ (Hành trình)'))![0]);
-    const cotTien = Object.entries(ten).filter(([, t]) => CONG.has(t) || /^(thành tiền|tổng)/i.test(t)).map(([i]) => Number(i));
-    for (let r = 1; r < hr; r++) { const row = ws.getRow(r); if (cotTien.some((i) => typeof gt(row.getCell(i).value) === 'number')) tongTren.push(r); }
+    const laTong = (row: ExcelJS.Row) => { let co = false; row.eachCell({ includeEmpty: false }, (c) => { if (/^tổng( cộng| thanh toán)?\b/i.test(chuan(gt(c.value)))) co = true; }); return co; };
+    for (let r = 1; r < hr; r++) { const row = ws.getRow(r); let so = false; row.eachCell({ includeEmpty: false }, (c, i) => { if (i > 1 && typeof gt(c.value) === 'number' && (c.value as any)?.formula) so = true; }); if (so) tongTren.push(r); }
     for (let r = hrCuoi + 1; r <= soDong; r++) {
-      const row = ws.getRow(r); const a = chuan(gt(row.getCell(1).value)); const b = chuan(gt(row.getCell(cotTen).value));
-      if (/^tổng/i.test(a) || /^tổng/i.test(b)) { tong.push(r); continue; }
+      const row = ws.getRow(r);
+      if (laTong(row)) { tong.push(r); continue; }
+      const a = chuan(gt(row.getCell(1).value)); const b = chuan(gt(row.getCell(cotTenSo).value));
       const laSo = a !== '' && !isNaN(Number(a));
-      if (laSo && b) { if (!dau) dau = r; cuoi = r; continue; }
-      if (dau && !tong.length && cotTien.some((i) => typeof gt(row.getCell(i).value) === 'number') && !b) { tong.push(r); continue; }
+      if ((laSo || (!a && dau === 0 && r > hrCuoi + 1)) && b && !tong.length) { if (!dau) dau = r; cuoi = r; }
     }
-    if (!dau) { out.ghiChu.push(`Sheet "${ws.name}" không có dòng dữ liệu mẫu — giữ nguyên.`); continue; }
+    if (!dau) { out.ghiChu.push(`Sheet "${ws.name}" không có dòng dữ liệu mẫu — bỏ qua.`); continue; }
+    // Cột có dữ liệu nhưng không có tiêu đề (VD số hóa đơn, link, mã giao dịch ở cuối bảng)
+    for (let rr = dau; rr <= Math.min(cuoi, dau + 3); rr++) ws.getRow(rr).eachCell({ includeEmpty: false }, (c, i) => { if (!ten[i] && gt(c.value) !== null && chuan(gt(c.value))) ten[i] = `(cột ${ws.getColumn(i).letter} không tiêu đề)`; });
     const sh: SheetMau = { ten: ws.name, loai, hangTieuDe: hrCuoi, hangDuLieuDau: dau, hangDuLieuCuoi: cuoi, hangTong: tong, hangTongTren: tongTren, hangCuoi: soDong,
-      cot: Object.entries(ten).map(([i, t]) => ({ so: Number(i), ten: t, nguon: loai === 'tong_hop' ? '' : ghepCot(t, loai),
-        mau: [dau, dau + 1, dau + 2].map((rr) => chuan(gt(ws.getRow(rr).getCell(Number(i)).value))).filter(Boolean).slice(0, 3) })).sort((x, y) => x.so - y.so) };
+      cot: Object.entries(ten).map(([i, t]) => {
+        const c0 = ws.getRow(dau).getCell(Number(i)); const v: any = c0.value;
+        const congThuc = v && typeof v === 'object' && 'formula' in v && v.formula ? String(v.formula) : undefined;
+        let nguon = loai === 'tong_hop' ? '' : ghepCot(t, loai);
+        if (!nguon && congThuc) nguon = '@cong_thuc';
+        return { so: Number(i), ten: t, nguon, congThuc, mau: [dau, dau + 1, dau + 2].map((rr) => { const x = gt(ws.getRow(rr).getCell(Number(i)).value); return x instanceof Date ? chuoiNgay(x) : chuan(x); }).filter(Boolean).slice(0, 3) };
+      }).sort((x, y) => x.so - y.so) };
+    (sh as any).an = ws.state && ws.state !== 'visible';
     if (loai === 'tong_hop') {
       const tim = (re: RegExp) => Number(Object.entries(ten).find(([, t]) => re.test(t))?.[0] ?? 0);
       sh.thCot = { stt: 1, pb: tim(/^phòng ban/i), cc: tim(/cost center/i), nd: tim(/^nội địa/i), dv: tim(/^dịch vụ/i), chua_vat: tim(/^thành tiền/i), phi: tim(/^phí dịch vụ/i),
@@ -91,11 +124,39 @@ export async function hocMau(buf: Buffer): Promise<CauTrucMau> {
       for (let r = dau; r <= cuoi; r++) { const row = ws.getRow(r); const pb = chuan(gt(row.getCell(sh.thCot.pb).value)); if (!pb) continue;
         sh.thDong.push({ pb, cc: sh.thCot.cc ? (chuan(gt(row.getCell(sh.thCot.cc).value)) || null) : null, nd: sh.thCot.nd ? (chuan(gt(row.getCell(sh.thCot.nd).value)) || null) : null, dv: chuan(gt(row.getCell(sh.thCot.dv).value)) }); }
     }
-    const khongGhep = sh.cot.filter((c) => !c.nguon && loai !== 'tong_hop').map((c) => c.ten);
-    if (khongGhep.length) out.ghiChu.push(`Sheet "${ws.name}": cột không có trong raw, để trống khi dựng: ${khongGhep.join(', ')}.`);
     out.sheets.push(sh);
   }
+  // Nhiều sheet cùng loại (bản cũ, "Copy of…", sheet ẩn): giữ sheet đang hiện, ưu tiên sheet có nhãn kỳ mới nhất / đứng sau cùng
+  const giu: SheetMau[] = [];
+  for (const loai of ['ve_may_bay', 'khach_san', 'tong_hop'] as const) {
+    const ds = out.sheets.filter((x) => x.loai === loai);
+    if (ds.length <= 1) { giu.push(...ds); continue; }
+    const hien = ds.filter((x) => !(x as any).an && !/^copy of/i.test(x.ten));
+    const chon = (hien.length ? hien : ds)[(hien.length ? hien : ds).length - 1];
+    giu.push(chon);
+    out.ghiChu.push(`Có ${ds.length} sheet loại ${loai === 'khach_san' ? 'khách sạn' : loai === 've_may_bay' ? 'vé máy bay' : 'tổng hợp'} (${ds.map((x) => `"${x.ten}"${(x as any).an ? ' (ẩn)' : ''}`).join(', ')}) — dùng "${chon.ten}" làm mẫu, các sheet còn lại bỏ khỏi bảng kê.`);
+  }
+  out.sheets = out.sheets.filter((x) => giu.includes(x));
+  for (const sh of out.sheets) {
+    // Cột giữ công thức nhưng công thức dùng tới cột sẽ để trống (không lấy từ raw) → bỏ công thức, tránh ra số sai
+    for (const c of sh.cot.filter((x) => x.nguon === '@cong_thuc' && x.congThuc)) {
+      const dung = [...c.congThuc!.matchAll(/\$?([A-Z]{1,3})\$?\d+/g)].map((m) => m[1]);
+      const trong = dung.filter((L) => { const k = sh.cot.find((x) => colLetter(x.so) === L); return !k || !k.nguon; });
+      if (trong.length) { c.nguon = ''; out.ghiChu.push(`Sheet "${sh.ten}": cột "${c.ten}" có công thức dùng cột ${[...new Set(trong)].join(', ')} không có trong raw — để trống (kế toán ghép cột nguồn nếu có).`); }
+    }
+    const khongGhep = sh.cot.filter((c) => !c.nguon && sh.loai !== 'tong_hop').map((c) => c.ten);
+    if (khongGhep.length) out.ghiChu.push(`Sheet "${sh.ten}": cột chưa ghép với raw (để trống khi dựng): ${khongGhep.join(', ')}.`);
+    const ct = sh.cot.filter((c) => c.nguon === '@cong_thuc').map((c) => c.ten);
+    if (ct.length) out.ghiChu.push(`Sheet "${sh.ten}": giữ công thức của mẫu ở các cột: ${ct.join(', ')}.`);
+  }
   return out;
+}
+
+function colLetter(n: number): string { let s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; }
+
+/** Dời số dòng trong công thức: hàm map nhận số dòng cũ, trả số dòng mới. */
+function dichCongThuc(f: string, map: (r: number) => number): string {
+  return f.replace(/(\$?[A-Z]{1,3}\$?)(\d+)/g, (_x, cot, r) => `${cot}${map(Number(r))}`);
 }
 
 function chepDong(src: ExcelJS.Row, dst: ExcelJS.Row, soCot: number, giaTri = true) {
@@ -120,11 +181,7 @@ export async function apDungMau(tplBuf: Buffer, ct: CauTrucMau, dong: DongRaw[],
     const merges: string[] = ((src as any).model?.merges ?? []) as string[];
     const rangeRows = (m: string) => { const nums = m.match(/\d+/g)!.map(Number); return [nums[0], nums[nums.length - 1]]; };
     const dichMerge = (m: string, delta: number) => m.replace(/([A-Z]+)(\d+)/g, (_x, c, r) => `${c}${Number(r) + delta}`);
-    if (!sh) { // sheet không nhận ra: chép nguyên
-      src.eachRow({ includeEmpty: true }, (row, r) => chepDong(row, ws.getRow(r), soCot));
-      merges.forEach((m) => { try { ws.mergeCells(m); } catch { /* bỏ qua */ } });
-      continue;
-    }
+    if (!sh) { out.removeWorksheet(ws.id); continue; }   // sheet cũ / không nhận ra: không đưa vào bảng kê
     // 1) Phần đầu (đến trước dòng dữ liệu đầu) chép nguyên, thay kỳ và tài khoản
     for (let r = 1; r < sh.hangDuLieuDau; r++) chepDong(src.getRow(r), ws.getRow(r), soCot);
     merges.filter((m) => rangeRows(m)[1] < sh.hangDuLieuDau).forEach((m) => { try { ws.mergeCells(m); } catch { /* bỏ qua */ } });
@@ -145,6 +202,7 @@ export async function apDungMau(tplBuf: Buffer, ct: CauTrucMau, dong: DongRaw[],
           let v: any = null;
           if (c.nguon === '#') v = i + 1;
           else if (c.nguon === '@trang_thai') { const k = `${sh.loai}:${String(d.v['Trạng thái'] ?? '').trim().toLowerCase()}`; v = ts.ten_trang_thai?.[k] ?? d.v['Trạng thái'] ?? null; }
+          else if (c.nguon === '@cong_thuc' && c.congThuc) { row.getCell(c.so).value = { formula: dichCongThuc(c.congThuc, (x) => (x === r0 ? r : x)) } as any; continue; }
           else if (c.nguon) { v = d.v[c.nguon] ?? null; if (v instanceof Date || /^Ngày/.test(c.nguon)) v = v ? chuoiNgay(v) : null; }
           row.getCell(c.so).value = v;
         }
@@ -178,13 +236,18 @@ export async function apDungMau(tplBuf: Buffer, ct: CauTrucMau, dong: DongRaw[],
     const datTong = (row: ExcelJS.Row) => { for (const so of Object.keys(tongCot).map(Number)) {
       const L = ws.getColumn(so).letter; row.getCell(so).value = { formula: cuoiMoi >= r0 ? `SUM(${L}${r0}:${L}${cuoiMoi})` : '0', result: giaTriTong(so) } as any; } };
     const batDauChan = sh.hangDuLieuCuoi + 1;
+    const mapDong = (x: number) => (x < r0 ? x : x <= sh.hangDuLieuCuoi ? (x === sh.hangDuLieuCuoi ? cuoiMoi : x === r0 ? r0 : Math.min(x, cuoiMoi)) : x + delta);
     for (let rr = batDauChan; rr <= sh.hangCuoi; rr++) {
       const dst = ws.getRow(rr + delta); chepDong(src.getRow(rr), dst, soCot);
+      // Công thức ở chân bảng (dòng tổng, đối chiếu…): giữ, dời tham chiếu theo số dòng mới
+      src.getRow(rr).eachCell({ includeEmpty: false }, (c, i) => { const v: any = c.value;
+        if (v && typeof v === 'object' && v.formula) dst.getCell(i).value = { formula: dichCongThuc(String(v.formula), mapDong) } as any;
+        else if (v && typeof v === 'object' && 'sharedFormula' in v) dst.getCell(i).value = null; });
       if (sh.hangTong.includes(rr)) { datTong(dst); const a = dst.getCell(1); if (a.value !== null && !isNaN(Number(a.value))) a.value = null; }
-      else dst.eachCell((c) => { const v: any = src.getRow(rr).getCell(c.col).value; if (v && typeof v === 'object' && ('formula' in v || 'sharedFormula' in v)) c.value = null; });
     }
     merges.filter((m) => rangeRows(m)[0] >= batDauChan).forEach((m) => { try { ws.mergeCells(dichMerge(m, delta)); } catch { /* bỏ qua */ } });
     for (const rr of sh.hangTongTren) datTong(ws.getRow(rr));
   }
+  out.calcProperties = { ...(out.calcProperties ?? {}), fullCalcOnLoad: true } as any;
   return Buffer.from(await out.xlsx.writeBuffer());
 }

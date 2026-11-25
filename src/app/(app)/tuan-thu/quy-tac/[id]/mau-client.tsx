@@ -19,12 +19,13 @@ export function HocMau({ maKhach }: { maKhach: string }) {
   );
 }
 
-export function GhepCot({ id, sheet, so, nguon, luaChon }: { id: string; sheet: string; so: number; nguon: string; luaChon: string[] }) {
+export function GhepCot({ id, sheet, so, nguon, luaChon, congThuc }: { id: string; sheet: string; so: number; nguon: string; luaChon: string[]; congThuc?: string }) {
   const [v, setV] = useState(nguon);
   return (
     <span className="inline-flex gap-1 items-start">
       <select className="field !py-1 text-[12px]" value={v} onChange={(e) => setV(e.target.value)}>
         <option value="">— Để trống —</option><option value="#">Số thứ tự</option><option value="@trang_thai">Trạng thái (tên hiển thị)</option>
+        {congThuc && <option value="@cong_thuc">Giữ công thức của mẫu (={congThuc})</option>}
         {luaChon.map((c) => <option key={c} value={c}>{c}</option>)}
       </select>
       {v !== nguon && <Nut chay={() => suaGhepCotMau(id, sheet, so, v)} nhan="Lưu" kieu="btn-primary" />}

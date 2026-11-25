@@ -117,7 +117,9 @@ async function xuLyDaFormat(lc: any, hd: any, ts: ThamSoHopDong, phien_ban: numb
   const sb = supabaseAdmin();
   if (!lc.bk_goc_path) throw new Error('Chưa có file bảng kê đã format.');
   const goc = await tai(lc.bk_goc_path);
-  const kq = await docBangKeDaFormat(goc);
+  // Mẫu đã duyệt của khách giúp đọc đúng các cột khác tên (VD "Tên dịch vụ", "Tiền thuế GTGT")
+  const { data: mauDs } = await sb.from('tt_mau_bang_ke').select('cau_truc').eq('ma_khach', hd.ma_khach).eq('trang_thai', 'hieu_luc').order('phien_ban', { ascending: false }).limit(1);
+  const kq = await docBangKeDaFormat(goc, ((mauDs ?? [])[0] as any)?.cau_truc ?? null);
   if (!kq.dong.length) throw new Error(`Không nhận ra giao dịch nào trong file (sheet không nhận ra: ${kq.khongNhanRa.join(', ') || 'không'}). Cần sheet chi tiết có dòng tiêu đề bắt đầu bằng "STT" và cột "Tên khách sạn" hoặc "Tên dịch vụ (Hành trình)".`);
   const tongGoc = tongHop(kq.dong);
   const canhBaoFile = kiemBangKeDaFormat(kq, ts);
