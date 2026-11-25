@@ -4,7 +4,10 @@ import { revalidatePath } from 'next/cache';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { writeAudit } from '@/lib/audit';
 import { sendMail } from '@/lib/google/gmail';
-import { batBuoc, BuocDuyet, duocLam, gopSau, nguoiTT, thamSoHieuLuc, BUCKET_TT, fmtVnd, dsDangChan } from '@/lib/tuan-thu/db';
+import { refSubject, tplBangKe } from '@/lib/email-templates';
+import { periodFull } from '@/lib/period';
+import { signedUrl } from '@/lib/storage';
+import { batBuoc, BuocDuyet, duocLam, gopSau, nguoiTT, thamSoHieuLuc, BUCKET_TT, dsDangChan } from '@/lib/tuan-thu/db';
 import { docDongLanChay, luuTep, xuLyLanChay } from '@/lib/tuan-thu/xu-ly';
 import { deXuatBuoc, textDeXuat } from '@/lib/tuan-thu/de-xuat';
 import { PhongBan, TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
@@ -172,34 +175,48 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
   });
 }
 
-export async function thongTinGui(lanId: string) {
+/**
+ * Thư gửi bảng kê — dùng đúng mẫu của WF1 (refSubject + tplBangKe), đính kèm file bảng kê.
+ * Phạm vi đợt lấy từ lịch gửi của nhóm Master Data (pham_vi_nhan) nếu có, không thì tính theo kỳ của lần chạy.
+ * Không truyền linkBangKe (xem trước) thì nút "Xem bảng kê" trỏ tạm về '#'.
+ */
+export async function thongTinGui(lanId: string, linkBangKe?: string) {
   const sb = supabaseAdmin();
   const { data: lc } = await sb.from('tt_lan_chay').select('*, tt_hop_dong(*, billing_groups(*))').eq('id', lanId).single();
   const hd: any = (lc as any)?.tt_hop_dong; const g: any = hd?.billing_groups;
   const to = g?.email_l1 ?? '';
   const cc = [g?.email_ke_toan, g?.email_cc, g?.email_pm, hd?.cc_them].filter((x) => x && String(x).includes('@')).join(',');
-  const th: any = lc?.tong_hop ?? {};
-  const subject = `[${hd?.ten_khach ?? ''}] Bảng kê dịch vụ ${th.nhan_ky ?? ''}`.trim();
-  const html = `<p>Kính gửi Quý khách hàng,</p>
-<p>Xperise (Công ty Cổ phần Universal Travel Solutions Network) gửi bảng kê dịch vụ ${th.nhan_ky ?? ''} theo hợp đồng số ${hd?.so_hop_dong ?? ''}.</p>
-<table cellpadding="6" style="border-collapse:collapse;border:1px solid #ddd;font-family:Arial;font-size:13px">
-<tr><td>Vé máy bay</td><td align="right">${fmtVnd(th.tong?.ve_may_bay)} đ</td></tr>
-<tr><td>Khách sạn</td><td align="right">${fmtVnd(th.tong?.khach_san)} đ</td></tr>
-<tr><td><b>Tổng cộng</b></td><td align="right"><b>${fmtVnd(th.tong_cong)} đ</b></td></tr></table>
-<p>Quý khách vui lòng kiểm tra và phản hồi trong vòng 10 ngày làm việc theo Điều 3.2 hợp đồng.</p>
-<p>Trân trọng,<br/>Xperise</p>`;
+  const [y, m] = String(lc?.thang ?? '').split('-');
+  const ky = `T${m}.${y}`;
+  let phamVi: string | null = null;
+  if (lc?.dot) {
+    if (g?.id) {
+      const { data: lich } = await sb.from('billing_schedules').select('pham_vi_nhan').eq('group_id', g.id).eq('dot', lc.dot).limit(1);
+      phamVi = (lich ?? [])[0]?.pham_vi_nhan ?? null;
+    }
+    if (!phamVi) {
+      const nk = String((lc?.tong_hop as any)?.nhan_ky ?? '').match(/(\d{2})\/(\d{2})\/\d{4}.*?(\d{2})\/(\d{2})\/\d{4}/);
+      phamVi = nk ? `Đợt ${lc.dot}: ${nk[1]}/${nk[2]}–${nk[3]}/${nk[4]}` : `Đợt ${lc.dot}`;
+    }
+  }
+  const tenNhom = g?.ten_nhom ?? hd?.ten_khach ?? '';
+  const subject = refSubject(tenNhom, periodFull(ky, phamVi, lc?.dot ?? undefined));
+  const html = tplBangKe(tenNhom, ky, linkBangKe ?? '#', phamVi, 1);
   return { lc, hd, g, to, cc, subject, html };
 }
 
 async function guiBangKe(lanId: string) {
   const sb = supabaseAdmin();
-  const { lc, to, cc, subject, html } = await thongTinGui(lanId);
-  if (!lc?.bang_ke_path) throw new Error('Chưa có file bảng kê.');
+  const { data: lc0 } = await sb.from('tt_lan_chay').select('bang_ke_path').eq('id', lanId).single();
+  if (!lc0?.bang_ke_path) throw new Error('Chưa có file bảng kê.');
+  const tenTep = lc0.bang_ke_path.split('/').pop()!;
+  const link = await signedUrl(lc0.bang_ke_path, tenTep);
+  const { to, cc, subject, html } = await thongTinGui(lanId, link);
   if (!to.includes('@')) throw new Error('Hợp đồng chưa gắn nhóm Master Data có email đầu mối khách (email_l1). Gắn ở trang Hợp đồng & quy tắc.');
-  const { data } = await sb.storage.from(BUCKET_TT).download(lc.bang_ke_path);
+  const { data } = await sb.storage.from(BUCKET_TT).download(lc0.bang_ke_path);
   if (!data) throw new Error('Không tải được file bảng kê.');
   const sent = await sendMail({ to, cc: cc || undefined, subject, html,
-    attachments: [{ filename: lc.bang_ke_path.split('/').pop()!, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', data: Buffer.from(await data.arrayBuffer()) }] });
+    attachments: [{ filename: tenTep, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', data: Buffer.from(await data.arrayBuffer()) }] });
   await sb.from('tt_lan_chay').update({ buoc: 'da_gui', gui_luc: new Date().toISOString(), gui_den: to, gui_cc: cc, thread_id: sent.threadId }).eq('id', lanId);
 }
 

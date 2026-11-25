@@ -211,7 +211,8 @@ export default async function Page({ params }: { params: { id: string } }) {
               <p className="label mb-1">Thư sẽ gửi</p>
               <div className="text-[12px]"><b>Từ:</b> cs@uts.network<br /><b>Đến:</b> {gui.to || <span className="text-red-600">chưa có email đầu mối</span>}<br />
                 <b>CC:</b> {gui.cc || '—'}<br /><b>Tiêu đề:</b> {gui.subject}<br /><b>Đính kèm:</b> {lc.bang_ke_path?.split('/').pop()}</div>
-              <div className="mail-body mt-2 text-[12px]" dangerouslySetInnerHTML={{ __html: gui.html }} />
+              <iframe title="Xem trước thư gửi khách" className="mt-2 w-full rounded-lg border border-[var(--line)]" style={{ height: 560, background: '#f5f5f5' }} sandbox="" srcDoc={gui.html} />
+              <p className="text-[11px] text-[var(--ink-3)] mt-1">Mẫu thư giống WF1; file bảng kê được đính kèm, nút Xem bảng kê dùng liên kết tải có thời hạn tạo lúc gửi.</p>
               {lc.buoc === 'da_gui' && <div className="callout callout-stable mt-2">Đã gửi lúc {new Date(lc.gui_luc).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}.</div>}
             </div>
           </div>
