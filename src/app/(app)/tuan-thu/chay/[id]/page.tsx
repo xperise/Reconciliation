@@ -4,6 +4,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { PageHeader } from '@/components/PageHeader';
 import { duocLam, fmtVnd, nguoiTT, nhanThang, TEN_BUOC } from '@/lib/tuan-thu/db';
 import { deXuatBuoc, DeXuat } from '@/lib/tuan-thu/de-xuat';
+import { laBuocCuoiDuyet } from '@/lib/tuan-thu/cau-hinh';
+import { docCauHinhQuyTrinh } from '@/lib/tuan-thu/cau-hinh-db';
 import { TEN_DICH_VU, TEN_MUC_DO, TEN_PHONG_BAN, PhongBan, LoaiDichVu } from '@/lib/tuan-thu/types';
 import { thongTinGui } from '../../actions';
 import { ChonBan, Duyet, GiaiTrinh, GoChan, KiemSoat, TaiLai, XacNhanMot, XacNhanTatCa } from './panels';
@@ -54,7 +56,8 @@ export default async function Page({ params }: { params: { id: string } }) {
   const th: any = lc.tong_hop ?? {};
   const daDuyet = (b: string) => dyVong.find((d) => d.buoc === b && d.quyet_dinh === 'duyet');
   const daFormat = lc.che_do === 'da_format';
-  const dx = (b: string) => deXuatBuoc(b, canhBao, thayDoi, dyVong, b === 'ceo' ? dangChanDs : [], { chuaChonBan: daFormat && !lc.ban_gui, banGui: lc.ban_gui });
+  const cauHinh = await docCauHinhQuyTrinh();
+  const dx = (b: string) => deXuatBuoc(b, canhBao, thayDoi, dyVong, laBuocCuoiDuyet(cauHinh, b) ? dangChanDs : [], { chuaChonBan: daFormat && !lc.ban_gui, banGui: lc.ban_gui }, cauHinh);
   const chuaXn = thayDoi.filter((t) => !t.xac_nhan).length;
   const suaKeToan = duocLam(n, 'ke_toan') && lc.buoc === 'cho_ke_toan';
   const gui = lc.buoc === 'cho_ceo' || lc.buoc === 'da_gui' ? await thongTinGui(lc.id) : null;

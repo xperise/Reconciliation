@@ -2,6 +2,8 @@
  * "Agent" đề xuất cho từng bước duyệt — bản đầu chạy bằng luật cố định (không gọi AI),
  * để mọi đề xuất đều giải thích được. Bước sau sẽ thêm agent AI chat theo skill của từng head.
  */
+import { CAU_HINH_MAC_DINH, coDuyet, laBuocCuoiDuyet, type QuyTrinhCauHinh } from './cau-hinh';
+
 export type DeXuat = { ket_luan: 'duyet' | 'tra_ve'; ly_do: string[]; luu_y: string[] };
 type CB = { id: number; ma_quy_tac: string; phong_ban: string; muc_do: string; noi_dung: string; giai_trinh: string | null; so_tien: number | null };
 type TD = { xac_nhan: boolean; ma_quy_tac: string; cot: string };
@@ -12,11 +14,16 @@ export const GOI_Y_AGENT = '[Gợi ý agent';
 const coGt = (c: CB) => !!c.giai_trinh?.trim() && !c.giai_trinh.startsWith(GOI_Y_AGENT);
 const canGiaiTrinh = (c: CB) => (c.muc_do === 'chan_gui' || c.muc_do === 'giai_trinh') && !coGt(c);
 
-export function deXuatBuoc(buoc: string, cb: CB[], td: TD[], dy: DY[], dangChan: { phong_ban: string; ly_do: string }[] = [], tuyChon: { chuaChonBan?: boolean; banGui?: string | null } = {}): DeXuat {
+export function deXuatBuoc(buoc: string, cb: CB[], td: TD[], dy: DY[], dangChan: { phong_ban: string; ly_do: string }[] = [], tuyChon: { chuaChonBan?: boolean; banGui?: string | null } = {}, cfg: QuyTrinhCauHinh = CAU_HINH_MAC_DINH): DeXuat {
   const ly_do: string[] = [], luu_y: string[] = [];
   const chuaXn = td.filter((t) => !t.xac_nhan).length;
 
-  if (buoc === 'ke_toan') {
+  // Loại bước suy ra từ cấu hình: bước duyệt đầu (kế toán), kiểm soát không duyệt (demand/supply), bước duyệt cuối (CEO)
+  const laKiemSoat = !coDuyet(cfg, buoc);
+  const laDau = !laKiemSoat && !laBuocCuoiDuyet(cfg, buoc);
+  const dauDuyet = cfg.roles.filter((r) => coDuyet(cfg, r.key) && !laBuocCuoiDuyet(cfg, r.key)).map((r) => r.key);
+
+  if (laDau) {
     if (tuyChon.chuaChonBan) ly_do.push('Chưa chọn bản gửi khách: bảng kê kế toán upload hay bản đã sửa theo quy tắc.');
     if (chuaXn && tuyChon.banGui !== 'goc') ly_do.push(`${chuaXn} ô app tự sửa chưa được kế toán xác nhận.`);
     if (tuyChon.banGui === 'goc' && td.length) luu_y.push(`Kế toán chọn gửi bản tự format: ${td.length} ô khác quy tắc vẫn giữ nguyên trong file gửi khách — các cảnh báo liên quan phải có giải trình.`);
@@ -27,7 +34,7 @@ export function deXuatBuoc(buoc: string, cb: CB[], td: TD[], dy: DY[], dangChan:
   }
 
   // Demand/Supply không duyệt: 'duyet' nghĩa là KHÔNG CẦN CHẶN, 'tra_ve' nghĩa là NÊN CHẶN / TRẢ VỀ
-  if (buoc === 'demand' || buoc === 'supply') {
+  if (laKiemSoat) {
     const cua = cb.filter((c) => c.phong_ban === buoc);
     const chan = cua.filter((c) => c.muc_do === 'chan_gui');
     const chanThieu = chan.filter((c) => !coGt(c));
@@ -41,8 +48,8 @@ export function deXuatBuoc(buoc: string, cb: CB[], td: TD[], dy: DY[], dangChan:
   }
 
   // CEO: kế toán đã duyệt; Demand/Supply không chặn; không còn chặn gửi thiếu giải trình
-  if (!dy.some((d) => d.buoc === 'ke_toan' && d.quyet_dinh === 'duyet')) ly_do.push('Kế toán chưa duyệt.');
-  for (const c of dangChan) ly_do.push(`${c.phong_ban === 'demand' ? 'Demand' : 'Supply'} đang chặn: ${c.ly_do}`);
+  if (!dy.some((d) => dauDuyet.includes(d.buoc) && d.quyet_dinh === 'duyet')) ly_do.push('Kế toán chưa duyệt.');
+  for (const c of dangChan) ly_do.push(`${c.phong_ban === 'demand' ? 'Demand' : c.phong_ban === 'supply' ? 'Supply' : c.phong_ban} đang chặn: ${c.ly_do}`);
   const chanThieu = cb.filter((c) => c.muc_do === 'chan_gui' && !coGt(c));
   if (chanThieu.length) ly_do.push(`${chanThieu.length} cảnh báo chặn gửi chưa có giải trình.`);
   if (tuyChon.chuaChonBan) ly_do.push('Kế toán chưa chọn bản gửi khách.');

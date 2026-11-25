@@ -4,7 +4,6 @@ import { PhongBan, ThamSoHopDong } from './types';
 
 export const BUCKET_TT = 'bang-ke';
 export type BuocDuyet = string; // mã role, lấy từ cấu hình
-export const BUOC_DUYET: BuocDuyet[] = ['ke_toan', 'demand', 'supply', 'ceo'];
 export const TEN_BUOC: Record<string, string> = {
   cho_ke_toan: 'Chờ kế toán', cho_scope: 'Chờ CEO duyệt', cho_ceo: 'Chờ CEO duyệt', da_gui: 'Đã gửi khách', huy: 'Đã hủy',
 };

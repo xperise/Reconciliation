@@ -3,12 +3,15 @@ import { pushNotify } from '@/lib/notify';
 import { sendMail } from '@/lib/google/gmail';
 import { fmtVnd, nhanThang } from './db';
 import { PhongBan, TEN_PHONG_BAN } from './types';
+import { laBuocCuoiDuyet } from './cau-hinh';
+import { docCauHinhQuyTrinh } from './cau-hinh-db';
 
 /**
  * Báo cho head của từng phòng ban (chuông + email nội bộ). Không bao giờ ném lỗi ra ngoài:
  * thông báo hỏng không được làm gãy luồng duyệt.
  */
 export async function baoChoPhongBan(lanId: string, pbs: PhongBan[], suKien: 'xu_ly' | 'cho_ceo' | 'chan' | 'go_chan', ghiChu?: string) {
+  const cauHinh = await docCauHinhQuyTrinh();
   try {
     const sb = supabaseAdmin();
     const { data: lc } = await sb.from('tt_lan_chay').select('thang, dot, tong_hop, tt_hop_dong(ma_khach)').eq('id', lanId).single();
@@ -23,7 +26,7 @@ export async function baoChoPhongBan(lanId: string, pbs: PhongBan[], suKien: 'xu
       const cua = (cb ?? []).filter((c: any) => c.phong_ban === pb && c.muc_do !== 'theo_doi');
       const chan = cua.filter((c: any) => c.muc_do === 'chan_gui').length;
       const tieuDe = suKien === 'xu_ly' ? `Bảng kê ${ky}: ${cua.length} cảnh báo thuộc ${TEN_PHONG_BAN[pb]}${chan ? ` (${chan} chặn gửi)` : ''}`
-        : suKien === 'cho_ceo' ? (pb === 'ceo' ? `Bảng kê ${ky} chờ CEO duyệt` : `Bảng kê ${ky} đã chuyển CEO — chặn ngay nếu cần`)
+        : suKien === 'cho_ceo' ? (laBuocCuoiDuyet(cauHinh, pb) ? `Bảng kê ${ky} chờ CEO duyệt` : `Bảng kê ${ky} đã chuyển CEO — chặn ngay nếu cần`)
         : suKien === 'chan' ? `Bảng kê ${ky} đang bị chặn` : `Bảng kê ${ky} đã gỡ chặn`;
       const noiDung = suKien === 'xu_ly'
         ? cua.slice(0, 5).map((c: any) => `• ${c.noi_dung}${c.so_tien != null ? ` (${fmtVnd(c.so_tien)}đ)` : ''}`).join('\n') + (cua.length ? '\nKhông cần duyệt; chỉ chặn hoặc trả về nếu cần kiểm soát.' : '')

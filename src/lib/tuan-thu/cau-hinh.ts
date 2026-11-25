@@ -146,3 +146,8 @@ export function vaiTroChiKiemSoat(c: QuyTrinhCauHinh): string[] {
 export function coQuyenKichHoat(c: QuyTrinhCauHinh, roleKey: string): boolean {
   return c.roles.some((r) => r.key === roleKey && r.kichHoat);
 }
+
+/** Role là bước duyệt cuối (bước gửi): có quyền duyệt và thao tác ở trạng thái chờ CEO. */
+export function laBuocCuoiDuyet(c: QuyTrinhCauHinh, roleKey: string): boolean {
+  return coDuyet(c, roleKey) && trangThaiDuocDuyet(c, roleKey).includes(TRANG_THAI_CHO.sau);
+}

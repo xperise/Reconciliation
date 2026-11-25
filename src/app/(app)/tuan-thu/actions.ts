@@ -158,9 +158,9 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
     ]);
     const chan = await dsDangChan(lanId);
     const dx = deXuatBuoc(buoc, (cb ?? []) as any, (td ?? []) as any, (dy ?? []) as any, chan,
-      { chuaChonBan: lc.che_do === 'da_format' && !lc.ban_gui, banGui: lc.ban_gui });
+      { chuaChonBan: lc.che_do === 'da_format' && !lc.ban_gui, banGui: lc.ban_gui }, cauHinh);
     // Điều kiện cứng: không duyệt được khi còn việc bắt buộc (chỉ cho phép ghi đè ở bước demand/supply bằng ý kiến)
-    if (quyetDinh === 'duyet' && dx.ket_luan === 'tra_ve' && (buoc === 'ke_toan' || buoc === 'ceo'))
+    if (quyetDinh === 'duyet' && dx.ket_luan === 'tra_ve' && coDuyet(cauHinh, buoc))
       throw new Error('Chưa đủ điều kiện duyệt: ' + dx.ly_do.join(' '));
     if (quyetDinh === 'duyet' && dx.ket_luan === 'tra_ve' && !yKien.trim())
       throw new Error('Duyệt khác đề xuất của agent phải ghi ý kiến.');
