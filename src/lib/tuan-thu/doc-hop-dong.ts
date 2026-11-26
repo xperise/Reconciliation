@@ -5,6 +5,7 @@ import { goiMoHinh } from './ai-provider';
 import { PhongBan, TEN_PHONG_BAN, ThamSoHopDong } from './types';
 import { docCauHinhQuyTrinh } from './cau-hinh-db';
 import { TO_CHUC_MAC_DINH_ID } from './to-chuc';
+import { themOrg } from './to-chuc';
 
 /**
  * Agent đọc hợp đồng mới upload (PDF hợp đồng + phụ lục):
@@ -180,12 +181,12 @@ VIẾT GỌN: ${gioiHan}`;
         can_cu: q.can_cu ?? null, cach_kiem: ['tu_dong', 'head_xem', 'gd2'].includes(q.cach_kiem) ? q.cach_kiem : 'head_xem',
         muc_do: ['chan_gui', 'giai_trinh', 'theo_doi'].includes(q.muc_do) ? q.muc_do : 'giai_trinh', du_lieu: q.du_lieu ?? null, chot: 'cho' };
     }));
-    if (rows.length) { const r = await sb.from('tt_quy_tac').insert(rows); if (r.error) throw new Error(r.error.message); }
+    if (rows.length) { const r = await sb.from('tt_quy_tac').insert(themOrg(rows, hd.org_id)); if (r.error) throw new Error(r.error.message); }
     const ts = { ...MAC_DINH, ...(chung.tham_so ?? {}), ma_khach: hd.ma_khach, so_hop_dong: hd.so_hop_dong };
     if (!Array.isArray(ts.dinh_muc_phong)) ts.dinh_muc_phong = [];
     if (!Array.isArray(ts.dia_ban_nhom_1_2)) ts.dia_ban_nhom_1_2 = [];
     const hieuLuc = hd.hieu_luc_tu ?? new Date().toISOString().slice(0, 7);
-    const r2 = await sb.from('tt_bo_quy_tac').insert({ hop_dong_id: hopDongId, phien_ban: 1, tham_so: ts, hieu_luc_tu: hieuLuc, ghi_chu: `Agent đọc hợp đồng ${hd.so_hop_dong} (${MODEL()}) — bản nháp chờ 4 head chốt` });
+    const r2 = await sb.from('tt_bo_quy_tac').insert(themOrg({ hop_dong_id: hopDongId, phien_ban: 1, tham_so: ts, hieu_luc_tu: hieuLuc, ghi_chu: `Agent đọc hợp đồng ${hd.so_hop_dong} (${MODEL()}) — bản nháp chờ 4 head chốt` }, hd.org_id));
     if (r2.error) throw new Error(r2.error.message);
     await sb.from('tt_hop_dong').update({ trang_thai: 'cho_chot', tom_tat_dieu_khoan: chung.tom_tat_dieu_khoan ?? null,
       cau_hoi_mo: chung.cau_hoi_mo ?? [], ...(chung.ngay_ky && !hd.ngay_ky ? { ngay_ky: chung.ngay_ky } : {}) }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', hopDongId);

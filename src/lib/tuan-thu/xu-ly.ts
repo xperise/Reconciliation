@@ -9,6 +9,7 @@ import { apDungMau, CauTrucMau } from './mau-bang-ke';
 import { taoBaoCao } from './bao-cao';
 import { DongRaw, LoaiDichVu, ThamSoHopDong } from './types';
 import { TO_CHUC_MAC_DINH_ID } from './to-chuc';
+import { themOrg } from './to-chuc';
 
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
@@ -72,21 +73,21 @@ export async function xuLyLanChay(lanChayId: string) {
   const bkBuf = m ? await apDungMau(await tai(m.path), m.cau_truc as CauTrucMau, dong, ts, nhanKy)
     : await taoBangKe({ ts, nhanKy, dong, danhMucPhongBan: danhMuc, tenSheet: hd.ten_sheet });
   await luuTep(`${goc}/${tenBk}`, bkBuf);
-  await sb.from('tt_tep_lan_chay').insert({ lan_chay_id: lc.id, vong: lc.vong, loai: 'bk_app', path: `${goc}/${tenBk}`, ten: m ? `${tenBk} (mẫu khách v${m.phien_ban})` : `${tenBk} (mẫu chuẩn)` });
+  await sb.from('tt_tep_lan_chay').insert(themOrg({ lan_chay_id: lc.id, vong: lc.vong, loai: 'bk_app', path: `${goc}/${tenBk}`, ten: m ? `${tenBk} (mẫu khách v${m.phien_ban})` : `${tenBk} (mẫu chuẩn)` }, lc.org_id));
   await luuTep(`${goc}/bao_cao_kiem_tra.xlsx`, await taoBaoCao({ nhanKy, dong, canhBao, thayDoi }));
 
   await sb.from('tt_canh_bao').delete().eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', lc.id);
   await sb.from('tt_thay_doi').delete().eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', lc.id);
   if (canhBao.length) {
-    const r = await sb.from('tt_canh_bao').insert(canhBao.map((c) => ({
+    const r = await sb.from('tt_canh_bao').insert(themOrg(canhBao.map((c) => ({
       lan_chay_id: lc.id, ma_quy_tac: c.ma_quy_tac, phong_ban: c.phong_ban, muc_do: c.muc_do, loai: c.loai ?? null,
-      dong: c.dong, noi_dung: c.noi_dung, so_tien: c.so_tien ?? null })));
+      dong: c.dong, noi_dung: c.noi_dung, so_tien: c.so_tien ?? null })), lc.org_id));
     if (r.error) throw new Error(r.error.message);
   }
   for (let i = 0; i < thayDoi.length; i += 500) {
-    const r = await sb.from('tt_thay_doi').insert(thayDoi.slice(i, i + 500).map((t) => ({
+    const r = await sb.from('tt_thay_doi').insert(themOrg(thayDoi.slice(i, i + 500).map((t) => ({
       lan_chay_id: lc.id, ma_quy_tac: t.ma_quy_tac, loai: t.loai, dong: t.dong, ma_giao_dich: t.ma_giao_dich,
-      cot: t.cot, truoc: t.truoc, sau: t.sau })));
+      cot: t.cot, truoc: t.truoc, sau: t.sau })), lc.org_id));
     if (r.error) throw new Error(r.error.message);
   }
   const th = tongHop(dong);
@@ -144,19 +145,19 @@ async function xuLyDaFormat(lc: any, hd: any, ts: ThamSoHopDong, phien_ban: numb
   const tenGoc = lc.bk_goc_ten || lc.bk_goc_path.split('/').pop();
   let bkSua: string | null = null;
   if (coSua) { bkSua = `${thuMuc}/da-sua/${tenAnToan(tenGoc)}`; await luuTep(bkSua, await taoBanDaSua(goc, kq, thayDoi, ts));
-    await sb.from('tt_tep_lan_chay').insert({ lan_chay_id: lc.id, vong: lc.vong, loai: 'bk_sua', path: bkSua, ten: `${tenGoc} (bản đã sửa theo quy tắc)` }); }
+    await sb.from('tt_tep_lan_chay').insert(themOrg({ lan_chay_id: lc.id, vong: lc.vong, loai: 'bk_sua', path: bkSua, ten: `${tenGoc} (bản đã sửa theo quy tắc)` }, lc.org_id)); }
   await luuTep(`${thuMuc}/bao_cao_kiem_tra.xlsx`, await taoBaoCao({ nhanKy, dong: kq.dong, canhBao, thayDoi }));
 
   await sb.from('tt_canh_bao').delete().eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', lc.id);
   await sb.from('tt_thay_doi').delete().eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', lc.id);
   if (canhBao.length) {
-    const r = await sb.from('tt_canh_bao').insert(canhBao.map((c) => ({ lan_chay_id: lc.id, ma_quy_tac: c.ma_quy_tac, phong_ban: c.phong_ban, muc_do: c.muc_do,
-      loai: c.loai ?? null, dong: c.dong, noi_dung: c.noi_dung, so_tien: c.so_tien ?? null })));
+    const r = await sb.from('tt_canh_bao').insert(themOrg(canhBao.map((c) => ({ lan_chay_id: lc.id, ma_quy_tac: c.ma_quy_tac, phong_ban: c.phong_ban, muc_do: c.muc_do,
+      loai: c.loai ?? null, dong: c.dong, noi_dung: c.noi_dung, so_tien: c.so_tien ?? null })), lc.org_id));
     if (r.error) throw new Error(r.error.message);
   }
   for (let i = 0; i < thayDoi.length; i += 500) {
-    const r = await sb.from('tt_thay_doi').insert(thayDoi.slice(i, i + 500).map((t) => ({ lan_chay_id: lc.id, ma_quy_tac: t.ma_quy_tac, loai: t.loai, dong: t.dong,
-      ma_giao_dich: t.ma_giao_dich, cot: t.cot, truoc: t.truoc, sau: t.sau })));
+    const r = await sb.from('tt_thay_doi').insert(themOrg(thayDoi.slice(i, i + 500).map((t) => ({ lan_chay_id: lc.id, ma_quy_tac: t.ma_quy_tac, loai: t.loai, dong: t.dong,
+      ma_giao_dich: t.ma_giao_dich, cot: t.cot, truoc: t.truoc, sau: t.sau })), lc.org_id));
     if (r.error) throw new Error(r.error.message);
   }
   const th = tongHop(kq.dong);
