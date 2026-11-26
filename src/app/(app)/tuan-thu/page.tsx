@@ -5,17 +5,17 @@ import { fmtVnd, nhanThang, TEN_BUOC } from '@/lib/tuan-thu/db';
 import { TaoLanChay } from './tao-lan-chay';
 import { xoaLanChay } from './actions';
 import { XoaNut } from './xoa-nut';
-import { TO_CHUC_MAC_DINH_ID } from '@/lib/tuan-thu/to-chuc';
+import { toChucHienTai } from '@/lib/tuan-thu/to-chuc-server';
 
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {
   const sb = supabaseAdmin();
   const [{ data: hd }, { data: ds }, { data: chan }] = await Promise.all([
-    sb.from('tt_hop_dong').select('id, ma_khach, ten_khach, so_hop_dong, trang_thai').eq('org_id', TO_CHUC_MAC_DINH_ID).order('ma_khach'),
-    sb.from('tt_lan_chay').select('*, tt_hop_dong(ma_khach)').eq('org_id', TO_CHUC_MAC_DINH_ID)
+    sb.from('tt_hop_dong').select('id, ma_khach, ten_khach, so_hop_dong, trang_thai').eq('org_id', await toChucHienTai()).order('ma_khach'),
+    sb.from('tt_lan_chay').select('*, tt_hop_dong(ma_khach)').eq('org_id', await toChucHienTai())
       .order('created_at', { ascending: false }).limit(100),
-    sb.from('tt_chan').select('lan_chay_id').eq('org_id', TO_CHUC_MAC_DINH_ID).is('go_luc', null),
+    sb.from('tt_chan').select('lan_chay_id').eq('org_id', await toChucHienTai()).is('go_luc', null),
   ]);
   const biChan = new Set(((chan ?? []) as any[]).map((c) => c.lan_chay_id));
   return (

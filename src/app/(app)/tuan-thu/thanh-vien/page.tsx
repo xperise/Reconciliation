@@ -2,7 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { PageHeader } from '@/components/PageHeader';
 import { nguoiTT } from '@/lib/tuan-thu/db';
 import { ChonPhongBan } from './client';
-import { TO_CHUC_MAC_DINH_ID } from '@/lib/tuan-thu/to-chuc';
+import { toChucHienTai } from '@/lib/tuan-thu/to-chuc-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +12,7 @@ export default async function Page() {
   const sb = supabaseAdmin();
   const [{ data: users }, { data: tv }] = await Promise.all([
     sb.from('profiles').select('id, email, full_name, role, is_active').eq('is_active', true).order('email'),
-    sb.from('tt_thanh_vien').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID),
+    sb.from('tt_thanh_vien').select('*').eq('org_id', await toChucHienTai()),
   ]);
   const pb = new Map((tv ?? []).map((x: any) => [x.user_id, x.phong_ban]));
   return (

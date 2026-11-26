@@ -5,7 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { PageHeader } from '@/components/PageHeader';
 import { nguoiTT } from '@/lib/tuan-thu/db';
 import { PhongBan, TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
-import { TO_CHUC_MAC_DINH_ID } from '@/lib/tuan-thu/to-chuc';
+import { toChucHienTai } from '@/lib/tuan-thu/to-chuc-server';
 
 export const dynamic = 'force-dynamic';
 const PB: PhongBan[] = ['ke_toan', 'demand', 'supply', 'ceo'];
@@ -16,10 +16,10 @@ export default async function Page() {
   const n = (await nguoiTT())!;
   const sb = supabaseAdmin();
   const [{ data: hds }, { data: qt }, { data: bo }, { data: sd }] = await Promise.all([
-    sb.from('tt_hop_dong').select('id, ma_khach, ten_khach, so_hop_dong, ngay_ky, trang_thai, hieu_luc_tu, billing_groups(ten_nhom)').eq('org_id', TO_CHUC_MAC_DINH_ID).order('ma_khach').order('created_at', { ascending: false }),
-    sb.from('tt_quy_tac').select('hop_dong_id, phong_ban, chot').eq('org_id', TO_CHUC_MAC_DINH_ID),
-    sb.from('tt_bo_quy_tac').select('hop_dong_id, phien_ban').eq('org_id', TO_CHUC_MAC_DINH_ID),
-    sb.from('tt_sua_doi').select('hop_dong_id, trang_thai').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('trang_thai', 'cho_duyet'),
+    sb.from('tt_hop_dong').select('id, ma_khach, ten_khach, so_hop_dong, ngay_ky, trang_thai, hieu_luc_tu, billing_groups(ten_nhom)').eq('org_id', await toChucHienTai()).order('ma_khach').order('created_at', { ascending: false }),
+    sb.from('tt_quy_tac').select('hop_dong_id, phong_ban, chot').eq('org_id', await toChucHienTai()),
+    sb.from('tt_bo_quy_tac').select('hop_dong_id, phien_ban').eq('org_id', await toChucHienTai()),
+    sb.from('tt_sua_doi').select('hop_dong_id, trang_thai').eq('org_id', await toChucHienTai()).eq('trang_thai', 'cho_duyet'),
   ]);
   const ds = (hds ?? []) as any[];
   const dem = (id: string, pb: PhongBan) => { const x = ((qt ?? []) as any[]).filter((q) => q.hop_dong_id === id && q.phong_ban === pb); return { da: x.filter((q) => q.chot === 'dong_y').length, tong: x.length }; };

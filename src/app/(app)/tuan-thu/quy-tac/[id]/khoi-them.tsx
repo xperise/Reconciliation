@@ -5,7 +5,7 @@ import { COT_RAW, CauTrucMau } from '@/lib/tuan-thu/mau-bang-ke';
 import { DuyetSuaDoi, FormDeXuat } from '../../sua-doi/client';
 import { PhanTichSuaDoi, VanBan } from '../../agent-ui';
 import { DuyetMau, GhepCot, HocMau } from './mau-client';
-import { TO_CHUC_MAC_DINH_ID } from '@/lib/tuan-thu/to-chuc';
+import { toChucHienTai } from '@/lib/tuan-thu/to-chuc-server';
 
 const PB: PhongBan[] = ['ke_toan', 'supply', 'demand', 'ceo'];
 const TT: Record<string, [string, string]> = { cho_duyet: ['Chờ duyệt', 'pill-watch'], hieu_luc: ['Có hiệu lực', 'pill-stable'], tu_choi: ['Từ chối', 'pill-critical'] };
@@ -14,7 +14,7 @@ const tep = (p: string) => `/api/tuan-thu/tep?path=${encodeURIComponent(p)}`;
 
 /** Mẫu bảng kê riêng của khách: học từ bảng kê mẫu → kế toán xem ghép cột → duyệt → lần chạy từ raw dựng đúng mẫu. */
 export async function KhoiMau({ hd, n }: { hd: any; n: NguoiTT }) {
-  const { data, error } = await supabaseAdmin().from('tt_mau_bang_ke').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('ma_khach', hd.ma_khach).order('phien_ban', { ascending: false });
+  const { data, error } = await supabaseAdmin().from('tt_mau_bang_ke').select('*').eq('org_id', await toChucHienTai()).eq('ma_khach', hd.ma_khach).order('phien_ban', { ascending: false });
   const ds = (data ?? []) as any[];
   const ke = duocLam(n, 'ke_toan');
   return (
@@ -54,9 +54,9 @@ export async function KhoiMau({ hd, n }: { hd: any; n: NguoiTT }) {
 export async function KhoiSuaDoi({ hd, n, maChon }: { hd: any; n: NguoiTT; maChon?: string }) {
   const sb = supabaseAdmin();
   const [{ data: qts }, { data: sds }, { data: aiKq }] = await Promise.all([
-    sb.from('tt_quy_tac').select('hop_dong_id, ma, noi_dung, gia_tri, phong_ban').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('hop_dong_id', hd.id).order('ma'),
-    sb.from('tt_sua_doi').select('*, tt_sua_doi_duyet(*)').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('hop_dong_id', hd.id).order('created_at', { ascending: false }),
-    sb.from('tt_ai_ket_qua').select('sua_doi_id, phong_ban, noi_dung, luc').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('loai', 'tac_dong').order('luc', { ascending: false }),
+    sb.from('tt_quy_tac').select('hop_dong_id, ma, noi_dung, gia_tri, phong_ban').eq('org_id', await toChucHienTai()).eq('hop_dong_id', hd.id).order('ma'),
+    sb.from('tt_sua_doi').select('*, tt_sua_doi_duyet(*)').eq('org_id', await toChucHienTai()).eq('hop_dong_id', hd.id).order('created_at', { ascending: false }),
+    sb.from('tt_ai_ket_qua').select('sua_doi_id, phong_ban, noi_dung, luc').eq('org_id', await toChucHienTai()).eq('loai', 'tac_dong').order('luc', { ascending: false }),
   ]);
   const tacDong = (id: string, pb: string) => ((aiKq ?? []) as any[]).find((k) => k.sua_doi_id === id && k.phong_ban === pb)?.noi_dung ?? null;
   if (hd.trang_thai && hd.trang_thai !== 'hieu_luc') return null;
