@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { ChotQuyTac, ChotTatCa, DocLai, KichHoat, SuaHopDong, SuaThamSo } from '../client';
 import { VanBan } from '../../agent-ui';
 import { KhoiMau, KhoiSuaDoi } from './khoi-them';
+import { TO_CHUC_MAC_DINH_ID } from '@/lib/tuan-thu/to-chuc';
 
 export const dynamic = 'force-dynamic';
 const CACH: Record<string, string> = { tu_dong: 'Tự động', head_xem: 'Head xem', gd2: 'Giai đoạn 2' };
@@ -28,7 +29,7 @@ export default async function Page({ params, searchParams }: { params: { id: str
   const sb = supabaseAdmin();
   const n = (await nguoiTT())!;
   const [{ data: hds }, { data: nhom }] = await Promise.all([
-    sb.from('tt_hop_dong').select('*, billing_groups(ten_nhom, email_l1)').eq('id', params.id),
+    sb.from('tt_hop_dong').select('*, billing_groups(ten_nhom, email_l1)').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', params.id),
     sb.from('billing_groups').select('id, ten_nhom, ma_he_thong').order('ten_nhom'),
   ]);
   const nhomDs = (nhom ?? []).map((g: any) => ({ id: g.id, ten: `${g.ten_nhom} (${g.ma_he_thong})` }));
@@ -49,8 +50,8 @@ export default async function Page({ params, searchParams }: { params: { id: str
 async function KhoiHopDong({ hd, n, nhomDs }: { hd: any; n: NguoiTT; nhomDs: { id: string; ten: string }[] }) {
   const sb = supabaseAdmin();
         const [{ data: qt }, { data: bo }] = await Promise.all([
-          sb.from('tt_quy_tac').select('*').eq('hop_dong_id', hd.id).order('ma'),
-          sb.from('tt_bo_quy_tac').select('*').eq('hop_dong_id', hd.id).order('phien_ban', { ascending: false }),
+          sb.from('tt_quy_tac').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('hop_dong_id', hd.id).order('ma'),
+          sb.from('tt_bo_quy_tac').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('hop_dong_id', hd.id).order('phien_ban', { ascending: false }),
         ]);
         const hienHanh = (bo ?? [])[0];
         const theoPb = (['ke_toan', 'demand', 'supply', 'ceo'] as PhongBan[]).map((pb) => ({ pb, ds: (qt ?? []).filter((q: any) => q.phong_ban === pb) }));

@@ -10,6 +10,7 @@ import { TEN_DICH_VU, TEN_MUC_DO, TEN_PHONG_BAN, PhongBan, LoaiDichVu } from '@/
 import { thongTinGui } from '../../actions';
 import { ChonBan, Duyet, GiaiTrinh, GoChan, KiemSoat, TaiLai, XacNhanMot, XacNhanTatCa } from './panels';
 import { GoiYGiaiTrinh, RaSoat } from '../../agent-ui';
+import { TO_CHUC_MAC_DINH_ID } from '@/lib/tuan-thu/to-chuc';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,24 +30,24 @@ function KhungDeXuat({ dx, kiemSoat }: { dx: DeXuat; kiemSoat?: boolean }) {
 export default async function Page({ params }: { params: { id: string } }) {
   const sb = supabaseAdmin();
   const n = (await nguoiTT())!;
-  const { data: lc } = await sb.from('tt_lan_chay').select('*, tt_hop_dong(*)').eq('id', params.id).maybeSingle();
+  const { data: lc } = await sb.from('tt_lan_chay').select('*, tt_hop_dong(*)').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', params.id).maybeSingle();
   if (!lc) notFound();
   const [{ data: cb }, { data: td }, { data: dyAll }] = await Promise.all([
-    sb.from('tt_canh_bao').select('*').eq('lan_chay_id', lc.id).order('id'),
-    sb.from('tt_thay_doi').select('*').eq('lan_chay_id', lc.id).order('id').limit(5000),
-    sb.from('tt_duyet').select('*').eq('lan_chay_id', lc.id).order('luc', { ascending: false }),
+    sb.from('tt_canh_bao').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', lc.id).order('id'),
+    sb.from('tt_thay_doi').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', lc.id).order('id').limit(5000),
+    sb.from('tt_duyet').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', lc.id).order('luc', { ascending: false }),
   ]);
   const canhBao = (cb ?? []) as any[], thayDoi = (td ?? []) as any[], dy = ((dyAll ?? []) as any[]);
   // Agent AI (SQL 39): kết quả rà soát mới nhất của vòng hiện tại + lịch sử chat của người đang xem
   const pbs = (['ke_toan', 'demand', 'supply', 'ceo'] as PhongBan[]).filter((p) => duocLam(n, p));
   const [{ data: aiKq }, { data: suaTay }] = await Promise.all([
-    sb.from('tt_ai_ket_qua').select('phong_ban, noi_dung, luc, skill_phien_ban, vong').eq('lan_chay_id', params.id).eq('loai', 'ra_soat').order('luc', { ascending: false }),
-    sb.from('tt_sua_tay').select('*').eq('lan_chay_id', params.id).order('id'),
+    sb.from('tt_ai_ket_qua').select('phong_ban, noi_dung, luc, skill_phien_ban, vong').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', params.id).eq('loai', 'ra_soat').order('luc', { ascending: false }),
+    sb.from('tt_sua_tay').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', params.id).order('id'),
   ]);
-  const { data: chanAll } = await sb.from('tt_chan').select('*').eq('lan_chay_id', params.id).order('luc', { ascending: false });
+  const { data: chanAll } = await sb.from('tt_chan').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', params.id).order('luc', { ascending: false });
   const [{ data: lichSuTep }, { data: mauDung }] = await Promise.all([
-    sb.from('tt_tep_lan_chay').select('*').eq('lan_chay_id', params.id).order('luc', { ascending: false }),
-    lc.mau_id ? sb.from('tt_mau_bang_ke').select('phien_ban, ten_tep').eq('id', lc.mau_id).maybeSingle() : Promise.resolve({ data: null } as any),
+    sb.from('tt_tep_lan_chay').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', params.id).order('luc', { ascending: false }),
+    lc.mau_id ? sb.from('tt_mau_bang_ke').select('phien_ban, ten_tep').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', lc.mau_id).maybeSingle() : Promise.resolve({ data: null } as any),
   ]);
   const chanDs = (chanAll ?? []) as any[], dangChanDs = chanDs.filter((c) => !c.go_luc);
   const raSoat = (b: string) => ((aiKq ?? []) as any[]).find((k) => k.phong_ban === b && k.vong === lc.vong) ?? null;

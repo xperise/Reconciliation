@@ -3,6 +3,7 @@ import { currentUser } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { Shell } from './shell';
 import { tabAccess } from '@/lib/access';
+import { TO_CHUC_MAC_DINH_ID } from '@/lib/tuan-thu/to-chuc';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     sb.from('notifications').select('*')
       .order('created_at', { ascending: false }).limit(30),
     // Phần Tuân thủ bảng kê (SQL 38). Chưa chạy SQL thì bảng chưa có → coi như không có quyền.
-    sb.from('tt_thanh_vien').select('user_id').eq('user_id', user.id).maybeSingle(),
+    sb.from('tt_thanh_vien').select('user_id').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('user_id', user.id).maybeSingle(),
   ]);
   const tuanThu = user.role === 'admin' || (!ttTv.error && !!ttTv.data);
 

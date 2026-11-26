@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { PageHeader } from '@/components/PageHeader';
 import { nguoiTT } from '@/lib/tuan-thu/db';
+import { TO_CHUC_MAC_DINH_ID } from '@/lib/tuan-thu/to-chuc';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,17 +11,17 @@ type Buoc = { ten: string; vai: string; lam: string; kq: string; link: string; x
 export default async function Page() {
   await nguoiTT();
   const sb = supabaseAdmin();
-  const { data: hdDs } = await sb.from('tt_hop_dong').select('id, group_id').eq('ma_khach', 'VCB').order('created_at').limit(1);
+  const { data: hdDs } = await sb.from('tt_hop_dong').select('id, group_id').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('ma_khach', 'VCB').order('created_at').limit(1);
   const hd = (hdDs ?? [])[0] as any;
   const hdId = hd?.id ?? '00000000-0000-0000-0000-000000000000';
   const [{ data: tv }, { data: qt }, { data: runs }, { data: sd }, { data: sk }, { data: ai }, { data: chan }] = await Promise.all([
-    sb.from('tt_thanh_vien').select('phong_ban'),
-    sb.from('tt_quy_tac').select('phong_ban, chot').eq('hop_dong_id', hdId),
-    sb.from('tt_lan_chay').select('*').eq('hop_dong_id', hdId),
-    sb.from('tt_sua_doi').select('ma_quy_tac, trang_thai').eq('hop_dong_id', hdId),
-    sb.from('tt_skill').select('phong_ban, phien_ban, ly_do'),
-    sb.from('tt_ai_ket_qua').select('loai').limit(200),
-    sb.from('tt_chan').select('go_luc').limit(200),
+    sb.from('tt_thanh_vien').select('phong_ban').eq('org_id', TO_CHUC_MAC_DINH_ID),
+    sb.from('tt_quy_tac').select('phong_ban, chot').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('hop_dong_id', hdId),
+    sb.from('tt_lan_chay').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('hop_dong_id', hdId),
+    sb.from('tt_sua_doi').select('ma_quy_tac, trang_thai').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('hop_dong_id', hdId),
+    sb.from('tt_skill').select('phong_ban, phien_ban, ly_do').eq('org_id', TO_CHUC_MAC_DINH_ID),
+    sb.from('tt_ai_ket_qua').select('loai').eq('org_id', TO_CHUC_MAC_DINH_ID).limit(200),
+    sb.from('tt_chan').select('go_luc').eq('org_id', TO_CHUC_MAC_DINH_ID).limit(200),
   ]);
   const coTv = (p: string) => (tv ?? []).some((x: any) => x.phong_ban === p);
   const chot = (p: string) => { const ds = (qt ?? []).filter((q: any) => q.phong_ban === p); return ds.length > 0 && ds.every((q: any) => q.chot === 'dong_y'); };

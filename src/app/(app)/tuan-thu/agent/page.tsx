@@ -4,6 +4,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { duocLam, nguoiTT } from '@/lib/tuan-thu/db';
 import { PhongBan, TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
 import { GoiYSkill, KiemTraClaude, SuaSkill } from '../agent-ui';
+import { TO_CHUC_MAC_DINH_ID } from '@/lib/tuan-thu/to-chuc';
 
 export const dynamic = 'force-dynamic';
 const PB: PhongBan[] = ['ke_toan', 'demand', 'supply', 'ceo'];
@@ -14,9 +15,9 @@ export default async function Page({ searchParams }: { searchParams: { pb?: stri
   const pb = (choPhep.includes(searchParams.pb as PhongBan) ? searchParams.pb : n.phong_ban ?? choPhep[0]) as PhongBan;
   const sb = supabaseAdmin();
   const [{ data: sk, error }, { data: gy }, { data: dung }] = await Promise.all([
-    sb.from('tt_skill').select('*').eq('phong_ban', pb).order('phien_ban', { ascending: false }),
-    sb.from('tt_skill_goi_y').select('*').eq('phong_ban', pb).eq('trang_thai', 'cho').order('luc', { ascending: false }),
-    sb.from('tt_duyet').select('skill_phien_ban').eq('buoc', pb),
+    sb.from('tt_skill').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('phong_ban', pb).order('phien_ban', { ascending: false }),
+    sb.from('tt_skill_goi_y').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('phong_ban', pb).eq('trang_thai', 'cho').order('luc', { ascending: false }),
+    sb.from('tt_duyet').select('skill_phien_ban').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('buoc', pb),
   ]);
   if (error) return <div className="callout callout-high">Chưa chạy <code>supabase/migrations/39_tuan_thu_agent.sql</code> — chưa có bảng skill.</div>;
   const hienHanh = (sk ?? [])[0] as any;
