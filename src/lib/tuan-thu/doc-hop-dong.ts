@@ -4,7 +4,6 @@ import { MODEL, skillHienHanh } from './agent';
 import { goiMoHinh } from './ai-provider';
 import { PhongBan, TEN_PHONG_BAN, ThamSoHopDong } from './types';
 import { docCauHinhQuyTrinh } from './cau-hinh-db';
-import { TO_CHUC_MAC_DINH_ID } from './to-chuc';
 import { themOrg } from './to-chuc';
 
 /**
@@ -120,10 +119,10 @@ const MAC_DINH: Partial<ThamSoHopDong> = {
 
 export async function docHopDong(hopDongId: string) {
   const sb = supabaseAdmin();
-  const { data: hd } = await sb.from('tt_hop_dong').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', hopDongId).single();
+  const { data: hd } = await sb.from('tt_hop_dong').select('*').eq('id', hopDongId).single();
   if (!hd) throw new Error('Không tìm thấy hợp đồng.');
   if (hd.trang_thai === 'hieu_luc') throw new Error('Hợp đồng đã kích hoạt; muốn đổi quy tắc hãy dùng luồng sửa đổi.');
-  await sb.from('tt_hop_dong').update({ trang_thai: 'dang_doc', loi_doc: null }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', hopDongId);
+  await sb.from('tt_hop_dong').update({ trang_thai: 'dang_doc', loi_doc: null }).eq('id', hopDongId);
   try {
     const teps = (hd.tep_hop_dong ?? []) as { path: string; ten: string }[];
     if (!teps.length) throw new Error('Chưa có file hợp đồng.');
@@ -135,8 +134,8 @@ export async function docHopDong(hopDongId: string) {
     }
 
     // Cấu trúc quy tắc mẫu (từ hợp đồng đã kích hoạt gần nhất) để mã quy tắc thống nhất giữa các khách
-    const { data: mau } = await sb.from('tt_hop_dong').select('id').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('trang_thai', 'hieu_luc').order('created_at').limit(1);
-    const { data: qtMau } = mau?.length ? await sb.from('tt_quy_tac').select('ma, phong_ban, nhom, noi_dung, cach_kiem, muc_do').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('hop_dong_id', mau[0].id).order('ma') : { data: [] as any[] };
+    const { data: mau } = await sb.from('tt_hop_dong').select('id').eq('org_id', hd.org_id).eq('trang_thai', 'hieu_luc').order('created_at').limit(1);
+    const { data: qtMau } = mau?.length ? await sb.from('tt_quy_tac').select('ma, phong_ban, nhom, noi_dung, cach_kiem, muc_do').eq('hop_dong_id', mau[0].id).order('ma') : { data: [] as any[] };
 
     const sysChung = `Bạn là agent pháp chế - vận hành của Xperise (Công ty Cổ phần Universal Travel Solutions Network). Đọc hợp đồng khách hàng để hệ thống kiểm bảng kê gửi khách tuân thủ đúng hợp đồng. Chỉ dựa trên văn bản; không suy đoán. Trả lời tiếng Việt.`;
     const yeuCauTomTat = `Đọc toàn bộ hợp đồng và phụ lục đính kèm. Viết TÓM TẮT ĐIỀU KHOẢN đầy đủ theo từng điều và phụ lục để làm văn bản tham chiếu: các bên (tên, MST, địa chỉ, tài khoản nhận tiền); phạm vi dịch vụ; giá, phí, chiết khấu; hạn mức; kỳ và hạn gửi bảng kê, hồ sơ thanh toán; thời hạn phản hồi và thanh toán; tạm ứng; định mức / chính sách chi của khách nếu có (ghi đủ con số); phạt, chấm dứt, khiếu nại; SLA; điều khoản sửa đổi. Giữ nguyên con số, ghi rõ số điều. Chỉ trả về văn bản tóm tắt.`;
@@ -149,7 +148,7 @@ export async function docHopDong(hopDongId: string) {
     const PBS: PhongBan[] = cauHinh.roles.map((r) => r.key);
     for (const pb of PBS) {
       tasks.push((async () => {
-        const sk = await skillHienHanh(pb);
+        const sk = await skillHienHanh(pb, hd.org_id);
         const mauPb = (qtMau ?? []).filter((q: any) => q.phong_ban === pb).map((q: any) => `${q.ma} [${q.nhom}] ${q.noi_dung} (${q.cach_kiem}, ${q.muc_do})`).join('\n');
         const sys = `${sk.noi_dung}\n\nBạn đang đọc hợp đồng của một khách mới để lập bộ quy tắc kiểm bảng kê trong scope ${(cauHinh.roles.find((r) => r.key === pb)?.ten ?? pb)}. Chỉ dựa trên văn bản hợp đồng; điều hợp đồng không quy định thì ghi rõ "Hợp đồng không quy định" và nêu cách hiểu an toàn. Trả lời tiếng Việt.`;
         const yeuCau = (gioiHan: string) => `Rút các quy tắc thuộc scope ${(cauHinh.roles.find((r) => r.key === pb)?.ten ?? pb)} để kiểm bảng kê và hồ sơ thanh toán của khách này, rồi gọi công cụ ghi_quy_tac.
@@ -172,8 +171,8 @@ VIẾT GỌN: ${gioiHan}`;
     const chung = { ...(thamSoKq ?? {}), tom_tat_dieu_khoan: tomTat };
 
     // Ghi bản nháp (xóa bản nháp cũ nếu đọc lại)
-    await sb.from('tt_quy_tac').delete().eq('org_id', TO_CHUC_MAC_DINH_ID).eq('hop_dong_id', hopDongId);
-    await sb.from('tt_bo_quy_tac').delete().eq('org_id', TO_CHUC_MAC_DINH_ID).eq('hop_dong_id', hopDongId);
+    await sb.from('tt_quy_tac').delete().eq('hop_dong_id', hopDongId);
+    await sb.from('tt_bo_quy_tac').delete().eq('hop_dong_id', hopDongId);
     const daCo = new Set<string>();
     const rows = (theoPb as { pb: PhongBan; ds: any[] }[]).flatMap(({ pb, ds }) => ds.filter((q) => q?.ma && q?.noi_dung).map((q) => {
       let ma = String(q.ma).trim().toUpperCase(); while (daCo.has(ma)) ma = `${ma}B`; daCo.add(ma);
@@ -189,10 +188,10 @@ VIẾT GỌN: ${gioiHan}`;
     const r2 = await sb.from('tt_bo_quy_tac').insert(themOrg({ hop_dong_id: hopDongId, phien_ban: 1, tham_so: ts, hieu_luc_tu: hieuLuc, ghi_chu: `Agent đọc hợp đồng ${hd.so_hop_dong} (${MODEL()}) — bản nháp chờ 4 head chốt` }, hd.org_id));
     if (r2.error) throw new Error(r2.error.message);
     await sb.from('tt_hop_dong').update({ trang_thai: 'cho_chot', tom_tat_dieu_khoan: chung.tom_tat_dieu_khoan ?? null,
-      cau_hoi_mo: chung.cau_hoi_mo ?? [], ...(chung.ngay_ky && !hd.ngay_ky ? { ngay_ky: chung.ngay_ky } : {}) }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', hopDongId);
+      cau_hoi_mo: chung.cau_hoi_mo ?? [], ...(chung.ngay_ky && !hd.ngay_ky ? { ngay_ky: chung.ngay_ky } : {}) }).eq('id', hopDongId);
     return { so_quy_tac: rows.length, cau_hoi_mo: (chung.cau_hoi_mo ?? []).length };
   } catch (e) {
-    await sb.from('tt_hop_dong').update({ trang_thai: 'loi', loi_doc: e instanceof Error ? e.message : String(e) }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', hopDongId);
+    await sb.from('tt_hop_dong').update({ trang_thai: 'loi', loi_doc: e instanceof Error ? e.message : String(e) }).eq('id', hopDongId);
     throw e;
   }
 }

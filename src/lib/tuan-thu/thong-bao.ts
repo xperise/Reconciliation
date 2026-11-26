@@ -4,7 +4,6 @@ import { sendMail } from '@/lib/google/gmail';
 import { fmtVnd, nhanThang } from './db';
 import { PhongBan, TEN_PHONG_BAN } from './types';
 import { laBuocCuoiDuyet } from './cau-hinh';
-import { TO_CHUC_MAC_DINH_ID } from './to-chuc';
 import { docCauHinhQuyTrinh } from './cau-hinh-db';
 
 /**
@@ -15,13 +14,13 @@ export async function baoChoPhongBan(lanId: string, pbs: PhongBan[], suKien: 'xu
   const cauHinh = await docCauHinhQuyTrinh();
   try {
     const sb = supabaseAdmin();
-    const { data: lc } = await sb.from('tt_lan_chay').select('thang, dot, tong_hop, tt_hop_dong(ma_khach)').eq('id', lanId).eq('org_id', TO_CHUC_MAC_DINH_ID).single();
+    const { data: lc } = await sb.from('tt_lan_chay').select('thang, dot, tong_hop, org_id, tt_hop_dong(ma_khach)').eq('id', lanId).single();
     if (!lc) return;
     const ky = `${(lc as any).tt_hop_dong?.ma_khach} ${nhanThang(lc.thang, lc.dot)}`;
     const link = `/tuan-thu/chay/${lanId}`;
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
-    const { data: cb } = await sb.from('tt_canh_bao').select('phong_ban, muc_do, noi_dung, so_tien').eq('lan_chay_id', lanId).eq('org_id', TO_CHUC_MAC_DINH_ID);
-    const { data: tv } = await sb.from('tt_thanh_vien').select('user_id, phong_ban, profiles(email)').eq('org_id', TO_CHUC_MAC_DINH_ID).in('phong_ban', pbs);
+    const { data: cb } = await sb.from('tt_canh_bao').select('phong_ban, muc_do, noi_dung, so_tien').eq('lan_chay_id', lanId);
+    const { data: tv } = await sb.from('tt_thanh_vien').select('user_id, phong_ban, profiles(email)').eq('org_id', lc.org_id).in('phong_ban', pbs);
     for (const t of (tv ?? []) as any[]) {
       const pb = t.phong_ban as PhongBan;
       const cua = (cb ?? []).filter((c: any) => c.phong_ban === pb && c.muc_do !== 'theo_doi');

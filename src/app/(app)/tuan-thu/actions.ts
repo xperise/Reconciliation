@@ -16,7 +16,6 @@ import { CauTrucMau, hocMau } from '@/lib/tuan-thu/mau-bang-ke';
 import { goiYGhepCot } from '@/lib/tuan-thu/mau-ai';
 import { chuanHoaMa, coChan, coDuyet, coQuyenKichHoat, trangThaiDuocDuyet, TRANG_THAI_CHO, vaiTroChiKiemSoat, vaiTroCoDuyet, vaiTroTheoTrangThai } from '@/lib/tuan-thu/cau-hinh';
 import { docCauHinhQuyTrinh } from '@/lib/tuan-thu/cau-hinh-db';
-import { TO_CHUC_MAC_DINH_ID } from '@/lib/tuan-thu/to-chuc';
 import { themOrg } from '@/lib/tuan-thu/to-chuc';
 import { toChucHienTai } from '@/lib/tuan-thu/to-chuc-server';
 

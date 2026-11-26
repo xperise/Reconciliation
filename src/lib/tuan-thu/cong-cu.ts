@@ -3,7 +3,7 @@ import { dsDangChan, duocLam, fmtVnd, nhanThang, NguoiTT, TEN_BUOC } from './db'
 import { boiCanhLanChay } from './agent';
 import { docDongLanChay } from './xu-ly';
 import { PhongBan, TEN_PHONG_BAN, TEN_DICH_VU, LoaiDichVu } from './types';
-import { TO_CHUC_MAC_DINH_ID } from './to-chuc';
+import { toChucHienTai } from './to-chuc-server';
 
 /**
  * Công cụ của agent (Claude tool use).
@@ -65,15 +65,15 @@ export const LA_THAO_TAC = new Set(CONG_CU_THAO_TAC.map((t) => t.name));
 export async function chayCongCuDoc(ten: string, input: any): Promise<string> {
   const sb = supabaseAdmin();
   if (ten === 'ds_lan_chay') {
-    const { data } = await sb.from('tt_lan_chay').select('id, thang, dot, buoc, vong, tong_hop, loi, tt_hop_dong(ma_khach)').eq('org_id', TO_CHUC_MAC_DINH_ID).order('created_at', { ascending: false }).limit(20);
-    const { data: ch } = await sb.from('tt_chan').select('lan_chay_id').eq('org_id', TO_CHUC_MAC_DINH_ID).is('go_luc', null);
+    const { data } = await sb.from('tt_lan_chay').select('id, thang, dot, buoc, vong, tong_hop, loi, tt_hop_dong(ma_khach)').eq('org_id', await toChucHienTai()).order('created_at', { ascending: false }).limit(20);
+    const { data: ch } = await sb.from('tt_chan').select('lan_chay_id').eq('org_id', await toChucHienTai()).is('go_luc', null);
     const chan = new Set((ch ?? []).map((c: any) => c.lan_chay_id));
     return (data ?? []).map((r: any) => `${r.id} | ${r.tt_hop_dong?.ma_khach} ${nhanThang(r.thang, r.dot)} | ${TEN_BUOC[r.buoc] ?? r.buoc} | vòng ${r.vong} | tổng ${fmtVnd(r.tong_hop?.tong_cong)}đ${chan.has(r.id) ? ' | ĐANG CHẶN' : ''}${r.loi ? ' | LỖI' : ''}`).join('\n') || 'Chưa có lần chạy nào.';
   }
   if (ten === 'xem_lan_chay') {
     const b = await boiCanhLanChay(input.lan_chay_id);
     const chan = await dsDangChan(input.lan_chay_id);
-    const { data: st } = await sb.from('tt_sua_tay').select('loai, dong, cot, gia_tri_cu, gia_tri_moi, ly_do, nguoi_email').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', input.lan_chay_id).order('id');
+    const { data: st } = await sb.from('tt_sua_tay').select('loai, dong, cot, gia_tri_cu, gia_tri_moi, ly_do, nguoi_email').eq('lan_chay_id', input.lan_chay_id).order('id');
     return `${b.text}\n\nID LẦN CHẶN ĐANG HIỆU LỰC: ${chan.map((c: any) => `#${c.id} (${TEN_PHONG_BAN[c.phong_ban as PhongBan]}: ${c.ly_do})`).join('; ') || 'không'}\nSỬA TAY: ${(st ?? []).map((x: any) => `${TEN_DICH_VU[x.loai as LoaiDichVu]} dòng ${x.dong} cột ${x.cot}: "${x.gia_tri_cu ?? ''}" → "${x.gia_tri_moi ?? ''}" (${x.ly_do}, ${x.nguoi_email})`).join('; ') || 'không'}`;
   }
   if (ten === 'xem_dong') {
@@ -85,7 +85,7 @@ export async function chayCongCuDoc(ten: string, input: any): Promise<string> {
     return out.join('\n') || 'Không tìm thấy dòng nào.';
   }
   if (ten === 'ds_hop_dong') {
-    const { data } = await sb.from('tt_hop_dong').select('id, ma_khach, ten_khach, so_hop_dong, trang_thai, cau_hoi_mo, tt_quy_tac(phong_ban, chot)').eq('org_id', TO_CHUC_MAC_DINH_ID).order('ma_khach');
+    const { data } = await sb.from('tt_hop_dong').select('id, ma_khach, ten_khach, so_hop_dong, trang_thai, cau_hoi_mo, tt_quy_tac(phong_ban, chot)').eq('org_id', await toChucHienTai()).order('ma_khach');
     return (data ?? []).map((h: any) => {
       const dem = (['ke_toan', 'demand', 'supply', 'ceo'] as PhongBan[]).map((p) => { const ds = (h.tt_quy_tac ?? []).filter((q: any) => q.phong_ban === p); return `${TEN_PHONG_BAN[p]} ${ds.filter((q: any) => q.chot === 'dong_y').length}/${ds.length}`; }).join(', ');
       return `${h.id} | ${h.ma_khach} — ${h.ten_khach} | HĐ ${h.so_hop_dong} | ${h.trang_thai ?? 'hieu_luc'} | đã chốt: ${dem}${(h.cau_hoi_mo ?? []).length ? ` | điểm còn mở: ${(h.cau_hoi_mo as string[]).join(' / ')}` : ''}`;
@@ -93,17 +93,17 @@ export async function chayCongCuDoc(ten: string, input: any): Promise<string> {
   }
   if (ten === 'xem_hop_dong') {
     const [{ data: h }, { data: qt }, { data: bo }] = await Promise.all([
-      sb.from('tt_hop_dong').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', input.hop_dong_id).single(),
-      sb.from('tt_quy_tac').select('ma, phong_ban, noi_dung, gia_tri, can_cu, muc_do, chot').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('hop_dong_id', input.hop_dong_id).order('ma'),
-      sb.from('tt_bo_quy_tac').select('phien_ban, hieu_luc_tu, tham_so').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('hop_dong_id', input.hop_dong_id).order('phien_ban', { ascending: false }).limit(1),
+      sb.from('tt_hop_dong').select('*').eq('id', input.hop_dong_id).single(),
+      sb.from('tt_quy_tac').select('ma, phong_ban, noi_dung, gia_tri, can_cu, muc_do, chot').eq('hop_dong_id', input.hop_dong_id).order('ma'),
+      sb.from('tt_bo_quy_tac').select('phien_ban, hieu_luc_tu, tham_so').eq('hop_dong_id', input.hop_dong_id).order('phien_ban', { ascending: false }).limit(1),
     ]);
     if (!h) return 'Không tìm thấy hợp đồng.';
-    const { data: maus } = await sb.from('tt_mau_bang_ke').select('id, phien_ban, ten_tep, trang_thai').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('ma_khach', h.ma_khach).order('phien_ban', { ascending: false });
+    const { data: maus } = await sb.from('tt_mau_bang_ke').select('id, phien_ban, ten_tep, trang_thai').eq('org_id', await toChucHienTai()).eq('ma_khach', h.ma_khach).order('phien_ban', { ascending: false });
     const dongMau = (maus ?? []).map((m: any) => `${m.id} v${m.phien_ban} ${m.ten_tep} (${m.trang_thai})`).join('; ') || 'chưa có (dùng mẫu chuẩn)';
     return `${h.ma_khach} — ${h.ten_khach} | HĐ ${h.so_hop_dong} | trạng thái ${h.trang_thai ?? 'hieu_luc'}\nTÓM TẮT:\n${h.tom_tat_dieu_khoan ?? '(chưa có)'}\nMẪU BẢNG KÊ: ${dongMau}\n\nĐIỂM CÒN MỞ: ${((h.cau_hoi_mo ?? []) as string[]).join(' / ') || 'không'}\n\nTHAM SỐ v${bo?.[0]?.phien_ban ?? '?'}: ${JSON.stringify(bo?.[0]?.tham_so ?? {})}\n\nQUY TẮC:\n${(qt ?? []).map((q: any) => `${q.ma} [${TEN_PHONG_BAN[q.phong_ban as PhongBan]}] ${q.noi_dung} | ${q.gia_tri ?? ''} | ${q.can_cu ?? ''} | ${q.muc_do} | chốt: ${q.chot}`).join('\n')}`;
   }
   if (ten === 'ds_sua_doi') {
-    const { data } = await sb.from('tt_sua_doi').select('id, so, ma_quy_tac, noi_dung_moi, trang_thai, hieu_luc_tu, tt_sua_doi_duyet(phong_ban, quyet_dinh)').eq('org_id', TO_CHUC_MAC_DINH_ID).order('so');
+    const { data } = await sb.from('tt_sua_doi').select('id, so, ma_quy_tac, noi_dung_moi, trang_thai, hieu_luc_tu, tt_sua_doi_duyet(phong_ban, quyet_dinh)').eq('org_id', await toChucHienTai()).order('so');
     return (data ?? []).map((x: any) => `${x.id} | SĐ-${x.so} ${x.ma_quy_tac}: ${x.noi_dung_moi} | từ ${x.hieu_luc_tu} | ${x.trang_thai} | đã ý kiến: ${(x.tt_sua_doi_duyet ?? []).map((d: any) => `${TEN_PHONG_BAN[d.phong_ban as PhongBan]} ${d.quyet_dinh === 'dong_y' ? 'đồng ý' : 'không'}`).join(', ') || 'chưa'}`).join('\n') || 'Không có đề xuất nào.';
   }
   return `Không có công cụ ${ten}.`;

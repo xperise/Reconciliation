@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { currentUser } from '@/lib/supabase/server';
 import { PhongBan, ThamSoHopDong } from './types';
-import { TO_CHUC_MAC_DINH_ID } from './to-chuc';
+import { toChucHienTai } from './to-chuc-server';
 
 export const BUCKET_TT = 'bang-ke';
 export type BuocDuyet = string; // mã role, lấy từ cấu hình
@@ -20,7 +20,7 @@ export async function nguoiTT(): Promise<NguoiTT | null> {
   const u = await currentUser();
   if (!u) return null;
   const laAdmin = u.role === 'admin';
-  const { data } = await supabaseAdmin().from('tt_thanh_vien').select('phong_ban').eq('user_id', u.id).eq('org_id', TO_CHUC_MAC_DINH_ID).maybeSingle();
+  const { data } = await supabaseAdmin().from('tt_thanh_vien').select('phong_ban').eq('user_id', u.id).eq('org_id', await toChucHienTai()).maybeSingle();
   const phong_ban = (data?.phong_ban ?? null) as PhongBan | null;
   if (!laAdmin && !phong_ban) return null;
   return { id: u.id, email: u.email, full_name: u.full_name, laAdmin, phong_ban };
@@ -39,7 +39,7 @@ export async function batBuoc(pb?: PhongBan): Promise<NguoiTT> {
 /** Bộ tham số có hiệu lực cho tháng: phiên bản cao nhất có hieu_luc_tu ≤ tháng. */
 export async function thamSoHieuLuc(hopDongId: string, thang: string): Promise<{ phien_ban: number; tham_so: ThamSoHopDong }> {
   const { data, error } = await supabaseAdmin().from('tt_bo_quy_tac')
-    .select('phien_ban, tham_so, hieu_luc_tu').eq('hop_dong_id', hopDongId).eq('org_id', TO_CHUC_MAC_DINH_ID)
+    .select('phien_ban, tham_so, hieu_luc_tu').eq('hop_dong_id', hopDongId)
     .lte('hieu_luc_tu', thang).order('phien_ban', { ascending: false }).limit(1);
   if (error) throw new Error(error.message);
   if (!data?.length) throw new Error(`Chưa có bộ quy tắc hiệu lực cho tháng ${thang}.`);
@@ -62,7 +62,7 @@ export const nhanThang = (thang: string, dot?: number | null) => {
 
 /** Các lần chặn còn hiệu lực của Demand/Supply (SQL 40). Chưa chạy SQL 40 thì coi như không có. */
 export async function dsDangChan(lanId: string): Promise<any[]> {
-  const { data, error } = await supabaseAdmin().from('tt_chan').select('*').eq('lan_chay_id', lanId).eq('org_id', TO_CHUC_MAC_DINH_ID).is('go_luc', null).order('luc');
+  const { data, error } = await supabaseAdmin().from('tt_chan').select('*').eq('lan_chay_id', lanId).is('go_luc', null).order('luc');
   return error ? [] : (data ?? []);
 }
 

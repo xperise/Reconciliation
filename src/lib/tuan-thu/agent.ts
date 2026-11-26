@@ -2,7 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { goiMoHinh, TEN_MO_HINH } from './ai-provider';
 import { dsDangChan, fmtVnd } from './db';
 import { PhongBan, TEN_DICH_VU, TEN_MUC_DO, TEN_PHONG_BAN, LoaiDichVu } from './types';
-import { TO_CHUC_MAC_DINH_ID } from './to-chuc';
+import { toChucHienTai } from './to-chuc-server';
 
 /**
  * Agent AI của từng phòng ban: gọi Claude API, đọc skill (có phiên bản) + quy tắc hợp đồng trong scope
@@ -17,8 +17,8 @@ export async function goiClaude(system: string, messages: Msg[], maxTokens = 150
   return d.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n').trim();
 }
 
-export async function skillHienHanh(pb: PhongBan): Promise<{ phien_ban: number; noi_dung: string }> {
-  const { data } = await supabaseAdmin().from('tt_skill').select('phien_ban, noi_dung').eq('org_id', TO_CHUC_MAC_DINH_ID)
+export async function skillHienHanh(pb: PhongBan, org?: string): Promise<{ phien_ban: number; noi_dung: string }> {
+  const { data } = await supabaseAdmin().from('tt_skill').select('phien_ban, noi_dung').eq('org_id', org ?? await toChucHienTai())
     .eq('phong_ban', pb).order('phien_ban', { ascending: false }).limit(1);
   if (!data?.length) throw new Error('Chưa có skill cho phòng ban này — chạy supabase/migrations/39_tuan_thu_agent.sql.');
   return data[0] as any;
@@ -50,10 +50,10 @@ export async function heThong(pb: PhongBan, hopDongId: string | null) {
   let hopDong = '', quyTac = '', thamSo = '', suaDoi = '';
   if (hopDongId) {
     const [{ data: hd }, { data: qt }, { data: bo }, { data: sd }] = await Promise.all([
-      sb.from('tt_hop_dong').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', hopDongId).single(),
-      sb.from('tt_quy_tac').select('ma, phong_ban, noi_dung, gia_tri, can_cu, muc_do, chot').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('hop_dong_id', hopDongId).order('ma'),
-      sb.from('tt_bo_quy_tac').select('phien_ban, hieu_luc_tu, tham_so, ghi_chu').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('hop_dong_id', hopDongId).order('phien_ban', { ascending: false }),
-      sb.from('tt_sua_doi').select('so, ma_quy_tac, noi_dung_moi, gia_tri_moi, hieu_luc_tu, trang_thai, can_cu').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('hop_dong_id', hopDongId).order('so'),
+      sb.from('tt_hop_dong').select('*').eq('id', hopDongId).single(),
+      sb.from('tt_quy_tac').select('ma, phong_ban, noi_dung, gia_tri, can_cu, muc_do, chot').eq('hop_dong_id', hopDongId).order('ma'),
+      sb.from('tt_bo_quy_tac').select('phien_ban, hieu_luc_tu, tham_so, ghi_chu').eq('hop_dong_id', hopDongId).order('phien_ban', { ascending: false }),
+      sb.from('tt_sua_doi').select('so, ma_quy_tac, noi_dung_moi, gia_tri_moi, hieu_luc_tu, trang_thai, can_cu').eq('hop_dong_id', hopDongId).order('so'),
     ]);
     hopDong = (hd as any)?.tom_tat_dieu_khoan ?? `${(hd as any)?.ten_khach ?? ''} — HĐ ${(hd as any)?.so_hop_dong ?? ''} (chưa có bản tóm tắt điều khoản; chạy SQL 41)`;
     const PBS: PhongBan[] = ['ke_toan', 'demand', 'supply', 'ceo'];
@@ -94,16 +94,16 @@ CÁCH LÀM VIỆC:
 /** Bối cảnh một lần chạy để đưa vào tin nhắn. */
 export async function boiCanhLanChay(lanChayId: string): Promise<{ text: string; hopDongId: string; vong: number }> {
   const sb = supabaseAdmin();
-  const { data: lc } = await sb.from('tt_lan_chay').select('*, tt_hop_dong(ma_khach, ten_khach, so_hop_dong)').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', lanChayId).single();
+  const { data: lc } = await sb.from('tt_lan_chay').select('*, tt_hop_dong(ma_khach, ten_khach, so_hop_dong)').eq('id', lanChayId).single();
   if (!lc) throw new Error('Không tìm thấy lần chạy.');
   const [{ data: cb }, { data: td }, { data: dy }] = await Promise.all([
-    sb.from('tt_canh_bao').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', lanChayId).order('id'),
-    sb.from('tt_thay_doi').select('ma_quy_tac, loai, cot, truoc, sau, xac_nhan').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', lanChayId).limit(10000),
-    sb.from('tt_duyet').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', lanChayId).eq('vong', lc.vong).order('luc'),
+    sb.from('tt_canh_bao').select('*').eq('lan_chay_id', lanChayId).order('id'),
+    sb.from('tt_thay_doi').select('ma_quy_tac, loai, cot, truoc, sau, xac_nhan').eq('lan_chay_id', lanChayId).limit(10000),
+    sb.from('tt_duyet').select('*').eq('lan_chay_id', lanChayId).eq('vong', lc.vong).order('luc'),
   ]);
   const th: any = lc.tong_hop ?? {};
   const chan = await dsDangChan(lanChayId);
-  const { data: aiKq } = await sb.from('tt_ai_ket_qua').select('phong_ban, noi_dung, luc').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', lanChayId)
+  const { data: aiKq } = await sb.from('tt_ai_ket_qua').select('phong_ban, noi_dung, luc').eq('lan_chay_id', lanChayId)
     .eq('loai', 'ra_soat').eq('vong', lc.vong).order('luc', { ascending: false });
   const aiMoiNhat = (['ke_toan', 'demand', 'supply', 'ceo'] as PhongBan[]).map((p) => ({ p, k: (aiKq ?? []).find((x: any) => x.phong_ban === p) as any })).filter((x) => x.k);
   const nhom = new Map<string, { n: number; chenh: number; xn: number }>();

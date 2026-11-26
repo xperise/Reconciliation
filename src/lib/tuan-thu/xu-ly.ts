@@ -8,7 +8,6 @@ import { taoBangKe } from './bang-ke';
 import { apDungMau, CauTrucMau } from './mau-bang-ke';
 import { taoBaoCao } from './bao-cao';
 import { DongRaw, LoaiDichVu, ThamSoHopDong } from './types';
-import { TO_CHUC_MAC_DINH_ID } from './to-chuc';
 import { themOrg } from './to-chuc';
 
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -29,7 +28,7 @@ export async function luuTep(path: string, buf: Buffer, mime = XLSX) {
  */
 export async function xuLyLanChay(lanChayId: string) {
   const sb = supabaseAdmin();
-  const { data: lc, error } = await sb.from('tt_lan_chay').select('*, tt_hop_dong(*)').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', lanChayId).single();
+  const { data: lc, error } = await sb.from('tt_lan_chay').select('*, tt_hop_dong(*)').eq('id', lanChayId).single();
   if (error || !lc) throw new Error(error?.message ?? 'Không tìm thấy lần chạy.');
   const hd = lc.tt_hop_dong as any;
   const { phien_ban, tham_so: ts } = await thamSoHieuLuc(hd.id, lc.thang);
@@ -49,7 +48,7 @@ export async function xuLyLanChay(lanChayId: string) {
   }
 
   // Sửa tay qua agent (SQL 42): áp sau khi đọc raw, trước khi app tự sửa theo quy tắc
-  const { data: suaTay } = await sb.from('tt_sua_tay').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', lc.id).order('id');
+  const { data: suaTay } = await sb.from('tt_sua_tay').select('*').eq('lan_chay_id', lc.id).order('id');
   for (const st of (suaTay ?? []) as any[]) {
     const d = dong.find((x) => x.loai === st.loai && x.dong === st.dong);
     if (!d) continue;
@@ -58,7 +57,7 @@ export async function xuLyLanChay(lanChayId: string) {
   }
 
   const thayDoi = tuSua(dong, ts);
-  const { data: pb } = await sb.from('tt_phong_ban_khach').select('ten, ma_cost_center, thu_tu').eq('org_id', TO_CHUC_MAC_DINH_ID)
+  const { data: pb } = await sb.from('tt_phong_ban_khach').select('ten, ma_cost_center, thu_tu')
     .eq('hop_dong_id', hd.id).order('thu_tu');
   const danhMuc = (pb ?? []).map((x: any) => ({ ten: x.ten, ma_cost_center: x.ma_cost_center }));
   const canhBao = kiemTra({ dong, ts, thang: lc.thang, dot: lc.dot ?? undefined,
@@ -68,7 +67,7 @@ export async function xuLyLanChay(lanChayId: string) {
   const goc = `tuan-thu/${hd.ma_khach}/${lc.thang}${lc.dot ? `-dot${lc.dot}` : ''}/${lc.id}/v${lc.vong}`;
   const tenBk = `${hd.ma_khach}_bang_ke_${lc.thang}${lc.dot ? `_dot${lc.dot}` : ''}.xlsx`;
   // Mẫu riêng của khách (đã duyệt) → dựng đúng mẫu; chưa có → mẫu chuẩn
-  const { data: mau } = await sb.from('tt_mau_bang_ke').select('id, path, cau_truc, phien_ban').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('ma_khach', hd.ma_khach).eq('trang_thai', 'hieu_luc').order('phien_ban', { ascending: false }).limit(1);
+  const { data: mau } = await sb.from('tt_mau_bang_ke').select('id, path, cau_truc, phien_ban').eq('ma_khach', hd.ma_khach).eq('trang_thai', 'hieu_luc').order('phien_ban', { ascending: false }).limit(1);
   const m = (mau ?? [])[0] as any;
   const bkBuf = m ? await apDungMau(await tai(m.path), m.cau_truc as CauTrucMau, dong, ts, nhanKy)
     : await taoBangKe({ ts, nhanKy, dong, danhMucPhongBan: danhMuc, tenSheet: hd.ten_sheet });
@@ -76,8 +75,8 @@ export async function xuLyLanChay(lanChayId: string) {
   await sb.from('tt_tep_lan_chay').insert(themOrg({ lan_chay_id: lc.id, vong: lc.vong, loai: 'bk_app', path: `${goc}/${tenBk}`, ten: m ? `${tenBk} (mẫu khách v${m.phien_ban})` : `${tenBk} (mẫu chuẩn)` }, lc.org_id));
   await luuTep(`${goc}/bao_cao_kiem_tra.xlsx`, await taoBaoCao({ nhanKy, dong, canhBao, thayDoi }));
 
-  await sb.from('tt_canh_bao').delete().eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', lc.id);
-  await sb.from('tt_thay_doi').delete().eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', lc.id);
+  await sb.from('tt_canh_bao').delete().eq('lan_chay_id', lc.id);
+  await sb.from('tt_thay_doi').delete().eq('lan_chay_id', lc.id);
   if (canhBao.length) {
     const r = await sb.from('tt_canh_bao').insert(themOrg(canhBao.map((c) => ({
       lan_chay_id: lc.id, ma_quy_tac: c.ma_quy_tac, phong_ban: c.phong_ban, muc_do: c.muc_do, loai: c.loai ?? null,
@@ -94,16 +93,16 @@ export async function xuLyLanChay(lanChayId: string) {
   await sb.from('tt_lan_chay').update({
     phien_ban_quy_tac: phien_ban, bang_ke_path: `${goc}/${tenBk}`, bao_cao_path: `${goc}/bao_cao_kiem_tra.xlsx`,
     tong_hop: { ...th, nhan_ky: nhanKy }, loi: null, mau_id: m?.id ?? null,
-  }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', lc.id);
+  }).eq('id', lc.id);
 }
 
 /** Đọc lại raw của một lần chạy (đã áp sửa tay) — dùng cho công cụ xem dòng của agent. */
 export async function docDongLanChay(lanChayId: string): Promise<DongRaw[]> {
   const sb = supabaseAdmin();
-  const { data: lc } = await sb.from('tt_lan_chay').select('raw_paths').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', lanChayId).single();
+  const { data: lc } = await sb.from('tt_lan_chay').select('raw_paths').eq('id', lanChayId).single();
   const dong: DongRaw[] = [];
   for (const p of Object.values((lc?.raw_paths ?? {}) as Record<string, string>)) dong.push(...(await docRaw(await tai(p))).dong);
-  const { data: suaTay } = await sb.from('tt_sua_tay').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', lanChayId).order('id');
+  const { data: suaTay } = await sb.from('tt_sua_tay').select('*').eq('lan_chay_id', lanChayId).order('id');
   for (const st of (suaTay ?? []) as any[]) {
     const d = dong.find((x) => x.loai === st.loai && x.dong === st.dong);
     if (d) d.v[st.cot] = COT_SO.includes(st.cot) ? Number(st.gia_tri_moi) : st.gia_tri_moi;
@@ -120,13 +119,13 @@ async function xuLyDaFormat(lc: any, hd: any, ts: ThamSoHopDong, phien_ban: numb
   if (!lc.bk_goc_path) throw new Error('Chưa có file bảng kê đã format.');
   const goc = await tai(lc.bk_goc_path);
   // Mẫu đã duyệt của khách giúp đọc đúng các cột khác tên (VD "Tên dịch vụ", "Tiền thuế GTGT")
-  const { data: mauDs } = await sb.from('tt_mau_bang_ke').select('cau_truc').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('ma_khach', hd.ma_khach).eq('trang_thai', 'hieu_luc').order('phien_ban', { ascending: false }).limit(1);
+  const { data: mauDs } = await sb.from('tt_mau_bang_ke').select('cau_truc').eq('ma_khach', hd.ma_khach).eq('trang_thai', 'hieu_luc').order('phien_ban', { ascending: false }).limit(1);
   const kq = await docBangKeDaFormat(goc, ((mauDs ?? [])[0] as any)?.cau_truc ?? null);
   if (!kq.dong.length) throw new Error(`Không nhận ra giao dịch nào trong file (sheet không nhận ra: ${kq.khongNhanRa.join(', ') || 'không'}). Cần sheet chi tiết có dòng tiêu đề bắt đầu bằng "STT" và cột "Tên khách sạn" hoặc "Tên dịch vụ (Hành trình)".`);
   const tongGoc = tongHop(kq.dong);
   const canhBaoFile = kiemBangKeDaFormat(kq, ts);
   const thayDoi = tuSua(kq.dong, ts);
-  const { data: pb } = await sb.from('tt_phong_ban_khach').select('ten').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('hop_dong_id', hd.id);
+  const { data: pb } = await sb.from('tt_phong_ban_khach').select('ten').eq('hop_dong_id', hd.id);
   const canhBao = [...canhBaoFile, ...kiemTra({ dong: kq.dong, ts, thang: lc.thang, dot: lc.dot ?? undefined,
     danh_muc_phong_ban: (pb ?? []).map((x: any) => x.ten), thieu_cot: { khach_san: [], ve_may_bay: [] }, ten_cong_ty: hd.ten_cong_ty_raw || hd.ten_khach })];
   // Đối chiếu raw (không bắt buộc): chỉ lấy giao dịch trong kỳ của lần chạy
@@ -148,8 +147,8 @@ async function xuLyDaFormat(lc: any, hd: any, ts: ThamSoHopDong, phien_ban: numb
     await sb.from('tt_tep_lan_chay').insert(themOrg({ lan_chay_id: lc.id, vong: lc.vong, loai: 'bk_sua', path: bkSua, ten: `${tenGoc} (bản đã sửa theo quy tắc)` }, lc.org_id)); }
   await luuTep(`${thuMuc}/bao_cao_kiem_tra.xlsx`, await taoBaoCao({ nhanKy, dong: kq.dong, canhBao, thayDoi }));
 
-  await sb.from('tt_canh_bao').delete().eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', lc.id);
-  await sb.from('tt_thay_doi').delete().eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', lc.id);
+  await sb.from('tt_canh_bao').delete().eq('lan_chay_id', lc.id);
+  await sb.from('tt_thay_doi').delete().eq('lan_chay_id', lc.id);
   if (canhBao.length) {
     const r = await sb.from('tt_canh_bao').insert(themOrg(canhBao.map((c) => ({ lan_chay_id: lc.id, ma_quy_tac: c.ma_quy_tac, phong_ban: c.phong_ban, muc_do: c.muc_do,
       loai: c.loai ?? null, dong: c.dong, noi_dung: c.noi_dung, so_tien: c.so_tien ?? null })), lc.org_id));
@@ -167,5 +166,5 @@ async function xuLyDaFormat(lc: any, hd: any, ts: ThamSoHopDong, phien_ban: numb
     phien_ban_quy_tac: phien_ban, bk_sua_path: bkSua, ban_gui: banGui,
     bang_ke_path: banGui === 'goc' ? lc.bk_goc_path : null, bao_cao_path: `${thuMuc}/bao_cao_kiem_tra.xlsx`,
     tong_hop: { ...th, nhan_ky: nhanKy, goc: { tong_cong: tongGoc.tong_cong, chiet_khau: tongGoc.chiet_khau.khach_san + tongGoc.chiet_khau.ve_may_bay } }, loi: null,
-  }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', lc.id);
+  }).eq('id', lc.id);
 }
