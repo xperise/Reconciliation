@@ -14,6 +14,7 @@ import { GOI_Y_AGENT } from '@/lib/tuan-thu/de-xuat';
 import { PhongBan, TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
 import { themOrg } from '@/lib/tuan-thu/to-chuc';
 import { toChucHienTai } from '@/lib/tuan-thu/to-chuc-server';
+import { coQuyenTepCuaToChuc } from '@/lib/tuan-thu/to-chuc';
 
 type KQ = { ok: true; text?: string; thongBao?: string } | { ok: false; loi: string };
 const lam = async (fn: () => Promise<KQ>): Promise<KQ> => {
@@ -30,7 +31,8 @@ export type TinNhan = { vai: 'user' | 'assistant'; noi_dung: string; hanh_dong: 
 export async function hoiAgent(lanChayId: string | null, pb: PhongBan, cauHoi: string, tep: TepDinhKem[] = []): Promise<{ ok: true; text: string; hanh_dong: HanhDongTT[] } | { ok: false; loi: string }> {
   try {
     const n = await batBuoc(pb);
-    const teps = tep.filter((t) => typeof t.path === 'string' && t.path.startsWith('tuan-thu/') && !t.path.includes('..'));
+    const toChuc = await toChucHienTai();
+    const teps = tep.filter((t) => typeof t.path === 'string' && coQuyenTepCuaToChuc(t.path, toChuc));
     const q = cauHoi.trim() || (teps.length ? 'Đọc giúp tôi các tệp đính kèm.' : '');
     if (!q) throw new Error('Nhập câu hỏi.');
     const sb = supabaseAdmin();

@@ -18,6 +18,7 @@ import { chuanHoaMa, coChan, coDuyet, coQuyenKichHoat, trangThaiDuocDuyet, TRANG
 import { docCauHinhQuyTrinh } from '@/lib/tuan-thu/cau-hinh-db';
 import { themOrg } from '@/lib/tuan-thu/to-chuc';
 import { toChucHienTai } from '@/lib/tuan-thu/to-chuc-server';
+import { coQuyenTepCuaToChuc, duongDanTepTo } from '@/lib/tuan-thu/to-chuc';
 
 type KQ = { ok: true; id?: string; thongBao?: string } | { ok: false; loi: string };
 const loi = (e: unknown): KQ => ({ ok: false, loi: e instanceof Error ? e.message : String(e) });
@@ -55,7 +56,7 @@ export async function taoLanChay(fd: FormData): Promise<KQ> {
     if (hd.trang_thai && hd.trang_thai !== 'hieu_luc') throw new Error('Hợp đồng chưa kích hoạt — 4 head phải chốt quy tắc và CEO kích hoạt trước.');
     const { phien_ban } = await thamSoHieuLuc(hopDongId, thang);
     const cheDo = String(fd.get('che_do') ?? 'raw') === 'da_format' ? 'da_format' : 'raw';
-    const bk = tepDaTai(fd, 'bk_json');
+    const bk = tepDaTai(fd, 'bk_json', await toChucHienTai());
     if (cheDo === 'da_format' && !bk.length) throw new Error('Chọn file bảng kê đã format.');
     const { data: lc, error } = await sb.from('tt_lan_chay').insert(themOrg({
       hop_dong_id: hopDongId, thang, dot: dotS ? Number(dotS) : null, phien_ban_quy_tac: phien_ban, created_by: n.id,
@@ -64,7 +65,7 @@ export async function taoLanChay(fd: FormData): Promise<KQ> {
     if (error && /che_do|bk_goc/.test(error.message)) throw new Error('Cần chạy supabase/migrations/45_tuan_thu_bang_ke_da_format.sql.');
     if (error || !lc) throw new Error(error?.message ?? 'Không tạo được lần chạy.');
     try {
-      const rawFiles = (fd.getAll('raw') as File[]).filter((f) => f && f.size), rawDaTai = tepDaTai(fd, 'raw_json');
+      const rawFiles = (fd.getAll('raw') as File[]).filter((f) => f && f.size), rawDaTai = tepDaTai(fd, 'raw_json', await toChucHienTai());
       if (cheDo === 'raw' || rawFiles.length || rawDaTai.length) {
         const { paths, ten } = await ghiRaw(lc.id, hd.ma_khach, thang, rawFiles, rawDaTai);
         await sb.from('tt_lan_chay').update({ raw_paths: paths, raw_ten: ten }).eq('org_id', await toChucHienTai()).eq('id', lc.id);
@@ -93,10 +94,10 @@ export async function taiLaiRaw(fd: FormData): Promise<KQ> {
     if (lc.buoc === 'da_gui') throw new Error('Bảng kê đã gửi, không tải lại được. Tạo lần chạy mới.');
     const { phien_ban } = await thamSoHieuLuc(lc.hop_dong_id, lc.thang);
     const capNhat: any = { vong: lc.vong + 1, buoc: 'cho_ke_toan', phien_ban_quy_tac: phien_ban };
-    const bk = tepDaTai(fd, 'bk_json');
+    const bk = tepDaTai(fd, 'bk_json', await toChucHienTai());
     // Kế toán upload bảng kê chỉnh tay (kể cả lần chạy đang từ raw) → kiểm tra file đó, tạo bản đã sửa nếu cần
     if (bk.length) Object.assign(capNhat, { che_do: 'da_format', bk_goc_path: bk[0].path, bk_goc_ten: bk[0].ten, ban_gui: null, bang_ke_path: null, bk_sua_path: null });
-    const rawFiles = (fd.getAll('raw') as File[]).filter((f) => f && f.size), rawDaTai = tepDaTai(fd, 'raw_json');
+    const rawFiles = (fd.getAll('raw') as File[]).filter((f) => f && f.size), rawDaTai = tepDaTai(fd, 'raw_json', await toChucHienTai());
     let rawMoi: { path: string; ten: string }[] = [];
     if (rawFiles.length || rawDaTai.length) { const { paths, ten } = await ghiRaw(id, (lc as any).tt_hop_dong.ma_khach, lc.thang, rawFiles, rawDaTai); Object.assign(capNhat, { raw_paths: paths, raw_ten: ten }); rawMoi = Object.entries(paths).map(([k, p]) => ({ path: p, ten: ten[k] })); }
     else if (!bk.length) throw new Error(lc.che_do === 'da_format' ? 'Chọn file bảng kê đã sửa (và raw nếu có).' : 'Chọn file raw, hoặc bảng kê đã chỉnh tay.');
@@ -466,7 +467,7 @@ export async function taoHopDong(fd: FormData): Promise<KQ> {
     const hieuLuc = String(fd.get('hieu_luc_tu') ?? '');
     if (!ma || !ten || !so) throw new Error('Nhập mã khách, tên khách và số hợp đồng.');
     if (!/^\d{4}-\d{2}$/.test(hieuLuc)) throw new Error('Chọn tháng bắt đầu áp dụng.');
-    const daTai = tepDaTai(fd, 'tep_json');
+    const daTai = tepDaTai(fd, 'tep_json', await toChucHienTai());
     const files = (fd.getAll('tep') as File[]).filter((f) => f && f.size);
     if (!files.length && !daTai.length) throw new Error('Chọn file PDF hợp đồng (và phụ lục).');
     if (files.some((f) => !/\.pdf$/i.test(f.name))) throw new Error('Chỉ nhận file PDF.');
@@ -537,11 +538,12 @@ export async function xinLinkTaiLen(loai: 'hop_dong' | 'raw' | 'chat', maKhach: 
     const ma = maKhach.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '') || 'KHAC';
     const lo = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     const ds = [];
+    const toChuc = await toChucHienTai();
     for (const ten of tenTep.slice(0, 10)) {
       if (loai === 'hop_dong' && !/\.pdf$/i.test(ten)) throw new Error('Hợp đồng chỉ nhận file PDF.');
       if (loai === 'raw' && !/\.xlsx$/i.test(ten)) throw new Error('Raw chỉ nhận file .xlsx.');
       if (loai === 'chat' && !/\.(pdf|xlsx|xlsm|xls|csv|txt|md|docx|png|jpe?g|webp|gif)$/i.test(ten)) throw new Error(`Chưa hỗ trợ loại file ${ten}.`);
-      const path = `tuan-thu/${ma}/${loai === 'hop_dong' ? 'hop-dong' : loai === 'chat' ? 'chat' : 'raw-tam'}/${lo}/${tenAnToan(ten)}`;
+      const path = duongDanTepTo(toChuc, ma, loai === 'hop_dong' ? 'hop-dong' : loai === 'chat' ? 'chat' : 'raw-tam', lo, tenAnToan(ten));
       const { data, error } = await supabaseAdmin().storage.from(BUCKET_TT).createSignedUploadUrl(path);
       if (error || !data) throw new Error(`Không tạo được link tải lên: ${error?.message ?? ''}`);
       ds.push({ path: data.path, token: data.token, ten });
@@ -551,10 +553,10 @@ export async function xinLinkTaiLen(loai: 'hop_dong' | 'raw' | 'chat', maKhach: 
 }
 
 /** Đọc danh sách file đã tải thẳng lên (JSON [{path, ten}]) từ FormData, chỉ nhận đường dẫn trong tuan-thu/. */
-function tepDaTai(fd: FormData, khoa: string): { path: string; ten: string }[] {
+function tepDaTai(fd: FormData, khoa: string, toChuc: string): { path: string; ten: string }[] {
   try {
     const ds = JSON.parse(String(fd.get(khoa) ?? '[]')) as { path: string; ten: string }[];
-    return ds.filter((t) => typeof t.path === 'string' && t.path.startsWith('tuan-thu/') && !t.path.includes('..'));
+    return ds.filter((t) => typeof t.path === 'string' && coQuyenTepCuaToChuc(t.path, toChuc));
   } catch { return []; }
 }
 
@@ -587,7 +589,7 @@ export async function hocMauBangKe(fd: FormData): Promise<KQ> {
     const n = await batBuoc('ke_toan');
     const sb = supabaseAdmin();
     const ma = String(fd.get('ma_khach') ?? '').trim().toUpperCase();
-    const t = tepDaTai(fd, 'mau_json')[0];
+    const t = tepDaTai(fd, 'mau_json', await toChucHienTai())[0];
     if (!ma || !t) throw new Error('Chọn khách và file bảng kê mẫu (.xlsx).');
     const { data: f } = await sb.storage.from(BUCKET_TT).download(t.path);
     if (!f) throw new Error('Không tải được file mẫu.');
