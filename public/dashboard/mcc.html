@@ -1,0 +1,1745 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MCC vs XPAY</title>
+<style>:root{color-scheme:light}
+html,body{margin:0;background:#fff}
+[hidden]{display:none!important}
+body{font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#1d1d1f;padding:4px 2px 24px}
+#dash-root,.mcc-bar,.mcc-empty{--font-anthropic-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;--font-anthropic-serif:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+--color-fg:#1d1d1f;--color-fg-muted:#6b6c6d;--color-bg:#fff;--color-panel:#f7f7fa;--color-border-line:rgba(0,0,0,.1);--color-ok:#00a693;--color-warn:#c46a0a;--color-bad:#e83c3f;
+--cds-border:rgba(0,0,0,.12);--cds-chart-axis:rgba(0,0,0,.35);--cds-chart-grid:rgba(0,0,0,.08);--cds-chart-muted:#b9c3c1;--cds-chart-status-critical:#e83c3f;--cds-dur-slow:.35s;
+--cds-font-size-caption:12px;--cds-font-size-body:14px;--cds-font-size-heading:17px;--cds-font-size-title:24px;--cds-font-weight-medium:600;
+--cds-gap-xs:4px;--cds-gap-sm:8px;--cds-gap-md:14px;--cds-gap-lg:22px;--cds-pad-xs:4px;--cds-pad-sm:8px;--cds-pad-md:12px;--cds-pad-lg:18px;--cds-radius:10px;
+--cds-shadow-popover:0 8px 24px rgba(0,0,0,.16);--cds-surface-popover:#fff;--cds-text-secondary:#6b6c6d;--xp-accent:#0f5c52}
+.dash-skeleton{color:var(--color-fg-muted)}
+.mcc-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:#6b6c6d;margin:0 0 14px;padding:8px 12px;background:#f7f7fa;border-radius:10px}
+.mcc-bar label,.mcc-empty label{cursor:pointer;color:#0f5c52;font-weight:600;text-decoration:underline;text-underline-offset:2px}
+.mcc-bar input,.mcc-empty input{display:none}
+.mcc-prof{font-size:11px;font-weight:600;color:#0f5c52;background:#e7f3f0;border-radius:6px;padding:1px 6px;text-decoration:none;white-space:nowrap}.mcc-prof:hover{background:#cfe8e2}
+.mcc-note{font-size:12px;color:#7a5a12;background:#fff6e0;border-radius:10px;padding:8px 12px;margin:0 0 12px}
+.mcc-empty{max-width:560px;margin:40px auto;padding:28px;border:1px solid rgba(0,0,0,.1);border-radius:14px;text-align:center}
+.mcc-empty h2{margin:0 0 8px;font-size:18px}.mcc-empty p{margin:0 0 14px;color:#6b6c6d}
+.mcc-empty label{display:inline-block;background:#0f5c52;color:#fff;text-decoration:none;padding:9px 16px;border-radius:10px}
+</style><style>#dash-root{--xp-m:var(--cds-chart-muted);--xp-x:var(--xp-accent,#2a6fdb)}
+.xp{display:flex;flex-direction:column;gap:var(--cds-gap-lg);font-family:var(--font-anthropic-sans);font-variant-numeric:tabular-nums;min-width:0}
+.xp h1,.xp h2,.xp h3{margin:0;text-wrap:balance}
+.xp h1{font-family:var(--font-anthropic-serif);font-weight:400;font-size:var(--cds-font-size-title)}
+.xp h2{font-size:var(--cds-font-size-heading);font-weight:var(--cds-font-weight-medium)}
+.xp h3{font-size:var(--cds-font-size-body);font-weight:var(--cds-font-weight-medium)}
+.xp p{margin:0}
+.xp .xp-muted{color:var(--color-fg-muted)}
+.xp .xp-cap{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.xp-head{display:flex;flex-direction:column;gap:var(--cds-gap-sm)}
+.xp-lead{max-width:62rem;line-height:1.55}
+.xp .xp-lead b{font-weight:600}
+.xp-warn{font-size:var(--cds-font-size-caption);color:var(--color-warn)}
+.xp-tabs{display:flex;gap:var(--cds-gap-xs);flex-wrap:wrap;border-bottom:1px solid var(--color-border-line)}
+.xp-tab{appearance:none;background:none;border:0;border-bottom:2px solid transparent;padding:var(--cds-pad-sm) var(--cds-pad-md);font:inherit;color:var(--color-fg-muted);cursor:pointer}
+.xp-tab[aria-selected="true"]{color:var(--color-fg);border-bottom-color:var(--color-fg)}
+.xp-tab:focus-visible,.xp-chip:focus-visible,.xp-btn:focus-visible,.xp-th:focus-visible{outline:2px solid var(--color-fg);outline-offset:2px}
+.xp-sec{display:flex;flex-direction:column;gap:var(--cds-gap-lg);min-width:0}
+.xp-step{display:flex;flex-direction:column;gap:var(--cds-gap-md);min-width:0}
+.xp-step>h2{padding-top:var(--cds-pad-sm);border-top:1px solid var(--color-border-line)}
+.xp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr));gap:var(--cds-gap-md)}
+.xp-grid-sm{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr));gap:var(--cds-gap-md)}
+.xp-card{background:var(--color-panel);border:1px solid var(--color-border-line);border-radius:var(--cds-radius);padding:var(--cds-pad-lg);display:flex;flex-direction:column;gap:var(--cds-gap-sm);min-width:0}
+.xp-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,10.5rem),1fr));gap:var(--cds-gap-sm)}
+.xp-kpi{background:var(--color-panel);border:1px solid var(--color-border-line);border-radius:var(--cds-radius);padding:var(--cds-pad-md);display:flex;flex-direction:column;gap:var(--cds-gap-xs);min-width:0}
+.xp-kpi .xp-lab{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.xp-pair{display:grid;grid-template-columns:1fr 1fr;gap:var(--cds-gap-xs);align-items:end}
+.xp-pair>div{display:flex;flex-direction:column;min-width:0}
+.xp-pair .xp-side{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted);display:flex;align-items:center;gap:4px}
+.xp-big{font-family:var(--font-anthropic-serif);font-size:var(--cds-font-size-heading);line-height:1.2}
+.xp .xp-big{font-weight:400}
+.xp-pair .xp-v{font-family:var(--font-anthropic-serif);font-size:var(--cds-font-size-heading);line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.xp .xp-pair b.xp-v{font-weight:400}
+.xp-ratio{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.xp-sw{display:inline-block;width:.6rem;height:.6rem;border-radius:2px;flex:none}
+.xp-sw-m{background:var(--xp-m)}.xp-sw-x{background:var(--xp-x)}
+.xp-legend{display:flex;gap:var(--cds-gap-md);font-size:var(--cds-font-size-caption);color:var(--color-fg-muted);flex-wrap:wrap}
+.xp-legend span{display:inline-flex;align-items:center;gap:4px}
+.xp-chips{display:flex;gap:var(--cds-gap-xs);flex-wrap:wrap}
+.xp-chip{appearance:none;font:inherit;font-size:var(--cds-font-size-caption);border:1px solid var(--color-border-line);background:var(--color-bg);color:var(--color-fg);border-radius:999px;padding:4px 10px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.xp-subnav{position:sticky;top:env(safe-area-inset-top,0px);z-index:3;background:var(--color-bg);padding-block:var(--cds-pad-xs)}
+.xp-subtab{font-size:var(--cds-font-size-body)}
+.xp-comp{display:grid;grid-template-columns:minmax(9rem,15rem) 7rem 1fr;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--color-border-line);font-size:var(--cds-font-size-caption)}
+.xp-comp .xp-num{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+@media (max-width:560px){.xp-comp{grid-template-columns:1fr 6rem}.xp-comp>:last-child{grid-column:1/-1}}
+.xp-table td.xp-dn{color:var(--color-bad)}
+.xp-table tr.xp-sel td{background:color-mix(in srgb,var(--xp-x) 14%,transparent)}
+.xp-table tr.xp-total td{font-weight:600;border-top:2px solid var(--color-border-line)}
+.xp-cohcard{border:1px solid var(--color-border-line);border-left-width:5px;border-radius:var(--cds-radius);padding:var(--cds-pad-md);display:flex;flex-direction:column;gap:var(--cds-gap-sm);background:var(--color-bg);min-width:0}
+.xp-cohhead{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:var(--cds-font-size-caption)}
+.xp-dn-t{color:var(--color-bad)}.xp-up-t{color:var(--color-ok)}
+.xp-rbar{display:block;height:10px;border-radius:3px;opacity:.75}
+.xp-table td.xp-up{color:var(--color-ok)}
+.xp-chip[aria-pressed="true"]{background:var(--color-fg);color:var(--color-bg);border-color:var(--color-fg)}
+.xp-chip .xp-n{opacity:.75}
+.xp-btn{appearance:none;font:inherit;font-size:var(--cds-font-size-caption);border:1px solid var(--color-border-line);background:var(--color-bg);color:var(--color-fg);border-radius:var(--cds-radius);padding:4px 10px;cursor:pointer}
+.xp-input{font:inherit;padding:6px 10px;border:1px solid var(--color-border-line);border-radius:var(--cds-radius);background:var(--color-bg);color:var(--color-fg);width:100%;max-width:26rem;box-sizing:border-box}
+.xp-sel{font:inherit;padding:5px 8px;border:1px solid var(--color-border-line);border-radius:var(--cds-radius);background:var(--color-bg);color:var(--color-fg)}
+.xp-row{display:flex;gap:var(--cds-gap-sm);flex-wrap:wrap;align-items:center}
+.xp-tw{overflow:auto;max-height:34rem;border:1px solid var(--color-border-line);border-radius:var(--cds-radius)}
+.xp-tw-s{max-height:22rem}
+.xp-table{border-collapse:collapse;width:100%;font-size:var(--cds-font-size-caption)}
+.xp-table th{position:sticky;top:0;background:var(--color-panel);text-align:left;font-weight:var(--cds-font-weight-medium);padding:6px 8px;border-bottom:1px solid var(--color-border-line);white-space:nowrap;z-index:1}
+.xp-table td{padding:6px 8px;border-bottom:1px solid var(--color-border-line);vertical-align:top}
+.xp-table td.xp-num,.xp-table th.xp-num{text-align:right;white-space:nowrap}
+.xp-table tbody tr.xp-click{cursor:pointer}
+.xp-table tbody tr.xp-click:hover{background:color-mix(in srgb,var(--color-fg) 6%,transparent)}
+.xp-table tbody tr.xp-hot{background:color-mix(in srgb,var(--color-warn) 12%,transparent)}
+.xp-table tbody tr.xp-on{outline:2px solid var(--xp-x);outline-offset:-2px}
+.xp-th{appearance:none;background:none;border:0;font:inherit;color:inherit;cursor:pointer;padding:0}
+.xp-name{min-width:12rem;max-width:22rem}
+.xp-pill{display:inline-block;border-radius:999px;padding:1px 8px;font-size:var(--cds-font-size-caption);white-space:nowrap;border:1px solid var(--color-border-line)}
+.xp-pill.bad{color:var(--color-bad);border-color:color-mix(in srgb,var(--color-bad) 45%,transparent)}
+.xp-pill.warn{color:var(--color-warn);border-color:color-mix(in srgb,var(--color-warn) 45%,transparent)}
+.xp-pill.ok{color:var(--color-ok);border-color:color-mix(in srgb,var(--color-ok) 45%,transparent)}
+.xp-bars{display:flex;flex-direction:column;gap:6px;min-height:6rem}
+.xp-brow{display:grid;grid-template-columns:minmax(5.5rem,9rem) 1fr;gap:8px;align-items:center;font-size:var(--cds-font-size-caption)}
+.xp-brow .xp-bl{color:var(--color-fg-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.xp-btrack{display:flex;flex-direction:column;gap:2px;min-width:0}
+.xp-bline{display:flex;align-items:center;gap:6px;min-width:0}
+.xp-bfill{height:9px;border-radius:2px;min-width:1px}
+.xp-bval{white-space:nowrap;color:var(--color-fg-muted)}
+.xp-wf{display:flex;flex-direction:column;gap:8px;min-height:14rem}
+.xp-wrow{display:grid;grid-template-columns:minmax(8rem,14rem) 1fr;gap:10px;align-items:center;font-size:var(--cds-font-size-caption)}
+.xp-wtrack{position:relative;height:22px}
+.xp-wbar{position:absolute;top:2px;height:18px;border-radius:2px}
+.xp-wlab{position:absolute;top:2px;line-height:18px;white-space:nowrap;font-size:var(--cds-font-size-caption)}
+.xp-cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;min-height:9rem}
+.xp-cal .xp-dh{font-size:10px;color:var(--color-fg-muted);text-align:center}
+.xp-cell{aspect-ratio:1/1;max-width:100%;border-radius:3px;border:1px solid var(--color-border-line);font-size:10px;display:flex;flex-direction:column;justify-content:space-between;padding:2px 3px;box-sizing:border-box;min-width:0;overflow:hidden}
+.xp-cell.we{border-style:dashed;border-color:var(--color-fg-muted)}
+.xp-cell.out{visibility:hidden}
+.xp-cell .xp-cv{font-weight:600;text-align:right}
+.xp-cals{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,17rem),1fr));gap:var(--cds-gap-md)}
+.xp-chart{position:relative;min-height:12rem;width:100%}
+.xp-chart svg{display:block}
+.xp-tip{position:absolute;pointer-events:none;background:var(--cds-surface-popover);border:1px solid var(--cds-border);border-radius:var(--cds-radius);box-shadow:var(--cds-shadow-popover);padding:var(--cds-pad-xs) var(--cds-pad-sm);font-size:var(--cds-font-size-caption);white-space:nowrap;z-index:5}
+.xp-tip .t{color:var(--cds-text-secondary)}
+.xp-strip{display:flex;gap:1px;align-items:flex-end;height:14px}
+.xp-strip i{display:block;width:3px;border-radius:1px;background:var(--color-border-line);height:3px}
+.xp-diag{display:flex;flex-direction:column;gap:var(--cds-gap-sm);min-height:4rem}
+.xp-issue{border:1px solid var(--color-border-line);border-left-width:4px;border-radius:var(--cds-radius);padding:var(--cds-pad-md);display:flex;flex-direction:column;gap:6px;background:var(--color-bg)}
+.xp-issue.cao{border-left-color:var(--cds-chart-status-critical)}
+.xp-issue.vua{border-left-color:var(--color-warn)}
+.xp-issue.thap{border-left-color:var(--cds-chart-muted)}
+.xp-issue.tot{border-left-color:var(--color-ok)}
+.xp-issue .xp-it{font-weight:var(--cds-font-weight-medium)}
+.xp-issue p{font-size:var(--cds-font-size-caption);line-height:1.5}
+.xp-results{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;border:1px solid var(--color-border-line);border-radius:var(--cds-radius);max-height:16rem;overflow:auto;max-width:40rem}
+.xp-results li{padding:6px 10px;border-bottom:1px solid var(--color-border-line);cursor:pointer;font-size:var(--cds-font-size-caption)}
+.xp-results li:hover{background:color-mix(in srgb,var(--color-fg) 6%,transparent)}
+.xp-meta{display:flex;gap:var(--cds-gap-md);flex-wrap:wrap;font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.xp-meta b{color:var(--color-fg);font-weight:500}
+.xp-sum{line-height:1.6;max-width:62rem}
+.xp-detail{border:1px solid var(--xp-x);border-radius:var(--cds-radius);padding:var(--cds-pad-lg);display:flex;flex-direction:column;gap:var(--cds-gap-md);background:var(--color-panel)}
+.xp-foot{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted);border-top:1px solid var(--color-border-line);padding-top:var(--cds-pad-sm)}
+[data-dash-source-state=empty]{color:transparent}
+[data-dash-source-state=refreshing]{opacity:.5;transition:opacity var(--cds-dur-slow)}
+.xp-fail{display:flex;align-items:center;justify-content:center;gap:6px;color:var(--color-fg-muted);font-size:var(--cds-font-size-caption);min-height:inherit}
+.xp-fail::before{content:"";width:.375rem;height:.375rem;border-radius:50%;background:var(--color-bad)}
+@media (max-width:560px){.xp-wrow{grid-template-columns:7rem 1fr}.xp-brow{grid-template-columns:5.5rem 1fr}}</style></head><body>
+<div class="mcc-bar"><span id="mcc-state">Đang tải số liệu…</span><a href="#" id="mcc-cur" hidden style="font-weight:600;color:#0f5c52">Mở hồ sơ công ty này trên dashboard</a><span data-mcc-msg></span><label style="margin-left:auto">Cập nhật số liệu<input type="file" accept=".gz" data-mcc-up></label></div>
+<div class="mcc-note">MCC là thẻ cũ đã ngừng, XPAY là sản phẩm thay thế. Trang này là bản phân tích tham khảo (số liệu đến 21/11) để tìm khách cần kích hoạt XPAY. PIC, mốc, thẻ và giao dịch XPAY hiện tại lấy theo dashboard: bấm <b>Hồ sơ</b> cạnh tên công ty để xem và cập nhật.</div>
+<div class="mcc-empty" id="mcc-empty" hidden><h2>Chưa có số liệu MCC vs XPAY</h2><p>Nạp file số liệu (đuôi .mcc.gz) để dựng các trang so sánh MCC và XPAY.</p><label>Chọn file số liệu<input type="file" accept=".gz" data-mcc-up></label><p data-mcc-msg style="margin-top:12px"></p></div>
+<div id="dash-root">
+<div class="xp">
+  <header class="xp-head" id="top">
+    <h1>Tổng quan về MCC và XPAY</h1>
+    <p class="xp-muted">So hành vi đi xe giữa thẻ MCC từng kỳ T04–T09 (kỳ chính để so là T09, 26/08–25/09/2026) và thẻ XPay 30 ngày gần nhất (23/10–21/11/2026), cùng tiến độ chuyển đổi và kế hoạch thẻ XPay của từng công ty. Ở trang Tổng quan có thể chọn kỳ MCC để so.</p>
+    <p class="xp-warn">Dashboard có tên in trên thẻ của khách hàng. Chỉ chia sẻ nội bộ.</p>
+    <nav class="xp-tabs" role="tablist" aria-label="Trang">
+      <button class="xp-tab" role="tab" data-tab="overview" id="tab-overview" aria-selected="true">Tổng quan</button>
+      <button class="xp-tab" role="tab" data-tab="company" id="tab-company" aria-selected="false">MCC cũ và XPAY mới</button>
+      <button class="xp-tab" role="tab" data-tab="profile" id="tab-profile" aria-selected="false">Hồ sơ khách hàng</button>
+      <button class="xp-tab" role="tab" data-tab="convert" id="tab-convert" aria-selected="false">Chuyển đổi XPAY</button>
+      <button class="xp-tab" role="tab" data-tab="plan" id="tab-plan" aria-selected="false">Kế hoạch thẻ XPAY</button>
+      <button class="xp-tab" role="tab" data-tab="y2022" id="tab-y2022" aria-selected="false">Doanh thu 2022</button>
+    </nav>
+  </header>
+
+  <!-- ================= TỔNG QUAN ================= -->
+  <section class="xp-sec" id="overview" data-page="overview">
+    <p class="xp-lead" id="ov-takeaway">XPay 30 ngày đạt <b data-draw="kpi" data-source="ov_kpi" data-field="ratio" data-where="period=T09&amp;metric=gmv" data-fmt="pct">—</b> GMV của MCC kỳ <b data-draw="ovper-name">—</b>: <b data-draw="kpi" data-source="ov_kpi" data-field="xpay" data-where="period=T09&amp;metric=gmv" data-fmt="money">—</b> so với <b data-draw="kpi" data-source="ov_kpi" data-field="mcc" data-where="period=T09&amp;metric=gmv" data-fmt="money">—</b>. Phần lớn chênh lệch nằm ở <b data-draw="bval" data-source="bridge" data-field="cos" data-where="period=T09&amp;order=1" data-fmt="int">—</b> công ty có MCC kỳ đó nhưng chưa đi XPay (<b data-draw="bval" data-source="bridge" data-field="value" data-where="period=T09&amp;order=1" data-fmt="money">—</b>); với <b data-draw="bval" data-source="bridge" data-field="cos" data-where="period=T09&amp;order=2" data-fmt="int">—</b> công ty đi cả hai, phần do số thẻ có chuyến là <b data-draw="bval" data-source="bridge" data-field="value" data-where="period=T09&amp;order=2" data-fmt="money">—</b>. Theo nhóm chuyển đổi (MCC TB T07–T09): <b data-draw="gval" data-source="groups" data-field="cos" data-where="order=1" data-fmt="int">—</b> công ty đã có thẻ XPay nhưng chưa đi chuyến nào, đang có <b data-draw="gval" data-source="groups" data-field="m79_gmv" data-where="order=1" data-fmt="money">—</b> GMV MCC mỗi tháng; <b data-draw="gval" data-source="groups" data-field="cos" data-where="order=0" data-fmt="int">—</b> công ty chưa có thẻ XPay, <b data-draw="gval" data-source="groups" data-field="m79_gmv" data-where="order=0" data-fmt="money">—</b> mỗi tháng. Để về lại số thẻ MCC hoạt động T07–T09 cần thêm <b data-draw="pval" data-source="plan_kpi" data-field="value" data-where="metric=need_cards" data-fmt="int">—</b> thẻ XPay có chuyến; <b data-draw="pval" data-source="plan_kpi" data-field="value" data-where="metric=cards_hi" data-fmt="int">—</b> thẻ đang ở mức ưu tiên cao trong Kế hoạch thẻ XPAY.</p>
+    <div class="xp-row" id="ov-per">
+      <span class="xp-cap">So XPay 30 ngày với MCC kỳ</span>
+      <div class="xp-chips" role="group" aria-label="Chọn kỳ MCC để so">
+        <button class="xp-chip" data-ovper="T04" aria-pressed="false">T04</button><button class="xp-chip" data-ovper="T05" aria-pressed="false">T05</button><button class="xp-chip" data-ovper="T06" aria-pressed="false">T06</button><button class="xp-chip" data-ovper="T07" aria-pressed="false">T07</button><button class="xp-chip" data-ovper="T08" aria-pressed="false">T08</button><button class="xp-chip" data-ovper="T09" aria-pressed="true">T09</button>
+      </div>
+      <span class="xp-cap">Kỳ chọn áp dụng cho câu kết luận, ô số, biểu đồ cầu, phân bố chuyến và lịch theo ngày.</span>
+    </div>
+    <div class="xp-legend"><span><i class="xp-sw xp-sw-m"></i>MCC kỳ <span data-draw="ovper-name">—</span> (<span data-draw="ovper-range">—</span>)</span><span><i class="xp-sw xp-sw-x"></i>XPay 30 ngày (23/10–21/11)</span></div>
+
+    <div class="xp-kpis" id="ov-kpis">
+      <div class="xp-kpi"><span class="xp-lab">GMV</span><div class="xp-pair"><div><span class="xp-side"><i class="xp-sw xp-sw-m"></i>MCC</span><b class="xp-v" data-draw="kpi" data-source="ov_kpi" data-field="mcc" data-where="period=T09&amp;metric=gmv" data-fmt="money">—</b></div><div><span class="xp-side"><i class="xp-sw xp-sw-x"></i>XPay</span><b class="xp-v" data-draw="kpi" data-source="ov_kpi" data-field="xpay" data-where="period=T09&amp;metric=gmv" data-fmt="money">—</b></div></div><span class="xp-ratio">XPay bằng <span data-draw="kpi" data-source="ov_kpi" data-field="ratio" data-where="period=T09&amp;metric=gmv" data-fmt="pct">—</span> MCC</span></div>
+      <div class="xp-kpi"><span class="xp-lab">Số chuyến</span><div class="xp-pair"><div><span class="xp-side"><i class="xp-sw xp-sw-m"></i>MCC</span><b class="xp-v" data-draw="kpi" data-source="ov_kpi" data-field="mcc" data-where="period=T09&amp;metric=trips" data-fmt="int">—</b></div><div><span class="xp-side"><i class="xp-sw xp-sw-x"></i>XPay</span><b class="xp-v" data-draw="kpi" data-source="ov_kpi" data-field="xpay" data-where="period=T09&amp;metric=trips" data-fmt="int">—</b></div></div><span class="xp-ratio">XPay bằng <span data-draw="kpi" data-source="ov_kpi" data-field="ratio" data-where="period=T09&amp;metric=trips" data-fmt="pct">—</span> MCC</span></div>
+      <div class="xp-kpi"><span class="xp-lab">Thẻ có chuyến</span><div class="xp-pair"><div><span class="xp-side"><i class="xp-sw xp-sw-m"></i>MCC</span><b class="xp-v" data-draw="kpi" data-source="ov_kpi" data-field="mcc" data-where="period=T09&amp;metric=cards" data-fmt="int">—</b></div><div><span class="xp-side"><i class="xp-sw xp-sw-x"></i>XPay</span><b class="xp-v" data-draw="kpi" data-source="ov_kpi" data-field="xpay" data-where="period=T09&amp;metric=cards" data-fmt="int">—</b></div></div><span class="xp-ratio">XPay bằng <span data-draw="kpi" data-source="ov_kpi" data-field="ratio" data-where="period=T09&amp;metric=cards" data-fmt="pct">—</span> MCC</span></div>
+      <div class="xp-kpi"><span class="xp-lab">Công ty có chuyến</span><div class="xp-pair"><div><span class="xp-side"><i class="xp-sw xp-sw-m"></i>MCC</span><b class="xp-v" data-draw="kpi" data-source="ov_kpi" data-field="mcc" data-where="period=T09&amp;metric=cos" data-fmt="int">—</b></div><div><span class="xp-side"><i class="xp-sw xp-sw-x"></i>XPay</span><b class="xp-v" data-draw="kpi" data-source="ov_kpi" data-field="xpay" data-where="period=T09&amp;metric=cos" data-fmt="int">—</b></div></div><span class="xp-ratio">XPay bằng <span data-draw="kpi" data-source="ov_kpi" data-field="ratio" data-where="period=T09&amp;metric=cos" data-fmt="pct">—</span> MCC</span></div>
+      <div class="xp-kpi"><span class="xp-lab">Tiền TB mỗi chuyến</span><div class="xp-pair"><div><span class="xp-side"><i class="xp-sw xp-sw-m"></i>MCC</span><b class="xp-v" data-draw="kpi" data-source="ov_kpi" data-field="mcc" data-where="period=T09&amp;metric=fare" data-fmt="money">—</b></div><div><span class="xp-side"><i class="xp-sw xp-sw-x"></i>XPay</span><b class="xp-v" data-draw="kpi" data-source="ov_kpi" data-field="xpay" data-where="period=T09&amp;metric=fare" data-fmt="money">—</b></div></div><span class="xp-ratio">XPay bằng <span data-draw="kpi" data-source="ov_kpi" data-field="ratio" data-where="period=T09&amp;metric=fare" data-fmt="pct">—</span> MCC</span></div>
+      <div class="xp-kpi"><span class="xp-lab">Chuyến TB mỗi thẻ</span><div class="xp-pair"><div><span class="xp-side"><i class="xp-sw xp-sw-m"></i>MCC</span><b class="xp-v" data-draw="kpi" data-source="ov_kpi" data-field="mcc" data-where="period=T09&amp;metric=tpc" data-fmt="dec">—</b></div><div><span class="xp-side"><i class="xp-sw xp-sw-x"></i>XPay</span><b class="xp-v" data-draw="kpi" data-source="ov_kpi" data-field="xpay" data-where="period=T09&amp;metric=tpc" data-fmt="dec">—</b></div></div><span class="xp-ratio">XPay bằng <span data-draw="kpi" data-source="ov_kpi" data-field="ratio" data-where="period=T09&amp;metric=tpc" data-fmt="pct">—</span> MCC</span></div>
+      <div class="xp-kpi"><span class="xp-lab">% chuyến sân bay</span><div class="xp-pair"><div><span class="xp-side"><i class="xp-sw xp-sw-m"></i>MCC</span><b class="xp-v" data-draw="kpi" data-source="ov_kpi" data-field="mcc" data-where="period=T09&amp;metric=air" data-fmt="pct">—</b></div><div><span class="xp-side"><i class="xp-sw xp-sw-x"></i>XPay</span><b class="xp-v" data-draw="kpi" data-source="ov_kpi" data-field="xpay" data-where="period=T09&amp;metric=air" data-fmt="pct">—</b></div></div><span class="xp-ratio">Theo điểm đón hoặc trả có sân bay</span></div>
+    </div>
+
+    <div class="xp-card" id="ov-periods">
+      <h2>MCC từng kỳ T04–T09 so với XPay 30 ngày</h2>
+      <p class="xp-cap">Kỳ MCC là ngày 26 tháng trước đến 25 tháng này. Thẻ có chuyến là số thẻ có ít nhất một chuyến trong kỳ. Bấm một dòng để chọn kỳ đó cho phần so sánh.</p>
+      <div class="xp-legend"><span><i class="xp-sw xp-sw-m"></i>GMV MCC mỗi kỳ</span><span><i class="xp-sw xp-sw-x"></i>GMV XPay 30 ngày</span></div>
+      <div class="xp-bars" data-draw="ov-period-bars" data-source="ov_period"></div>
+      <div class="xp-tw xp-tw-s">
+        <table class="xp-table" data-source="ov_period" data-row-key="period" id="ov-period-table">
+          <thead><tr><th data-field="label">Kỳ</th><th data-field="start">Từ ngày</th><th data-field="end">Đến ngày</th><th class="xp-num" data-field="gmv">GMV</th><th class="xp-num" data-field="trips">Chuyến</th><th class="xp-num" data-field="cards">Thẻ có chuyến</th><th class="xp-num" data-field="cos">Công ty có chuyến</th><th class="xp-num" data-field="fare">Tiền TB/chuyến</th><th class="xp-num" data-field="tpc">Chuyến TB/thẻ</th><th class="xp-num" data-field="air">% chuyến sân bay</th><th class="xp-num" data-field="x_ratio">XPay bằng % kỳ này</th></tr></thead>
+          <tbody data-draw="ov-period-rows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="xp-card" id="ov-conv">
+      <h2>Chuyển đổi XPAY theo nhóm công ty</h2>
+      <p class="xp-cap">Công ty có đi MCC trong T07–T09 hoặc có chuyến XPay. GMV MCC là trung bình mỗi tháng T07–T09; GMV chưa chuyển là phần MCC đó trừ GMV XPay 30 ngày. Thẻ cần thêm là số thẻ MCC hoạt động cao nhất T07–T09 trừ số thẻ XPay có chuyến.</p>
+      <div class="xp-legend"><span><i class="xp-sw xp-sw-m"></i>GMV MCC TB T07–T09</span><span><i class="xp-sw xp-sw-x"></i>GMV XPay 30 ngày</span></div>
+      <div class="xp-bars" data-draw="groups-bars" data-source="groups"></div>
+      <div class="xp-tw xp-tw-s">
+        <table class="xp-table" data-source="groups" data-row-key="order">
+          <thead><tr><th data-field="group">Nhóm chuyển đổi</th><th class="xp-num" data-field="cos">Công ty</th><th class="xp-num" data-field="m79_gmv">GMV MCC TB T07–T09</th><th class="xp-num" data-field="x_gmv">GMV XPay</th><th class="xp-num" data-field="gap_gmv">GMV chưa chuyển</th><th class="xp-num" data-field="mcc_active">Thẻ MCC hoạt động</th><th class="xp-num" data-field="x_cards">Thẻ XPay có chuyến</th><th class="xp-num" data-field="need_cards">Thẻ cần thêm</th><th class="xp-num" data-field="issued">Thẻ XPay phát hành</th></tr></thead>
+          <tbody data-draw="groups-rows"></tbody>
+        </table>
+      </div>
+      <h3>Công ty có MCC kỳ T09: đã active XPay hay chưa</h3>
+      <div class="xp-kpis">
+        <div class="xp-kpi"><span class="xp-lab">Đã active XPay</span><b class="xp-v" style="font-family:var(--font-anthropic-serif);font-weight:400;font-size:var(--cds-font-size-heading)" data-draw="zval" data-source="active_zone" data-field="cos" data-where="order=0" data-fmt="int">—</b><span class="xp-ratio">MCC T09 <span data-draw="zval" data-source="active_zone" data-field="m9_gmv" data-where="order=0" data-fmt="money">—</span>, XPay <span data-draw="zval" data-source="active_zone" data-field="x_gmv" data-where="order=0" data-fmt="money">—</span></span></div>
+        <div class="xp-kpi"><span class="xp-lab">TP.HCM chưa active</span><b class="xp-v" style="font-family:var(--font-anthropic-serif);font-weight:400;font-size:var(--cds-font-size-heading)" data-draw="zval" data-source="active_zone" data-field="cos" data-where="order=1" data-fmt="int">—</b><span class="xp-ratio">MCC T09 <span data-draw="zval" data-source="active_zone" data-field="m9_gmv" data-where="order=1" data-fmt="money">—</span></span></div>
+        <div class="xp-kpi"><span class="xp-lab">Các tỉnh chưa active</span><b class="xp-v" style="font-family:var(--font-anthropic-serif);font-weight:400;font-size:var(--cds-font-size-heading)" data-draw="zval" data-source="active_zone" data-field="cos" data-where="order=2" data-fmt="int">—</b><span class="xp-ratio">MCC T09 <span data-draw="zval" data-source="active_zone" data-field="m9_gmv" data-where="order=2" data-fmt="money">—</span></span></div>
+      </div>
+      <p class="xp-cap">Vùng theo khu vực có nhiều chuyến MCC nhất của công ty trong kỳ T09.</p>
+    </div>
+
+    <div class="xp-card" id="ov-bridge">
+      <h2>Vì sao XPay thấp hơn MCC</h2>
+      <p class="xp-cap">Đi từ GMV MCC kỳ đang chọn tới GMV XPay 30 ngày. Với công ty đã đi cả hai, phần chênh được tách lần lượt: số thẻ có chuyến, rồi số chuyến mỗi thẻ, rồi tiền mỗi chuyến (cộng lại đúng bằng chênh lệch).</p>
+      <div class="xp-wf" data-draw="bridge" data-source="bridge"></div>
+    </div>
+
+    <div class="xp-card" id="ov-dist">
+      <h2>Đi lúc nào, đi bao xa, đi ở đâu</h2>
+      <p class="xp-cap">% số chuyến của mỗi bên. MCC kỳ <span data-draw="ovper-name">—</span> so với XPay 30 ngày.</p>
+      <div class="xp-grid-sm">
+        <div class="xp-step"><h3>Khung giờ</h3><div class="xp-bars" data-draw="dist" data-dim="hour" data-source="ov_dist"></div></div>
+        <div class="xp-step"><h3>Ngày trong tuần</h3><div class="xp-bars" data-draw="dist" data-dim="weekday" data-source="ov_dist"></div></div>
+        <div class="xp-step"><h3>Mức tiền mỗi chuyến</h3><div class="xp-bars" data-draw="dist" data-dim="fare" data-source="ov_dist"></div></div>
+        <div class="xp-step"><h3>Tỉnh thành</h3><div class="xp-bars" data-draw="dist" data-dim="region" data-source="ov_dist"></div></div>
+      </div>
+    </div>
+
+    <div class="xp-grid">
+      <div class="xp-card" id="ov-cal">
+        <h2>Số công ty có chuyến mỗi ngày</h2>
+        <p class="xp-cap">Mỗi ô một ngày, màu đậm là nhiều công ty. Thứ 7 và chủ nhật viền đứt.</p>
+        <div class="xp-cals">
+          <div class="xp-step"><h3>MCC kỳ <span data-draw="ovper-name">—</span></h3><div class="xp-cal" data-draw="ov-cal" data-side="M" data-source="ov_daily"></div></div>
+          <div class="xp-step"><h3>XPay 30 ngày</h3><div class="xp-cal" data-draw="ov-cal" data-side="XPay" data-source="ov_daily"></div></div>
+        </div>
+      </div>
+      <div class="xp-card" id="ov-vendors">
+        <h2>XPay chạy qua hãng nào</h2>
+        <p class="xp-cap">Theo cột "Đơn vị phát sinh" của bảng kê XPay. Mai Linh gồm Tập đoàn và các công ty Mai Linh tỉnh.</p>
+        <div class="xp-tw xp-tw-s">
+          <table class="xp-table" data-source="vendors" data-row-key="vendor">
+            <thead><tr><th data-field="vendor">Hãng</th><th class="xp-num" data-field="trips">Chuyến</th><th class="xp-num" data-field="share_trips">% chuyến</th><th class="xp-num" data-field="gmv">GMV</th><th class="xp-num" data-field="share_gmv">% GMV</th><th class="xp-num" data-field="fare">Tiền/chuyến</th><th class="xp-num" data-field="cos">Công ty</th></tr></thead>
+            <tbody data-draw="vendors"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="xp-card" id="ov-pic">
+      <h2>Tiến độ theo PIC XPay</h2>
+      <p class="xp-cap">PIC lấy từ danh sách Công ty – PIC, nếu không có thì từ file khởi tạo XPay. Bấm một dòng để mở danh sách thẻ cần kích hoạt của PIC đó.</p>
+      <div class="xp-tw xp-tw-s">
+        <table class="xp-table" data-source="pic" data-row-key="pic" id="pic-table">
+          <thead><tr><th data-field="pic">PIC</th><th class="xp-num" data-field="cos">Công ty</th><th class="xp-num" data-field="m9_gmv">GMV MCC T09</th><th class="xp-num" data-field="x_gmv">GMV XPay</th><th class="xp-num" data-field="pct">XPay/MCC</th><th class="xp-num" data-field="gap_gmv">GMV chưa chuyển</th><th class="xp-num" data-field="need_cards">Thẻ cần thêm</th><th class="xp-num" data-field="cards_hi">Thẻ ưu tiên cao</th><th class="xp-num" data-field="g_none">Chưa có thẻ</th><th class="xp-num" data-field="g_idle">Có thẻ, chưa đi</th><th class="xp-num" data-field="g_more">Cần tăng thẻ</th><th class="xp-num" data-field="g_good">Đã chuyển tốt</th></tr></thead>
+          <tbody data-draw="pic-rows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="xp-card" id="ov-companies">
+      <h2>Công ty: GMV và số thẻ MCC từng kỳ T04–T09 so với XPay</h2>
+      <p class="xp-cap">Mỗi kỳ có hai cột: GMV MCC và số thẻ có chuyến trong kỳ. Mặc định xếp theo GMV T09; bấm tiêu đề cột để xếp theo kỳ khác. Tình trạng và XPay/MCC so với kỳ T09. Bấm một dòng để mở trang công ty. "Vấn đề chính" là vấn đề ưu tiên cao nhất theo các quy tắc ở cuối trang.</p>
+      <div class="xp-chips" role="group" aria-label="Lọc theo tình trạng">
+        <button class="xp-chip" data-stf="all" aria-pressed="true">Tất cả</button>
+        <button class="xp-chip" data-stf="Chưa đi XPay" aria-pressed="false">Chưa đi XPay <span class="xp-n" data-draw="stcount" data-source="status_count" data-field="cos" data-where="status=Chưa đi XPay">—</span></button>
+        <button class="xp-chip" data-stf="XPay dưới 50%" aria-pressed="false">XPay dưới 50% <span class="xp-n" data-draw="stcount" data-source="status_count" data-field="cos" data-where="status=XPay dưới 50%25">—</span></button>
+        <button class="xp-chip" data-stf="XPay 50–99%" aria-pressed="false">XPay 50–99% <span class="xp-n" data-draw="stcount" data-source="status_count" data-field="cos" data-where="status=XPay 50–99%25">—</span></button>
+        <button class="xp-chip" data-stf="Bằng hoặc hơn MCC" aria-pressed="false">Bằng hoặc hơn MCC <span class="xp-n" data-draw="stcount" data-source="status_count" data-field="cos" data-where="status=Bằng hoặc hơn MCC">—</span></button>
+        <button class="xp-chip" data-stf="Ngừng MCC trước T09" aria-pressed="false">Ngừng MCC trước T09 <span class="xp-n" data-draw="stcount" data-source="status_count" data-field="cos" data-where="status=Ngừng MCC trước T09">—</span></button>
+        <button class="xp-chip" data-stf="Chỉ có trên XPay" aria-pressed="false">Chỉ có trên XPay <span class="xp-n" data-draw="stcount" data-source="status_count" data-field="cos" data-where="status=Chỉ có trên XPay">—</span></button>
+      </div>
+      <div class="xp-row">
+        <input class="xp-input" id="ov-q" type="search" placeholder="Tìm tên công ty (gõ không dấu được)" aria-label="Tìm công ty">
+        <select class="xp-sel" data-draw="pic-select" data-param="opic" aria-label="Lọc theo PIC" data-source="pic"></select>
+        <select class="xp-sel" id="ov-grp" aria-label="Lọc theo nhóm chuyển đổi"><option value="all">Mọi nhóm chuyển đổi</option><option>Chưa có thẻ XPay</option><option>Có thẻ XPay, chưa đi chuyến nào</option><option>Cần tăng số thẻ</option><option>Chuyển đổi tốt</option><option>Quay lại nhờ XPay</option><option>Chỉ có trên XPay</option></select>
+        <span class="xp-cap" data-draw="ov-count" data-source="companies">—</span>
+      </div>
+      <div class="xp-tw">
+        <table class="xp-table" data-source="companies" data-row-key="co_id" id="ov-table">
+          <thead><tr>
+            <th data-field="co_id"><button class="xp-th" data-sort="co_id">Mã KH</button></th>
+            <th data-field="name"><button class="xp-th" data-sort="name">Công ty</button></th>
+            <th data-field="status"><button class="xp-th" data-sort="status">Tình trạng</button></th>
+            <th class="xp-num" data-field="g04"><button class="xp-th" data-sort="g04">GMV T04</button></th>
+            <th class="xp-num" data-field="c04"><button class="xp-th" data-sort="c04">Thẻ T04</button></th>
+            <th class="xp-num" data-field="g05"><button class="xp-th" data-sort="g05">GMV T05</button></th>
+            <th class="xp-num" data-field="c05"><button class="xp-th" data-sort="c05">Thẻ T05</button></th>
+            <th class="xp-num" data-field="g06"><button class="xp-th" data-sort="g06">GMV T06</button></th>
+            <th class="xp-num" data-field="c06"><button class="xp-th" data-sort="c06">Thẻ T06</button></th>
+            <th class="xp-num" data-field="g07"><button class="xp-th" data-sort="g07">GMV T07</button></th>
+            <th class="xp-num" data-field="c07"><button class="xp-th" data-sort="c07">Thẻ T07</button></th>
+            <th class="xp-num" data-field="g08"><button class="xp-th" data-sort="g08">GMV T08</button></th>
+            <th class="xp-num" data-field="c08"><button class="xp-th" data-sort="c08">Thẻ T08</button></th>
+            <th class="xp-num" data-field="g09"><button class="xp-th" data-sort="g09" aria-sort="descending">GMV T09</button></th>
+            <th class="xp-num" data-field="c09"><button class="xp-th" data-sort="c09">Thẻ T09</button></th>
+            <th class="xp-num" data-field="m_avg_gmv"><button class="xp-th" data-sort="m_avg_gmv">GMV TB T04–T09</button></th>
+            <th class="xp-num" data-field="x_gmv"><button class="xp-th" data-sort="x_gmv">GMV XPay 30 ngày</button></th>
+            <th class="xp-num" data-field="x_cards"><button class="xp-th" data-sort="x_cards">Thẻ XPay</button></th>
+            <th class="xp-num" data-field="pct"><button class="xp-th" data-sort="pct">XPay/MCC T09</button></th>
+            <th data-field="group"><button class="xp-th" data-sort="group">Nhóm chuyển đổi</button></th>
+            <th class="xp-num" data-field="need_cards"><button class="xp-th" data-sort="need_cards">Thẻ cần thêm</button></th>
+            <th data-field="main_issue"><button class="xp-th" data-sort="main_issue">Vấn đề chính</button></th>
+            <th data-field="pic"><button class="xp-th" data-sort="pic">PIC</button></th>
+            <th data-field="sale"><button class="xp-th" data-sort="sale">Sale</button></th>
+          </tr></thead>
+          <tbody data-draw="ov-rows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="xp-grid" id="ov-rules">
+      <div class="xp-card">
+        <h2>Ngưỡng dùng để chẩn đoán</h2>
+        <p class="xp-cap">Bạn có thể yêu cầu chỉnh bất kỳ ngưỡng nào.</p>
+        <div class="xp-tw xp-tw-s">
+          <table class="xp-table" data-source="rules" data-row-key="code">
+            <thead><tr><th data-field="code">Mã</th><th data-field="title">Vấn đề</th><th data-field="threshold">Ngưỡng</th><th data-field="action">Việc cần làm</th></tr></thead>
+            <tbody data-draw="rules"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="xp-card">
+        <h2>Cách nối dữ liệu và giả định</h2>
+        <p class="xp-cap">Công ty XPay nối với mã KH theo tên bỏ dấu và bỏ chữ chung (CÔNG TY, TNHH, CP…). Thẻ XPay nối với thẻ MCC cũ theo số thẻ cũ → thẻ mới trong file XPAY_LIST_PROCESSES (bảng kê chỉ có 4 số cuối thẻ, nên so 4 số cuối trong cùng công ty). Khu vực MCC theo đơn vị thực hiện (MLC là TP.HCM); XPay theo "Mai Linh &lt;tỉnh&gt;", Tập đoàn Mai Linh và các hãng khác tính là TP.HCM.</p>
+        <div class="xp-tw xp-tw-s">
+          <table class="xp-table" data-source="assume" data-row-key="key">
+            <thead><tr><th data-field="label">Giả định</th><th class="xp-num" data-field="value">Giá trị</th></tr></thead>
+            <tbody data-draw="assume"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= TỪNG CÔNG TY ================= -->
+  <section class="xp-sec" id="company" data-page="company" hidden>
+    <div class="xp-step">
+      <label class="xp-cap" for="co-q">Tìm công ty (gõ không dấu được, ví dụ "johnson")</label>
+      <input class="xp-input" id="co-q" type="search" placeholder="Tên công ty hoặc mã KH" autocomplete="off">
+      <ul class="xp-results" data-draw="co-results" data-source="companies" hidden></ul>
+    </div>
+    <p class="xp-muted" id="co-empty" hidden>Chọn một công ty: tìm ở ô trên hoặc bấm một dòng trong bảng ở trang Tổng quan.</p>
+
+    <div class="xp-sec" id="co-body" hidden>
+      <div class="xp-head">
+        <h2 style="font-family:var(--font-anthropic-serif);font-weight:400;font-size:var(--cds-font-size-title)" data-draw="co-f" data-source="companies" data-field="name">—</h2>
+        <div class="xp-meta">
+          <span>Mã KH <b data-draw="co-f" data-source="companies" data-field="co_id">—</b></span>
+          <span>Sale <b data-draw="co-f" data-source="companies" data-field="sale">—</b></span>
+          <span>Tình trạng <b data-draw="co-f" data-source="companies" data-field="status">—</b></span>
+          <span>Cách đi trên XPay <b data-draw="co-f" data-source="companies" data-field="how">—</b></span>
+          <span>PIC XPay <b data-draw="co-f" data-source="companies" data-field="pic">—</b></span>
+          <span>Mã HĐ <b data-draw="co-f" data-source="companies" data-field="ma_hd">—</b></span>
+          <span>Nhóm chuyển đổi <b data-draw="co-f" data-source="companies" data-field="group">—</b></span>
+          <span>Trạng thái HĐ <b data-draw="co-f" data-source="companies" data-field="contract">—</b></span>
+          <span>Tiến độ giao thẻ <b data-draw="co-f" data-source="companies" data-field="delivery">—</b></span>
+        </div>
+      </div>
+
+      <!-- Bước 1 -->
+      <div class="xp-step" id="co-step1">
+        <h2>Bước 1 · Cấp công ty</h2>
+        <h3>1. MCC kỳ T09 cạnh XPay 30 ngày</h3>
+        <div class="xp-kpis">
+          <div class="xp-kpi"><span class="xp-lab">GMV</span><div class="xp-pair"><div><span class="xp-side"><i class="xp-sw xp-sw-m"></i>MCC T09</span><b class="xp-v" data-draw="co-f" data-source="companies" data-field="m9_gmv" data-fmt="money">—</b></div><div><span class="xp-side"><i class="xp-sw xp-sw-x"></i>XPay</span><b class="xp-v" data-draw="co-f" data-source="companies" data-field="x_gmv" data-fmt="money">—</b></div></div><span class="xp-ratio">XPay bằng <span data-draw="co-f" data-source="companies" data-field="pct" data-fmt="pct">—</span> MCC</span></div>
+          <div class="xp-kpi"><span class="xp-lab">Số chuyến</span><div class="xp-pair"><div><span class="xp-side"><i class="xp-sw xp-sw-m"></i>MCC T09</span><b class="xp-v" data-draw="co-f" data-source="companies" data-field="m9_trips" data-fmt="int">—</b></div><div><span class="xp-side"><i class="xp-sw xp-sw-x"></i>XPay</span><b class="xp-v" data-draw="co-f" data-source="companies" data-field="x_trips" data-fmt="int">—</b></div></div></div>
+          <div class="xp-kpi"><span class="xp-lab">Thẻ có chuyến</span><div class="xp-pair"><div><span class="xp-side"><i class="xp-sw xp-sw-m"></i>MCC T09</span><b class="xp-v" data-draw="co-f" data-source="companies" data-field="m9_cards" data-fmt="int">—</b></div><div><span class="xp-side"><i class="xp-sw xp-sw-x"></i>XPay</span><b class="xp-v" data-draw="co-f" data-source="companies" data-field="x_cards" data-fmt="int">—</b></div></div><span class="xp-ratio">MCC TB <span data-draw="co-f" data-source="companies" data-field="m_avg_cards" data-fmt="dec">—</span> thẻ/tháng T04–T09</span></div>
+          <div class="xp-kpi"><span class="xp-lab">Tiền TB mỗi chuyến</span><div class="xp-pair"><div><span class="xp-side"><i class="xp-sw xp-sw-m"></i>MCC T09</span><b class="xp-v" data-draw="co-f" data-source="companies" data-field="m9_fare" data-fmt="money">—</b></div><div><span class="xp-side"><i class="xp-sw xp-sw-x"></i>XPay</span><b class="xp-v" data-draw="co-f" data-source="companies" data-field="x_fare" data-fmt="money">—</b></div></div></div>
+          <div class="xp-kpi"><span class="xp-lab">Chuyến TB mỗi thẻ</span><div class="xp-pair"><div><span class="xp-side"><i class="xp-sw xp-sw-m"></i>MCC T09</span><b class="xp-v" data-draw="co-f" data-source="companies" data-field="m9_tpc" data-fmt="dec">—</b></div><div><span class="xp-side"><i class="xp-sw xp-sw-x"></i>XPay</span><b class="xp-v" data-draw="co-f" data-source="companies" data-field="x_tpc" data-fmt="dec">—</b></div></div></div>
+          <div class="xp-kpi"><span class="xp-lab">% chuyến sân bay</span><div class="xp-pair"><div><span class="xp-side"><i class="xp-sw xp-sw-m"></i>MCC T09</span><b class="xp-v" data-draw="co-f" data-source="companies" data-field="m9_air" data-fmt="pct">—</b></div><div><span class="xp-side"><i class="xp-sw xp-sw-x"></i>XPay</span><b class="xp-v" data-draw="co-f" data-source="companies" data-field="x_air" data-fmt="pct">—</b></div></div></div>
+          <div class="xp-kpi"><span class="xp-lab">GMV TB mỗi tháng có đi T04–T09</span><b class="xp-v" style="font-family:var(--font-anthropic-serif);font-weight:400;font-size:var(--cds-font-size-heading)" data-draw="co-f" data-source="companies" data-field="m_avg_gmv" data-fmt="money">—</b><span class="xp-ratio">Có đi <span data-draw="co-f" data-source="companies" data-field="m_months" data-fmt="int">—</span>/6 kỳ</span></div>
+        </div>
+        <h3>MCC từng kỳ T04–T09 so với XPay 30 ngày</h3>
+        <div class="xp-tw xp-tw-s">
+          <table class="xp-table" data-source="co_period" data-row-key="co_id,period">
+            <thead><tr><th data-field="period">Kỳ</th><th class="xp-num" data-field="gmv">GMV</th><th class="xp-num" data-field="trips">Chuyến</th><th class="xp-num" data-field="cards">Thẻ có chuyến</th><th class="xp-num" data-field="days">Ngày có chuyến</th><th class="xp-num" data-field="fare">Tiền TB/chuyến</th><th class="xp-num" data-field="tpc">Chuyến TB/thẻ</th></tr></thead>
+            <tbody data-draw="co-ptable"></tbody>
+          </table>
+        </div>
+        <h3>Thẻ XPay: phát hành, có chuyến, cần thêm</h3>
+        <div class="xp-kpis">
+          <div class="xp-kpi"><span class="xp-lab">Thẻ MCC hoạt động</span><b class="xp-v xp-big" data-draw="co-f" data-source="companies" data-field="mcc_active" data-fmt="int">—</b><span class="xp-ratio">TB mỗi kỳ trong T07–T09, làm tròn lên</span></div>
+          <div class="xp-kpi"><span class="xp-lab">Thẻ XPay phát hành</span><b class="xp-v xp-big" data-draw="co-f" data-source="companies" data-field="issued" data-fmt="int">—</b><span class="xp-ratio">Theo file XPAY_LIST_PROCESSES</span></div>
+          <div class="xp-kpi"><span class="xp-lab">Thẻ XPay có chuyến</span><b class="xp-v xp-big" data-draw="co-f" data-source="companies" data-field="x_cards" data-fmt="int">—</b><span class="xp-ratio">Trong 30 ngày</span></div>
+          <div class="xp-kpi"><span class="xp-lab">Thẻ cần thêm</span><b class="xp-v xp-big" data-draw="co-f" data-source="companies" data-field="need_cards" data-fmt="int">—</b><span class="xp-ratio">Thẻ MCC hoạt động trừ thẻ XPay có chuyến</span></div>
+          <div class="xp-kpi"><span class="xp-lab">GMV chưa chuyển mỗi tháng</span><b class="xp-v xp-big" data-draw="co-f" data-source="companies" data-field="gap_gmv" data-fmt="money">—</b><span class="xp-ratio">MCC TB T07–T09 <span data-draw="co-f" data-source="companies" data-field="m79_gmv" data-fmt="money">—</span> trừ XPay 30 ngày</span></div>
+        </div>
+
+        <div class="xp-card" id="co-daily">
+          <h3>2. Công ty đi theo từng ngày trong tháng</h3>
+          <div class="xp-row">
+            <label class="xp-cap" for="co-per">So với kỳ MCC</label>
+            <select class="xp-sel" id="co-per"><option value="T04">T04 (26/03–25/04)</option><option value="T05">T05 (26/04–25/05)</option><option value="T06">T06 (26/05–25/06)</option><option value="T07">T07 (26/06–25/07)</option><option value="T08">T08 (26/07–25/08)</option><option value="T09">T09 (26/08–25/09)</option></select>
+            <span class="xp-cap">Chỉ số theo ngày</span>
+            <div class="xp-chips" role="group" aria-label="Chỉ số theo ngày">
+              <button class="xp-chip" data-metric="trips" aria-pressed="true">Số chuyến</button>
+              <button class="xp-chip" data-metric="gmv" aria-pressed="false">GMV</button>
+              <button class="xp-chip" data-metric="cards" aria-pressed="false">Số thẻ có chuyến</button>
+            </div>
+          </div>
+          <div class="xp-tw xp-tw-s">
+            <table class="xp-table" data-source="co_period" data-row-key="co_id,period">
+              <thead><tr><th data-field="period">Kỳ</th><th class="xp-num" data-field="days">Ngày có chuyến</th><th class="xp-num" data-field="workdays">Ngày làm việc có chuyến (T2–T6)</th><th class="xp-num" data-field="gap">Nghỉ dài nhất (ngày)</th><th class="xp-num" data-field="tpd">Chuyến TB mỗi ngày có đi</th><th class="xp-num" data-field="cpd">Thẻ TB mỗi ngày có đi</th><th class="xp-num" data-field="gpd">GMV TB mỗi ngày có đi</th></tr></thead>
+              <tbody data-draw="co-pstats"></tbody>
+            </table>
+          </div>
+          <div class="xp-cals">
+            <div class="xp-step"><h3>MCC kỳ <span data-draw="per-name">—</span></h3><div class="xp-cal" data-draw="co-cal" data-side="M" data-source="co_daily"></div></div>
+            <div class="xp-step"><h3>XPay 30 ngày</h3><div class="xp-cal" data-draw="co-cal" data-side="X" data-source="co_daily"></div></div>
+          </div>
+          <p class="xp-cap">Mỗi ô một ngày, màu đậm là nhiều. Thứ 7 và chủ nhật viền đứt. Cùng một thang màu cho cả hai bên.</p>
+          <h3>Theo ngày thứ 1…31 của kỳ</h3>
+          <div class="xp-legend"><span><i class="xp-sw xp-sw-m"></i>MCC</span><span><i class="xp-sw xp-sw-x"></i>XPay</span></div>
+          <div class="xp-chart" data-draw="co-days" data-source="co_daily"></div>
+        </div>
+
+        <div class="xp-card" id="co-mix">
+          <h3>3. GMV theo kỳ và kiểu đi</h3>
+          <div class="xp-grid-sm">
+            <div class="xp-step"><h3>GMV và thẻ có chuyến theo kỳ T04–T09 so với XPay</h3><div class="xp-bars" data-draw="co-periods" data-source="co_period"></div></div>
+            <div class="xp-step"><h3>Khung giờ</h3><div class="xp-bars" data-draw="co-dist" data-dim="hour" data-source="co_dist"></div></div>
+            <div class="xp-step"><h3>Ngày trong tuần</h3><div class="xp-bars" data-draw="co-dist" data-dim="weekday" data-source="co_dist"></div></div>
+            <div class="xp-step"><h3>Tiền mỗi chuyến</h3><div class="xp-bars" data-draw="co-dist" data-dim="fare" data-source="co_dist"></div></div>
+            <div class="xp-step"><h3>Nơi phát sinh</h3><div class="xp-bars" data-draw="co-dist" data-dim="region" data-source="co_dist"></div></div>
+            <div class="xp-step"><h3>Sân bay hay nơi khác</h3><div class="xp-bars" data-draw="co-dist" data-dim="pickup" data-source="co_dist"></div></div>
+          </div>
+          <p class="xp-cap">Phần kiểu đi là % số chuyến: MCC gộp T04–T09 để có đủ chuyến, so với XPay 30 ngày.</p>
+        </div>
+
+        <div class="xp-card" id="co-summary">
+          <h3>4. Tóm tắt cấp công ty</h3>
+          <p class="xp-sum" data-draw="co-f" data-source="companies" data-field="summary">—</p>
+          <h3>Phản hồi KH / CS</h3>
+          <p class="xp-sum" data-draw="co-f" data-source="companies" data-field="feedback">—</p>
+        </div>
+
+        <div class="xp-card" id="co-diagnosis">
+          <h3>5. Chẩn đoán và việc cần làm cho công ty</h3>
+          <div class="xp-diag" data-draw="co-diag" data-source="co_diag"></div>
+        </div>
+      </div>
+
+      <!-- Bước 2 -->
+      <div class="xp-step" id="co-step2">
+        <h2>Bước 2 · Cấp thẻ</h2>
+        <p class="xp-cap">Mỗi dòng là một thẻ MCC T04–T09 hoặc thẻ XPay. Thẻ XPay nối với thẻ MCC cũ theo số thẻ cũ trong file XPAY_LIST_PROCESSES. Dòng tô màu là thẻ cần chú ý: thẻ ưu tiên cao chưa đi XPay. Bấm một thẻ để xem chi tiết.</p>
+        <div class="xp-chips" role="group" aria-label="Lọc thẻ theo tình trạng">
+          <button class="xp-chip" data-cst="all" aria-pressed="true">Tất cả</button>
+          <button class="xp-chip" data-cst="flag" aria-pressed="false">Cần chú ý</button>
+          <button class="xp-chip" data-cst="Có thẻ XPay, chưa đi" aria-pressed="false">Có thẻ XPay, chưa đi</button>
+          <button class="xp-chip" data-cst="Chưa thấy thẻ XPay" aria-pressed="false">Chưa thấy thẻ XPay</button>
+          <button class="xp-chip" data-cst="Đã chuyển, đi nhiều hơn" aria-pressed="false">Đã chuyển, đi nhiều hơn</button>
+          <button class="xp-chip" data-cst="Đã chuyển, tương đương" aria-pressed="false">Đã chuyển, tương đương</button>
+          <button class="xp-chip" data-cst="Đã chuyển, đi ít hơn" aria-pressed="false">Đã chuyển, đi ít hơn</button>
+          <button class="xp-chip" data-cst="Quay lại nhờ XPay" aria-pressed="false">Quay lại nhờ XPay</button>
+          <button class="xp-chip" data-cst="Chỉ có trên XPay" aria-pressed="false">Chỉ có trên XPay</button>
+          <button class="xp-chip" data-cst="Thẻ chung" aria-pressed="false">Thẻ tên chung</button>
+          <button class="xp-chip" data-cst="Đã ngừng trước T09" aria-pressed="false">Đã ngừng trước T09</button>
+        </div>
+        <input class="xp-input" id="card-q" type="search" placeholder="Tìm tên trên thẻ hoặc 4 số cuối" aria-label="Tìm thẻ">
+        <div class="xp-tw">
+          <table class="xp-table" data-source="cards" data-row-key="card" id="card-table">
+            <thead><tr>
+              <th data-field="name">Tên trên thẻ</th>
+              <th data-field="status">Tình trạng</th>
+              <th data-field="prio">Ưu tiên</th>
+              <th class="xp-num" data-field="m9_trips">Chuyến MCC T09</th>
+              <th class="xp-num" data-field="m9_gmv">GMV MCC T09</th>
+              <th class="xp-num" data-field="months">Số tháng có đi (/6)</th>
+              <th class="xp-num" data-field="mavg">TB chuyến/tháng MCC</th>
+              <th class="xp-num" data-field="x_trips">Chuyến XPay</th>
+              <th class="xp-num" data-field="x_gmv">GMV XPay</th>
+              <th class="xp-num" data-field="rhythm">Nhịp XPay so với T04–T09</th>
+              <th data-source="card_strip" data-field="m9">Dải ngày MCC T09</th>
+              <th data-source="card_strip" data-field="xp">Dải ngày XPay</th>
+              <th data-field="mlast4">4 số cuối MCC</th>
+              <th data-field="xlast4">4 số cuối XPay</th>
+              <th data-field="level">Mức đi</th>
+              <th data-field="trend">Xu hướng</th>
+            </tr></thead>
+            <tbody data-draw="card-rows"></tbody>
+          </table>
+        </div>
+        <span class="xp-cap" data-draw="card-count" data-source="cards">—</span>
+
+        <div class="xp-detail" id="card-detail" hidden>
+          <div class="xp-row" style="justify-content:space-between">
+            <h3 style="font-size:var(--cds-font-size-heading)">Thẻ <span data-draw="card-f" data-source="cards" data-field="name">—</span></h3>
+            <button class="xp-btn" id="card-close">Đóng chi tiết thẻ</button>
+          </div>
+          <div class="xp-meta"><span>Tình trạng <b data-draw="card-f" data-source="cards" data-field="status">—</b></span><span>Ưu tiên <b data-draw="card-f" data-source="cards" data-field="prio">—</b></span><span>Mức đi <b data-draw="card-f" data-source="cards" data-field="level">—</b></span><span>Xu hướng <b data-draw="card-f" data-source="cards" data-field="trend">—</b></span><span>Cách nối <b data-draw="card-f" data-source="cards" data-field="linkhow">—</b></span><span>MCC …<b data-draw="card-f" data-source="cards" data-field="mlast4">—</b></span><span>XPay …<b data-draw="card-f" data-source="cards" data-field="xlast4">—</b></span></div>
+          <div class="xp-kpis">
+            <div class="xp-kpi"><span class="xp-lab">Chuyến</span><div class="xp-pair"><div><span class="xp-side"><i class="xp-sw xp-sw-m"></i>MCC T09</span><b class="xp-v" data-draw="card-f" data-source="cards" data-field="m9_trips" data-fmt="int">—</b></div><div><span class="xp-side"><i class="xp-sw xp-sw-x"></i>XPay</span><b class="xp-v" data-draw="card-f" data-source="cards" data-field="x_trips" data-fmt="int">—</b></div></div></div>
+            <div class="xp-kpi"><span class="xp-lab">GMV</span><div class="xp-pair"><div><span class="xp-side"><i class="xp-sw xp-sw-m"></i>MCC T09</span><b class="xp-v" data-draw="card-f" data-source="cards" data-field="m9_gmv" data-fmt="money">—</b></div><div><span class="xp-side"><i class="xp-sw xp-sw-x"></i>XPay</span><b class="xp-v" data-draw="card-f" data-source="cards" data-field="x_gmv" data-fmt="money">—</b></div></div></div>
+            <div class="xp-kpi"><span class="xp-lab">Ngày có đi</span><div class="xp-pair"><div><span class="xp-side"><i class="xp-sw xp-sw-m"></i>MCC T09</span><b class="xp-v" data-draw="card-f" data-source="cards" data-field="m9_days" data-fmt="int">—</b></div><div><span class="xp-side"><i class="xp-sw xp-sw-x"></i>XPay</span><b class="xp-v" data-draw="card-f" data-source="cards" data-field="x_days" data-fmt="int">—</b></div></div></div>
+            <div class="xp-kpi"><span class="xp-lab">Nghỉ dài nhất (ngày)</span><div class="xp-pair"><div><span class="xp-side"><i class="xp-sw xp-sw-m"></i>MCC T09</span><b class="xp-v" data-draw="card-f" data-source="cards" data-field="m9_gap" data-fmt="int">—</b></div><div><span class="xp-side"><i class="xp-sw xp-sw-x"></i>XPay</span><b class="xp-v" data-draw="card-f" data-source="cards" data-field="x_gap" data-fmt="int">—</b></div></div></div>
+            <div class="xp-kpi"><span class="xp-lab">Tiền mỗi chuyến</span><div class="xp-pair"><div><span class="xp-side"><i class="xp-sw xp-sw-m"></i>MCC T09</span><b class="xp-v" data-draw="card-f" data-source="cards" data-field="m9_fare" data-fmt="money">—</b></div><div><span class="xp-side"><i class="xp-sw xp-sw-x"></i>XPay</span><b class="xp-v" data-draw="card-f" data-source="cards" data-field="x_fare" data-fmt="money">—</b></div></div></div>
+          </div>
+          <div class="xp-cals">
+            <div class="xp-step"><h3>MCC kỳ T09 theo ngày</h3><div class="xp-cal" data-draw="card-cal" data-side="T09" data-source="card_daily"></div></div>
+            <div class="xp-step"><h3>XPay 30 ngày theo ngày</h3><div class="xp-cal" data-draw="card-cal" data-side="XP" data-source="card_daily"></div></div>
+          </div>
+          <div class="xp-grid-sm">
+            <div class="xp-step"><h3>Chuyến theo tháng T04–T09 so với XPay</h3><div class="xp-bars" data-draw="card-months" data-source="cards"></div></div>
+            <div class="xp-step"><h3>Khung giờ (số chuyến)</h3><div class="xp-bars" data-draw="card-hour" data-source="card_hour"></div><p class="xp-cap">MCC gộp T04–T09, XPay 30 ngày.</p></div>
+          </div>
+          <div class="xp-issue vua">
+            <span class="xp-it">Nhận xét</span><p data-draw="card-f" data-source="cards" data-field="note">—</p>
+            <span class="xp-it">Việc cần làm</span><p data-draw="card-f" data-source="cards" data-field="action">—</p>
+            <span class="xp-it">Kiểu đi</span><p data-draw="card-f" data-source="cards" data-field="style">—</p>
+            <span class="xp-it">Gợi ý khi gọi</span><p data-draw="card-f" data-source="cards" data-field="tip">—</p>
+          </div>
+          <div class="xp-grid">
+            <div class="xp-step"><h3>8 chuyến MCC gần nhất</h3>
+              <div class="xp-tw xp-tw-s"><table class="xp-table" data-source="recent" data-row-key="k"><thead><tr><th data-field="dt">Thời gian</th><th class="xp-num" data-field="amt">Tiền</th><th data-field="pickup">Điểm đón</th><th data-field="dropoff">Điểm trả</th><th data-field="region">Khu vực</th></tr></thead><tbody data-draw="recent" data-side="M"></tbody></table></div>
+            </div>
+            <div class="xp-step"><h3>8 chuyến XPay gần nhất</h3>
+              <div class="xp-tw xp-tw-s"><table class="xp-table" data-source="recent" data-row-key="k"><thead><tr><th data-field="dt">Thời gian</th><th class="xp-num" data-field="amt">Tiền</th><th data-field="pickup">Điểm đón</th><th data-field="dropoff">Điểm trả</th><th data-field="vendor">Hãng</th></tr></thead><tbody data-draw="recent" data-side="X"></tbody></table></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= HỒ SƠ KHÁCH HÀNG ================= -->
+  <section class="xp-sec" id="profile" data-page="profile" hidden>
+    <p class="xp-lead">Hồ sơ đi MCC kỳ T04–T09 của từng khách hàng và từng thẻ. Nhóm chuyển đổi tính lại với XPay 30 ngày (23/10–21/11).</p>
+    <div class="xp-card" id="hs-month">
+      <h2>MCC theo tháng</h2>
+      <p class="xp-cap">GMV MCC mỗi kỳ (26 tháng trước đến 25 tháng này).</p>
+      <div class="xp-bars" data-draw="hs-month-bars" data-source="hs_month"></div>
+      <div class="xp-tw xp-tw-s">
+        <table class="xp-table" data-source="hs_month" data-row-key="ky">
+          <thead><tr><th data-field="ky">Kỳ</th><th class="xp-num" data-field="gmv">GMV</th><th class="xp-num" data-field="trips">Chuyến</th><th class="xp-num" data-field="cos">Số KH</th><th class="xp-num" data-field="cards">Số thẻ</th><th class="xp-num" data-field="fare">TB mỗi chuyến</th><th class="xp-num" data-field="d_gmv">Thay đổi GMV</th><th class="xp-num" data-field="d_trips">Thay đổi chuyến</th><th class="xp-num" data-field="d_cos">Thay đổi số KH</th></tr></thead>
+          <tbody data-draw="hs-month-rows"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="xp-card" id="hs-company">
+      <h2>Hồ sơ công ty</h2>
+      <p class="xp-cap">Mỗi kỳ T04–T09 có GMV MCC và số thẻ có chuyến trong kỳ; hai cột XPay là 30 ngày 23/10–21/11. Thay đổi là GMV TB T07–T09 so với TB T04–T06; GMV mất mỗi tháng là phần giảm đó. "Số thẻ" là tổng số thẻ khác nhau đã đi trong T04–T09. Số ngày không dùng tính đến 21/11. Bấm một dòng để mở trang công ty.</p>
+      <div class="xp-row">
+        <input class="xp-input" id="hs-q" type="search" placeholder="Tìm tên công ty hoặc mã KH" aria-label="Tìm công ty">
+        <select class="xp-sel" data-draw="pic-select" data-param="hpic" aria-label="Lọc theo PIC" data-source="pic"></select>
+        <select class="xp-sel" id="hs-chg" aria-label="Lọc theo thay đổi GMV"><option value="all">Mọi mức thay đổi</option><option value="d50">Giảm trên 50%</option><option value="d20">Giảm 20–50%</option><option value="flat">Gần như giữ (±20%)</option><option value="up">Tăng trên 20%</option></select>
+        <span class="xp-cap" data-draw="hs-count" data-source="hs_co">—</span>
+      </div>
+      <div class="xp-tw">
+        <table class="xp-table" data-source="hs_co" data-row-key="co_id" id="hs-table" data-sortkey="hs">
+          <thead><tr><th data-field="co_id"><button class="xp-th" data-sort="co_id">Mã KH</button></th><th data-field="name"><button class="xp-th" data-sort="name">Công ty</button></th><th data-field="ma_hd"><button class="xp-th" data-sort="ma_hd">Mã HĐ</button></th><th data-field="sale"><button class="xp-th" data-sort="sale">Sale</button></th><th data-field="pic"><button class="xp-th" data-sort="pic">PIC</button></th><th class="xp-num" data-field="g04"><button class="xp-th" data-sort="g04">GMV T04</button></th><th class="xp-num" data-field="c04"><button class="xp-th" data-sort="c04">Thẻ T04</button></th><th class="xp-num" data-field="g05"><button class="xp-th" data-sort="g05">GMV T05</button></th><th class="xp-num" data-field="c05"><button class="xp-th" data-sort="c05">Thẻ T05</button></th><th class="xp-num" data-field="g06"><button class="xp-th" data-sort="g06">GMV T06</button></th><th class="xp-num" data-field="c06"><button class="xp-th" data-sort="c06">Thẻ T06</button></th><th class="xp-num" data-field="g07"><button class="xp-th" data-sort="g07">GMV T07</button></th><th class="xp-num" data-field="c07"><button class="xp-th" data-sort="c07">Thẻ T07</button></th><th class="xp-num" data-field="g08"><button class="xp-th" data-sort="g08">GMV T08</button></th><th class="xp-num" data-field="c08"><button class="xp-th" data-sort="c08">Thẻ T08</button></th><th class="xp-num" data-field="g09"><button class="xp-th" data-sort="g09">GMV T09</button></th><th class="xp-num" data-field="c09"><button class="xp-th" data-sort="c09">Thẻ T09</button></th><th class="xp-num" data-field="x_gmv"><button class="xp-th" data-sort="x_gmv">GMV XPay 30 ngày</button></th><th class="xp-num" data-field="x_cards"><button class="xp-th" data-sort="x_cards">Thẻ XPay</button></th><th class="xp-num" data-field="gmv"><button class="xp-th" data-sort="gmv">Tổng GMV T04–T09</button></th><th class="xp-num" data-field="avg46"><button class="xp-th" data-sort="avg46">GMV TB T04–T06</button></th><th class="xp-num" data-field="avg79"><button class="xp-th" data-sort="avg79">GMV TB T07–T09</button></th><th class="xp-num" data-field="change"><button class="xp-th" data-sort="change">Thay đổi</button></th><th class="xp-num" data-field="lost"><button class="xp-th" data-sort="lost">GMV mất mỗi tháng</button></th><th class="xp-num" data-field="cards"><button class="xp-th" data-sort="cards">Số thẻ</button></th><th class="xp-num" data-field="days"><button class="xp-th" data-sort="days">Ngày có đi</button></th><th data-field="last"><button class="xp-th" data-sort="last">Lần cuối đi MCC</button></th><th class="xp-num" data-field="idle"><button class="xp-th" data-sort="idle">Số ngày không dùng</button></th><th data-field="group"><button class="xp-th" data-sort="group">Nhóm chuyển đổi</button></th></tr></thead>
+          <tbody data-draw="hs-rows"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="xp-card" id="hs-cards">
+      <h2>Hồ sơ thẻ và hành vi</h2>
+      <p class="xp-cap">Mức đi theo số chuyến TB mỗi tháng T04–T09; xu hướng so T07–T09 với T04–T06 (±30%). Kiểu đi tóm khung giờ hay đi, tỷ lệ cuối tuần, sân bay và tiền TB mỗi chuyến.</p>
+      <div class="xp-grid-sm">
+        <div class="xp-step"><h3>Số thẻ theo mức đi</h3><div class="xp-bars" data-draw="hs-mix" data-dim="level" data-source="hs_mix"></div></div>
+        <div class="xp-step"><h3>Số thẻ theo xu hướng</h3><div class="xp-bars" data-draw="hs-mix" data-dim="trend" data-source="hs_mix"></div></div>
+      </div>
+      <div class="xp-chips" role="group" aria-label="Lọc theo mức đi">
+        <button class="xp-chip" data-hlevel="all" aria-pressed="true">Mọi mức đi</button><button class="xp-chip" data-hlevel="Đi rất nhiều" aria-pressed="false">Đi rất nhiều</button><button class="xp-chip" data-hlevel="Đi nhiều" aria-pressed="false">Đi nhiều</button><button class="xp-chip" data-hlevel="Đi đều" aria-pressed="false">Đi đều</button><button class="xp-chip" data-hlevel="Đi vừa" aria-pressed="false">Đi vừa</button><button class="xp-chip" data-hlevel="Đi ít" aria-pressed="false">Đi ít</button><button class="xp-chip" data-hlevel="Hiếm khi đi" aria-pressed="false">Hiếm khi đi</button>
+      </div>
+      <div class="xp-row">
+        <input class="xp-input" id="hc-q" type="search" placeholder="Tìm tên trên thẻ hoặc công ty" aria-label="Tìm thẻ">
+        <select class="xp-sel" id="hc-trend" aria-label="Lọc theo xu hướng"><option value="all">Mọi xu hướng</option><option value="active">Còn đi trong T09</option><option>Ổn định</option><option>Đang tăng</option><option>Đang giảm</option><option>Mới dùng từ T09</option><option>Mới dùng từ T07</option><option>Ngừng T09</option><option>Ngừng từ T08</option><option>Ngừng từ T07</option><option>Ngừng từ T06</option><option>Ngừng từ T05</option></select>
+        <select class="xp-sel" data-draw="pic-select" data-param="hcpic" aria-label="Lọc theo PIC" data-source="pic"></select>
+        <label class="xp-cap"><input type="checkbox" id="hc-batch"> Chỉ thẻ đã có thẻ XPay mới</label>
+        <span class="xp-cap" data-draw="hc-count" data-source="hs_card">—</span>
+      </div>
+      <div class="xp-tw">
+        <table class="xp-table" data-source="hs_card" data-row-key="k" id="hc-table" data-sortkey="hc">
+          <thead><tr><th data-field="co_name"><button class="xp-th" data-sort="co_name">Công ty</button></th><th data-field="pic"><button class="xp-th" data-sort="pic">PIC</button></th><th data-field="name"><button class="xp-th" data-sort="name">Tên trên thẻ</button></th><th data-field="last4"><button class="xp-th" data-sort="last4">4 số cuối</button></th><th class="xp-num" data-field="trips"><button class="xp-th" data-sort="trips">Chuyến T04–T09</button></th><th class="xp-num" data-field="gmv"><button class="xp-th" data-sort="gmv">GMV T04–T09</button></th><th class="xp-num" data-field="t04"><button class="xp-th" data-sort="t04">T04</button></th><th class="xp-num" data-field="t05"><button class="xp-th" data-sort="t05">T05</button></th><th class="xp-num" data-field="t06"><button class="xp-th" data-sort="t06">T06</button></th><th class="xp-num" data-field="t07"><button class="xp-th" data-sort="t07">T07</button></th><th class="xp-num" data-field="t08"><button class="xp-th" data-sort="t08">T08</button></th><th class="xp-num" data-field="t09"><button class="xp-th" data-sort="t09">T09</button></th><th data-field="last"><button class="xp-th" data-sort="last">Lần cuối đi</button></th><th data-field="level"><button class="xp-th" data-sort="level">Mức đi</button></th><th data-field="trend"><button class="xp-th" data-sort="trend">Xu hướng</button></th><th data-field="style"><button class="xp-th" data-sort="style">Kiểu đi</button></th><th data-field="comment"><button class="xp-th" data-sort="comment">Nhận xét</button></th><th data-field="tip"><button class="xp-th" data-sort="tip">Gợi ý khi gọi</button></th></tr></thead>
+          <tbody data-draw="hc-rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= CHUYỂN ĐỔI XPAY ================= -->
+  <section class="xp-sec" id="convert" data-page="convert" hidden>
+    <p class="xp-lead">Tiến độ chuyển từng công ty và từng thẻ từ MCC sang XPay. PIC, thẻ XPay phát hành, hợp đồng, giao thẻ, phản hồi và số thẻ cũ lấy từ file khởi tạo XPay (XPAY_LIST_PROCESSES); chuyến và GMV XPay lấy từ bảng kê 30 ngày (23/10–21/11).</p>
+    <div class="xp-kpis">
+      <div class="xp-kpi"><span class="xp-lab">GMV XPay 30 ngày</span><b class="xp-v xp-big" data-draw="kpi" data-source="ov_kpi" data-field="xpay" data-where="period=T09&amp;metric=gmv" data-fmt="money">—</b></div>
+      <div class="xp-kpi"><span class="xp-lab">Chuyến XPay</span><b class="xp-v xp-big" data-draw="kpi" data-source="ov_kpi" data-field="xpay" data-where="period=T09&amp;metric=trips" data-fmt="int">—</b></div>
+      <div class="xp-kpi"><span class="xp-lab">Công ty có chuyến XPay</span><b class="xp-v xp-big" data-draw="kpi" data-source="ov_kpi" data-field="xpay" data-where="period=T09&amp;metric=cos" data-fmt="int">—</b></div>
+      <div class="xp-kpi"><span class="xp-lab">Thẻ XPay có chuyến</span><b class="xp-v xp-big" data-draw="kpi" data-source="ov_kpi" data-field="xpay" data-where="period=T09&amp;metric=cards" data-fmt="int">—</b></div>
+      <div class="xp-kpi"><span class="xp-lab">GMV XPay nối được mã KH</span><b class="xp-v xp-big" data-draw="aval" data-source="assume" data-field="value" data-where="key=co_match_gmv" data-fmt="pct">—</b></div>
+      <div class="xp-kpi"><span class="xp-lab">Thẻ XPay đã phát hành</span><b class="xp-v xp-big" data-draw="pval" data-source="plan_kpi" data-field="value" data-where="metric=issued" data-fmt="int">—</b></div>
+    </div>
+    <div class="xp-card" id="cd-groups">
+      <h2>Nhóm chuyển đổi</h2>
+      <p class="xp-cap">Công ty có đi MCC trong T07–T09, có chuyến XPay hoặc đã được phát thẻ XPay. "Cần tăng số thẻ" khi thẻ XPay có chuyến ít hơn số thẻ MCC hoạt động T07–T09.</p>
+      <div class="xp-legend"><span><i class="xp-sw xp-sw-m"></i>GMV MCC TB T07–T09</span><span><i class="xp-sw xp-sw-x"></i>GMV XPay 30 ngày</span></div>
+      <div class="xp-bars" data-draw="groups-bars" data-source="groups"></div>
+      <div class="xp-tw xp-tw-s">
+        <table class="xp-table" data-source="groups" data-row-key="order">
+          <thead><tr><th data-field="group">Nhóm chuyển đổi</th><th class="xp-num" data-field="cos">Công ty</th><th class="xp-num" data-field="m79_gmv">GMV MCC TB T07–T09</th><th class="xp-num" data-field="x_gmv">GMV XPay</th><th class="xp-num" data-field="gap_gmv">GMV chưa chuyển</th><th class="xp-num" data-field="mcc_active">Thẻ MCC hoạt động</th><th class="xp-num" data-field="x_cards">Thẻ XPay có chuyến</th><th class="xp-num" data-field="need_cards">Thẻ cần thêm</th><th class="xp-num" data-field="issued">Thẻ XPay phát hành</th></tr></thead>
+          <tbody data-draw="groups-rows"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="xp-card" id="cd-company">
+      <h2>Chuyển đổi theo công ty</h2>
+      <p class="xp-cap">Phủ thẻ là thẻ XPay có chuyến chia thẻ MCC hoạt động. Mặc định xếp theo GMV chưa chuyển. Bấm một dòng để mở trang công ty.</p>
+      <div class="xp-row">
+        <input class="xp-input" id="cd-q" type="search" placeholder="Tìm tên công ty hoặc mã KH" aria-label="Tìm công ty">
+        <select class="xp-sel" id="cd-grp" aria-label="Lọc theo nhóm chuyển đổi"><option value="all">Mọi nhóm chuyển đổi</option><option>Chưa có thẻ XPay</option><option>Có thẻ XPay, chưa đi chuyến nào</option><option>Cần tăng số thẻ</option><option>Chuyển đổi tốt</option><option>Quay lại nhờ XPay</option><option>Chỉ có trên XPay</option></select>
+        <select class="xp-sel" data-draw="pic-select" data-param="cpic" aria-label="Lọc theo PIC" data-source="pic"></select>
+        <select class="xp-sel" id="cd-del" aria-label="Lọc theo tiến độ giao thẻ"><option value="all">Mọi tiến độ giao thẻ</option><option>Đã hoàn thành</option><option>Chưa hoàn thành</option><option value="none">Chưa ghi tiến độ</option></select>
+        <span class="xp-cap" data-draw="cd-count" data-source="companies">—</span>
+      </div>
+      <div class="xp-tw">
+        <table class="xp-table" data-source="companies" data-row-key="co_id" id="cd-table" data-sortkey="cd">
+          <thead><tr><th data-field="co_id"><button class="xp-th" data-sort="co_id">Mã KH</button></th><th data-field="name"><button class="xp-th" data-sort="name">Công ty</button></th><th data-field="pic"><button class="xp-th" data-sort="pic">PIC</button></th><th data-field="group"><button class="xp-th" data-sort="group">Nhóm chuyển đổi</button></th><th class="xp-num" data-field="mcc_active"><button class="xp-th" data-sort="mcc_active">Thẻ MCC hoạt động</button></th><th class="xp-num" data-field="m46_gmv"><button class="xp-th" data-sort="m46_gmv">GMV MCC TB T04–T06</button></th><th class="xp-num" data-field="m79_gmv"><button class="xp-th" data-sort="m79_gmv">GMV MCC TB T07–T09</button></th><th class="xp-num" data-field="issued"><button class="xp-th" data-sort="issued">Thẻ XPay phát hành</button></th><th class="xp-num" data-field="x_cards"><button class="xp-th" data-sort="x_cards">Thẻ XPay có chuyến</button></th><th class="xp-num" data-field="x_trips"><button class="xp-th" data-sort="x_trips">Chuyến XPay</button></th><th class="xp-num" data-field="x_gmv"><button class="xp-th" data-sort="x_gmv">GMV XPay</button></th><th class="xp-num" data-field="coverage"><button class="xp-th" data-sort="coverage">Phủ thẻ</button></th><th class="xp-num" data-field="need_cards"><button class="xp-th" data-sort="need_cards">Thẻ cần thêm</button></th><th class="xp-num" data-field="gap_gmv"><button class="xp-th" data-sort="gap_gmv">GMV chưa chuyển</button></th><th data-field="contract"><button class="xp-th" data-sort="contract">Trạng thái HĐ</button></th><th data-field="delivery"><button class="xp-th" data-sort="delivery">Tiến độ giao thẻ</button></th><th data-field="feedback"><button class="xp-th" data-sort="feedback">Phản hồi KH / CS</button></th></tr></thead>
+          <tbody data-draw="cd-rows"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="xp-card" id="cd-cards">
+      <h2>Thẻ MCC ↔ XPay</h2>
+      <p class="xp-cap">Thẻ XPay nối với thẻ MCC cũ theo số thẻ cũ → thẻ mới trong file XPAY_LIST_PROCESSES, so 4 số cuối thẻ mới trên bảng kê trong cùng công ty. Bấm một thẻ để mở trang công ty tại thẻ đó.</p>
+      <div class="xp-chips" role="group" aria-label="Lọc theo tình trạng thẻ">
+        <button class="xp-chip" data-mst="all" aria-pressed="true">Mọi tình trạng</button><button class="xp-chip" data-mst="Đã chuyển" aria-pressed="false">Đã đi bằng XPay</button><button class="xp-chip" data-mst="Có thẻ XPay, chưa đi" aria-pressed="false">Có thẻ XPay, chưa đi</button><button class="xp-chip" data-mst="Chưa thấy thẻ XPay" aria-pressed="false">Chưa thấy thẻ XPay</button><button class="xp-chip" data-mst="Thẻ chung, chưa nối được" aria-pressed="false">Thẻ chung, chưa nối được</button><button class="xp-chip" data-mst="Chỉ có trên XPay" aria-pressed="false">Thẻ XPay mới</button><button class="xp-chip" data-mst="Đã ngừng trước T09" aria-pressed="false">Ngừng MCC trước T09</button>
+      </div>
+      <div class="xp-row">
+        <input class="xp-input" id="cm-q" type="search" placeholder="Tìm tên trên thẻ, công ty hoặc 4 số cuối" aria-label="Tìm thẻ">
+        <select class="xp-sel" data-draw="pic-select" data-param="mpic" aria-label="Lọc theo PIC" data-source="pic"></select>
+        <span class="xp-cap" data-draw="cm-count" data-source="cards">—</span>
+      </div>
+      <div class="xp-tw">
+        <table class="xp-table" data-source="cards" data-row-key="card" id="cm-table" data-sortkey="cm">
+          <thead><tr><th data-field="co_name"><button class="xp-th" data-sort="co_name">Công ty</button></th><th data-field="pic"><button class="xp-th" data-sort="pic">PIC</button></th><th data-field="name"><button class="xp-th" data-sort="name">Tên trên thẻ</button></th><th data-field="mlast4"><button class="xp-th" data-sort="mlast4">4 số cuối MCC</button></th><th data-field="xlast4"><button class="xp-th" data-sort="xlast4">4 số cuối XPay</button></th><th data-field="linkhow"><button class="xp-th" data-sort="linkhow">Cách nối</button></th><th class="xp-num" data-field="t79"><button class="xp-th" data-sort="t79">Chuyến MCC T07–T09</button></th><th class="xp-num" data-field="m_trips"><button class="xp-th" data-sort="m_trips">Chuyến MCC T04–T09</button></th><th class="xp-num" data-field="m_gmv"><button class="xp-th" data-sort="m_gmv">GMV MCC T04–T09</button></th><th class="xp-num" data-field="x_trips"><button class="xp-th" data-sort="x_trips">Chuyến XPay</button></th><th class="xp-num" data-field="x_gmv"><button class="xp-th" data-sort="x_gmv">GMV XPay</button></th><th data-field="status"><button class="xp-th" data-sort="status">Tình trạng</button></th><th data-field="action"><button class="xp-th" data-sort="action">Việc cần làm</button></th></tr></thead>
+          <tbody data-draw="cm-rows"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="xp-card" id="cd-out">
+      <h2>Công ty trên XPay chưa nối được mã KH</h2>
+      <p class="xp-cap">Có thể là khách mới hoặc tên trên XPay khác tên MCC; cần đối chiếu tay.</p>
+      <div class="xp-tw xp-tw-s">
+        <table class="xp-table" data-source="companies" data-row-key="co_id">
+          <thead><tr><th data-field="name">Công ty trên XPay</th><th class="xp-num" data-field="x_trips">Chuyến XPay</th><th class="xp-num" data-field="x_gmv">GMV XPay</th><th class="xp-num" data-field="x_cards">Thẻ có chuyến</th></tr></thead>
+          <tbody data-draw="cd-out"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= KẾ HOẠCH THẺ ================= -->
+  <section class="xp-sec" id="plan" data-page="plan" hidden>
+    <p class="xp-lead">Danh sách thẻ MCC cần kích hoạt sang XPay, xếp theo ưu tiên. Công ty có đi MCC trong T07–T09 hoặc có chuyến XPay.</p>
+    <div class="xp-kpis">
+      <div class="xp-kpi"><span class="xp-lab">Thẻ MCC hoạt động T07–T09</span><b class="xp-v xp-big" data-draw="pval" data-source="plan_kpi" data-field="value" data-where="metric=mcc_active" data-fmt="int">—</b><span class="xp-ratio">Cộng số thẻ TB mỗi kỳ của từng công ty</span></div>
+      <div class="xp-kpi"><span class="xp-lab">Thẻ XPay có chuyến</span><b class="xp-v xp-big" data-draw="pval" data-source="plan_kpi" data-field="value" data-where="metric=x_cards" data-fmt="int">—</b><span class="xp-ratio">30 ngày, 23/10–21/11</span></div>
+      <div class="xp-kpi"><span class="xp-lab">Thẻ cần thêm</span><b class="xp-v xp-big" data-draw="pval" data-source="plan_kpi" data-field="value" data-where="metric=need_cards" data-fmt="int">—</b><span class="xp-ratio">Để về lại số thẻ MCC hoạt động</span></div>
+      <div class="xp-kpi"><span class="xp-lab">Thẻ XPay đã phát hành</span><b class="xp-v xp-big" data-draw="pval" data-source="plan_kpi" data-field="value" data-where="metric=issued" data-fmt="int">—</b><span class="xp-ratio">Theo file XPAY_LIST_PROCESSES</span></div>
+      <div class="xp-kpi"><span class="xp-lab">GMV chưa chuyển mỗi tháng</span><b class="xp-v xp-big" data-draw="pval" data-source="plan_kpi" data-field="value" data-where="metric=gap_gmv" data-fmt="money">—</b><span class="xp-ratio">MCC TB T07–T09 trừ XPay 30 ngày</span></div>
+      <div class="xp-kpi"><span class="xp-lab">Thẻ ưu tiên cao</span><b class="xp-v xp-big" data-draw="pval" data-source="plan_kpi" data-field="value" data-where="metric=cards_hi" data-fmt="int">—</b><span class="xp-ratio"><span data-draw="pval" data-source="plan_kpi" data-field="value" data-where="metric=hi_has" data-fmt="int">—</span> thuộc công ty đã có thẻ XPay, <span data-draw="pval" data-source="plan_kpi" data-field="value" data-where="metric=hi_no" data-fmt="int">—</span> thuộc công ty chưa có</span></div>
+    </div>
+    <div class="xp-card" id="plan-cards">
+      <h2>Thẻ cần kích hoạt</h2>
+      <p class="xp-cap">Ưu tiên theo số chuyến MCC T07–T09 của thẻ: Cao từ 9 chuyến (khoảng 3 chuyến/tháng), Trung bình 3–8 chuyến, Thấp dưới 3 chuyến. Bấm một thẻ để mở trang công ty tại thẻ đó.</p>
+      <div class="xp-chips" role="group" aria-label="Lọc theo ưu tiên">
+        <button class="xp-chip" data-prio="Cao" aria-pressed="true">Ưu tiên cao</button>
+        <button class="xp-chip" data-prio="Trung bình" aria-pressed="false">Trung bình</button>
+        <button class="xp-chip" data-prio="Thấp" aria-pressed="false">Thấp</button>
+        <button class="xp-chip" data-prio="all" aria-pressed="false">Tất cả</button>
+      </div>
+      <div class="xp-chips" role="group" aria-label="Lọc theo tình trạng thẻ">
+        <button class="xp-chip" data-pst="all" aria-pressed="true">Mọi tình trạng</button>
+        <button class="xp-chip" data-pst="Có thẻ XPay, chưa đi" aria-pressed="false">Có thẻ XPay, chưa đi</button>
+        <button class="xp-chip" data-pst="Chưa thấy thẻ XPay" aria-pressed="false">Chưa thấy thẻ XPay</button>
+        <button class="xp-chip" data-pst="Thẻ chung, chưa nối được" aria-pressed="false">Thẻ chung, chưa nối được</button>
+        <button class="xp-chip" data-pst="Đã chuyển, đi ít hơn" aria-pressed="false">Đã chuyển, đi ít hơn</button>
+        <button class="xp-chip" data-pst="Đã ngừng trước T09" aria-pressed="false">Ngừng MCC trước T09</button>
+      </div>
+      <div class="xp-row">
+        <input class="xp-input" id="plan-q" type="search" placeholder="Tìm tên công ty hoặc tên trên thẻ" aria-label="Tìm thẻ cần kích hoạt">
+        <select class="xp-sel" data-draw="pic-select" data-param="ppic" aria-label="Lọc theo PIC" data-source="pic"></select>
+        <span class="xp-cap" data-draw="plan-count" data-source="cards">—</span>
+      </div>
+      <div class="xp-tw">
+        <table class="xp-table" data-source="cards" data-row-key="card" id="plan-table">
+          <thead><tr><th data-field="prio">Ưu tiên</th><th data-field="co_name">Công ty</th><th data-field="pic">PIC</th><th data-field="name">Tên trên thẻ</th><th data-field="status">Tình trạng</th><th class="xp-num" data-field="t79">Chuyến MCC T07–T09</th><th class="xp-num" data-field="m9_gmv">GMV MCC T09</th><th data-field="level">Mức đi</th><th data-field="trend">Xu hướng</th><th data-field="mlast4">4 số cuối MCC</th><th data-field="xlast4">4 số cuối XPay</th><th data-field="action">Việc cần làm</th></tr></thead>
+          <tbody data-draw="plan-rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= DOANH THU 2022 ================= -->
+  <section class="xp-sec" id="y2022" data-page="y2022" hidden>
+    <p class="xp-lead">Doanh thu năm 2022 của từng khách, để tham khảo khách từng chi bao nhiêu cho đi lại so với bây giờ. Size 2022/tháng là số lớn hơn giữa doanh thu tháng 1/2022 và doanh thu cả năm 2022 chia 12. Chỉ lấy khách có size từ 20 triệu/tháng. Đang chi = MCC TB kỳ T07–T09 cộng XPay 30 ngày (23/10–21/11).</p>
+    <div class="xp-kpis">
+      <div class="xp-kpi"><span class="xp-lab">Khách có size 2022 ≥ 20 triệu/tháng</span><b class="xp-v xp-big" data-draw="ykpi" data-source="y_kpi" data-field="n" data-row="0" data-fmt="int">—</b><span class="xp-ratio">Đủ room &gt;$10k/tháng: <span data-draw="ykpi" data-source="y_kpi" data-field="room" data-row="0" data-fmt="int">—</span> khách</span></div>
+      <div class="xp-kpi"><span class="xp-lab">Size 2022 cộng lại</span><b class="xp-v xp-big" data-draw="ykpi" data-source="y_kpi" data-field="size" data-row="0" data-fmt="money">—</b><span class="xp-ratio">mỗi tháng</span></div>
+      <div class="xp-kpi"><span class="xp-lab">Đang chi cộng lại</span><b class="xp-v xp-big" data-draw="ykpi" data-source="y_kpi" data-field="cur" data-row="0" data-fmt="money">—</b><span class="xp-ratio">mỗi tháng</span></div>
+      <div class="xp-kpi"><span class="xp-lab">Đang chi so với 2022</span><b class="xp-v xp-big" data-draw="ykpi" data-source="y_kpi" data-field="ratio" data-row="0" data-fmt="pct">—</b><span class="xp-ratio">trên cùng nhóm khách</span></div>
+    </div>
+    <div class="xp-step">
+      <h2>Khách theo size 2022 và nhóm hiện tại</h2>
+      <p class="xp-cap">Active w/ XPay: có chuyến XPay 30 ngày. Có XPay – chưa active: đã phát thẻ XPay nhưng chưa có chuyến. Active MCC – chưa có XPay: còn chi MCC từ 20% so với 2022. Lapser: chưa có XPay và chi dưới 20% so với 2022. Đủ room khi size 2022 từ $10.000/tháng (tỷ giá 26.300, khoảng 263 triệu). Bấm một dòng có mã công ty để mở trang công ty.</p>
+      <div class="xp-chips" role="group" aria-label="Lọc theo nhóm">
+        <button class="xp-chip" data-yseg="all" aria-pressed="true">Tất cả</button>
+        <button class="xp-chip" data-yseg="Lapser" aria-pressed="false">Lapser</button>
+        <button class="xp-chip" data-yseg="Có XPay – chưa active" aria-pressed="false">Có XPay – chưa active</button>
+        <button class="xp-chip" data-yseg="Active w/ XPay" aria-pressed="false">Active w/ XPay</button>
+        <button class="xp-chip" data-yseg="Active MCC – chưa có XPay" aria-pressed="false">Active MCC – chưa có XPay</button>
+      </div>
+      <div class="xp-row"><input class="xp-input" id="y-q" type="search" placeholder="Tìm tên công ty hoặc mã HĐ" aria-label="Tìm công ty"><span class="xp-cap" data-draw="y-count" data-source="y2022">—</span></div>
+      <div class="xp-tw">
+        <table class="xp-table" id="y-table" data-source="y2022" data-row-key="k">
+          <thead><tr><th class="xp-num">#</th><th data-field="name">Khách hàng</th><th data-field="nganh">Ngành</th><th class="xp-num" data-field="size">Size 2022/tháng</th><th class="xp-num" data-field="dt1">DT tháng 1/2022</th><th class="xp-num" data-field="dt22">DT năm 2022</th><th class="xp-num" data-field="m79_gmv">MCC TB T07–T09</th><th class="xp-num" data-field="x_gmv">XPay 30 ngày</th><th class="xp-num" data-field="ratio">Đang chi / 2022</th><th data-field="seg">Nhóm</th><th data-field="pic">PIC</th></tr></thead>
+          <tbody data-draw="y-rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <p class="xp-foot">Nguồn: bảng kê XPay 23/10–21/11/2026 (ghép các bảng kê 16/11 và 21/11, đến 19:56 ngày 21/11), giao dịch thẻ MCC kỳ T04–T09 (file raw MCC/XPay/KPI; kỳ là ngày 26 tháng trước đến 25 tháng này), danh sách Công ty – PIC, file XPAY_LIST_PROCESSES 8 (thẻ phát hành, hợp đồng, giao thẻ, phản hồi, số thẻ cũ → thẻ mới) và file Danh sách khách hàng MCC 16-80 (doanh thu 2022). Chỉ giữ 4 số cuối thẻ. Chuyến 0đ không tính. Tiền viết kiểu "1,86 tỷ", "570 triệu".</p>
+</div>
+
+
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+/* Chạy trang "Tổng quan về MCC và XPAY" (vốn là dashboard trên claude.ai) trong web Reconciliation.
+   Thay runtime `dash` của claude.ai bằng bản nhỏ: dữ liệu đọc từ /api/dashboard/mobility/db (mcc/meta + mcc/<bảng>~<phần>),
+   CSV nén gzip, base64, chia phần ≤ 700 kB mỗi tài liệu. Các file xp-*.js giữ nguyên như bản gốc. */
+(function () {
+  "use strict";
+  var API = "/api/dashboard/mobility/db";
+  var DATA = {}, CALC = {}, CALCV = {}, DRAW = {}, MOUNT = new WeakMap(), ONDATA = [], PARAMS = {}, VER = 0, T = 0;
+  var dash = window.dash = {};
+  dash.colors = ["#0f5c52", "#d98a1c", "#6a45c2", "#3bb37b", "#e83c3f", "#2a6fdb"];
+  var sched = function () { if (T) return; T = requestAnimationFrame(function () { T = 0; run(); }); };
+  dash.data = function (id) {
+    if (CALC[id]) { var c = CALC[id], ins = c.inputs.map(function (i) { return dash.data(i); });
+      if (ins.some(function (x) { return x.status !== "ok"; })) { var s = ins.find(function (x) { return x.status !== "ok"; }).status; return {status: s, data: null}; }
+      if (!CALCV[id] || CALCV[id].v !== VER) { try { CALCV[id] = {v: VER, r: {status: "ok", data: c.fn.apply(null, ins.map(function (x) { return x.data; }))}}; } catch (e) { console.error(id, e); CALCV[id] = {v: VER, r: {status: "error", data: null, message: String(e)}}; } }
+      return CALCV[id].r; }
+    return DATA[id] || {status: "loading", data: []};
+  };
+  dash.calc = function (id, o) { CALC[id] = o; };
+  dash.loader = function () {};
+  dash.onData = function (fn) { ONDATA.push(fn); try { fn(); } catch (e) { console.error(e); } };
+  dash.draw = function (name, fn) { if (fn === undefined) { drawName(name); return; } DRAW[name] = fn; sched(); };
+  dash.params = function () { return Object.assign({}, PARAMS); };
+  dash.setParams = function (o) { Object.keys(o || {}).forEach(function (k) { if (o[k] === null || o[k] === undefined) delete PARAMS[k]; else PARAMS[k] = o[k]; }); VER++; sched(); };
+  dash.resetParams = function () { PARAMS = {}; VER++; sched(); };
+  dash.setLink = function (name) { try { history.replaceState(null, "", "#" + name); } catch (e) {} };
+  dash.refresh = function () {};
+  function visible(el) { return !el.closest("[hidden]"); }
+  function drawEl(name, el) {
+    var f = DRAW[name]; if (!f || !visible(el)) return;
+    try {
+      if (typeof f === "function") f(el);
+      else { var m = MOUNT.get(el); if (!m) { el.replaceChildren(); m = {made: f.mount ? f.mount(el) : null}; MOUNT.set(el, m); } if (f.update) f.update(el, m.made); }
+    } catch (e) { console.error("draw " + name, e); }
+  }
+  function drawName(name) { document.querySelectorAll('[data-draw="' + name + '"]').forEach(function (el) { drawEl(name, el); }); }
+  function run() {
+    ONDATA.forEach(function (fn) { try { fn(); } catch (e) { console.error(e); } });
+    document.querySelectorAll("[data-draw]").forEach(function (el) { if (el.parentElement && el.parentElement.closest("[data-draw]")) return; drawEl(el.dataset.draw, el); });
+    post();
+  }
+  var W = 0; window.addEventListener("resize", function () { if (Math.abs(window.innerWidth - W) > 4) { W = window.innerWidth; sched(); } });
+  // chiều cao trang báo cho khung chứa (tab MCC vs XPAY trong dashboard Mobility)
+  var lastH = 0; function post() { var h = document.documentElement.scrollHeight; if (Math.abs(h - lastH) > 2 && window.parent !== window) { lastH = h; window.parent.postMessage({type: "mcc-h", h: h}, location.origin); } }
+  setInterval(post, 800);
+
+  /* ---- dữ liệu ---- */
+  async function J(u, o) { var r = await fetch(u, Object.assign({cache: "no-store", credentials: "same-origin"}, o || {})); var b = {}; try { b = await r.json(); } catch (e) {} if (!r.ok) { var er = new Error(b.error || ("Lỗi " + r.status)); er.status = r.status; throw er; } return b; }
+  async function gunzipB64(b64) { var bin = atob(b64), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    return await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream("gzip"))).text(); }
+  async function gzipB64(text) { var buf = new Uint8Array(await new Response(new Blob([text]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer()); var s = "", CH = 0x8000;
+    for (var i = 0; i < buf.length; i += CH) s += String.fromCharCode.apply(null, buf.subarray(i, i + CH)); return btoa(s); }
+  function parse(text) { var rows = d3.csvParse(text); rows.forEach(function (r) { for (var k in r) if (r[k] === "") r[k] = null; }); var c = rows.columns; rows.columns = c; return rows; }
+  var META = null;
+  async function loadSet(id, n) {
+    try { var parts = await Promise.all(Array.from({length: n}, function (_, i) { return J(API + "?doc=" + encodeURIComponent("mcc/" + id + "~" + i)); }));
+      if (parts.some(function (p) { return !p.exists; })) throw new Error("thiếu phần dữ liệu");
+      var text = await gunzipB64(parts.map(function (p) { return p.data.b; }).join(""));
+      var rows = parse(text); DATA[id] = {status: "ok", data: rows, columns: rows.columns};
+    } catch (e) { DATA[id] = {status: "error", data: [], message: String(e.message || e)}; }
+    VER++; sched();
+  }
+  async function load() {
+    var st = document.getElementById("mcc-state");
+    try { var m = await J(API + "?doc=mcc/meta"); if (!m.exists) { showEmpty(); return; } META = m.data;
+      var ids = Object.keys(META.sets || {}); ids.forEach(function (id) { DATA[id] = {status: "loading", data: []}; });
+      if (st) st.textContent = "Số liệu: " + (META.src || "") + (META.at ? " · nạp " + META.at : "") + (META.by ? " bởi " + META.by : "");
+      // bảng nhỏ trước, bảng lớn sau
+      ids.sort(function (a, b) { return (META.sets[a].bytes || 0) - (META.sets[b].bytes || 0); });
+      var q = ids.slice(), go = async function () { while (q.length) { var id = q.shift(); await loadSet(id, META.sets[id].n); } };
+      await Promise.all([go(), go(), go(), go()]);
+    } catch (e) { if (st) st.textContent = e.status === 401 || e.status === 403 ? "Bạn chưa có quyền xem Dashboard Mobility." : "Chưa tải được số liệu: " + e.message; }
+  }
+  function showEmpty() { var e = document.getElementById("mcc-empty"); if (e) e.hidden = false; var r = document.getElementById("dash-root"); if (r) r.hidden = true; post(); }
+
+  /* ---- nạp file dữ liệu (*.mcc.gz: JSON {meta, sets:{id: csv}} nén gzip) ---- */
+  async function upload(file, msg) {
+    msg("Đang đọc file…");
+    var text = await new Response(file.stream().pipeThrough(new DecompressionStream("gzip"))).text(); var pk = JSON.parse(text);
+    if (!pk || !pk.sets || typeof pk.sets !== "object") throw new Error("File không đúng định dạng dữ liệu MCC vs XPAY");
+    var ids = Object.keys(pk.sets), meta = {sets: {}, src: (pk.meta && pk.meta.src) || "", at: new Date().toLocaleString("vi-VN"), by: ""};
+    for (var i = 0; i < ids.length; i++) { var id = ids[i]; if (!/^[A-Za-z0-9_-]{1,60}$/.test(id)) continue;
+      msg("Đang nạp " + (i + 1) + "/" + ids.length + ": " + id + "…");
+      var b = await gzipB64(pk.sets[id]), CH = 700000, n = Math.ceil(b.length / CH) || 1;
+      for (var j = 0; j < n; j++) await J(API, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({op: "set", path: "mcc/" + id + "~" + j, data: {b: b.slice(j * CH, (j + 1) * CH)}})});
+      meta.sets[id] = {n: n, bytes: pk.sets[id].length}; }
+    await J(API, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({op: "set", path: "mcc/meta", data: meta})});
+    msg("Đã nạp " + ids.length + " bảng. Đang tải lại…"); setTimeout(function () { location.reload(); }, 800);
+  }
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll("[data-mcc-up]").forEach(function (inp) { inp.addEventListener("change", async function () {
+      var f = inp.files && inp.files[0], out = document.querySelectorAll("[data-mcc-msg]"), msg = function (t) { out.forEach(function (o) { o.textContent = t; }); post(); };
+      if (!f) return; try { await upload(f, msg); } catch (e) { msg("Chưa nạp được: " + (e.message || e)); } inp.value = ""; }); });
+    load();
+  });
+})();
+
+</script>
+<script>
+/* Nối trang MCC → XPAY với dashboard (số liệu chuẩn của team):
+   - mã HĐ dashboard của từng công ty MCC: cột ma_dash (đối chiếu sẵn theo tên + số MCC), thiếu thì khớp theo tên với danh sách khách dashboard gửi sang;
+   - PIC lấy theo dashboard (ghi đè PIC trong bản tham khảo);
+   - tên công ty có nút "Hồ sơ" mở hồ sơ khách trên dashboard để ghi cuộc gọi, next step, Hỏi AI. */
+(function () {
+  "use strict";
+  var DASH = null, CO2K = null, FIXED = new WeakSet(), orig = window.dash.data;
+  var canon = function (x) { x = String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toUpperCase();
+    x = x.replace(/^[A-Z]?\d{2,5}\s*-\s*/, "").replace(/[^A-Z0-9]+/g, " ");
+    var stop = {CONG: 1, TY: 1, TNHH: 1, CO: 1, PHAN: 1, CP: 1, MTV: 1, MOT: 1, THANH: 1, VIEN: 1, TRACH: 1, NHIEM: 1, HUU: 1, HAN: 1};
+    return x.split(" ").filter(function (w) { return w && !stop[w]; }).join(" "); };
+  window.addEventListener("message", function (e) { if (e.origin !== location.origin || !e.data || e.data.type !== "mcc-dash") return; DASH = e.data; CO2K = null; window.dash.setParams({}); });
+  if (window.parent !== window) window.parent.postMessage({type: "mcc-ready"}, location.origin);
+  function co2k() {
+    if (CO2K) return CO2K; var c = orig("companies"); if (c.status !== "ok") return null;
+    CO2K = {}; c.data.forEach(function (r) { var k = r.ma_dash || (DASH && DASH.byName && DASH.byName[canon(r.name)]) || ""; if (k) CO2K[r.co_id] = k; });
+    return CO2K;
+  }
+  window.mccKey = function (coId) { var m = co2k(); return m ? m[coId] || "" : ""; };
+  // PIC theo dashboard cho các bảng theo công ty / thẻ
+  window.dash.data = function (id) {
+    var d = orig(id);
+    if (DASH && d.status === "ok" && Array.isArray(d.data) && d.data.length && "pic" in d.data[0] && "co_id" in d.data[0] && !FIXED.has(d.data)) {
+      var m = co2k(); if (m) { d.data.forEach(function (r) { var k = m[r.co_id]; if (k && DASH.pic && k in DASH.pic) r.pic = DASH.pic[k] || null; }); FIXED.add(d.data); }
+    }
+    return d;
+  };
+  // nút "Hồ sơ" cạnh tên công ty
+  function open(k) { window.parent.postMessage({type: "mcc-open", k: k}, location.origin); }
+  function decorate() {
+    var m = co2k(); if (!m) return;
+    document.querySelectorAll("tr[data-co], tr[data-key]").forEach(function (tr) {
+      if (tr.querySelector(".mcc-prof")) return;
+      var co = tr.dataset.co || tr.dataset.key, k = m[co]; if (!k) return;
+      var cells = tr.querySelectorAll("td"), td = null;
+      for (var i = 0; i < cells.length && i < 4; i++) { var t = cells[i].textContent || ""; if (t.length > 6 && /[A-Za-zÀ-ỹ]/.test(t)) { td = cells[i]; break; } }
+      if (!td) return;
+      var a = document.createElement("a"); a.href = "#"; a.className = "mcc-prof"; a.textContent = "Hồ sơ"; a.title = "Mở hồ sơ khách trên dashboard (HĐ " + k + ")";
+      a.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); open(k); });
+      td.appendChild(document.createTextNode(" ")); td.appendChild(a);
+    });
+    var cur = document.getElementById("mcc-cur"), p = window.dash.params(), co = p.page === "company" && p.co ? p.co : "";
+    if (cur) { var k = co && m[co]; cur.hidden = !k; if (k) { cur.dataset.k = k; } }
+  }
+  setInterval(decorate, 700);
+  document.addEventListener("click", function (e) { var b = e.target.closest && e.target.closest("#mcc-cur"); if (b && b.dataset.k) { e.preventDefault(); open(b.dataset.k); } });
+})();
+
+</script>
+<script>
+// Dùng chung: định dạng số, đọc dữ liệu, lịch, thanh ngang, tab và bộ lọc.
+(function () {
+  const xp = (window.xp = window.xp || {});
+  xp.state = { ovq: '', coq: '', cardq: '', planq: '', sort: { key: 'g09', dir: -1 } };
+  xp.cX = (dash.colors && dash.colors[0]) || '#2a6fdb';
+  xp.cM = 'var(--cds-chart-muted)';
+  // Các kỳ: ngày bắt đầu và số ngày (kỳ MCC = 26 tháng trước đến 25 tháng này).
+  xp.PER = { T04: ['2026-03-26', 31], T05: ['2026-04-26', 30], T06: ['2026-05-26', 31], T07: ['2026-06-26', 30], T08: ['2026-07-26', 31], T09: ['2026-08-26', 31], XP: ['2026-10-23', 30] };
+  xp.MK = ['T04', 'T05', 'T06', 'T07', 'T08', 'T09'];
+
+  xp.n = (v) => (v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Number(v));
+  xp.unacc = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+  const vi = (v, d) => v.toFixed(d).replace('.', ',');
+  xp.money = (v) => {
+    v = xp.n(v); if (v === null) return '—';
+    const s = v < 0 ? '−' : ''; const a = Math.abs(v);
+    if (a >= 1e9) return s + vi(a / 1e9, 2) + ' tỷ';
+    if (a >= 1e6) return s + (a < 1e7 ? vi(a / 1e6, 1) : Math.round(a / 1e6).toLocaleString('vi-VN')) + ' triệu';
+    if (a >= 1e3) return s + Math.round(a / 1e3) + ' nghìn';
+    return s + Math.round(a) + ' đ';
+  };
+  xp.int = (v) => { v = xp.n(v); return v === null ? '—' : Math.round(v).toLocaleString('vi-VN'); };
+  xp.dec = (v) => { v = xp.n(v); return v === null ? '—' : vi(v, 1); };
+  xp.pct = (v) => { v = xp.n(v); if (v === null) return '—'; const p = v * 100; return (p > 0 && p < 10 ? vi(p, 1) : Math.round(p).toLocaleString('vi-VN')) + '%'; };
+  xp.fmt = (v, k) => (k === 'money' ? xp.money(v) : k === 'int' ? xp.int(v) : k === 'dec' ? xp.dec(v) : k === 'pct' ? xp.pct(v) : (v === '' || v === null || v === undefined ? '—' : String(v)));
+
+  // Dữ liệu: trả về hàng khi đã tải xong, kèm chỉ mục theo cột.
+  const idx = new WeakMap();
+  xp.rows = (id) => { const d = dash.data(id); return d.status === 'ok' ? d.data : null; };
+  xp.by = (id, key) => {
+    const rows = xp.rows(id); if (!rows) return null;
+    let m = idx.get(rows); if (!m) { m = {}; idx.set(rows, m); }
+    if (!m[key]) { const mp = new Map(); for (const r of rows) { const k = String(r[key]); if (!mp.has(k)) mp.set(k, []); mp.get(k).push(r); } m[key] = mp; }
+    return m[key];
+  };
+  // Trạng thái chờ / lỗi cho một ô vẽ. Trả về true khi mọi nguồn đã sẵn sàng.
+  xp.ready = (el, ids) => {
+    for (const id of ids) {
+      const st = dash.data(id).status;
+      if (st !== 'ok') {
+        const box = !/^(B|SPAN|P|H2|H3)$/.test(el.tagName);
+        if (st === 'loading') {
+          el.classList.add('dash-skeleton');
+          if (box) el.replaceChildren(); else el.textContent = '—';
+        } else {
+          el.classList.remove('dash-skeleton');
+          if (box && !/^(TBODY|UL)$/.test(el.tagName)) { const f = document.createElement('div'); f.className = 'xp-fail'; f.textContent = 'Failed to load'; el.replaceChildren(f); }
+          else if (box) el.replaceChildren(); else el.textContent = '—';
+        }
+        return false;
+      }
+    }
+    el.classList.remove('dash-skeleton');
+    return true;
+  };
+  xp.where = (s) => (s || '').split('&').filter(Boolean).map((p) => { const i = p.indexOf('='); return [decodeURIComponent(p.slice(0, i)), decodeURIComponent(p.slice(i + 1))]; });
+  xp.enc = (v) => String(v).replace(/%/g, '%25').replace(/&/g, '%26').replace(/=/g, '%3D').replace(/,/g, '%2C');
+  // Một ô số đánh dấu bằng data-where trên bộ dữ liệu một hàng.
+  xp.cell = (el, id) => {
+    if (!xp.ready(el, [id])) return;
+    const w = xp.where(el.dataset.where);
+    const r = xp.rows(id).find((row) => w.every(([k, v]) => String(row[k]) === v));
+    el.textContent = r ? xp.fmt(r[el.dataset.field], el.dataset.fmt) : '—';
+  };
+  xp.h = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+
+  // Thanh ngang đôi MCC/XPay. rows: [{label, m, x, mt, xt}] với m, x là độ dài (0–1 theo max).
+  xp.pairBars = (el, rows, opts = {}) => {
+    const max = opts.max || Math.max(1e-9, ...rows.flatMap((r) => [r.m || 0, r.x || 0]));
+    el.replaceChildren(...rows.map((r) => {
+      const row = xp.h('div', 'xp-brow');
+      const lab = xp.h('span', 'xp-bl', r.label); lab.title = r.label;
+      const tr = xp.h('div', 'xp-btrack');
+      for (const [v, t, c] of [[r.m, r.mt, xp.cM], [r.x, r.xt, xp.cX]]) {
+        if (v === undefined) continue;
+        const line = xp.h('div', 'xp-bline'); const f = xp.h('span', 'xp-bfill');
+        f.style.width = `calc(${Math.max(0, (v || 0) / max) * 100}% * .78)`; f.style.background = c;
+        line.append(f, xp.h('span', 'xp-bval', t)); tr.append(line);
+      }
+      row.append(lab, tr); return row;
+    }));
+  };
+
+  // Lịch theo ngày: mỗi ô một ngày, tuần bắt đầu thứ 2.
+  xp.calendar = (el, per, vals, max, color, fmt) => {
+    const [start, n] = xp.PER[per];
+    const d0 = new Date(start + 'T00:00:00Z');
+    const lead = (d0.getUTCDay() + 6) % 7;
+    const kids = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((t) => xp.h('span', 'xp-dh', t));
+    for (let i = 0; i < lead; i++) kids.push(xp.h('span', 'xp-cell out'));
+    for (let d = 1; d <= n; d++) {
+      const dt = new Date(d0.getTime() + (d - 1) * 864e5); const wd = (dt.getUTCDay() + 6) % 7;
+      const v = vals.get(d) || 0;
+      const c = xp.h('span', 'xp-cell' + (wd >= 5 ? ' we' : ''));
+      c.append(xp.h('span', '', String(dt.getUTCDate()) + (dt.getUTCDate() === 1 || d === 1 ? '/' + (dt.getUTCMonth() + 1) : '')), xp.h('span', 'xp-cv', v ? fmt(v) : ''));
+      if (v) c.style.background = `color-mix(in srgb, ${color} ${Math.round(18 + 62 * Math.min(1, v / max))}%, transparent)`;
+      c.title = '';
+      kids.push(c);
+    }
+    el.replaceChildren(...kids);
+  };
+  xp.dateOf = (per, d) => { const [s] = xp.PER[per]; const dt = new Date(new Date(s + 'T00:00:00Z').getTime() + (d - 1) * 864e5); return `${String(dt.getUTCDate()).padStart(2, '0')}/${String(dt.getUTCMonth() + 1).padStart(2, '0')}`; };
+
+  // Màu XPay cho phần CSS.
+  document.querySelectorAll('.xp').forEach((e) => e.style.setProperty('--xp-x', xp.cX));
+
+  // Tab, chip, ô chọn: chỉ nghe sự kiện và đặt bộ lọc.
+  document.querySelectorAll('.xp-tab').forEach((b) => b.addEventListener('click', () => { dash.setParams({ page: b.dataset.tab }); dash.setLink(b.dataset.tab); }));
+  document.querySelectorAll('[data-stf]').forEach((b) => b.addEventListener('click', () => dash.setParams({ stf: b.dataset.stf })));
+  document.querySelectorAll('[data-cst]').forEach((b) => b.addEventListener('click', () => dash.setParams({ cst: b.dataset.cst })));
+  document.querySelectorAll('[data-metric]').forEach((b) => b.addEventListener('click', () => dash.setParams({ metric: b.dataset.metric })));
+  document.querySelectorAll('#co-per').forEach((s) => s.addEventListener('change', () => dash.setParams({ per: s.value })));
+  document.querySelectorAll('#ov-grp').forEach((s) => s.addEventListener('change', () => dash.setParams({ ogrp: s.value })));
+  document.querySelectorAll('[data-prio]').forEach((b) => b.addEventListener('click', () => dash.setParams({ prio: b.dataset.prio })));
+  document.querySelectorAll('[data-pst]').forEach((b) => b.addEventListener('click', () => dash.setParams({ pst: b.dataset.pst })));
+  document.querySelectorAll('[data-yseg]').forEach((b) => b.addEventListener('click', () => dash.setParams({ yseg: b.dataset.yseg })));
+  document.querySelectorAll('[data-ovper]').forEach((b) => b.addEventListener('click', () => dash.setParams({ ovper: b.dataset.ovper })));
+
+  const P = () => Object.assign({ page: 'overview', co: '', card: '', per: 'T09', metric: 'trips', stf: 'all', cst: 'all', opic: 'all', ogrp: 'all', ppic: 'all', prio: 'Cao', pst: 'all', ovper: 'T09', yseg: 'all' }, dash.params());
+  xp.P = P;
+  if (['#company', '#plan', '#profile', '#convert', '#y2022'].includes(location.hash)) dash.setParams({ page: location.hash.slice(1) });
+
+  dash.onData(() => {
+    const p = P();
+    document.querySelectorAll('[data-page]').forEach((s) => { s.hidden = s.dataset.page !== p.page; });
+    document.querySelectorAll('.xp-tab').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === p.page)));
+    document.querySelectorAll('[data-stf]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.stf === p.stf)));
+    document.querySelectorAll('[data-cst]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.cst === p.cst)));
+    document.querySelectorAll('[data-metric]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.metric === p.metric)));
+    document.querySelectorAll('#co-per').forEach((s) => { if (s !== document.activeElement) s.value = p.per; });
+    document.querySelectorAll('#ov-grp').forEach((s) => { if (s !== document.activeElement) s.value = p.ogrp; });
+    document.querySelectorAll('[data-prio]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.prio === p.prio)));
+    document.querySelectorAll('[data-pst]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.pst === p.pst)));
+    document.querySelectorAll('[data-ovper]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.ovper === p.ovper)));
+    document.querySelectorAll('[data-yseg]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.yseg === p.yseg)));
+    document.querySelectorAll('#co-body').forEach((s) => { s.hidden = !p.co; });
+    document.querySelectorAll('#co-empty').forEach((s) => { s.hidden = !!p.co; });
+    document.querySelectorAll('#card-detail').forEach((s) => { s.hidden = !p.card; });
+    document.querySelectorAll('[data-draw="co-results"]').forEach((s) => { s.hidden = !xp.state.coq; });
+  });
+})();
+
+</script>
+<script>
+// Trang Tổng quan.
+(function () {
+  const xp = window.xp;
+
+  // Kỳ MCC đang chọn ở trang Tổng quan (T04–T09).
+  const per = () => (xp.MK.includes(xp.P().ovper) ? xp.P().ovper : 'T09');
+  const withPer = (el) => { el.dataset.where = ['period=' + per(), ...xp.where(el.dataset.where).filter(([k]) => k !== 'period').map(([k, v]) => k + '=' + xp.enc(v))].join('&'); };
+  dash.draw('kpi', (el) => { withPer(el); xp.cell(el, 'ov_kpi'); });
+  dash.draw('bval', (el) => { withPer(el); xp.cell(el, 'bridge'); });
+  dash.draw('ovper-name', (el) => { el.textContent = per(); });
+  dash.draw('ovper-range', (el) => {
+    const [s, n] = xp.PER[per()]; const d0 = new Date(s + 'T00:00:00Z'); const d1 = new Date(d0.getTime() + (n - 1) * 864e5);
+    const f = (d) => `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    el.textContent = `${f(d0)}–${f(d1)}, ${n} ngày`;
+  });
+
+  // MCC từng kỳ T04–T09 so với XPay.
+  const perRows = () => xp.rows('ov_period').slice().sort((a, b) => xp.n(a.order) - xp.n(b.order));
+  dash.draw('ov-period-bars', (el) => {
+    if (!xp.ready(el, ['ov_period'])) return;
+    xp.pairBars(el, perRows().map((r) => (r.period === 'XP'
+      ? { label: r.label, x: xp.n(r.gmv), xt: `${xp.money(r.gmv)} · ${xp.int(r.cards)} thẻ · ${xp.int(r.cos)} công ty` }
+      : { label: r.label, m: xp.n(r.gmv), mt: `${xp.money(r.gmv)} · ${xp.int(r.cards)} thẻ · ${xp.int(r.cos)} công ty` })));
+  });
+  dash.draw('ov-period-rows', (el) => {
+    if (!xp.ready(el, ['ov_period'])) return;
+    const dm = (d) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : '—');
+    el.replaceChildren(...perRows().map((r) => {
+      const tr = xp.h('tr', r.period === 'XP' ? '' : 'xp-click'); tr.dataset.key = r.period;
+      if (r.period === per()) tr.classList.add('xp-sel');
+      if (r.period !== 'XP') tr.tabIndex = 0;
+      tr.append(xp.h('td', '', r.label), xp.h('td', '', dm(r.start)), xp.h('td', '', dm(r.end)),
+        ...[xp.money(r.gmv), xp.int(r.trips), xp.int(r.cards), xp.int(r.cos), xp.money(r.fare), xp.dec(r.tpc), xp.pct(r.air), r.period === 'XP' ? '—' : xp.pct(r.x_ratio)].map((v) => xp.h('td', 'xp-num', v)));
+      return tr;
+    }));
+  });
+  dash.draw('stcount', (el) => xp.cell(el, 'status_count'));
+  dash.draw('gval', (el) => xp.cell(el, 'groups'));
+  dash.draw('pval', (el) => xp.cell(el, 'plan_kpi'));
+  dash.draw('zval', (el) => xp.cell(el, 'active_zone'));
+
+  // Nhóm chuyển đổi.
+  const groupRows = () => xp.rows('groups').slice().sort((a, b) => xp.n(a.order) - xp.n(b.order));
+  dash.draw('groups-bars', (el) => {
+    if (!xp.ready(el, ['groups'])) return;
+    xp.pairBars(el, groupRows().map((r) => ({ label: `${r.group} (${xp.int(r.cos)})`, m: xp.n(r.m79_gmv), x: xp.n(r.x_gmv), mt: xp.money(r.m79_gmv), xt: xp.money(r.x_gmv) })));
+  });
+  dash.draw('groups-rows', (el) => {
+    if (!xp.ready(el, ['groups'])) return;
+    el.replaceChildren(...groupRows().map((r) => {
+      const tr = xp.h('tr'); tr.dataset.key = r.order;
+      tr.append(xp.h('td', '', r.group), ...[xp.int(r.cos), xp.money(r.m79_gmv), xp.money(r.x_gmv), xp.money(r.gap_gmv), xp.int(r.mcc_active), xp.int(r.x_cards), xp.int(r.need_cards), xp.int(r.issued)].map((v) => xp.h('td', 'xp-num', v)));
+      return tr;
+    }));
+  });
+
+  // PIC.
+  dash.draw('pic-rows', (el) => {
+    if (!xp.ready(el, ['pic'])) return;
+    el.replaceChildren(...xp.rows('pic').map((r) => {
+      const tr = xp.h('tr', 'xp-click'); tr.dataset.key = r.pic; tr.tabIndex = 0;
+      tr.append(xp.h('td', '', r.pic), ...[xp.int(r.cos), xp.money(r.m9_gmv), xp.money(r.x_gmv), xp.pct(r.pct), xp.money(r.gap_gmv), xp.int(r.need_cards), xp.int(r.cards_hi), xp.int(r.g_none), xp.int(r.g_idle), xp.int(r.g_more), xp.int(r.g_good)].map((v) => xp.h('td', 'xp-num', v)));
+      return tr;
+    }));
+  });
+  dash.draw('pic-select', (sel) => {
+    if (!xp.ready(sel, ['pic'])) return;
+    const name = sel.dataset.param;
+    sel.replaceChildren(new Option('Mọi PIC', 'all'), ...xp.rows('pic').map((r) => new Option(r.pic, r.pic)));
+    sel.value = xp.P()[name] || 'all';
+    sel.onchange = () => dash.setParams({ [name]: sel.value });
+  });
+
+  // Biểu đồ cầu: thanh ngang, mỗi bước bắt đầu từ chỗ bước trước dừng.
+  dash.draw('bridge', (el) => {
+    if (!xp.ready(el, ['bridge'])) return;
+    const rows = xp.rows('bridge').filter((r) => r.period === per()).sort((a, b) => xp.n(a.order) - xp.n(b.order));
+    let cum = 0; const segs = [];
+    for (const r of rows) {
+      const v = xp.n(r.value);
+      if (r.kind === 'start') { segs.push({ r, a: 0, b: v, c: xp.cM }); cum = v; }
+      else if (r.kind === 'end') { segs.push({ r, a: 0, b: v, c: xp.cX }); }
+      else { const a = cum, b = cum + v; segs.push({ r, a: Math.min(a, b), b: Math.max(a, b), c: v < 0 ? 'var(--cds-chart-status-critical)' : 'var(--color-ok)', v }); cum = b; }
+    }
+    const max = Math.max(...segs.map((s) => s.b));
+    el.replaceChildren(...segs.map((s) => {
+      const row = xp.h('div', 'xp-wrow');
+      const lab = xp.h('span', '', s.r.step);
+      const sub = s.r.kind === 'delta' ? xp.h('span', 'xp-cap', ` · ${xp.int(s.r.cos)} công ty`) : xp.h('span', 'xp-cap', ` · ${xp.int(s.r.cos)} công ty có chuyến`);
+      lab.append(xp.h('br'), sub);
+      const tr = xp.h('div', 'xp-wtrack');
+      const bar = xp.h('span', 'xp-wbar'); bar.style.left = (s.a / max) * 82 + '%'; bar.style.width = Math.max(0.4, ((s.b - s.a) / max) * 82) + '%'; bar.style.background = s.c;
+      const t = xp.h('span', 'xp-wlab', s.r.kind === 'delta' ? (s.v > 0 ? '+' : '') + xp.money(s.v) : xp.money(s.r.value));
+      t.style.left = `calc(${(s.b / max) * 82}% + 6px)`;
+      tr.append(bar, t); row.append(lab, tr); return row;
+    }));
+  });
+
+  dash.draw('dist', (el) => {
+    if (!xp.ready(el, ['ov_dist'])) return;
+    const rows = (xp.by('ov_dist', 'dim').get(el.dataset.dim) || []).filter((r) => r.period === per()).sort((a, b) => xp.n(a.order) - xp.n(b.order));
+    xp.pairBars(el, rows.map((r) => ({ label: r.bucket, m: xp.n(r.mcc_pct), x: xp.n(r.xpay_pct), mt: xp.pct(r.mcc_pct), xt: xp.pct(r.xpay_pct) })));
+  });
+
+  dash.draw('ov-cal', (el) => {
+    if (!xp.ready(el, ['ov_daily'])) return;
+    const k = per(); const sides = ['MCC ' + k, 'XPay'];
+    const rows = xp.rows('ov_daily').filter((r) => sides.includes(r.side)); const max = Math.max(1, ...rows.map((r) => xp.n(r.cos)));
+    const side = el.dataset.side === 'XPay' ? 'XPay' : 'MCC ' + k; const vals = new Map();
+    for (const r of rows) if (r.side === side) vals.set(xp.n(r.d), xp.n(r.cos));
+    xp.calendar(el, side === 'XPay' ? 'XP' : k, vals, max, side === 'XPay' ? xp.cX : xp.cM, xp.int);
+  });
+
+  dash.draw('vendors', (el) => {
+    if (!xp.ready(el, ['vendors'])) return;
+    el.replaceChildren(...xp.rows('vendors').map((r) => {
+      const tr = xp.h('tr'); tr.dataset.key = r.vendor;
+      for (const [v, num] of [[r.vendor], [xp.int(r.trips), 1], [xp.pct(r.share_trips), 1], [xp.money(r.gmv), 1], [xp.pct(r.share_gmv), 1], [xp.money(r.fare), 1], [xp.int(r.cos), 1]]) tr.append(xp.h('td', num ? 'xp-num' : '', v));
+      return tr;
+    }));
+  });
+
+  const pill = (s) => {
+    const cls = /Chưa đi|dưới 50|Ngừng/.test(s) ? 'bad' : /50–99/.test(s) ? 'warn' : /Bằng|Chỉ có/.test(s) ? 'ok' : '';
+    return xp.h('span', 'xp-pill ' + cls, s);
+  };
+  const filtered = () => {
+    const rows = xp.rows('companies'); if (!rows) return [];
+    const p = xp.P(); const q = xp.unacc(xp.state.ovq.trim());
+    const pk = (r) => r.pic || '(chưa có PIC)';
+    let out = rows.filter((r) => (p.stf === 'all' || r.status === p.stf) && (p.opic === 'all' || pk(r) === p.opic) && (p.ogrp === 'all' || r.group === p.ogrp) && (!q || String(r.search || '').includes(q) || String(r.co_id).includes(q)));
+    const { key, dir } = xp.state.sort;
+    const num = !['co_id', 'name', 'status', 'main_issue', 'sale', 'group', 'pic'].includes(key);
+    out = out.slice().sort((a, b) => {
+      if (num) return dir * ((xp.n(a[key]) ?? -1) - (xp.n(b[key]) ?? -1)) || (xp.n(b.m_avg_gmv) - xp.n(a.m_avg_gmv));
+      return dir * String(a[key]).localeCompare(String(b[key]), 'vi');
+    });
+    return out;
+  };
+  const LIMIT = 400;
+  dash.draw('ov-count', (el) => {
+    if (!xp.ready(el, ['companies'])) return;
+    const n = filtered().length;
+    el.textContent = n > LIMIT ? `Hiện ${LIMIT} trên ${xp.int(n)} công ty; tìm hoặc lọc để xem thêm` : `${xp.int(n)} công ty`;
+  });
+  dash.draw('ov-rows', (el) => {
+    if (!xp.ready(el, ['companies'])) return;
+    el.replaceChildren(...filtered().slice(0, LIMIT).map((r) => {
+      const tr = xp.h('tr', 'xp-click'); tr.dataset.key = r.co_id; tr.tabIndex = 0;
+      const st = xp.h('td'); st.append(pill(r.status));
+      const mon = xp.MK.flatMap((k) => { const m = k.slice(1); return [xp.h('td', 'xp-num', xp.money(r['g' + m])), xp.h('td', 'xp-num', xp.int(r['c' + m]))]; });
+      tr.append(xp.h('td', '', r.co_id), xp.h('td', 'xp-name', r.name), st, ...mon, xp.h('td', 'xp-num', xp.money(r.m_avg_gmv)), xp.h('td', 'xp-num', xp.money(r.x_gmv)),
+        xp.h('td', 'xp-num', xp.int(r.x_cards)), xp.h('td', 'xp-num', xp.n(r.m9_gmv) ? xp.pct(r.pct) : '—'), xp.h('td', '', r.group || '—'), xp.h('td', 'xp-num', xp.int(r.need_cards)), xp.h('td', '', r.main_issue || '—'), xp.h('td', '', r.pic || '—'), xp.h('td', '', r.sale || '—'));
+      return tr;
+    }));
+  });
+
+  dash.draw('rules', (el) => {
+    if (!xp.ready(el, ['rules'])) return;
+    el.replaceChildren(...xp.rows('rules').map((r) => { const tr = xp.h('tr'); tr.dataset.key = r.code; tr.append(xp.h('td', '', r.code), xp.h('td', '', r.title), xp.h('td', '', r.threshold), xp.h('td', '', r.action)); return tr; }));
+  });
+  dash.draw('assume', (el) => {
+    if (!xp.ready(el, ['assume'])) return;
+    const pctKeys = ['co_match_gmv', 'card_match_gmv', 'region_other'];
+    el.replaceChildren(...xp.rows('assume').map((r) => { const tr = xp.h('tr'); tr.dataset.key = r.key; tr.append(xp.h('td', '', r.label), xp.h('td', 'xp-num', pctKeys.includes(r.key) ? xp.pct(r.value) : xp.int(r.value))); return tr; }));
+  });
+
+  // Nghe sự kiện.
+  document.querySelectorAll('#ov-q').forEach((i) => i.addEventListener('input', () => { xp.state.ovq = i.value; dash.draw('ov-rows'); dash.draw('ov-count'); }));
+  document.querySelectorAll('#ov-table .xp-th').forEach((b) => b.addEventListener('click', () => {
+    const k = b.dataset.sort; const s = xp.state.sort;
+    xp.state.sort = { key: k, dir: s.key === k ? -s.dir : (['co_id', 'name', 'status', 'main_issue', 'sale', 'group', 'pic'].includes(k) ? 1 : -1) };
+    document.querySelectorAll('#ov-table .xp-th').forEach((o) => { if (o.dataset.sort === k) o.setAttribute('aria-sort', xp.state.sort.dir > 0 ? 'ascending' : 'descending'); else o.removeAttribute('aria-sort'); });
+    dash.draw('ov-rows');
+  }));
+  const openPic = (key) => { dash.setParams({ page: 'plan', ppic: key, prio: 'Cao', pst: 'all' }); dash.setLink('plan'); document.querySelectorAll('#top').forEach((t) => t.scrollIntoView({ block: 'start' })); };
+  document.querySelectorAll('#pic-table').forEach((t) => {
+    t.addEventListener('click', (e) => { const tr = e.target.closest('tr[data-key]'); if (tr) openPic(tr.dataset.key); });
+    t.addEventListener('keydown', (e) => { const tr = e.target.closest('tr[data-key]'); if (tr && e.key === 'Enter') openPic(tr.dataset.key); });
+  });
+  document.querySelectorAll('#ov-period-table').forEach((t) => {
+    const pick = (e) => { const tr = e.target.closest('tr[data-key]'); if (tr && xp.MK.includes(tr.dataset.key)) dash.setParams({ ovper: tr.dataset.key }); };
+    t.addEventListener('click', pick); t.addEventListener('keydown', (e) => { if (e.key === 'Enter') pick(e); });
+  });
+  const open = (key) => { dash.setParams({ page: 'company', co: key, card: '' }); dash.setLink('company'); document.querySelectorAll('#top').forEach((t) => t.scrollIntoView({ block: 'start' })); };
+  document.querySelectorAll('#ov-table').forEach((t) => {
+    t.addEventListener('click', (e) => { const tr = e.target.closest('tr[data-key]'); if (tr) open(tr.dataset.key); });
+    t.addEventListener('keydown', (e) => { const tr = e.target.closest('tr[data-key]'); if (tr && e.key === 'Enter') open(tr.dataset.key); });
+  });
+})();
+
+</script>
+<script>
+// Trang từng công ty: Bước 1 cấp công ty, Bước 2 cấp thẻ.
+(function () {
+  const xp = window.xp;
+
+  dash.calc('card_strip', {
+    title: 'Dải ngày của từng thẻ',
+    description: 'Số chuyến mỗi ngày của thẻ trong kỳ MCC T09 (31 ngày) và XPay (30 ngày), nối thành chuỗi theo thứ tự ngày.',
+    inputs: ['cards', 'card_daily'],
+    fn: (cards, card_daily) => {
+      const m = new Map(cards.map((c) => [String(c.card), { m9: Array(31).fill(0), xp: Array(30).fill(0) }]));
+      for (const r of card_daily) {
+        const s = m.get(String(r.card)); if (!s) continue;
+        const arr = r.period === 'T09' ? s.m9 : s.xp; const i = Number(r.d) - 1;
+        if (i >= 0 && i < arr.length) arr[i] += Number(r.trips);
+      }
+      return [...m].map(([card, s]) => ({ card, m9: s.m9.join(','), xp: s.xp.join(',') }));
+    },
+  });
+
+  const co = () => {
+    const p = xp.P(); const m = xp.by('companies', 'co_id');
+    return m && p.co ? (m.get(String(p.co)) || [])[0] : null;
+  };
+  const card = () => {
+    const p = xp.P(); const m = xp.by('cards', 'card');
+    return m && p.card ? (m.get(String(p.card)) || [])[0] : null;
+  };
+
+  dash.draw('co-results', (el) => {
+    if (!xp.ready(el, ['companies'])) return;
+    const q = xp.unacc(xp.state.coq.trim());
+    if (!q) { el.replaceChildren(); return; }
+    const hits = xp.rows('companies').filter((r) => String(r.search || '').includes(q) || String(r.co_id).includes(q))
+      .sort((a, b) => xp.n(b.m9_gmv) + xp.n(b.x_gmv) - xp.n(a.m9_gmv) - xp.n(a.x_gmv)).slice(0, 25);
+    el.replaceChildren(...(hits.length ? hits.map((r) => {
+      const li = xp.h('li', '', r.name); li.dataset.key = r.co_id;
+      li.append(xp.h('span', 'xp-cap', ` · ${r.co_id} · ${r.status} · MCC T09 ${xp.money(r.m9_gmv)} · XPay ${xp.money(r.x_gmv)}`));
+      return li;
+    }) : [xp.h('li', 'xp-cap', 'Không tìm thấy công ty nào.')]));
+  });
+
+  dash.draw('co-f', (el) => {
+    if (!xp.ready(el, ['companies'])) return;
+    const r = co(); if (!r) { el.textContent = '—'; return; }
+    el.dataset.where = 'co_id=' + xp.enc(r.co_id);
+    const v = r[el.dataset.field];
+    el.textContent = el.dataset.field === 'how' && !v ? (xp.n(r.x_trips) ? '—' : 'Chưa có trên XPay') : el.dataset.field === 'pct' && !xp.n(r.m9_gmv) ? '—' : xp.fmt(v, el.dataset.fmt);
+  });
+
+  dash.draw('per-name', (el) => { el.textContent = xp.P().per; });
+
+  dash.draw('co-pstats', (el) => {
+    if (!xp.ready(el, ['co_period'])) return;
+    const p = xp.P(); const rows = xp.by('co_period', 'co_id').get(String(p.co)) || [];
+    const pick = [p.per, 'XP'].map((k) => rows.find((r) => r.period === k) || null);
+    el.replaceChildren(...pick.map((r, i) => {
+      const tr = xp.h('tr'); const k = i ? 'XP' : p.per;
+      tr.dataset.key = xp.enc(p.co) + ',' + xp.enc(k);
+      if (!r) { tr.append(xp.h('td', '', i ? 'XPay 30 ngày' : 'MCC ' + k), ...Array(6).fill(0).map((_, j) => xp.h('td', 'xp-num', j === 2 ? String(xp.PER[k][1]) : '0'))); return tr; }
+      tr.append(xp.h('td', '', i ? 'XPay 30 ngày' : 'MCC ' + k), xp.h('td', 'xp-num', `${xp.int(r.days)}/${xp.int(r.ndays)}`), xp.h('td', 'xp-num', xp.int(r.workdays)), xp.h('td', 'xp-num', xp.int(r.gap)),
+        xp.h('td', 'xp-num', xp.dec(r.tpd)), xp.h('td', 'xp-num', xp.dec(r.cpd)), xp.h('td', 'xp-num', xp.money(r.gpd)));
+      return tr;
+    }));
+  });
+
+  const dailyVals = (per) => {
+    const p = xp.P(); const rows = xp.by('co_daily', 'co_id').get(String(p.co)) || [];
+    const m = new Map(); for (const r of rows) if (r.period === per) m.set(xp.n(r.d), xp.n(r[p.metric]));
+    return m;
+  };
+  const mfmt = () => (xp.P().metric === 'gmv' ? xp.money : xp.int);
+  dash.draw('co-cal', (el) => {
+    if (!xp.ready(el, ['co_daily'])) return;
+    const p = xp.P(); const a = dailyVals(p.per), b = dailyVals('XP');
+    const max = Math.max(1, ...a.values(), ...b.values());
+    const side = el.dataset.side;
+    const f = p.metric === 'gmv' ? (v) => xp.money(v).replace(' triệu', 'tr').replace(' nghìn', 'k').replace(' tỷ', 'tỷ') : xp.int;
+    xp.calendar(el, side === 'X' ? 'XP' : p.per, side === 'X' ? b : a, max, side === 'X' ? xp.cX : xp.cM, f);
+  });
+
+  // Cột đôi theo ngày thứ 1…31 của kỳ, có chú thích khi rê chuột.
+  dash.draw('co-days', (el) => {
+    if (!xp.ready(el, ['co_daily'])) return;
+    const p = xp.P(); const a = dailyVals(p.per), b = dailyVals('XP');
+    const n = Math.max(xp.PER[p.per][1], 30);
+    const W = Math.max(280, el.clientWidth || 600), H = 200, ml = 8, mr = 8, mt = 10, mb = 22;
+    const max = Math.max(1, ...a.values(), ...b.values());
+    const x = d3.scaleBand(d3.range(1, n + 1), [ml, W - mr]).paddingInner(0.25);
+    const y = d3.scaleLinear([0, max], [H - mb, mt]).nice();
+    const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img').attr('aria-label', 'Chỉ số theo ngày, MCC so với XPay');
+    svg.append('g').selectAll('line').data(y.ticks(3)).join('line').attr('x1', ml).attr('x2', W - mr).attr('y1', (v) => y(v)).attr('y2', (v) => y(v)).attr('stroke', 'var(--cds-chart-grid)');
+    const bw = x.bandwidth() / 2;
+    const g = svg.append('g');
+    for (const [vals, off, c] of [[a, 0, xp.cM], [b, bw, xp.cX]]) {
+      g.append('g').selectAll('rect').data([...vals]).join('rect').attr('x', ([d]) => x(d) + off).attr('width', Math.max(1, bw - 0.5))
+        .attr('y', ([, v]) => y(v)).attr('height', ([, v]) => Math.max(0, y(0) - y(v))).attr('rx', 1).attr('fill', c);
+    }
+    const ticks = d3.range(1, n + 1).filter((d) => d === 1 || d % 5 === 0);
+    svg.append('g').selectAll('text').data(ticks).join('text').attr('x', (d) => x(d) + x.bandwidth() / 2).attr('y', H - 6).attr('text-anchor', 'middle')
+      .attr('fill', 'var(--color-fg-muted)').style('font-size', '11px').text((d) => d);
+    svg.append('line').attr('x1', ml).attr('x2', W - mr).attr('y1', y(0)).attr('y2', y(0)).attr('stroke', 'var(--cds-chart-axis)');
+    const yl = svg.append('text').attr('x', ml + 2).attr('y', y(y.ticks(3).slice(-1)[0]) - 3).attr('fill', 'var(--color-fg-muted)').style('font-size', '11px').text(mfmt()(y.ticks(3).slice(-1)[0]));
+    yl.attr('opacity', 0.9);
+    const tip = xp.h('div', 'xp-tip'); tip.hidden = true;
+    svg.on('mousemove', (ev) => {
+      const [mx] = d3.pointer(ev); const d = Math.min(n, Math.max(1, Math.round((mx - ml) / ((W - ml - mr) / n) + 0.5)));
+      const f = mfmt();
+      const rows = [[`MCC ${p.per} · ${xp.dateOf(p.per, d)}`, d <= xp.PER[p.per][1] ? f(a.get(d) || 0) : '—', xp.cM], [`XPay · ${xp.dateOf('XP', d)}`, d <= 30 ? f(b.get(d) || 0) : '—', xp.cX]];
+      tip.replaceChildren(xp.h('div', 't', `Ngày thứ ${d} của kỳ`), ...rows.map(([l, v, c]) => { const r = xp.h('div'); const s = xp.h('i', 'xp-sw'); s.style.background = c; r.append(s, ` ${l}: `, xp.h('b', '', v)); return r; }));
+      tip.hidden = false;
+      const box = el.getBoundingClientRect(); const px = ev.clientX - box.left;
+      tip.style.left = Math.min(Math.max(0, px + 10), box.width - 200) + 'px'; tip.style.top = '4px';
+    }).on('mouseleave', () => { tip.hidden = true; });
+    el.replaceChildren(svg.node(), tip);
+  });
+
+  dash.draw('co-periods', (el) => {
+    if (!xp.ready(el, ['co_period'])) return;
+    const rows = xp.by('co_period', 'co_id').get(String(xp.P().co)) || [];
+    const m = new Map(rows.map((r) => [r.period, r]));
+    const g = (k) => xp.n((m.get(k) || {}).gmv) || 0; const c = (k) => xp.n((m.get(k) || {}).cards) || 0;
+    const list = [...xp.MK.map((k) => ({ label: 'MCC ' + k, m: g(k), mt: `${xp.money(g(k))} · ${xp.int(c(k))} thẻ` })), { label: 'XPay 30 ngày', x: g('XP'), xt: `${xp.money(g('XP'))} · ${xp.int(c('XP'))} thẻ` }];
+    xp.pairBars(el, list);
+  });
+
+  // Bảng MCC từng kỳ T04–T09 và XPay của công ty đang xem.
+  dash.draw('co-ptable', (el) => {
+    if (!xp.ready(el, ['co_period'])) return;
+    const p = xp.P(); const rows = xp.by('co_period', 'co_id').get(String(p.co)) || [];
+    const m = new Map(rows.map((r) => [r.period, r]));
+    el.replaceChildren(...[...xp.MK, 'XP'].filter((k) => m.has(k)).map((k) => {
+      const r = m.get(k); const tr = xp.h('tr'); tr.dataset.key = xp.enc(p.co) + ',' + xp.enc(k);
+      tr.append(xp.h('td', '', k === 'XP' ? 'XPay 30 ngày' : 'MCC ' + k),
+        ...[xp.money(r.gmv), xp.int(r.trips), xp.int(r.cards), `${xp.int(r.days)}/${xp.int(r.ndays)}`, xp.money(r.fare), xp.dec(r.tpc)].map((v) => xp.h('td', 'xp-num', v)));
+      return tr;
+    }));
+  });
+
+  dash.draw('co-dist', (el) => {
+    if (!xp.ready(el, ['co_dist'])) return;
+    const rows = (xp.by('co_dist', 'co_id').get(String(xp.P().co)) || []).filter((r) => r.dim === el.dataset.dim).sort((a, b) => xp.n(a.order) - xp.n(b.order));
+    if (!rows.length) { el.replaceChildren(xp.h('p', 'xp-cap', 'Không có chuyến chi tiết cho công ty này.')); return; }
+    xp.pairBars(el, rows.map((r) => ({ label: r.bucket, m: xp.n(r.mcc_pct), x: xp.n(r.xpay_pct), mt: `${xp.pct(r.mcc_pct)} (${xp.int(r.mcc)})`, xt: `${xp.pct(r.xpay_pct)} (${xp.int(r.xpay)})` })));
+  });
+
+  const SEV = { 'cao': 'cao', 'vừa': 'vua', 'thấp': 'thap', 'tốt': 'tot' };
+  dash.draw('co-diag', (el) => {
+    if (!xp.ready(el, ['co_diag'])) return;
+    const rows = (xp.by('co_diag', 'co_id').get(String(xp.P().co)) || []).slice().sort((a, b) => xp.n(a.rank) - xp.n(b.rank));
+    if (!rows.length) { el.replaceChildren(xp.h('p', 'xp-cap', 'Chưa phát hiện vấn đề nào theo các ngưỡng đang dùng.')); return; }
+    el.replaceChildren(...rows.map((r) => {
+      const box = xp.h('div', 'xp-issue ' + (SEV[r.severity] || ''));
+      const head = xp.h('div', 'xp-row'); head.append(xp.h('span', 'xp-it', `${r.code} · ${r.title}`), xp.h('span', 'xp-pill', 'Mức ' + r.severity));
+      const ev = xp.h('p'); ev.append(xp.h('b', '', 'Bằng chứng: '), r.evidence);
+      const ac = xp.h('p'); ac.append(xp.h('b', '', 'Việc cần làm: '), r.action);
+      box.append(head, ev, ac); return box;
+    }));
+  });
+
+  // Bảng thẻ.
+  const cardRows = () => {
+    const p = xp.P(); const all = (xp.by('cards', 'co_id') && xp.by('cards', 'co_id').get(String(p.co))) || [];
+    const q = xp.unacc(xp.state.cardq.trim());
+    return all.filter((r) => (p.cst === 'all' || (p.cst === 'flag' ? r.flag === '1' || r.flag === 1 : p.cst === 'Thẻ chung' ? String(r.status).startsWith('Thẻ chung') : r.status === p.cst))
+      && (!q || String(r.search || '').includes(q) || String(r.mlast4).includes(q) || String(r.xlast4).includes(q)))
+      .sort((a, b) => xp.n(b.flag) - xp.n(a.flag) || xp.n(b.m9_trips) - xp.n(a.m9_trips) || xp.n(b.x_trips) - xp.n(a.x_trips) || xp.n(b.mavg) - xp.n(a.mavg));
+  };
+  const strip = (s, c) => {
+    const w = xp.h('span', 'xp-strip');
+    for (const v of String(s || '').split(',')) { const i = xp.h('i'); const n = Number(v) || 0; if (n) { i.style.height = Math.min(14, 5 + n * 3) + 'px'; i.style.background = c; } w.append(i); }
+    return w;
+  };
+  const cpill = (s) => xp.h('span', 'xp-pill ' + (/Chưa thấy|ít hơn/.test(s) ? 'bad' : /Có thẻ XPay, chưa đi|Thẻ chung, chưa/.test(s) ? 'warn' : /nhiều hơn|tương đương|Quay lại/.test(s) ? 'ok' : ''), s);
+  const ppill = (s) => (s ? xp.h('span', 'xp-pill ' + (s === 'Cao' ? 'bad' : s === 'Trung bình' ? 'warn' : ''), s) : document.createTextNode('—'));
+  xp.cpill = cpill; xp.ppill = ppill;
+  dash.draw('card-rows', (el) => {
+    if (!xp.ready(el, ['cards', 'card_strip'])) return;
+    const st = xp.by('card_strip', 'card'); const sel = xp.P().card;
+    el.replaceChildren(...cardRows().map((r) => {
+      const tr = xp.h('tr', 'xp-click' + (xp.n(r.flag) ? ' xp-hot' : '') + (r.card === sel ? ' xp-on' : '')); tr.dataset.key = r.card; tr.tabIndex = 0;
+      const s = (st.get(String(r.card)) || [{}])[0];
+      const stt = xp.h('td'); stt.append(cpill(r.status));
+      const a = xp.h('td'); a.append(strip(s.m9, xp.cM)); const b = xp.h('td'); b.append(strip(s.xp, xp.cX));
+      const pr = xp.h('td'); pr.append(ppill(r.prio));
+      tr.append(xp.h('td', 'xp-name', r.name), stt, pr, xp.h('td', 'xp-num', xp.int(r.m9_trips)), xp.h('td', 'xp-num', xp.money(r.m9_gmv)), xp.h('td', 'xp-num', xp.int(r.months)),
+        xp.h('td', 'xp-num', xp.dec(r.mavg)), xp.h('td', 'xp-num', xp.int(r.x_trips)), xp.h('td', 'xp-num', xp.money(r.x_gmv)),
+        xp.h('td', 'xp-num', xp.n(r.mavg) && (xp.n(r.x_trips) || xp.n(r.m9_trips)) ? xp.pct(r.rhythm) : '—'), a, b, xp.h('td', '', r.mlast4 || '—'), xp.h('td', '', r.xlast4 || '—'), xp.h('td', '', r.level || '—'), xp.h('td', '', r.trend || '—'));
+      return tr;
+    }));
+  });
+  dash.draw('card-count', (el) => {
+    if (!xp.ready(el, ['cards'])) return;
+    const rows = cardRows(); const hot = rows.filter((r) => xp.n(r.flag)).length;
+    el.textContent = `${xp.int(rows.length)} thẻ, ${xp.int(hot)} thẻ cần chú ý.`;
+  });
+
+  dash.draw('card-f', (el) => {
+    if (!xp.ready(el, ['cards'])) return;
+    const r = card(); if (!r) { el.textContent = '—'; return; }
+    el.dataset.where = 'card=' + xp.enc(r.card);
+    const v = r[el.dataset.field];
+    el.textContent = (el.dataset.field === 'mlast4' || el.dataset.field === 'xlast4') && !v ? 'không có' : xp.fmt(v, el.dataset.fmt);
+  });
+  dash.draw('card-cal', (el) => {
+    if (!xp.ready(el, ['card_daily'])) return;
+    const p = xp.P(); const rows = xp.by('card_daily', 'card').get(String(p.card)) || [];
+    const max = Math.max(1, ...rows.map((r) => xp.n(r.trips)));
+    const per = el.dataset.side; const m = new Map();
+    for (const r of rows) if (r.period === per) m.set(xp.n(r.d), xp.n(r.trips));
+    xp.calendar(el, per, m, max, per === 'XP' ? xp.cX : xp.cM, xp.int);
+  });
+  dash.draw('card-months', (el) => {
+    if (!xp.ready(el, ['cards'])) return;
+    const r = card(); if (!r) { el.replaceChildren(); return; }
+    xp.pairBars(el, [...xp.MK.map((k) => ({ label: 'MCC ' + k, m: xp.n(r[k.toLowerCase()]), mt: xp.int(r[k.toLowerCase()]) + ' chuyến' })), { label: 'XPay 30 ngày', x: xp.n(r.x_trips), xt: xp.int(r.x_trips) + ' chuyến' }]);
+  });
+  dash.draw('card-hour', (el) => {
+    if (!xp.ready(el, ['card_hour'])) return;
+    const rows = xp.by('card_hour', 'card').get(String(xp.P().card)) || [];
+    const L = ['0–5h', '6–8h', '9–11h', '12–13h', '14–16h', '17–19h', '20–23h'];
+    const g = (side, i) => xp.n((rows.find((r) => r.side === side && xp.n(r.order) === i) || {}).trips) || 0;
+    xp.pairBars(el, L.map((l, i) => ({ label: l, m: g('M', i), x: g('X', i), mt: xp.int(g('M', i)), xt: xp.int(g('X', i)) })));
+  });
+  dash.draw('recent', (el) => {
+    if (!xp.ready(el, ['recent'])) return;
+    const p = xp.P(); const side = el.dataset.side;
+    const rows = (xp.by('recent', 'card').get(String(p.card)) || []).filter((r) => r.side === side).sort((a, b) => (a.dt < b.dt ? 1 : -1));
+    if (!rows.length) { const tr = xp.h('tr'); const td = xp.h('td', 'xp-cap', 'Chưa có chuyến.'); td.colSpan = 5; tr.append(td); el.replaceChildren(tr); return; }
+    el.replaceChildren(...rows.map((r) => {
+      const tr = xp.h('tr'); tr.dataset.key = r.k;
+      const d = r.dt.slice(8, 10) + '/' + r.dt.slice(5, 7) + ' ' + r.dt.slice(11, 16);
+      tr.append(xp.h('td', '', d), xp.h('td', 'xp-num', xp.money(r.amt)), xp.h('td', '', r.pickup || '—'), xp.h('td', '', r.dropoff || '—'), xp.h('td', '', side === 'M' ? r.region : r.vendor));
+      return tr;
+    }));
+  });
+
+  // Kế hoạch thẻ: danh sách thẻ cần kích hoạt.
+  const PO = { 'Cao': 0, 'Trung bình': 1, 'Thấp': 2 };
+  const planRows = () => {
+    const rows = xp.rows('cards'); if (!rows) return [];
+    const p = xp.P(); const q = xp.unacc(xp.state.planq.trim());
+    return rows.filter((r) => r.prio && (p.prio === 'all' || r.prio === p.prio) && (p.pst === 'all' || r.status === p.pst)
+      && (p.ppic === 'all' || (r.pic || '(chưa có PIC)') === p.ppic) && (!q || String(r.search || '').includes(q) || xp.unacc(r.co_name).includes(q)))
+      .sort((a, b) => PO[a.prio] - PO[b.prio] || xp.n(b.t79) - xp.n(a.t79) || xp.n(b.m9_gmv) - xp.n(a.m9_gmv));
+  };
+  const PLIM = 500;
+  dash.draw('plan-count', (el) => {
+    if (!xp.ready(el, ['cards'])) return;
+    const n = planRows().length;
+    el.textContent = n > PLIM ? `Hiện ${PLIM} trên ${xp.int(n)} thẻ; lọc thêm để xem hết` : `${xp.int(n)} thẻ`;
+  });
+  dash.draw('plan-rows', (el) => {
+    if (!xp.ready(el, ['cards'])) return;
+    el.replaceChildren(...planRows().slice(0, PLIM).map((r) => {
+      const tr = xp.h('tr', 'xp-click'); tr.dataset.key = r.card; tr.dataset.co = r.co_id; tr.tabIndex = 0;
+      const pr = xp.h('td'); pr.append(ppill(r.prio)); const st = xp.h('td'); st.append(cpill(r.status));
+      tr.append(pr, xp.h('td', 'xp-name', r.co_name), xp.h('td', '', r.pic || '—'), xp.h('td', '', r.name), st, xp.h('td', 'xp-num', xp.int(r.t79)), xp.h('td', 'xp-num', xp.money(r.m9_gmv)),
+        xp.h('td', '', r.level || '—'), xp.h('td', '', r.trend || '—'), xp.h('td', '', r.mlast4 || '—'), xp.h('td', '', r.xlast4 || '—'), xp.h('td', '', r.action));
+      return tr;
+    }));
+  });
+  document.querySelectorAll('#plan-q').forEach((i) => i.addEventListener('input', () => { xp.state.planq = i.value; dash.draw('plan-rows'); dash.draw('plan-count'); }));
+  const fromPlan = (tr) => {
+    dash.setParams({ page: 'company', co: tr.dataset.co, card: tr.dataset.key, cst: 'all' }); dash.setLink('company');
+    setTimeout(() => document.querySelectorAll('#card-detail').forEach((d) => d.scrollIntoView({ block: 'start' })), 400);
+  };
+  document.querySelectorAll('#plan-table').forEach((t) => {
+    t.addEventListener('click', (e) => { const tr = e.target.closest('tr[data-key]'); if (tr) fromPlan(tr); });
+    t.addEventListener('keydown', (e) => { const tr = e.target.closest('tr[data-key]'); if (tr && e.key === 'Enter') fromPlan(tr); });
+  });
+
+  // Nghe sự kiện.
+  document.querySelectorAll('#co-q').forEach((i) => i.addEventListener('input', () => {
+    xp.state.coq = i.value;
+    document.querySelectorAll('[data-draw="co-results"]').forEach((u) => { u.hidden = !i.value.trim(); });
+    dash.draw('co-results');
+  }));
+  document.querySelectorAll('[data-draw="co-results"]').forEach((u) => u.addEventListener('click', (e) => {
+    const li = e.target.closest('li[data-key]'); if (!li) return;
+    xp.state.coq = ''; document.querySelectorAll('#co-q').forEach((i) => { i.value = ''; }); u.hidden = true;
+    xp.state.cardq = ''; document.querySelectorAll('#card-q').forEach((i) => { i.value = ''; });
+    dash.setParams({ co: li.dataset.key, card: '', cst: 'all' });
+  }));
+  document.querySelectorAll('#card-q').forEach((i) => i.addEventListener('input', () => { xp.state.cardq = i.value; dash.draw('card-rows'); dash.draw('card-count'); }));
+  const openCard = (k) => {
+    dash.setParams({ card: k });
+    requestAnimationFrame(() => document.querySelectorAll('#card-detail').forEach((d) => d.scrollIntoView({ block: 'start', behavior: 'smooth' })));
+  };
+  document.querySelectorAll('#card-table').forEach((t) => {
+    t.addEventListener('click', (e) => { const tr = e.target.closest('tr[data-key]'); if (tr) openCard(tr.dataset.key); });
+    t.addEventListener('keydown', (e) => { const tr = e.target.closest('tr[data-key]'); if (tr && e.key === 'Enter') openCard(tr.dataset.key); });
+  });
+  document.querySelectorAll('#card-close').forEach((b) => b.addEventListener('click', () => dash.setParams({ card: '' })));
+})();
+
+</script>
+<script>
+// Tab Hồ sơ khách hàng và Chuyển đổi XPAY.
+(function () {
+  const xp = window.xp;
+  xp.state.hsq = ''; xp.state.hcq = ''; xp.state.cdq = ''; xp.state.cmq = '';
+  const PD = { hpic: 'all', hchg: 'all', hlevel: 'all', htrend: 'all', hbatch: '0', hcpic: 'all', cgrp: 'all', cpic: 'all', cdel: 'all', mst: 'all', mpic: 'all' };
+  const P = () => Object.assign({}, PD, xp.P());
+  const picOf = (r) => r.pic || '(chưa có PIC)';
+  const LEVELS = ['Đi rất nhiều', 'Đi nhiều', 'Đi đều', 'Đi vừa', 'Đi ít', 'Hiếm khi đi'];
+
+  dash.calc('hs_mix', {
+    title: 'Số thẻ theo mức đi và xu hướng',
+    description: 'Đếm số thẻ trong hồ sơ thẻ theo mức đi và theo xu hướng.',
+    inputs: ['hs_card'],
+    fn: (hs_card) => {
+      const lv = ['Đi rất nhiều', 'Đi nhiều', 'Đi đều', 'Đi vừa', 'Đi ít', 'Hiếm khi đi'];
+      const tr = ['Ổn định', 'Đang tăng', 'Đang giảm', 'Mới dùng từ T09', 'Mới dùng từ T07', 'Ngừng T09', 'Ngừng từ T08', 'Ngừng từ T07', 'Ngừng từ T06', 'Ngừng từ T05'];
+      const out = [];
+      for (const [dim, list, col] of [['level', lv, 'level'], ['trend', tr, 'trend']]) {
+        list.forEach((b, i) => out.push({ k: dim + '|' + b, dim, order: i, bucket: b, n: hs_card.filter((r) => r[col] === b).length }));
+      }
+      return out;
+    },
+  });
+
+  // Sắp xếp chung cho các bảng có data-sortkey.
+  const TEXT = new Set(['co_id', 'name', 'ma_hd', 'sale', 'pic', 'last', 'group', 'co_name', 'last4', 'level', 'trend', 'style', 'comment', 'tip', 'mlast4', 'xlast4', 'linkhow', 'status', 'action', 'contract', 'delivery', 'feedback']);
+  const DRAW = { hs: 'hs-rows', hc: 'hc-rows', cd: 'cd-rows', cm: 'cm-rows' };
+  xp.state.sorts = { hs: { key: 'avg79', dir: -1 }, hc: { key: 'trips', dir: -1 }, cd: { key: 'gap_gmv', dir: -1 }, cm: { key: 't79', dir: -1 } };
+  const sortRows = (rows, sk) => {
+    const { key, dir } = xp.state.sorts[sk];
+    return rows.slice().sort((a, b) => TEXT.has(key) ? dir * String(a[key] || '').localeCompare(String(b[key] || ''), 'vi') : dir * ((xp.n(a[key]) ?? -Infinity) - (xp.n(b[key]) ?? -Infinity)));
+  };
+  document.querySelectorAll('table[data-sortkey]').forEach((t) => {
+    const sk = t.dataset.sortkey;
+    if (!DRAW[sk]) return;
+    t.querySelectorAll('.xp-th').forEach((b) => b.addEventListener('click', () => {
+      const k = b.dataset.sort; const s = xp.state.sorts[sk];
+      xp.state.sorts[sk] = { key: k, dir: s.key === k ? -s.dir : (TEXT.has(k) ? 1 : -1) };
+      t.querySelectorAll('.xp-th').forEach((o) => { if (o.dataset.sort === k) o.setAttribute('aria-sort', xp.state.sorts[sk].dir > 0 ? 'ascending' : 'descending'); else o.removeAttribute('aria-sort'); });
+      dash.draw(DRAW[sk]);
+    }));
+  });
+  const td = (v, num) => xp.h('td', num ? 'xp-num' : '', v === '' || v === null || v === undefined ? '—' : v);
+  const countText = (n, lim, unit) => (n > lim ? `Hiện ${lim} trên ${xp.int(n)} ${unit}; lọc thêm để xem hết` : `${xp.int(n)} ${unit}`);
+
+  // ---------- Hồ sơ khách hàng ----------
+  dash.draw('hs-month-bars', (el) => {
+    if (!xp.ready(el, ['hs_month'])) return;
+    xp.pairBars(el, xp.rows('hs_month').map((r) => ({ label: 'MCC ' + r.ky, m: xp.n(r.gmv), mt: `${xp.money(r.gmv)} · ${xp.int(r.trips)} chuyến · ${xp.int(r.cos)} KH` })));
+  });
+  dash.draw('hs-month-rows', (el) => {
+    if (!xp.ready(el, ['hs_month'])) return;
+    const sg = (v) => (xp.n(v) === null ? '—' : (xp.n(v) > 0 ? '+' : '') + xp.pct(v));
+    el.replaceChildren(...xp.rows('hs_month').map((r) => {
+      const tr = xp.h('tr'); tr.dataset.key = r.ky;
+      tr.append(td(r.ky), td(xp.money(r.gmv), 1), td(xp.int(r.trips), 1), td(xp.int(r.cos), 1), td(xp.int(r.cards), 1), td(xp.money(r.fare), 1), td(sg(r.d_gmv), 1), td(sg(r.d_trips), 1), td(sg(r.d_cos), 1));
+      return tr;
+    }));
+  });
+  const hsRows = () => {
+    const rows = xp.rows('hs_co'); if (!rows) return [];
+    const p = P(); const q = xp.unacc(xp.state.hsq.trim());
+    const chg = (c) => { c = xp.n(c); if (c === null) return false; return p.hchg === 'd50' ? c < -0.5 : p.hchg === 'd20' ? c >= -0.5 && c < -0.2 : p.hchg === 'flat' ? c >= -0.2 && c <= 0.2 : p.hchg === 'up' ? c > 0.2 : true; };
+    return sortRows(rows.filter((r) => (p.hpic === 'all' || picOf(r) === p.hpic) && (p.hchg === 'all' || chg(r.change)) && (!q || String(r.search || '').includes(q) || String(r.co_id).includes(q))), 'hs');
+  };
+  dash.draw('hs-count', (el) => { if (xp.ready(el, ['hs_co'])) el.textContent = countText(hsRows().length, 400, 'công ty'); });
+  dash.draw('hs-rows', (el) => {
+    if (!xp.ready(el, ['hs_co'])) return;
+    const sg = (v) => (xp.n(v) === null ? '—' : (xp.n(v) > 0 ? '+' : '') + xp.pct(v));
+    el.replaceChildren(...hsRows().slice(0, 400).map((r) => {
+      const tr = xp.h('tr', 'xp-click'); tr.dataset.key = r.co_id; tr.tabIndex = 0;
+      tr.append(td(r.co_id), xp.h('td', 'xp-name', r.name), td(r.ma_hd), td(r.sale), td(r.pic),
+        ...['04', '05', '06', '07', '08', '09'].flatMap((m) => [td(xp.money(r['g' + m]), 1), td(xp.int(r['c' + m]), 1)]),
+        td(xp.money(r.x_gmv), 1), td(xp.int(r.x_cards), 1),
+        ...['gmv', 'avg46', 'avg79'].map((k) => td(xp.money(r[k]), 1)),
+        td(sg(r.change), 1), td(xp.money(r.lost), 1), td(xp.int(r.cards), 1), td(xp.int(r.days), 1), td(r.last), td(xp.int(r.idle), 1), td(r.group));
+      return tr;
+    }));
+  });
+  dash.draw('hs-mix', (el) => {
+    if (!xp.ready(el, ['hs_mix'])) return;
+    const rows = xp.rows('hs_mix').filter((r) => r.dim === el.dataset.dim).sort((a, b) => a.order - b.order);
+    xp.pairBars(el, rows.map((r) => ({ label: r.bucket, m: r.n, mt: xp.int(r.n) + ' thẻ' })));
+  });
+  const hcRows = () => {
+    const rows = xp.rows('hs_card'); if (!rows) return [];
+    const p = P(); const q = xp.unacc(xp.state.hcq.trim());
+    const okTrend = (t) => p.htrend === 'all' || (p.htrend === 'active' ? !/^Ngừng/.test(t) : t === p.htrend);
+    return sortRows(rows.filter((r) => (p.hlevel === 'all' || r.level === p.hlevel) && okTrend(r.trend) && (p.hcpic === 'all' || picOf(r) === p.hcpic)
+      && (p.hbatch !== '1' || r.batch === 'Có') && (!q || String(r.search || '').includes(q) || String(r.last4).includes(q))), 'hc');
+  };
+  dash.draw('hc-count', (el) => { if (xp.ready(el, ['hs_card'])) el.textContent = countText(hcRows().length, 300, 'thẻ'); });
+  dash.draw('hc-rows', (el) => {
+    if (!xp.ready(el, ['hs_card'])) return;
+    el.replaceChildren(...hcRows().slice(0, 300).map((r) => {
+      const tr = xp.h('tr', r.card ? 'xp-click' : ''); tr.dataset.key = r.k; tr.dataset.co = r.co_id; tr.dataset.card = r.card || ''; tr.tabIndex = 0;
+      tr.append(xp.h('td', 'xp-name', r.co_name), td(r.pic), td(r.name), td(r.last4), td(xp.int(r.trips), 1), td(xp.money(r.gmv), 1),
+        ...['t04', 't05', 't06', 't07', 't08', 't09'].map((k) => td(xp.int(r[k]), 1)), td(r.last), td(r.level), td(r.trend),
+        xp.h('td', 'xp-name', r.style || '—'), xp.h('td', 'xp-name', r.comment || '—'), xp.h('td', 'xp-name', r.tip || '—'));
+      return tr;
+    }));
+  });
+
+  // ---------- Chuyển đổi XPAY ----------
+  dash.draw('aval', (el) => xp.cell(el, 'assume'));
+  const cdRows = () => {
+    const rows = xp.rows('companies'); if (!rows) return [];
+    const p = P(); const q = xp.unacc(xp.state.cdq.trim());
+    return sortRows(rows.filter((r) => String(r.scope) === '1' && (p.cgrp === 'all' || r.group === p.cgrp) && (p.cpic === 'all' || picOf(r) === p.cpic)
+      && (p.cdel === 'all' || (p.cdel === 'none' ? !r.delivery : r.delivery === p.cdel)) && (!q || String(r.search || '').includes(q) || String(r.co_id).includes(q))), 'cd');
+  };
+  dash.draw('cd-count', (el) => { if (xp.ready(el, ['companies'])) el.textContent = countText(cdRows().length, 400, 'công ty'); });
+  dash.draw('cd-rows', (el) => {
+    if (!xp.ready(el, ['companies'])) return;
+    el.replaceChildren(...cdRows().slice(0, 400).map((r) => {
+      const tr = xp.h('tr', 'xp-click'); tr.dataset.key = r.co_id; tr.tabIndex = 0;
+      tr.append(td(r.co_id), xp.h('td', 'xp-name', r.name), td(r.pic), td(r.group), td(xp.int(r.mcc_active), 1), td(xp.money(r.m46_gmv), 1), td(xp.money(r.m79_gmv), 1),
+        td(xp.int(r.issued), 1), td(xp.int(r.x_cards), 1), td(xp.int(r.x_trips), 1), td(xp.money(r.x_gmv), 1), td(xp.n(r.coverage) === null ? '—' : xp.pct(r.coverage), 1),
+        td(xp.int(r.need_cards), 1), td(xp.money(r.gap_gmv), 1), td(r.contract), td(r.delivery), xp.h('td', 'xp-name', r.feedback || '—'));
+      return tr;
+    }));
+  });
+  const cmRows = () => {
+    const rows = xp.rows('cards'); if (!rows) return [];
+    const p = P(); const q = xp.unacc(xp.state.cmq.trim());
+    const okSt = (s) => p.mst === 'all' || (p.mst === 'Đã chuyển' ? /^Đã chuyển|Quay lại/.test(s) : p.mst === 'Chỉ có trên XPay' ? /Chỉ có trên XPay|Thẻ chung trên XPay/.test(s) : s === p.mst);
+    return sortRows(rows.filter((r) => okSt(r.status) && (p.mpic === 'all' || picOf(r) === p.mpic)
+      && (!q || String(r.search || '').includes(q) || xp.unacc(r.co_name).includes(q) || String(r.mlast4).includes(q) || String(r.xlast4).includes(q))), 'cm');
+  };
+  dash.draw('cm-count', (el) => { if (xp.ready(el, ['cards'])) el.textContent = countText(cmRows().length, 500, 'thẻ'); });
+  dash.draw('cm-rows', (el) => {
+    if (!xp.ready(el, ['cards'])) return;
+    el.replaceChildren(...cmRows().slice(0, 500).map((r) => {
+      const tr = xp.h('tr', 'xp-click'); tr.dataset.key = r.card; tr.dataset.co = r.co_id; tr.dataset.card = r.card; tr.tabIndex = 0;
+      const st = xp.h('td'); st.append(xp.cpill ? xp.cpill(r.status) : document.createTextNode(r.status));
+      tr.append(xp.h('td', 'xp-name', r.co_name), td(r.pic), td(r.name), td(r.mlast4), td(r.xlast4), td(r.linkhow), td(xp.int(r.t79), 1), td(xp.int(r.m_trips), 1), td(xp.money(r.m_gmv), 1),
+        td(xp.int(r.x_trips), 1), td(xp.money(r.x_gmv), 1), st, xp.h('td', 'xp-name', r.action));
+      return tr;
+    }));
+  });
+  dash.draw('cd-out', (el) => {
+    if (!xp.ready(el, ['companies'])) return;
+    el.replaceChildren(...xp.rows('companies').filter((r) => r.status === 'Chỉ có trên XPay').sort((a, b) => xp.n(b.x_gmv) - xp.n(a.x_gmv)).map((r) => {
+      const tr = xp.h('tr'); tr.dataset.key = r.co_id; tr.append(xp.h('td', 'xp-name', r.name), td(xp.int(r.x_trips), 1), td(xp.money(r.x_gmv), 1), td(xp.int(r.x_cards), 1)); return tr;
+    }));
+  });
+
+  // ---------- Nghe sự kiện ----------
+  const search = (id, key, draws) => document.querySelectorAll('#' + id).forEach((i) => i.addEventListener('input', () => { xp.state[key] = i.value; draws.forEach((d) => dash.draw(d)); }));
+  search('hs-q', 'hsq', ['hs-rows', 'hs-count']); search('hc-q', 'hcq', ['hc-rows', 'hc-count']); search('cd-q', 'cdq', ['cd-rows', 'cd-count']); search('cm-q', 'cmq', ['cm-rows', 'cm-count']);
+  for (const [id, prm] of [['hs-chg', 'hchg'], ['hc-trend', 'htrend'], ['cd-grp', 'cgrp'], ['cd-del', 'cdel']]) {
+    document.querySelectorAll('#' + id).forEach((s) => s.addEventListener('change', () => dash.setParams({ [prm]: s.value })));
+  }
+  document.querySelectorAll('#hc-batch').forEach((c) => c.addEventListener('change', () => dash.setParams({ hbatch: c.checked ? '1' : '0' })));
+  document.querySelectorAll('[data-hlevel]').forEach((b) => b.addEventListener('click', () => dash.setParams({ hlevel: b.dataset.hlevel })));
+  document.querySelectorAll('[data-mst]').forEach((b) => b.addEventListener('click', () => dash.setParams({ mst: b.dataset.mst })));
+  const toCompany = (co, card) => {
+    dash.setParams({ page: 'company', co, card: card || '', cst: 'all' }); dash.setLink('company');
+    if (card) setTimeout(() => document.querySelectorAll('#card-detail').forEach((d) => d.scrollIntoView({ block: 'start' })), 400);
+    else document.querySelectorAll('#top').forEach((t) => t.scrollIntoView({ block: 'start' }));
+  };
+  for (const id of ['hs-table', 'cd-table', 'hc-table', 'cm-table']) {
+    document.querySelectorAll('#' + id).forEach((t) => {
+      const go = (tr) => { if (id === 'hs-table' || id === 'cd-table') toCompany(tr.dataset.key); else if (tr.dataset.card) toCompany(tr.dataset.co, tr.dataset.card); };
+      t.addEventListener('click', (e) => { const tr = e.target.closest('tr[data-key]'); if (tr) go(tr); });
+      t.addEventListener('keydown', (e) => { const tr = e.target.closest('tr[data-key]'); if (tr && e.key === 'Enter') go(tr); });
+    });
+  }
+  dash.onData(() => {
+    const p = P();
+    for (const [id, prm] of [['hs-chg', 'hchg'], ['hc-trend', 'htrend'], ['cd-grp', 'cgrp'], ['cd-del', 'cdel']]) document.querySelectorAll('#' + id).forEach((s) => { if (s !== document.activeElement) s.value = p[prm]; });
+    document.querySelectorAll('#hc-batch').forEach((c) => { c.checked = p.hbatch === '1'; });
+    document.querySelectorAll('[data-hlevel]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.hlevel === p.hlevel)));
+    document.querySelectorAll('[data-mst]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mst === p.mst)));
+  });
+})();
+
+</script>
+<script>
+// Tab Doanh thu 2022.
+(function () {
+  const xp = window.xp;
+  xp.state.yq = '';
+  const ROOM = 10000 * 26300; // $10k/tháng theo tỷ giá 26.300
+  dash.calc('y_kpi', {
+    title: 'Tổng nhóm khách size 2022',
+    description: 'Số khách, size 2022/tháng, đang chi/tháng (MCC TB T07–T09 + XPay 30 ngày) và tỷ lệ, trên khách có size 2022 ≥ 20 triệu/tháng. Đủ room = size ≥ $10k/tháng (tỷ giá 26.300).',
+    inputs: ['y2022'],
+    fn: (y2022) => {
+      const size = y2022.reduce((s, r) => s + Number(r.size || 0), 0), cur = y2022.reduce((s, r) => s + Number(r.cur || 0), 0);
+      return [{ n: y2022.length, room: y2022.filter((r) => Number(r.size) >= 263000000).length, size, cur, ratio: size ? cur / size : null }];
+    },
+  });
+  dash.draw('ykpi', (el) => {
+    if (!xp.ready(el, ['y_kpi'])) return;
+    const r = xp.rows('y_kpi')[0]; el.textContent = r ? xp.fmt(r[el.dataset.field], el.dataset.fmt) : '—';
+  });
+  const rows = () => {
+    const all = xp.rows('y2022'); if (!all) return [];
+    const p = xp.P(); const q = xp.unacc(xp.state.yq.trim());
+    return all.filter((r) => (p.yseg === 'all' || r.seg === p.yseg) && (!q || String(r.search || '').includes(q) || String(r.ma_hd || '').includes(q)));
+  };
+  const pill = (s) => xp.h('span', 'xp-pill ' + (s === 'Lapser' ? 'bad' : s === 'Có XPay – chưa active' ? 'warn' : s === 'Active w/ XPay' ? 'ok' : ''), s);
+  dash.draw('y-count', (el) => {
+    if (!xp.ready(el, ['y2022'])) return;
+    const r = rows(); const room = r.filter((x) => xp.n(x.size) >= ROOM).length;
+    el.textContent = `${xp.int(r.length)} khách · ${xp.int(room)} khách đủ room >$10k/tháng`;
+  });
+  dash.draw('y-rows', (el) => {
+    if (!xp.ready(el, ['y2022'])) return;
+    el.replaceChildren(...rows().slice(0, 500).map((r, i) => {
+      const tr = xp.h('tr', r.co_id ? 'xp-click' : ''); tr.dataset.key = r.k; if (r.co_id) { tr.dataset.co = r.co_id; tr.tabIndex = 0; }
+      const sg = xp.h('td'); sg.append(pill(r.seg));
+      tr.append(xp.h('td', 'xp-num', String(i + 1)), xp.h('td', 'xp-name', r.name), xp.h('td', '', r.nganh || '—'), xp.h('td', 'xp-num', xp.money(r.size)),
+        xp.h('td', 'xp-num', xp.money(r.dt1)), xp.h('td', 'xp-num', xp.money(r.dt22)), xp.h('td', 'xp-num', xp.money(r.m79_gmv)), xp.h('td', 'xp-num', xp.money(r.x_gmv)),
+        xp.h('td', 'xp-num', xp.pct(r.ratio)), sg, xp.h('td', '', r.pic || '—'));
+      return tr;
+    }));
+  });
+  document.querySelectorAll('#y-q').forEach((i) => i.addEventListener('input', () => { xp.state.yq = i.value; dash.draw('y-rows'); dash.draw('y-count'); }));
+  const go = (tr) => { if (!tr.dataset.co) return; dash.setParams({ page: 'company', co: tr.dataset.co, card: '', cst: 'all' }); dash.setLink('company'); document.querySelectorAll('#top').forEach((t) => t.scrollIntoView({ block: 'start' })); };
+  document.querySelectorAll('#y-table').forEach((t) => {
+    t.addEventListener('click', (e) => { const tr = e.target.closest('tr[data-key]'); if (tr) go(tr); });
+    t.addEventListener('keydown', (e) => { const tr = e.target.closest('tr[data-key]'); if (tr && e.key === 'Enter') go(tr); });
+  });
+})();
+
+</script>
+</body></html>
