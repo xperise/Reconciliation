@@ -38,5 +38,23 @@ export async function baoChoPhongBan(lanId: string, pbs: PhongBan[], suKien: 'xu
           html: `<p>${tieuDe}</p>${noiDung ? `<pre style="font-family:Arial;white-space:pre-wrap">${noiDung.replace(/</g, '&lt;')}</pre>` : ''}<p><a href="${appUrl}${link}">Mở lần chạy</a></p>` }).catch(() => {});
       }
     }
+    // CEO (chức vụ) và người được cấp quyền xem báo cáo: nhận việc cần quyết
+    const coChanGui = (cb ?? []).some((c: any) => c.muc_do === 'chan_gui');
+    const canBaoCeo = suKien === 'cho_ceo' || suKien === 'chan' || suKien === 'go_chan' || (suKien === 'xu_ly' && coChanGui);
+    if (canBaoCeo) {
+      const daBao = new Set((tv ?? []).map((t: any) => t.user_id));
+      const [{ data: ceo }, { data: qs }] = await Promise.all([
+        sb.from('tt_thanh_vien').select('user_id').eq('org_id', lc.org_id).eq('phong_ban', 'ceo'),
+        sb.from('tt_quyen').select('user_id').eq('org_id', lc.org_id).in('quyen', ['xem_bao_cao', 'quan_tri']),
+      ]);
+      const tieuDeCeo = suKien === 'xu_ly' ? `Bảng kê ${ky} có cảnh báo chặn gửi`
+        : suKien === 'cho_ceo' ? `Bảng kê ${ky} chờ CEO duyệt`
+        : suKien === 'chan' ? `Bảng kê ${ky} đang bị chặn` : `Bảng kê ${ky} đã gỡ chặn`;
+      for (const r of [...(ceo ?? []), ...(qs ?? [])] as any[]) {
+        if (daBao.has(r.user_id)) continue;
+        daBao.add(r.user_id);
+        await pushNotify({ tieuDe: tieuDeCeo, noiDung: ghiChu ?? '', muc: suKien === 'xu_ly' ? 'canh_bao' : (suKien === 'chan' ? 'canh_bao' : 'info'), lienKet: link, userId: r.user_id, entity: 'tt_lan_chay', entityId: lanId });
+      }
+    }
   } catch (e) { console.error('[tuan-thu thong bao]', e); }
 }
