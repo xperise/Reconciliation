@@ -3,6 +3,7 @@ import { goiMoHinh, TEN_MO_HINH } from './ai-provider';
 import { dsDangChan, fmtVnd } from './db';
 import { PhongBan, TEN_DICH_VU, TEN_MUC_DO, TEN_PHONG_BAN, LoaiDichVu } from './types';
 import { toChucHienTai } from './to-chuc-server';
+import { moTaTomTat, tomTatKy, thangHienTai } from './bao-cao-ceo';
 
 /**
  * Agent AI của từng phòng ban: gọi Claude API, đọc skill (có phiên bản) + quy tắc hợp đồng trong scope
@@ -88,7 +89,9 @@ CÁCH LÀM VIỆC:
 - Chỉ dựa trên dữ liệu được cung cấp. Không bịa số liệu, tên, số hóa đơn. Mục nào không có trong dữ liệu thì nói rõ.
 - Bạn chỉ đề xuất; quyết định duyệt, chặn, trả về, sửa quy tắc thuộc về head. Không tuyên bố đã thực hiện thao tác nào.
 - Số tiền viết theo kiểu Việt Nam (1.234.567đ).`;
-  return { system, skill: sk.phien_ban };
+  // Agent CEO: thêm tình hình kỳ hiện tại (dữ liệu thật, chỉ đọc)
+  const ceoCtx = pb === 'ceo' ? `\n\nTÌNH HÌNH KỲ HIỆN TẠI (dữ liệu thật, chỉ đọc):\n${moTaTomTat(await tomTatKy(thangHienTai()))}` : '';
+  return { system: system + ceoCtx, skill: sk.phien_ban };
 }
 
 /** Bối cảnh một lần chạy để đưa vào tin nhắn. */

@@ -9,9 +9,12 @@ export const TEN_BUOC: Record<string, string> = {
   cho_ke_toan: 'Chờ kế toán', cho_scope: 'Chờ CEO duyệt', cho_ceo: 'Chờ CEO duyệt', da_gui: 'Đã gửi khách', huy: 'Đã hủy',
 };
 
+export type QuyenTT = 'quan_tri' | 'kich_hoat' | 'xem_bao_cao';
+
 export type NguoiTT = {
   id: string; email: string; full_name: string;
   laAdmin: boolean;
+  quyen: QuyenTT[];
   phong_ban: PhongBan | null;
 };
 
@@ -19,12 +22,22 @@ export type NguoiTT = {
 export async function nguoiTT(): Promise<NguoiTT | null> {
   const u = await currentUser();
   if (!u) return null;
-  const laAdmin = u.role === 'admin';
-  const { data } = await supabaseAdmin().from('tt_thanh_vien').select('phong_ban').eq('user_id', u.id).eq('org_id', await toChucHienTai()).maybeSingle();
+  const org = await toChucHienTai();
+  const sb = supabaseAdmin();
+  const [{ data }, { data: qs }] = await Promise.all([
+    sb.from('tt_thanh_vien').select('phong_ban').eq('user_id', u.id).eq('org_id', org).maybeSingle(),
+    sb.from('tt_quyen').select('quyen').eq('user_id', u.id).eq('org_id', org),
+  ]);
   const phong_ban = (data?.phong_ban ?? null) as PhongBan | null;
-  if (!laAdmin && !phong_ban) return null;
-  return { id: u.id, email: u.email, full_name: u.full_name, laAdmin, phong_ban };
+  const quyen = ((qs ?? []).map((x: any) => x.quyen) as QuyenTT[]);
+  // Admin của ứng dụng, hoặc được cấp quyền quản trị trong tổ chức (ví dụ CEO được làm thay admin)
+  const laAdmin = u.role === 'admin' || quyen.includes('quan_tri');
+  if (!laAdmin && !phong_ban && quyen.length === 0) return null;
+  return { id: u.id, email: u.email, full_name: u.full_name, laAdmin, phong_ban, quyen };
 }
+
+/** Người dùng có quyền bổ sung này (hoặc là admin/quản trị). */
+export const coQuyen = (n: NguoiTT, q: QuyenTT) => n.laAdmin || n.quyen.includes(q);
 
 /** Có được thao tác thay phòng ban này không. Admin làm thay được mọi phòng (giai đoạn pilot), mọi thao tác đều ghi tên. */
 export const duocLam = (n: NguoiTT, pb: PhongBan) => n.laAdmin || n.phong_ban === pb;

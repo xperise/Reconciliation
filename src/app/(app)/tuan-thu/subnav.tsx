@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 const MUC = [
   { href: '/tuan-thu/huong-dan', label: 'Hướng dẫn A→Z' },
   { href: '/tuan-thu', label: 'Lần chạy bảng kê', exact: true },
+  { href: '/tuan-thu/ceo', label: 'Tổng quan CEO' },
   { href: '/tuan-thu/quy-tac', label: 'Hợp đồng, quy tắc & mẫu' },
   { href: '/tuan-thu/agent', label: 'Agent của tôi' },
   { href: '/tuan-thu/thanh-vien', label: 'Thành viên', admin: true },

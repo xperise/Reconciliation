@@ -7,7 +7,7 @@ import { sendMail } from '@/lib/google/gmail';
 import { refSubject, tplBangKe } from '@/lib/email-templates';
 import { periodFull } from '@/lib/period';
 import { signedUrl } from '@/lib/storage';
-import { batBuoc, BuocDuyet, duocLam, gopSau, nguoiTT, thamSoHieuLuc, BUCKET_TT, dsDangChan, tenAnToan } from '@/lib/tuan-thu/db';
+import { batBuoc, BuocDuyet, coQuyen, duocLam, gopSau, nguoiTT, QuyenTT, thamSoHieuLuc, BUCKET_TT, dsDangChan, tenAnToan } from '@/lib/tuan-thu/db';
 import { docDongLanChay, luuTep, xuLyLanChay } from '@/lib/tuan-thu/xu-ly';
 import { deXuatBuoc, textDeXuat } from '@/lib/tuan-thu/de-xuat';
 import { PhongBan, TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
@@ -360,6 +360,26 @@ export async function duyetSuaDoi(id: string, pb: PhongBan, quyetDinh: 'dong_y' 
   });
 }
 
+/** Cấp hoặc thu hồi quyền bổ sung (quan_tri, kich_hoat, xem_bao_cao) cho người trong tổ chức. Chỉ admin hoặc người có quyền quản trị. */
+export async function datQuyen(userId: string, quyen: QuyenTT, bat: boolean): Promise<KQ> {
+  return lam(async () => {
+    const n = await nguoiTT();
+    if (!n || !n.laAdmin) throw new Error('Chỉ admin cấp quyền.');
+    if (!['quan_tri', 'kich_hoat', 'xem_bao_cao'].includes(quyen)) throw new Error('Quyền không hợp lệ.');
+    const toChuc = await toChucHienTai();
+    const sb = supabaseAdmin();
+    const { data: tv } = await sb.from('tt_nguoi_to_chuc').select('org_id').eq('user_id', userId).eq('org_id', toChuc).maybeSingle();
+    if (!tv) throw new Error('Người này chưa thuộc tổ chức của bạn.');
+    const { error } = bat
+      ? await sb.from('tt_quyen').upsert(themOrg({ user_id: userId, quyen, cap_boi: n.id }, toChuc))
+      : await sb.from('tt_quyen').delete().eq('org_id', toChuc).eq('user_id', userId).eq('quyen', quyen);
+    if (error) throw new Error(error.message);
+    await writeAudit({ actorId: n.id, actorEmail: n.email, action: bat ? 'tuan_thu.cap_quyen' : 'tuan_thu.thu_quyen', entity: 'tt_quyen', entityId: userId, after: { quyen } });
+    revalidatePath('/tuan-thu');
+    return { ok: true, thongBao: `${bat ? 'Đã cấp' : 'Đã thu hồi'} quyền ${quyen}.` };
+  });
+}
+
 export async function ganThanhVien(userId: string, phongBan: string): Promise<KQ> {
   return lam(async () => {
     const n = await nguoiTT();
@@ -497,7 +517,7 @@ export async function taoHopDong(fd: FormData): Promise<KQ> {
 export async function kichHoatHopDong(id: string): Promise<KQ> {
   return lam(async () => {
     const n = await batBuoc();
-    if (!n.laAdmin && !coQuyenKichHoat(await docCauHinhQuyTrinh(), n.phong_ban ?? '')) throw new Error('Chỉ CEO hoặc admin kích hoạt hợp đồng.');
+    if (!coQuyen(n, 'kich_hoat') && !coQuyenKichHoat(await docCauHinhQuyTrinh(), n.phong_ban ?? '')) throw new Error('Chỉ CEO hoặc người được cấp quyền kích hoạt hợp đồng.');
     const sb = supabaseAdmin();
     const { data: hd } = await sb.from('tt_hop_dong').select('trang_thai').eq('org_id', await toChucHienTai()).eq('id', id).single();
     if (hd?.trang_thai !== 'cho_chot') throw new Error('Hợp đồng không ở trạng thái chờ chốt.');
