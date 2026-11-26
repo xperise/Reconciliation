@@ -16,6 +16,7 @@ import { CauTrucMau, hocMau } from '@/lib/tuan-thu/mau-bang-ke';
 import { goiYGhepCot } from '@/lib/tuan-thu/mau-ai';
 import { chuanHoaMa, coChan, coDuyet, coQuyenKichHoat, trangThaiDuocDuyet, TRANG_THAI_CHO, vaiTroChiKiemSoat, vaiTroCoDuyet, vaiTroTheoTrangThai } from '@/lib/tuan-thu/cau-hinh';
 import { docCauHinhQuyTrinh } from '@/lib/tuan-thu/cau-hinh-db';
+import { TO_CHUC_MAC_DINH_ID } from '@/lib/tuan-thu/to-chuc';
 
 type KQ = { ok: true; id?: string; thongBao?: string } | { ok: false; loi: string };
 const loi = (e: unknown): KQ => ({ ok: false, loi: e instanceof Error ? e.message : String(e) });
@@ -48,7 +49,7 @@ export async function taoLanChay(fd: FormData): Promise<KQ> {
     const thang = String(fd.get('thang') ?? '');
     const dotS = String(fd.get('dot') ?? '');
     if (!/^\d{4}-\d{2}$/.test(thang)) throw new Error('Chọn tháng.');
-    const { data: hd } = await sb.from('tt_hop_dong').select('*').eq('id', hopDongId).single();
+    const { data: hd } = await sb.from('tt_hop_dong').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', hopDongId).single();
     if (!hd) throw new Error('Không tìm thấy hợp đồng.');
     if (hd.trang_thai && hd.trang_thai !== 'hieu_luc') throw new Error('Hợp đồng chưa kích hoạt — 4 head phải chốt quy tắc và CEO kích hoạt trước.');
     const { phien_ban } = await thamSoHieuLuc(hopDongId, thang);
@@ -65,14 +66,14 @@ export async function taoLanChay(fd: FormData): Promise<KQ> {
       const rawFiles = (fd.getAll('raw') as File[]).filter((f) => f && f.size), rawDaTai = tepDaTai(fd, 'raw_json');
       if (cheDo === 'raw' || rawFiles.length || rawDaTai.length) {
         const { paths, ten } = await ghiRaw(lc.id, hd.ma_khach, thang, rawFiles, rawDaTai);
-        await sb.from('tt_lan_chay').update({ raw_paths: paths, raw_ten: ten }).eq('id', lc.id);
+        await sb.from('tt_lan_chay').update({ raw_paths: paths, raw_ten: ten }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', lc.id);
         await ghiLichSuTep(lc.id, 1, 'raw', Object.entries(paths).map(([k, p]) => ({ path: p, ten: ten[k] })), n.email);
       }
       if (bk.length) await ghiLichSuTep(lc.id, 1, 'bk_upload', bk, n.email);
       await xuLyLanChay(lc.id);
       await baoChoPhongBan(lc.id, vaiTroChiKiemSoat(await docCauHinhQuyTrinh()) as PhongBan[], 'xu_ly');
     } catch (e) {
-      await sb.from('tt_lan_chay').update({ loi: e instanceof Error ? e.message : String(e) }).eq('id', lc.id);
+      await sb.from('tt_lan_chay').update({ loi: e instanceof Error ? e.message : String(e) }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', lc.id);
     }
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.tao_lan_chay', entity: 'tt_lan_chay', entityId: lc.id, after: { thang, dot: dotS } });
     revalidatePath('/tuan-thu');
@@ -86,7 +87,7 @@ export async function taiLaiRaw(fd: FormData): Promise<KQ> {
     const n = await batBuoc('ke_toan');
     const sb = supabaseAdmin();
     const id = String(fd.get('id'));
-    const { data: lc } = await sb.from('tt_lan_chay').select('*, tt_hop_dong(ma_khach)').eq('id', id).single();
+    const { data: lc } = await sb.from('tt_lan_chay').select('*, tt_hop_dong(ma_khach)').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', id).single();
     if (!lc) throw new Error('Không tìm thấy lần chạy.');
     if (lc.buoc === 'da_gui') throw new Error('Bảng kê đã gửi, không tải lại được. Tạo lần chạy mới.');
     const { phien_ban } = await thamSoHieuLuc(lc.hop_dong_id, lc.thang);
@@ -100,7 +101,7 @@ export async function taiLaiRaw(fd: FormData): Promise<KQ> {
     else if (!bk.length) throw new Error(lc.che_do === 'da_format' ? 'Chọn file bảng kê đã sửa (và raw nếu có).' : 'Chọn file raw, hoặc bảng kê đã chỉnh tay.');
     if (bk.length) await ghiLichSuTep(id, lc.vong + 1, 'bk_upload', bk, n.email);
     if (rawMoi.length) await ghiLichSuTep(id, lc.vong + 1, 'raw', rawMoi, n.email);
-    await sb.from('tt_lan_chay').update(capNhat).eq('id', id);
+    await sb.from('tt_lan_chay').update(capNhat).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', id);
     await xuLyLanChay(id);
     await baoChoPhongBan(id, vaiTroChiKiemSoat(await docCauHinhQuyTrinh()) as PhongBan[], 'xu_ly');
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.tai_lai_raw', entity: 'tt_lan_chay', entityId: id });
@@ -113,7 +114,7 @@ export async function xacNhanThayDoi(lanId: string, ids: number[] | 'tat_ca'): P
   return lam(async () => {
     const n = await batBuoc('ke_toan');
     const sb = supabaseAdmin();
-    let q = sb.from('tt_thay_doi').update({ xac_nhan: true, xac_nhan_boi: n.id, xac_nhan_luc: new Date().toISOString() }).eq('lan_chay_id', lanId);
+    let q = sb.from('tt_thay_doi').update({ xac_nhan: true, xac_nhan_boi: n.id, xac_nhan_luc: new Date().toISOString() }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', lanId);
     if (ids !== 'tat_ca') q = q.in('id', ids);
     const { error } = await q; if (error) throw new Error(error.message);
     revalidatePath(`/tuan-thu/chay/${lanId}`);
@@ -125,9 +126,9 @@ export async function luuGiaiTrinh(canhBaoId: number, text: string): Promise<KQ>
   return lam(async () => {
     const n = await batBuoc('ke_toan');
     const sb = supabaseAdmin();
-    const { data: cb } = await sb.from('tt_canh_bao').select('lan_chay_id').eq('id', canhBaoId).single();
+    const { data: cb } = await sb.from('tt_canh_bao').select('lan_chay_id').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', canhBaoId).single();
     if (!cb) throw new Error('Không tìm thấy cảnh báo.');
-    await sb.from('tt_canh_bao').update({ giai_trinh: text.trim() || null, giai_trinh_boi: n.id, giai_trinh_luc: new Date().toISOString() }).eq('id', canhBaoId);
+    await sb.from('tt_canh_bao').update({ giai_trinh: text.trim() || null, giai_trinh_boi: n.id, giai_trinh_luc: new Date().toISOString() }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', canhBaoId);
     revalidatePath(`/tuan-thu/chay/${cb.lan_chay_id}`);
     return { ok: true };
   });
@@ -143,7 +144,7 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
   return lam(async () => {
     const n = await batBuoc(buoc as PhongBan);
     const sb = supabaseAdmin();
-    const { data: lc } = await sb.from('tt_lan_chay').select('*').eq('id', lanId).single();
+    const { data: lc } = await sb.from('tt_lan_chay').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', lanId).single();
     if (!lc) throw new Error('Không tìm thấy lần chạy.');
     if (lc.loi) throw new Error('Lần chạy đang lỗi xử lý raw, hãy tải lại raw.');
     const cauHinh = await docCauHinhQuyTrinh();
@@ -152,9 +153,9 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
     if (quyetDinh === 'tra_ve' && !yKien.trim()) throw new Error('Trả về phải ghi lý do.');
 
     const [{ data: cb }, { data: td }, { data: dy }] = await Promise.all([
-      sb.from('tt_canh_bao').select('*').eq('lan_chay_id', lanId),
-      sb.from('tt_thay_doi').select('xac_nhan, ma_quy_tac, cot').eq('lan_chay_id', lanId),
-      sb.from('tt_duyet').select('buoc, quyet_dinh').eq('lan_chay_id', lanId).eq('vong', lc.vong),
+      sb.from('tt_canh_bao').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', lanId),
+      sb.from('tt_thay_doi').select('xac_nhan, ma_quy_tac, cot').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', lanId),
+      sb.from('tt_duyet').select('buoc, quyet_dinh').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', lanId).eq('vong', lc.vong),
     ]);
     const chan = await dsDangChan(lanId);
     const dx = deXuatBuoc(buoc, (cb ?? []) as any, (td ?? []) as any, (dy ?? []) as any, chan,
@@ -166,7 +167,7 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
       throw new Error('Duyệt khác đề xuất của agent phải ghi ý kiến.');
 
     // Phiên bản skill đang dùng (SQL 39); chưa chạy SQL 39 thì bỏ qua cột này
-    const { data: sk } = await sb.from('tt_skill').select('phien_ban').eq('phong_ban', buoc).order('phien_ban', { ascending: false }).limit(1);
+    const { data: sk } = await sb.from('tt_skill').select('phien_ban').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('phong_ban', buoc).order('phien_ban', { ascending: false }).limit(1);
     const dongDuyet: any = { lan_chay_id: lanId, vong: lc.vong, buoc, quyet_dinh: quyetDinh, y_kien: yKien.trim() || null,
       de_xuat_agent: textDeXuat(dx), nguoi: n.id, nguoi_email: n.email };
     if (sk?.length) dongDuyet.skill_phien_ban = sk[0].phien_ban;
@@ -174,7 +175,7 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
     if (ins.error && /skill_phien_ban/.test(ins.error.message)) { delete dongDuyet.skill_phien_ban; ins = await sb.from('tt_duyet').insert(dongDuyet).select('id').single(); }
     if (ins.error) throw new Error(ins.error.message);
     // Học từ quyết định: head duyệt trong khi agent AI (lần rà soát mới nhất của bước này) đề xuất trả về
-    const { data: aiMoi } = await sb.from('tt_ai_ket_qua').select('noi_dung').eq('lan_chay_id', lanId).eq('vong', lc.vong)
+    const { data: aiMoi } = await sb.from('tt_ai_ket_qua').select('noi_dung').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('lan_chay_id', lanId).eq('vong', lc.vong)
       .eq('loai', 'ra_soat').eq('phong_ban', buoc).order('luc', { ascending: false }).limit(1);
     const aiTraVe = !!aiMoi?.[0]?.noi_dung && /^\s*\**\s*ĐỀ XUẤT TRẢ VỀ/i.test(aiMoi[0].noi_dung);
     if (quyetDinh === 'duyet' && aiTraVe && yKien.trim()) {
@@ -187,18 +188,18 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
     }
 
     if (quyetDinh === 'tra_ve') {
-      await sb.from('tt_lan_chay').update({ buoc: 'cho_ke_toan', vong: lc.vong + 1 }).eq('id', lanId);
+      await sb.from('tt_lan_chay').update({ buoc: 'cho_ke_toan', vong: lc.vong + 1 }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', lanId);
     } else if (buoc === 'ceo') {
       try { await guiBangKe(lanId); }
       catch (e) {
         // Gửi thất bại: bỏ dòng duyệt vừa ghi để CEO bấm lại sau khi sửa nguyên nhân
-        if (ins.data?.id) await sb.from('tt_duyet').delete().eq('id', ins.data.id);
+        if (ins.data?.id) await sb.from('tt_duyet').delete().eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', ins.data.id);
         const m = e instanceof Error ? e.message : String(e);
         if (/invalid_grant/i.test(m)) throw new Error('Chưa gửi được: kết nối Gmail của hệ thống đã hết hiệu lực (invalid_grant). Admin vào Cài đặt → Kết nối lại Google bằng hộp thư gửi (cs@uts.network), rồi CEO bấm duyệt lại. Bảng kê vẫn đang chờ CEO.');
         throw new Error(`Chưa gửi được bảng kê: ${m}. Bảng kê vẫn đang chờ CEO.`);
       }
     } else {
-      await sb.from('tt_lan_chay').update({ buoc: 'cho_ceo' }).eq('id', lanId);
+      await sb.from('tt_lan_chay').update({ buoc: 'cho_ceo' }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', lanId);
       await baoChoPhongBan(lanId, vaiTroTheoTrangThai(cauHinh, TRANG_THAI_CHO.sau) as PhongBan[], 'cho_ceo');
     }
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: `tuan_thu.${quyetDinh}`, entity: 'tt_lan_chay', entityId: lanId, after: { buoc, yKien } });
@@ -214,7 +215,7 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
  */
 export async function thongTinGui(lanId: string, linkBangKe?: string) {
   const sb = supabaseAdmin();
-  const { data: lc } = await sb.from('tt_lan_chay').select('*, tt_hop_dong(*, billing_groups(*))').eq('id', lanId).single();
+  const { data: lc } = await sb.from('tt_lan_chay').select('*, tt_hop_dong(*, billing_groups(*))').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', lanId).single();
   const hd: any = (lc as any)?.tt_hop_dong; const g: any = hd?.billing_groups;
   const to = g?.email_l1 ?? '';
   const cc = [g?.email_ke_toan, g?.email_cc, g?.email_pm, hd?.cc_them].filter((x) => x && String(x).includes('@')).join(',');
@@ -239,10 +240,10 @@ export async function thongTinGui(lanId: string, linkBangKe?: string) {
 
 async function guiBangKe(lanId: string) {
   const sb = supabaseAdmin();
-  const { data: lc0 } = await sb.from('tt_lan_chay').select('bang_ke_path').eq('id', lanId).single();
+  const { data: lc0 } = await sb.from('tt_lan_chay').select('bang_ke_path').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', lanId).single();
   if (!lc0?.bang_ke_path) throw new Error('Chưa có file bảng kê.');
   // Tên file đính kèm thư: giữ tên gốc kế toán đặt (có dấu) nếu là bảng kê kế toán upload / bản đã sửa
-  const { data: lcTen } = await sb.from('tt_lan_chay').select('che_do, bk_goc_ten').eq('id', lanId).single();
+  const { data: lcTen } = await sb.from('tt_lan_chay').select('che_do, bk_goc_ten').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', lanId).single();
   const tenTep = (lcTen?.che_do === 'da_format' && lcTen?.bk_goc_ten) ? lcTen.bk_goc_ten : lc0.bang_ke_path.split('/').pop()!;
   const link = await signedUrl(lc0.bang_ke_path, tenTep);
   const { to, cc, subject, html } = await thongTinGui(lanId, link);
@@ -251,7 +252,7 @@ async function guiBangKe(lanId: string) {
   if (!data) throw new Error('Không tải được file bảng kê.');
   const sent = await sendMail({ to, cc: cc || undefined, subject, html,
     attachments: [{ filename: tenTep, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', data: Buffer.from(await data.arrayBuffer()) }] });
-  await sb.from('tt_lan_chay').update({ buoc: 'da_gui', gui_luc: new Date().toISOString(), gui_den: to, gui_cc: cc, thread_id: sent.threadId }).eq('id', lanId);
+  await sb.from('tt_lan_chay').update({ buoc: 'da_gui', gui_luc: new Date().toISOString(), gui_den: to, gui_cc: cc, thread_id: sent.threadId }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', lanId);
 }
 
 // ---------------------------------------------------------------------
@@ -260,10 +261,10 @@ async function guiBangKe(lanId: string) {
 export async function chotQuyTac(id: string, chot: 'dong_y' | 'can_sua' | 'cho', yKien: string): Promise<KQ> {
   return lam(async () => {
     const sb = supabaseAdmin();
-    const { data: qt } = await sb.from('tt_quy_tac').select('phong_ban').eq('id', id).single();
+    const { data: qt } = await sb.from('tt_quy_tac').select('phong_ban').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', id).single();
     if (!qt) throw new Error('Không tìm thấy quy tắc.');
     const n = await batBuoc(qt.phong_ban as PhongBan);
-    await sb.from('tt_quy_tac').update({ chot, chot_y_kien: yKien.trim() || null, chot_boi: n.id, chot_luc: new Date().toISOString() }).eq('id', id);
+    await sb.from('tt_quy_tac').update({ chot, chot_y_kien: yKien.trim() || null, chot_boi: n.id, chot_luc: new Date().toISOString() }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', id);
     revalidatePath('/tuan-thu/quy-tac', 'layout');
     return { ok: true };
   });
@@ -273,7 +274,7 @@ export async function capNhatHopDong(id: string, groupId: string | null, ccThem:
   return lam(async () => {
     const n = await batBuoc();
     if (!n.laAdmin) throw new Error('Chỉ admin sửa thông tin hợp đồng.');
-    const { error } = await supabaseAdmin().from('tt_hop_dong').update({ group_id: groupId || null, cc_them: ccThem.trim() || null }).eq('id', id);
+    const { error } = await supabaseAdmin().from('tt_hop_dong').update({ group_id: groupId || null, cc_them: ccThem.trim() || null }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', id);
     if (error) throw new Error(error.message);
     revalidatePath('/tuan-thu/quy-tac', 'layout');
     return { ok: true };
@@ -302,13 +303,13 @@ export async function deXuatSuaDoi(fd: FormData): Promise<KQ> {
     if (!duocLam(n, pb)) throw new Error('Chọn phòng ban đề xuất.');
     const sb = supabaseAdmin();
     const hopDongId = String(fd.get('hop_dong_id')), ma = String(fd.get('ma_quy_tac'));
-    const { data: qt } = await sb.from('tt_quy_tac').select('*').eq('hop_dong_id', hopDongId).eq('ma', ma).single();
+    const { data: qt } = await sb.from('tt_quy_tac').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('hop_dong_id', hopDongId).eq('ma', ma).single();
     if (!qt) throw new Error('Không tìm thấy quy tắc.');
     const moi = String(fd.get('noi_dung_moi') ?? '').trim(), lyDo = String(fd.get('ly_do') ?? '').trim();
     const hieuLuc = String(fd.get('hieu_luc_tu') ?? '');
     if (!moi || !lyDo) throw new Error('Nhập nội dung mới và lý do.');
     if (!/^\d{4}-\d{2}$/.test(hieuLuc)) throw new Error('Chọn tháng bắt đầu hiệu lực.');
-    const { count } = await sb.from('tt_sua_doi').select('id', { count: 'exact', head: true }).eq('hop_dong_id', hopDongId);
+    const { count } = await sb.from('tt_sua_doi').select('id', { count: 'exact', head: true }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('hop_dong_id', hopDongId);
     const { data: sd, error } = await sb.from('tt_sua_doi').insert({
       hop_dong_id: hopDongId, so: (count ?? 0) + 1, ma_quy_tac: ma, phong_ban: pb,
       noi_dung_goc: `${qt.noi_dung}${qt.gia_tri ? ` — ${qt.gia_tri}` : ''}`, noi_dung_moi: moi,
@@ -327,28 +328,28 @@ export async function duyetSuaDoi(id: string, pb: PhongBan, quyetDinh: 'dong_y' 
   return lam(async () => {
     const n = await batBuoc(pb);
     const sb = supabaseAdmin();
-    const { data: sd } = await sb.from('tt_sua_doi').select('*').eq('id', id).single();
+    const { data: sd } = await sb.from('tt_sua_doi').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', id).single();
     if (!sd) throw new Error('Không tìm thấy đề xuất.');
     if (sd.trang_thai !== 'cho_duyet') throw new Error('Đề xuất đã chốt.');
     if (quyetDinh === 'khong_dong_y' && !yKien.trim()) throw new Error('Không đồng ý phải ghi lý do.');
     await sb.from('tt_sua_doi_duyet').upsert({ sua_doi_id: id, phong_ban: pb, quyet_dinh: quyetDinh, y_kien: yKien.trim() || null, nguoi: n.id, luc: new Date().toISOString() });
-    const { data: ds } = await sb.from('tt_sua_doi_duyet').select('phong_ban, quyet_dinh').eq('sua_doi_id', id);
+    const { data: ds } = await sb.from('tt_sua_doi_duyet').select('phong_ban, quyet_dinh').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('sua_doi_id', id);
     let thongBao: string | undefined;
     if ((ds ?? []).some((d: any) => d.quyet_dinh === 'khong_dong_y')) {
-      await sb.from('tt_sua_doi').update({ trang_thai: 'tu_choi' }).eq('id', id);
+      await sb.from('tt_sua_doi').update({ trang_thai: 'tu_choi' }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', id);
       thongBao = 'Đề xuất bị từ chối.';
     } else if ((await docCauHinhQuyTrinh()).roles.every((r) => (ds ?? []).some((d: any) => d.phong_ban === r.key && d.quyet_dinh === 'dong_y'))) {
       // Đủ quorum (mọi role trong cấu hình đồng ý; mặc định 4/4): áp lên bộ tham số (phiên bản mới) và cập nhật quy tắc dạng chữ
-      const { data: cuoi } = await sb.from('tt_bo_quy_tac').select('*').eq('hop_dong_id', sd.hop_dong_id).order('phien_ban', { ascending: false }).limit(1).single();
+      const { data: cuoi } = await sb.from('tt_bo_quy_tac').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('hop_dong_id', sd.hop_dong_id).order('phien_ban', { ascending: false }).limit(1).single();
       if (sd.thay_doi_tham_so) {
         await sb.from('tt_bo_quy_tac').insert({ hop_dong_id: sd.hop_dong_id, phien_ban: (cuoi?.phien_ban ?? 0) + 1,
           tham_so: gopSau(cuoi?.tham_so ?? {}, sd.thay_doi_tham_so), hieu_luc_tu: sd.hieu_luc_tu,
           ghi_chu: `SĐ-${String(sd.so).padStart(2, '0')} (${sd.ma_quy_tac}): ${sd.noi_dung_moi}` });
       }
       await sb.from('tt_quy_tac').update({ noi_dung: sd.noi_dung_moi, ...(sd.gia_tri_moi ? { gia_tri: sd.gia_tri_moi } : {}),
-        can_cu: `SĐ-${String(sd.so).padStart(2, '0')} hiệu lực từ ${sd.hieu_luc_tu}${sd.can_cu ? ` — ${sd.can_cu}` : ''}`, chot: 'dong_y' })
+        can_cu: `SĐ-${String(sd.so).padStart(2, '0')} hiệu lực từ ${sd.hieu_luc_tu}${sd.can_cu ? ` — ${sd.can_cu}` : ''}`, chot: 'dong_y' }).eq('org_id', TO_CHUC_MAC_DINH_ID)
         .eq('hop_dong_id', sd.hop_dong_id).eq('ma', sd.ma_quy_tac);
-      await sb.from('tt_sua_doi').update({ trang_thai: 'hieu_luc' }).eq('id', id);
+      await sb.from('tt_sua_doi').update({ trang_thai: 'hieu_luc' }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', id);
       thongBao = 'Đủ quorum head đồng ý — sửa đổi đã có hiệu lực.';
     }
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: `tuan_thu.sua_doi_${quyetDinh}`, entity: 'tt_sua_doi', entityId: id, after: { pb, yKien } });
@@ -366,7 +367,7 @@ export async function ganThanhVien(userId: string, phongBan: string): Promise<KQ
     if (ma && !(await docCauHinhQuyTrinh()).roles.some((r) => r.key === ma)) throw new Error(`Role "${phongBan}" chưa có trong cấu hình.`);
     const { error } = ma
       ? await sb.from('tt_thanh_vien').upsert({ user_id: userId, phong_ban: ma })
-      : await sb.from('tt_thanh_vien').delete().eq('user_id', userId);
+      : await sb.from('tt_thanh_vien').delete().eq('org_id', TO_CHUC_MAC_DINH_ID).eq('user_id', userId);
     if (error) throw new Error(error.message);
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.gan_thanh_vien', entity: 'tt_thanh_vien', entityId: userId, after: { phongBan } });
     revalidatePath('/tuan-thu/thanh-vien');
@@ -384,7 +385,7 @@ export async function chanLanChay(lanId: string, pb: PhongBan, lyDo: string): Pr
     if (!coChan(cauHinh, pb)) throw new Error('Phòng này không có quyền chặn bảng kê.');
     if (!lyDo.trim()) throw new Error('Chặn phải ghi lý do.');
     const sb = supabaseAdmin();
-    const { data: lc } = await sb.from('tt_lan_chay').select('buoc').eq('id', lanId).single();
+    const { data: lc } = await sb.from('tt_lan_chay').select('buoc').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', lanId).single();
     if (!lc) throw new Error('Không tìm thấy lần chạy.');
     if (lc.buoc === 'da_gui') throw new Error('Bảng kê đã gửi, không chặn được nữa.');
     const { error } = await sb.from('tt_chan').insert({ lan_chay_id: lanId, phong_ban: pb, ly_do: lyDo.trim(), nguoi: n.id, nguoi_email: n.email });
@@ -399,11 +400,11 @@ export async function chanLanChay(lanId: string, pb: PhongBan, lyDo: string): Pr
 export async function goChan(chanId: number, ghiChu: string): Promise<KQ> {
   return lam(async () => {
     const sb = supabaseAdmin();
-    const { data: c } = await sb.from('tt_chan').select('*').eq('id', chanId).single();
+    const { data: c } = await sb.from('tt_chan').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', chanId).single();
     if (!c) throw new Error('Không tìm thấy lần chặn.');
     const n = await batBuoc(c.phong_ban as PhongBan);
     if (c.go_luc) throw new Error('Đã gỡ trước đó.');
-    await sb.from('tt_chan').update({ go_luc: new Date().toISOString(), go_boi: n.id, go_email: n.email, go_ghi_chu: ghiChu.trim() || null }).eq('id', chanId);
+    await sb.from('tt_chan').update({ go_luc: new Date().toISOString(), go_boi: n.id, go_email: n.email, go_ghi_chu: ghiChu.trim() || null }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', chanId);
     // Học từ quyết định: chặn rồi gỡ kèm cách xử lý → gợi ý bổ sung skill cho phòng đó
     if (ghiChu.trim()) await sb.from('tt_skill_goi_y').insert({ phong_ban: c.phong_ban, lan_chay_id: c.lan_chay_id, nguon: 'Chặn rồi gỡ chặn',
       noi_dung: `Từng chặn vì: ${c.ly_do} — gỡ sau khi: ${ghiChu.trim()}. Lần sau gặp tình huống tương tự, kiểm tra điều kiện gỡ này trước khi đề xuất chặn.` });
@@ -423,7 +424,7 @@ export async function suaBangKe(lanId: string, thayDoi: { loai: 'khach_san' | 'v
     if (!lyDo.trim()) throw new Error('Sửa bảng kê phải ghi lý do.');
     if (!thayDoi.length) throw new Error('Không có ô nào cần sửa.');
     const sb = supabaseAdmin();
-    const { data: lc } = await sb.from('tt_lan_chay').select('*').eq('id', lanId).single();
+    const { data: lc } = await sb.from('tt_lan_chay').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', lanId).single();
     if (!lc) throw new Error('Không tìm thấy lần chạy.');
     if (lc.buoc === 'da_gui') throw new Error('Bảng kê đã gửi, không sửa được. Tạo lần chạy mới.');
     const dong = await docDongLanChay(lanId);
@@ -437,7 +438,7 @@ export async function suaBangKe(lanId: string, thayDoi: { loai: 'khach_san' | 'v
     });
     const { error } = await sb.from('tt_sua_tay').insert(rows);
     if (error) throw new Error(/tt_sua_tay/.test(error.message) ? 'Cần chạy supabase/migrations/42_tuan_thu_agent_hanh_dong.sql.' : error.message);
-    await sb.from('tt_lan_chay').update({ vong: lc.vong + 1, buoc: 'cho_ke_toan' }).eq('id', lanId);
+    await sb.from('tt_lan_chay').update({ vong: lc.vong + 1, buoc: 'cho_ke_toan' }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', lanId);
     await xuLyLanChay(lanId);
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.sua_tay', entity: 'tt_lan_chay', entityId: lanId, after: { thayDoi, lyDo } });
     revalidatePath(`/tuan-thu/chay/${lanId}`); revalidatePath('/tuan-thu');
@@ -474,7 +475,7 @@ export async function taoHopDong(fd: FormData): Promise<KQ> {
       await luuTep(p, Buffer.from(await f.arrayBuffer()), 'application/pdf');
       teps.push({ path: p, ten: f.name });
     }
-    await sb.from('tt_hop_dong').update({ tep_hop_dong: teps }).eq('id', hd.id);
+    await sb.from('tt_hop_dong').update({ tep_hop_dong: teps }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', hd.id);
     // Danh mục phòng ban (tùy chọn): mỗi dòng "Tên phòng ban;mã cost center"
     const pb = String(fd.get('phong_ban') ?? '').split('\n').map((x) => x.trim()).filter(Boolean)
       .map((x, i) => { const [t, m] = x.split(/[;\t]/); return { hop_dong_id: hd.id, ten: t.trim(), ma_cost_center: m?.trim() || null, thu_tu: i + 1 }; });
@@ -490,13 +491,13 @@ export async function kichHoatHopDong(id: string): Promise<KQ> {
     const n = await batBuoc();
     if (!n.laAdmin && !coQuyenKichHoat(await docCauHinhQuyTrinh(), n.phong_ban ?? '')) throw new Error('Chỉ CEO hoặc admin kích hoạt hợp đồng.');
     const sb = supabaseAdmin();
-    const { data: hd } = await sb.from('tt_hop_dong').select('trang_thai').eq('id', id).single();
+    const { data: hd } = await sb.from('tt_hop_dong').select('trang_thai').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', id).single();
     if (hd?.trang_thai !== 'cho_chot') throw new Error('Hợp đồng không ở trạng thái chờ chốt.');
-    const { data: qt } = await sb.from('tt_quy_tac').select('phong_ban, chot').eq('hop_dong_id', id);
+    const { data: qt } = await sb.from('tt_quy_tac').select('phong_ban, chot').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('hop_dong_id', id);
     const chua = (qt ?? []).filter((q: any) => q.chot !== 'dong_y');
     if (!(qt ?? []).length) throw new Error('Chưa có quy tắc nào.');
     if (chua.length) throw new Error(`Còn ${chua.length} quy tắc chưa được head đồng ý (${[...new Set(chua.map((q: any) => TEN_PHONG_BAN[q.phong_ban as PhongBan]))].join(', ')}).`);
-    await sb.from('tt_hop_dong').update({ trang_thai: 'hieu_luc' }).eq('id', id);
+    await sb.from('tt_hop_dong').update({ trang_thai: 'hieu_luc' }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', id);
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.kich_hoat_hop_dong', entity: 'tt_hop_dong', entityId: id });
     revalidatePath('/tuan-thu/quy-tac', 'layout'); revalidatePath('/tuan-thu');
     return { ok: true, thongBao: 'Đã kích hoạt — chạy bảng kê được theo hợp đồng này.' };
@@ -508,10 +509,10 @@ export async function suaThamSoNhap(id: string, json: string): Promise<KQ> {
   return lam(async () => {
     const n = await batBuoc();
     const sb = supabaseAdmin();
-    const { data: hd } = await sb.from('tt_hop_dong').select('trang_thai').eq('id', id).single();
+    const { data: hd } = await sb.from('tt_hop_dong').select('trang_thai').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', id).single();
     if (hd?.trang_thai === 'hieu_luc') throw new Error('Hợp đồng đã kích hoạt — đổi tham số qua luồng sửa đổi.');
     let ts: any; try { ts = JSON.parse(json); } catch { throw new Error('JSON không hợp lệ.'); }
-    const { error } = await sb.from('tt_bo_quy_tac').update({ tham_so: ts }).eq('hop_dong_id', id).eq('phien_ban', 1);
+    const { error } = await sb.from('tt_bo_quy_tac').update({ tham_so: ts }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('hop_dong_id', id).eq('phien_ban', 1);
     if (error) throw new Error(error.message);
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.sua_tham_so_nhap', entity: 'tt_hop_dong', entityId: id });
     revalidatePath('/tuan-thu/quy-tac', 'layout');
@@ -555,11 +556,11 @@ export async function chonBanGui(lanId: string, ban: 'goc' | 'da_sua'): Promise<
   return lam(async () => {
     const n = await batBuoc('ke_toan');
     const sb = supabaseAdmin();
-    const { data: lc } = await sb.from('tt_lan_chay').select('*').eq('id', lanId).single();
+    const { data: lc } = await sb.from('tt_lan_chay').select('*').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', lanId).single();
     if (!lc || lc.che_do !== 'da_format') throw new Error('Lần chạy không phải loại bảng kê đã format.');
     if (lc.buoc !== 'cho_ke_toan') throw new Error('Chỉ chọn được khi lần chạy đang chờ kế toán.');
     if (ban === 'da_sua' && !lc.bk_sua_path) throw new Error('Không có bản đã sửa (file đã đúng quy tắc).');
-    await sb.from('tt_lan_chay').update({ ban_gui: ban, bang_ke_path: ban === 'da_sua' ? lc.bk_sua_path : lc.bk_goc_path }).eq('id', lanId);
+    await sb.from('tt_lan_chay').update({ ban_gui: ban, bang_ke_path: ban === 'da_sua' ? lc.bk_sua_path : lc.bk_goc_path }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', lanId);
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.chon_ban_gui', entity: 'tt_lan_chay', entityId: lanId, after: { ban } });
     revalidatePath(`/tuan-thu/chay/${lanId}`);
     return { ok: true, thongBao: ban === 'da_sua' ? 'Sẽ gửi bản đã sửa theo quy tắc.' : 'Sẽ gửi bảng kê kế toán upload (giữ nguyên).' };
@@ -586,7 +587,7 @@ export async function hocMauBangKe(fd: FormData): Promise<KQ> {
     let ct = await hocMau(Buffer.from(await f.arrayBuffer()));
     if (!ct.sheets.length) throw new Error(`Không nhận ra sheet nào trong file mẫu. ${ct.ghiChu.join(' ')}`);
     const g = await goiYGhepCot(ct); ct = g.ct;
-    const { data: cu } = await sb.from('tt_mau_bang_ke').select('phien_ban').eq('ma_khach', ma).order('phien_ban', { ascending: false }).limit(1);
+    const { data: cu } = await sb.from('tt_mau_bang_ke').select('phien_ban').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('ma_khach', ma).order('phien_ban', { ascending: false }).limit(1);
     const { data: m, error } = await sb.from('tt_mau_bang_ke').insert({ ma_khach: ma, phien_ban: ((cu ?? [])[0]?.phien_ban ?? 0) + 1, ten_tep: t.ten, path: t.path, cau_truc: ct, tao_boi: n.id }).select('id').single();
     if (error || !m) throw new Error(/tt_mau_bang_ke/.test(error?.message ?? '') ? 'Cần chạy supabase/migrations/46_tuan_thu_mau_bang_ke.sql.' : error?.message ?? 'Không lưu được mẫu.');
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.hoc_mau', entity: 'tt_mau_bang_ke', entityId: m.id, after: { ma, sheets: ct.sheets.map((x) => x.ten) } });
@@ -600,13 +601,13 @@ export async function suaGhepCotMau(id: string, sheet: string, so: number, nguon
   return lam(async () => {
     await batBuoc('ke_toan');
     const sb = supabaseAdmin();
-    const { data: m } = await sb.from('tt_mau_bang_ke').select('cau_truc, trang_thai').eq('id', id).single();
+    const { data: m } = await sb.from('tt_mau_bang_ke').select('cau_truc, trang_thai').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', id).single();
     if (!m) throw new Error('Không tìm thấy mẫu.');
     if (m.trang_thai !== 'cho_duyet') throw new Error('Mẫu đã duyệt — muốn đổi thì học lại mẫu mới.');
     const ct = m.cau_truc as CauTrucMau; const c = ct.sheets.find((x) => x.ten === sheet)?.cot.find((x) => x.so === so);
     if (!c) throw new Error('Không tìm thấy cột.');
     c.nguon = nguon;
-    await sb.from('tt_mau_bang_ke').update({ cau_truc: ct }).eq('id', id);
+    await sb.from('tt_mau_bang_ke').update({ cau_truc: ct }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', id);
     revalidatePath('/tuan-thu/quy-tac', 'layout');
     return { ok: true };
   });
@@ -616,11 +617,11 @@ export async function duyetMauBangKe(id: string): Promise<KQ> {
   return lam(async () => {
     const n = await batBuoc('ke_toan');
     const sb = supabaseAdmin();
-    const { data: m } = await sb.from('tt_mau_bang_ke').select('ma_khach, phien_ban, trang_thai').eq('id', id).single();
+    const { data: m } = await sb.from('tt_mau_bang_ke').select('ma_khach, phien_ban, trang_thai').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', id).single();
     if (!m) throw new Error('Không tìm thấy mẫu.');
     if (m.trang_thai !== 'cho_duyet') throw new Error('Mẫu không ở trạng thái chờ duyệt.');
-    await sb.from('tt_mau_bang_ke').update({ trang_thai: 'thay_the' }).eq('ma_khach', m.ma_khach).eq('trang_thai', 'hieu_luc');
-    await sb.from('tt_mau_bang_ke').update({ trang_thai: 'hieu_luc', duyet_boi: n.id, duyet_luc: new Date().toISOString() }).eq('id', id);
+    await sb.from('tt_mau_bang_ke').update({ trang_thai: 'thay_the' }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('ma_khach', m.ma_khach).eq('trang_thai', 'hieu_luc');
+    await sb.from('tt_mau_bang_ke').update({ trang_thai: 'hieu_luc', duyet_boi: n.id, duyet_luc: new Date().toISOString() }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', id);
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.duyet_mau', entity: 'tt_mau_bang_ke', entityId: id });
     revalidatePath('/tuan-thu/quy-tac', 'layout');
     return { ok: true, thongBao: `Mẫu v${m.phien_ban} của ${m.ma_khach} có hiệu lực — lần chạy từ raw tiếp theo dựng đúng mẫu này.` };
@@ -632,7 +633,7 @@ export async function chotTatCaQuyTac(hopDongId: string, pb: PhongBan, yKien: st
   return lam(async () => {
     const n = await batBuoc(pb);
     const sb = supabaseAdmin();
-    const { data, error } = await sb.from('tt_quy_tac').update({ chot: 'dong_y', chot_y_kien: yKien.trim() || null, chot_boi: n.id, chot_luc: new Date().toISOString() })
+    const { data, error } = await sb.from('tt_quy_tac').update({ chot: 'dong_y', chot_y_kien: yKien.trim() || null, chot_boi: n.id, chot_luc: new Date().toISOString() }).eq('org_id', TO_CHUC_MAC_DINH_ID)
       .eq('hop_dong_id', hopDongId).eq('phong_ban', pb).neq('chot', 'dong_y').select('ma');
     if (error) throw new Error(error.message);
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.chot_tat_ca', entity: 'tt_hop_dong', entityId: hopDongId, after: { pb, so: data?.length ?? 0 } });
@@ -646,10 +647,10 @@ export async function xoaLanChay(lanId: string): Promise<KQ> {
   return lam(async () => {
     const n = await batBuoc('ke_toan');
     const sb = supabaseAdmin();
-    const { data: lc } = await sb.from('tt_lan_chay').select('id, buoc, thang').eq('id', lanId).single();
+    const { data: lc } = await sb.from('tt_lan_chay').select('id, buoc, thang').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', lanId).single();
     if (!lc) throw new Error('Không tìm thấy lần chạy.');
     if (lc.buoc === 'da_gui') throw new Error('Bảng kê đã gửi khách, không xoá được để giữ đối chiếu.');
-    const { error } = await sb.from('tt_lan_chay').delete().eq('id', lanId);
+    const { error } = await sb.from('tt_lan_chay').delete().eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', lanId);
     if (error) throw new Error(error.message);
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.xoa_lan_chay', entity: 'tt_lan_chay', entityId: lanId, after: { thang: lc.thang } });
     revalidatePath('/tuan-thu');
@@ -663,11 +664,11 @@ export async function xoaHopDong(hopDongId: string): Promise<KQ> {
     const n = await nguoiTT();
     if (!n?.laAdmin) throw new Error('Chỉ Admin được xoá hợp đồng.');
     const sb = supabaseAdmin();
-    const { data: hd } = await sb.from('tt_hop_dong').select('id, ma_khach, so_hop_dong').eq('id', hopDongId).single();
+    const { data: hd } = await sb.from('tt_hop_dong').select('id, ma_khach, so_hop_dong').eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', hopDongId).single();
     if (!hd) throw new Error('Không tìm thấy hợp đồng.');
-    const { count } = await sb.from('tt_lan_chay').select('id', { count: 'exact', head: true }).eq('hop_dong_id', hopDongId).eq('buoc', 'da_gui');
+    const { count } = await sb.from('tt_lan_chay').select('id', { count: 'exact', head: true }).eq('org_id', TO_CHUC_MAC_DINH_ID).eq('hop_dong_id', hopDongId).eq('buoc', 'da_gui');
     if (count) throw new Error(`Hợp đồng đã có ${count} bảng kê gửi khách, không xoá được để giữ đối chiếu.`);
-    const { error } = await sb.from('tt_hop_dong').delete().eq('id', hopDongId);
+    const { error } = await sb.from('tt_hop_dong').delete().eq('org_id', TO_CHUC_MAC_DINH_ID).eq('id', hopDongId);
     if (error) throw new Error(error.message);
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.xoa_hop_dong', entity: 'tt_hop_dong', entityId: hopDongId, after: { ma_khach: hd.ma_khach, so_hop_dong: hd.so_hop_dong } });
     revalidatePath('/tuan-thu');
