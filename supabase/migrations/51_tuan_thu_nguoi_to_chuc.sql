@@ -16,7 +16,7 @@ create table if not exists tt_nguoi_to_chuc (
 alter table tt_nguoi_to_chuc enable row level security;
 
 insert into tt_nguoi_to_chuc (user_id, org_id)
-select distinct tv.user_id, '00000000-0000-0000-0000-000000000001'
+select distinct tv.user_id, '00000000-0000-0000-0000-000000000001'::uuid
 from tt_thanh_vien tv
 where tv.user_id is not null
 on conflict (user_id, org_id) do nothing;
