@@ -200,6 +200,12 @@ export function planOf(C: Ctx, seg: Seg | null, ky: string, day?: string): Plan 
   const nd = day ? daysIn(ky) : 1;
   if (!T) { const m: Plan = { gmv: mp!.gmv, nr: mp!.gmv * mobRate(C, ky), kh: day ? 0 : mp!.kh }; return m; }
   const n = (v: number | null | undefined) => Number(v || 0), tm = (k: string) => num(D, k);
+  // tab một mảng: kế hoạch GMV & Net revenue của riêng mảng đó (kế hoạch số khách không tách theo mảng)
+  if (D.dvOnly && seg !== "m") {
+    const g = D.dvOnly === "Hotel" ? n(T.gmv_hotel) : n(T.gmv_flight), mg = tm(D.dvOnly === "Hotel" ? "target_margin_hotel" : "target_margin_flight");
+    const nd2 = day ? daysIn(ky) : 1;
+    return { gmv: g / nd2, nr: (g * mg) / nd2, kh: 0 };
+  }
   const ts: Plan = { gmv: n(T.gmv_hotel) + n(T.gmv_flight) + n(T.gmv_saas_t) + n(T.gmv_fnb),
     nr: n(T.gmv_hotel) * tm("target_margin_hotel") + n(T.gmv_flight) * tm("target_margin_flight") + n(T.gmv_saas_t) * tm("target_margin_saas") + n(T.gmv_fnb) * tm("target_margin_fnb"),
     kh: n(T.kh_n1) };
@@ -467,4 +473,18 @@ export function tripBridge(C: Ctx, W: Win): { total: TripRow; rows: TripRow[]; c
   const keys = Array.from(new Set([...cur, ...prev].map((x) => x.k)));
   const rows = keys.map((k) => row(k, prev.filter((x) => x.k === k), cur.filter((x) => x.k === k))).sort((a, b) => Math.abs(b.d) - Math.abs(a.d));
   return { total: row("__all", prev, cur), rows, coTrip: T.some((t) => !t[2].startsWith("BK:")) };
+}
+
+/* ---------------- Ngữ cảnh một mảng (tab Accommodation / Flight) ---------------- */
+const dvCache = new WeakMap<Ctx, Map<string, Ctx>>();
+/** Ngữ cảnh chỉ gồm GMV / giá vốn / chuyến đi của một mảng; công nợ giữ nguyên */
+export function dvCtx(C: Ctx, dv: "Hotel" | "Flight"): Ctx {
+  const m = dvCache.get(C) || new Map<string, Ctx>();
+  const hit = m.get(dv);
+  if (hit) return hit;
+  const loai = dv === "Hotel" ? "hotel" : "flight";
+  const D = { ...C.D, dvOnly: dv, mob: null, gmv: C.D.gmv.filter((r) => r.dich_vu === dv), trips: C.D.trips ? C.D.trips.filter((t) => t[3] === loai) : C.D.trips };
+  const out: Ctx = { ...C, D };
+  m.set(dv, out); dvCache.set(C, m);
+  return out;
 }

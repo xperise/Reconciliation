@@ -12,17 +12,27 @@ import type { VM } from "./views";
 import { drillPanel } from "./views";
 import type { SrcNccSum } from "./types";
 import { canonNcc, nccOfSrc, nccTen } from "./alias";
-import { tripBridge, dimKey, grpKey, custInfo, groupArCustomers, makeWin, block, facts, mgOf, covOf, byDim, topRest, bridgeOf, nrByCustomer, onTimeSeg, invCol, Win, Dim, Block, Sum, Mode } from "./ops";
+import { dvCtx, tripBridge, dimKey, grpKey, custInfo, groupArCustomers, makeWin, block, facts, mgOf, covOf, byDim, topRest, bridgeOf, nrByCustomer, onTimeSeg, invCol, Win, Dim, Block, Sum, Mode } from "./ops";
 
 /** Lựa chọn của người xem dành cho các màn hình này (nằm chung trong VM.st) */
 export interface OpsState { mode?: Mode; ngay?: string; dim?: string; dimAll?: string }
 const S = (v: VM) => v.st as OpsState;
 
 /** Dựng tab mới; tab khác trả null để views.ts xử lý như cũ */
+/** Tab một mảng của Travel & SaaS */
+export const MANG_TAB: Record<string, { dv: "Hotel" | "Flight"; ten: string }> = { hotel: { dv: "Hotel", ten: "Accommodation (Hotel)" }, flight: { dv: "Flight", ten: "Flight" } };
+type VMm = VM & { mang?: "Hotel" | "Flight" };
+/** VM chỉ gồm số của một mảng (GMV, giá vốn, chuyến đi, phải trả theo ngành); phải thu không tách theo mảng */
+export function vmTab(v: VM, tab: string): VM {
+  const m = MANG_TAB[tab];
+  return m ? ({ ...v, Cc: dvCtx(v.Cc, m.dv), mang: m.dv } as VMm) : v;
+}
+const mangOf = (v: VM) => (v as VMm).mang;
 export function renderOps(tab: string, v: VM): string | null {
   switch (tab) {
     case "home": return homeOps(v);
     case "main": return tsMain(v);
+    case "hotel": case "flight": return tsMain(vmTab(v, tab));
     case "congno": return tsCongNo(v);
     default: return null;
   }
@@ -272,7 +282,8 @@ const SEG_GO: Record<Seg, string> = { ts: "ts:main", m: "m:" };
 const NO_DAILY = "chưa có số theo ngày";
 
 /* ---------- Dải KPI: GMV · Margin · Net revenue · Nợ quá hạn · Khách active ---------- */
-export function opsStrip(v: VM): string {
+export function opsStrip(v0: VM, tab = ""): string {
+  const v = vmTab(v0, tab);
   const W = winOf(v), seg = v.seg ?? null, B = block(v.Cc, W, seg), A = v.A;
   const go = seg ? "main" : "home";
   const day = W.mode === "ngay";
@@ -289,7 +300,7 @@ export function opsStrip(v: VM): string {
     B.noDaily ? ["Margin", "—", NO_DAILY, 0, "muted", go, "ri-percent-line"]
       : covTile(["Margin", pc(mg, 2), [mgP ? `KH ${pc(mgP, 2)}` : "", cmpS ? `${dPlain(dPt(mg, mgOf(cmpS)), true)} so ${cmpL}` : ""].filter(Boolean).join(" · "), mg != null && mgP ? mg / mgP : 0, stCls(mg != null && mgP ? mg / mgP : null), go, "ri-percent-line"], B),
     covTile(money("Net revenue", "ri-funds-line", B.cur.nr, B.plan.nr, cmpS?.nr), B),
-    ["Nợ phải thu quá hạn", A.tot ? pc(A.od / A.tot) : "—", A.tot ? `${ty(A.od)} / ${ty(A.tot)} · DSO ${ok(A.dso) ? n0(A.dso) + " ngày" : "—"}` : "chưa có sổ công nợ", A.tot ? A.od / A.tot : 0, !A.tot ? "muted" : A.od / A.tot > 0.4 ? "critical" : A.od / A.tot > 0.25 ? "high" : "stable", go, "ri-time-line"],
+    ["Nợ phải thu quá hạn", A.tot ? pc(A.od / A.tot) : "—", A.tot ? `${ty(A.od)} / ${ty(A.tot)} · DSO ${ok(A.dso) ? n0(A.dso) + " ngày" : "—"}${mangOf(v) ? " · toàn Travel & SaaS (không tách theo mảng)" : ""}` : "chưa có sổ công nợ", A.tot ? A.od / A.tot : 0, !A.tot ? "muted" : A.od / A.tot > 0.4 ? "critical" : A.od / A.tot > 0.25 ? "high" : "stable", go, "ri-time-line"],
     B.noDaily ? ["Khách hàng active", "—", NO_DAILY, 0, "muted", go, "ri-group-line"]
       : ["Khách hàng active", n0(B.cur.kh), day ? (B.avg ? `TB 7 ngày ${N1.format(B.avg.kh)} khách/ngày` : "") : [B.plan.kh ? `của ${n0(B.plan.kh)} kế hoạch` : "", `${dPlain(dPct(B.cur.kh, B.prev.kh))} so ${W.prevL}`].filter(Boolean).join(" · "),
         !day && B.plan.kh ? B.cur.kh / B.plan.kh : 0, stCls(!day && B.plan.kh ? B.cur.kh / B.plan.kh : null), go, "ri-group-line"],
@@ -396,15 +407,18 @@ const DIM_L: [Dim, string][] = [["dv", "Theo mảng"], ["kh", "Theo khách hàng
 /** NCC thuộc Mobility không tính vào Travel & SaaS */
 function apTs(v: VM) {
   const nganh = new Map(v.C.D.suppliers.map((s) => [s.ma_ncc, s.nganh]));
-  const C2: Ctx = { ...v.C, D: { ...v.C.D, ap: v.C.D.ap.filter((r) => nganh.get(r.ma_ncc) !== "Mobility") } };
-  return { B: calcAP(C2, null), APS: v.APS.filter((s) => s.nganh !== "Mobility") };
+  const mg = mangOf(v);
+  const ok2 = (ng: string | undefined) => ng !== "Mobility" && (!mg || ng === mg);
+  const C2: Ctx = { ...v.C, D: { ...v.C.D, ap: v.C.D.ap.filter((r) => ok2(nganh.get(r.ma_ncc))) } };
+  return { B: calcAP(C2, null), APS: v.APS.filter((s) => ok2(s.nganh)) };
 }
 function tsMain(v: VM): string {
   const C = v.Cc, W = winOf(v), day = W.mode === "ngay", B = block(C, W, "ts");
-  const dim: Dim = (S(v).dim as Dim) || "dv";
+  const mg = mangOf(v);
+  const dim0: Dim = (S(v).dim as Dim) || "dv", dim: Dim = mg && dim0 === "dv" ? "kh" : dim0;
 
   /* 1. GMV, Net revenue, Margin theo mảng / khách / NCC */
-  const sw = `<div class="seg" style="margin-bottom:10px">${DIM_L.map(([k, l]) => `<button type="button" class="seg-b${k === dim ? " on" : ""}" data-st="dim" data-v="${k}">${l}</button>`).join("")}</div>`;
+  const sw = `<div class="seg" style="margin-bottom:10px">${DIM_L.filter(([k]) => !mg || k !== "dv").map(([k, l]) => `<button type="button" class="seg-b${k === dim ? " on" : ""}" data-st="dim" data-v="${k}">${l}</button>`).join("")}</div>`;
   let body: string;
   if (B.noDaily) body = empty("Travel & SaaS chưa có số theo ngày — xem theo kỳ, hoặc up số theo ngày ở tab Dữ liệu.");
   else {
@@ -458,7 +472,7 @@ function tsMain(v: VM): string {
   ];
   const custCard = card("Tuổi nợ theo ngày đến hạn", "Dư nợ theo từng khách hàng", unitLabel() + " · 5 khách lớn nhất và còn lại",
     custRows.length ? hStack(custRows, { ft: tr, legend: AR_BUCKETS.map((b, k): LegendItem => [b, BCLS[k]]) }) : empty("Không còn dư nợ"));
-  const arPart = !A.count && !v.C.D.ar.length ? `<div class="card notice">Chưa có công nợ phải thu. Upload ở tab Dữ liệu (Tổng quan), hoặc thêm ở tab <a href="#" data-go="congno">Công nợ</a>.</div>` :
+  const arPart = mg ? `<div class="card notice">Công nợ phải thu không tách theo mảng (sổ phải thu theo khách × kỳ, phải thu = GMV mọi mảng) — xem ở tab <a href="#" data-go="main">Tổng hợp</a> hoặc <a href="#" data-go="congno">Công nợ</a>.</div>` : !A.count && !v.C.D.ar.length ? `<div class="card notice">Chưa có công nợ phải thu. Upload ở tab Dữ liệu (Tổng quan), hoặc thêm ở tab <a href="#" data-go="congno">Công nợ</a>.</div>` :
     `<div class="g57">${agingCard}${invCard}</div>${custCard}<div class="small">Chi tiết từng khách (kỳ nào chưa trả, còn bao nhiêu, trễ mấy ngày) ở tab <a href="#" data-go="congno">Công nợ</a>.</div>`;
 
   /* 3. Công nợ phải trả */
@@ -558,7 +572,8 @@ function apDsCard(v: VM, W: Win): string {
   const src = v.Cc.D.src;
   if (!src || !src.ncc.length) return "";
   // giá NCC trên hệ thống (HT:) chỉ để làm giá vốn, không phải số NCC đòi — không đưa vào phải trả
-  const ky = W.ky, rows = src.ncc.filter((r) => r.ky === ky && r.nganh !== "Mobility" && !(r.khop || "").startsWith("Trùng") && !(r.khop || "").startsWith("HT:"));
+  const mg = mangOf(v);
+  const ky = W.ky, rows = src.ncc.filter((r) => r.ky === ky && r.nganh !== "Mobility" && (!mg || r.nganh === mg) && !(r.khop || "").startsWith("Trùng") && !(r.khop || "").startsWith("HT:"));
   if (!rows.length) return card("Đối soát NCC", `Phải trả phát sinh kỳ ${ky}`, "", empty(`Chưa có file đối soát NCC cho kỳ ${ky}`));
   // Khách sạn trực tiếp (file B1) gộp thành một nhóm; các NCC đối soát giữ riêng
   type G = { ncc: string; nganh: string; bk: number; led: number; khop: number; lech: number; thieu: number; daChi: number; chuaChi: number; n: number; ks: Set<string> };
@@ -592,7 +607,8 @@ export const drillKey = (seg: Seg, dim: Dim, k: string) => `ops:${seg}:${dim}:${
 const DIM_NAME: Record<Dim, string> = { dv: "Mảng", kh: "Khách hàng", ncc: "Nhà cung cấp" };
 const nccBare = (s: string | null | undefined) => String(s || "").replace(/^(hotel|flight):/, "");
 
-export function opsDrill(v: VM, key: string): string {
+export function opsDrill(v0: VM, key: string, tab = ""): string {
+  const v = vmTab(v0, tab);
   if (key.startsWith("ops-br:")) return opsBridgeDrill(v, key);
   // Tổng quan › tuổi nợ phải thu của từng mảng: cùng khung chi tiết như ở Travel & SaaS, chỉ lấy khách của mảng đó
   if (key.startsWith("ops-arall:")) return opsArAll(v, key);
@@ -839,13 +855,18 @@ function sumHome(v: VM): string {
 }
 
 function sumTs(v: VM): string {
-  const C = v.Cc, W = winOf(v), B = block(C, W, "ts");
+  const C = v.Cc, W = winOf(v), B = block(C, W, "ts"), mg = mangOf(v);
+  const ten = mg ? MANG_TAB[mg === "Hotel" ? "hotel" : "flight"].ten : "Travel & SaaS";
   const pts: Pt[] = [];
+  if (!B.noDaily && mg) {
+    const ns = byDim(C, W, "ts", "ncc");
+    if (ns.length) pts.push([`Theo NCC: ${ns.slice(0, 4).map((r) => `${r.ten} ${tt(r.cur.gmv)}, margin ${pc(mgOf(r.cur), 1)}`).join(" · ")}.`, "neutral"]);
+  }
   if (!B.noDaily) {
     // theo mảng: đạt kế hoạch, thay đổi
     const T = C.D.targets.find((t) => t.ky === W.ky);
     const planDv: Record<string, number> = T ? { Hotel: Number(T.gmv_hotel || 0), Flight: Number(T.gmv_flight || 0), SaaS: Number(T.gmv_saas_t || 0), "F&B": Number(T.gmv_fnb || 0) } : {};
-    const dvs = byDim(C, W, "ts", "dv");
+    const dvs = mg ? [] : byDim(C, W, "ts", "dv");
     if (dvs.length) pts.push([`Theo mảng: ${dvs.map((r) => { const p = W.mode === "ky" ? planDv[r.k] : 0; return `${r.ten} ${tt(r.cur.gmv)}${p ? ` (${pc(r.cur.gmv / p, 0)} KH)` : ""}, margin ${pc(mgOf(r.cur), 1)}`; }).join(" · ")}.`, "neutral"]);
     const ks = byDim(C, W, "ts", "kh"), tot = sum(ks, (r) => r.cur.gmv);
     if (ks.length && tot) {
@@ -857,11 +878,11 @@ function sumTs(v: VM): string {
     const cv = covOf(B.cur);
     if (cv != null && cv < 0.95) pts.push([`Giá vốn mới có cho ${pc(cv, 0)} GMV — nạp thêm đối soát NCC / giá NCC hệ thống ở tab Dữ liệu.`, "watch"]);
   }
-  pts.push(...arRisk(C, v.A, "Phải thu", true));
+  if (!mg) pts.push(...arRisk(C, v.A, "Phải thu", true));
   const IC = invCol(v.C, W.ky, 6, W);
-  if (IC.totInv) pts.push([`Dồn tích đã thu ${pc(IC.totCol / IC.totInv, 0)} số đã xuất hóa đơn; còn ${tt(IC.totInv - IC.totCol)}.`, IC.totCol / IC.totInv < 0.8 ? "high" : "neutral"]);
+  if (IC.totInv && !mg) pts.push([`Dồn tích đã thu ${pc(IC.totCol / IC.totInv, 0)} số đã xuất hóa đơn; còn ${tt(IC.totInv - IC.totCol)}.`, IC.totCol / IC.totInv < 0.8 ? "high" : "neutral"]);
   pts.push(...apRisk(v));
-  return band("Tóm tắt điều hành", leadOf(W.mode === "ngay" ? `Travel & SaaS ngày ${fmtDate(W.ngay)}` : `Travel & SaaS kỳ ${W.curL}`, B, W), pts);
+  return band("Tóm tắt điều hành", leadOf(W.mode === "ngay" ? `${ten} ngày ${fmtDate(W.ngay)}` : `${ten} kỳ ${W.curL}`, B, W), pts);
 }
 
 function sumCongNo(v: VM): string {

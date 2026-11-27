@@ -79,6 +79,8 @@ export interface DataSet {
   alias?: Record<string, string>;
   /** GMV theo chuyến đi: [kỳ tính, mã KH, Trip ID, mảng, GMV, ngày giao dịch đầu] — từ bảng kê (Trip ID), sau khi dựng lại */
   trips?: [string, string, string, string, number, string][] | null;
+  /** Chỉ một mảng (tab Accommodation / Flight của Travel & SaaS) — dùng cho kế hoạch của mảng đó */
+  dvOnly?: "Hotel" | "Flight";
   /** File nguồn đã nạp: bảng kê khách hàng & đối soát NCC (tổng hợp) */
   src?: SrcSum | null;
   me?: { email: string; role: string; canEdit: boolean };

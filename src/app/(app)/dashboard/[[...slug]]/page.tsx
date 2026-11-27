@@ -33,6 +33,8 @@ const TABS: Record<Sec, [string, string, string][]> = {
   // Travel & SaaS: một tab tổng hợp + một tab nhập trực tiếp công nợ phải thu / phải trả
   ts: [
     ["main", "Tổng hợp", "ri-dashboard-line"],
+    ["hotel", "Accommodation (Hotel)", "ri-hotel-line"],
+    ["flight", "Flight", "ri-flight-takeoff-line"],
     ["congno", "Công nợ", "ri-file-list-3-line"],
   ],
   // Mobility = dashboard XPAY (5 tab riêng bên trong khung: Tổng quan, Lộ trình 60 tỷ, Tiến độ khách hàng,
@@ -438,13 +440,13 @@ export default function DashboardPage() {
         {data && !ctx?.periods.length && tab !== "data" && (
           <div className="card notice">Chưa có dữ liệu. Vào tab <a href="#" data-go="data">Dữ liệu</a> để tải template và upload file đầu tiên.</div>
         )}
-        {vm && tab !== "data" && <section className="kpis k5" dangerouslySetInnerHTML={{ __html: opsStrip(vm) }} />}
+        {vm && tab !== "data" && <section className="kpis k5" dangerouslySetInnerHTML={{ __html: opsStrip(vm, tab) }} />}
         {vm && tab !== "data" && <div className="view" dangerouslySetInnerHTML={{ __html: renderOps(tab, vm) ?? renderView(tab, vm) }} />}
         {data && tab === "data" && <div className="view" style={{ marginBottom: 16 }}><SourceUpload data={data} canEdit={canEdit} onDone={load} toast={toast} /></div>}
         {data && tab === "data" && <DataTab data={data} onDone={load} toast={toast} canEdit={canEdit} />}
         {data && tab === "data" && <div className="view" style={{ marginTop: 16 }}><MobCostConfig data={data} canEdit={canEdit} onDone={load} toast={toast} /></div>}
       </div>}
-      {vm && drillKey && <div dangerouslySetInnerHTML={{ __html: drillKey.startsWith("ops") ? opsDrill(vm, drillKey) : drillPanel(vm, drillKey) }} />}
+      {vm && drillKey && <div dangerouslySetInnerHTML={{ __html: drillKey.startsWith("ops") ? opsDrill(vm, drillKey, tab) : drillPanel(vm, drillKey) }} />}
       {toastMsg && <div className={"toast" + (toastMsg.err ? " err" : "")}>{toastMsg.m}</div>}
       {/* Gợi ý mã khi thêm dòng mới — dùng chung cho mọi form trên các tab */}
       {data && <datalist id="dl-kh">{data.customers.map((c) => <option key={c.ma_kh} value={c.ma_kh}>{c.ten_viet_tat || c.ten_kh} · {c.nhom}</option>)}</datalist>}
