@@ -129,20 +129,26 @@ export async function POST(req: Request) {
       // Nạp lại: chỉ thay các hóa đơn có trong file mới (cùng khách + số hóa đơn; dòng không số hóa đơn: cùng khách + kỳ).
       // Hóa đơn / kỳ không có trong file giữ nguyên. Client chia lô theo khách nên một khách luôn nằm cùng một lô.
       const rows = (b.rows || []).filter((r) => r.ma_kh && KY.test(r.ky) && r.ngay_den_han);
-      const byKh = new Map<string, typeof rows>();
-      rows.forEach((r) => { const a = byKh.get(r.ma_kh) || []; a.push(r); byKh.set(r.ma_kh, a); });
+      // Gom truy vấn theo hóa đơn / theo kỳ (không theo từng khách) để mỗi lô chạy trong vài giây
       let thay = 0, suaTay = 0;
-      for (const [ma, list] of Array.from(byKh.entries())) {
-        const hd = Array.from(new Set(list.map((r) => r.so_ct).filter(Boolean) as string[]));
-        const kyKhongHd = Array.from(new Set(list.filter((r) => !r.so_ct).map((r) => r.ky)));
-        const kys = Array.from(new Set(list.map((r) => r.ky)));
-        for (let i = 0; i < hd.length; i += 200) { const r = await sb.from("fin_ar").delete({ count: "exact" }).eq("ma_kh", ma).in("so_ct", hd.slice(i, i + 200)); chk(r.error, "Thay hóa đơn cũ"); thay += r.count || 0; }
-        if (kyKhongHd.length) { const r = await sb.from("fin_ar").delete({ count: "exact" }).eq("ma_kh", ma).in("ky", kyKhongHd).is("so_ct", null); chk(r.error, "Thay dòng cũ"); thay += r.count || 0; }
-        // Số sửa tay của các kỳ có trong file (của khách này): file là số chuẩn cho tiền & ngày thu; giữ ngày gửi bảng kê, cờ đã gửi, ghi chú
-        if (hd.length) { const r1 = await sb.from("fin_ar_edit").delete({ count: "exact" }).eq("ma_kh", ma).in("so_ct", hd); chk(r1.error, "Bỏ sửa tay theo hóa đơn"); suaTay += r1.count || 0; }
-        const r0 = await sb.from("fin_ar_edit").delete({ count: "exact" }).eq("ma_kh", ma).in("ky", kys).eq("tu_tao", true); chk(r0.error, "Bỏ dòng thêm tay"); suaTay += r0.count || 0;
+      // số hóa đơn có thể trùng giữa các khách (khác ký hiệu) → chỉ xóa trong các khách của lô này
+      const hd = Array.from(new Set(rows.map((r) => r.so_ct).filter(Boolean) as string[]));
+      const khLo = Array.from(new Set(rows.map((r) => r.ma_kh)));
+      for (let i = 0; i < hd.length; i += 300) {
+        const part = hd.slice(i, i + 300);
+        const r1 = await sb.from("fin_ar").delete({ count: "exact" }).in("so_ct", part).in("ma_kh", khLo); chk(r1.error, "Thay hóa đơn cũ"); thay += r1.count || 0;
+        const r2 = await sb.from("fin_ar_edit").delete({ count: "exact" }).in("so_ct", part).in("ma_kh", khLo); chk(r2.error, "Bỏ sửa tay theo hóa đơn"); suaTay += r2.count || 0;
+      }
+      // theo kỳ: dòng không số hóa đơn, dòng thêm tay, số tiền sửa tay ở mức kỳ — của các khách có trong lô
+      const byKy = new Map<string, { all: Set<string>; khongHd: Set<string> }>();
+      rows.forEach((r) => { const o = byKy.get(r.ky) || { all: new Set<string>(), khongHd: new Set<string>() }; o.all.add(r.ma_kh); if (!r.so_ct) o.khongHd.add(r.ma_kh); byKy.set(r.ky, o); });
+      for (const [ky, o] of Array.from(byKy.entries())) {
+        const all = Array.from(o.all), khong = Array.from(o.khongHd);
+        if (khong.length) { const r = await sb.from("fin_ar").delete({ count: "exact" }).eq("ky", ky).is("so_ct", null).in("ma_kh", khong); chk(r.error, "Thay dòng cũ"); thay += r.count || 0; }
+        const r0 = await sb.from("fin_ar_edit").delete({ count: "exact" }).eq("ky", ky).eq("tu_tao", true).in("ma_kh", all); chk(r0.error, "Bỏ dòng thêm tay"); suaTay += r0.count || 0;
+        // file là số chuẩn cho tiền & ngày thu; giữ ngày gửi bảng kê, cờ đã gửi, ghi chú
         const r2 = await sb.from("fin_ar_edit").update({ so_tien: null, da_thu: null, ngay_thu_du: null, ngay_thu_gan_nhat: null, ngay_den_han: null, ngay_hd: null, updated_at: now })
-          .eq("ma_kh", ma).in("ky", kys).eq("so_ct", "").eq("tu_tao", false);
+          .eq("ky", ky).eq("so_ct", "").eq("tu_tao", false).in("ma_kh", all);
         chk(r2.error, "Bỏ số tiền sửa tay");
       }
       for (let i = 0; i < rows.length; i += 1000) { const { error } = await sb.from("fin_ar").insert(rows.slice(i, i + 1000).map((r) => ({ ...r, ngay_gui_bk: null }))); chk(error, "Ghi công nợ phải thu"); }
@@ -469,19 +475,24 @@ async function rebuild(sb: Sb) {
   let luuNoi = true;
   try {
     const TIER = ["Đối soát NCC", "Chi KS trực tiếp B1", "Giá NCC hệ thống (Performance Dashboard)"];
+    // chỉ ghi lại dòng có kết quả nối thay đổi so với lần trước (lần đầu thì ghi hết)
+    const doi = (a: Record<string, unknown>, b: Record<string, unknown>, ks: string[]) => ks.some((k) => String(a[k] ?? "") !== String(b[k] ?? ""));
     const rowsKh = kh.map((r) => {
       const g0 = kyGocKh.get(r.id);
       const { id, ...rest } = r as Kh & Record<string, unknown>;
       return { ...rest, id, ky: g0?.ky ?? r.ky, ngay: g0?.ngay ?? r.ngay, kh_ma: khMa.get(r.id) ?? null, ncc_ma: nccOf.get(r.id) ?? null,
         gia_von: gv.has(r.id) ? Math.round(gv.get(r.id) as number) : null, nguon_gv: gv.has(r.id) ? TIER[srcOf.get(r.id) ?? 0] ?? null : null, ky_tinh: r.ky };
     });
-    for (let i = 0; i < rowsKh.length; i += 500) { const { error } = await sb.from("fin_src_kh").upsert(rowsKh.slice(i, i + 500), { onConflict: "id" }); if (error) throw error; }
+    const goc = new Map(kh.map((r) => [r.id, r as unknown as Record<string, unknown>]));
+    const khDoi = rowsKh.filter((x) => doi(x, goc.get(x.id as number) || {}, ["kh_ma", "ncc_ma", "gia_von", "nguon_gv", "ky_tinh"]));
+    for (let i = 0; i < khDoi.length; i += 500) { const { error } = await sb.from("fin_src_kh").upsert(khDoi.slice(i, i + 500), { onConflict: "id" }); if (error) throw error; }
     const rowsNcc = nccRaw.map((n) => {
       const dung = nccDung.get(n.id), main = nccMain.get(n.id);
       const tt = ttNoi.get(n.id) || (dung != null ? (Math.abs(dung - (n.bang_ke || 0)) > 1 ? "Dùng làm giá vốn — đã quy theo phần trên bảng kê" : "Dùng làm giá vốn") : "Không dùng");
       return { ...n, kh_ma: main != null ? khMa.get(main) ?? null : null, gia_von_dung: dung != null ? Math.round(dung) : null, tt_noi: tt };
     });
-    for (let i = 0; i < rowsNcc.length; i += 500) { const { error } = await sb.from("fin_src_ncc").upsert(rowsNcc.slice(i, i + 500), { onConflict: "id" }); if (error) throw error; }
+    const nccDoi = rowsNcc.filter((x, i) => doi(x, nccRaw[i] as unknown as Record<string, unknown>, ["kh_ma", "gia_von_dung", "tt_noi"]));
+    for (let i = 0; i < nccDoi.length; i += 500) { const { error } = await sb.from("fin_src_ncc").upsert(nccDoi.slice(i, i + 500), { onConflict: "id" }); if (error) throw error; }
   } catch (e) {
     const m = e instanceof Error ? e.message : String((e as { message?: string })?.message || e);
     if (/kh_ma|ncc_ma|gia_von|nguon_gv|ky_tinh|tt_noi/.test(m)) luuNoi = false; else throw new Error("Lưu kết quả nối: " + m);

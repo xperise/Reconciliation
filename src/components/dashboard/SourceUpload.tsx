@@ -9,11 +9,11 @@ import { n0, pc } from "@/lib/dashboard/util";
 
 const CHUNK = 1000;
 /** Chia lô ~CHUNK dòng nhưng không cắt ngang một khóa (giao dịch / booking / khách): server thay theo khóa trong từng lô */
-function lots<T>(rows: T[], key: (r: T) => string): T[][] {
+function lots<T>(rows: T[], key: (r: T) => string, size = CHUNK): T[][] {
   const g = new Map<string, T[]>();
   rows.forEach((r) => { const k = key(r); const a = g.get(k) || []; a.push(r); g.set(k, a); });
   const out: T[][] = []; let cur: T[] = [];
-  g.forEach((a) => { if (cur.length && cur.length + a.length > CHUNK) { out.push(cur); cur = []; } cur.push(...a); });
+  g.forEach((a) => { if (cur.length && cur.length + a.length > size) { out.push(cur); cur = []; } cur.push(...a); });
   if (cur.length) out.push(cur);
   return out;
 }
@@ -43,10 +43,15 @@ export default function SourceUpload({ data, canEdit, onDone, toast }: { data: D
     finally { setBusy(""); if (inp.current) inp.current.value = ""; }
   }
 
+  // bước đang chạy — để báo lỗi rõ hỏng ở đâu
+  const buoc = useRef("");
   async function post(body: unknown) {
     const r = await fetch("/api/dashboard/nguon", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok || j.error) throw new Error(j.error || `Lỗi ${r.status}`);
+    if (!r.ok || j.error) {
+      const qua = r.status === 504 || r.status === 502 ? " (máy chủ xử lý quá 60 giây)" : "";
+      throw new Error(`${j.error || `Lỗi ${r.status}`}${qua} — ở bước ${buoc.current || "?"}`);
+    }
     return j;
   }
 
@@ -62,17 +67,21 @@ export default function SourceUpload({ data, canEdit, onDone, toast }: { data: D
       for (const f of sorted) {
         setBusy(`Đang ghi ${f.name}…`);
         if (f.kind === "ar") {
+          buoc.current = `danh mục khách (${f.name})`;
           await post({ action: "dm", rows: f.dm || [] }); tick();
-          for (const lot of lots(f.ar || [], (r) => r.ma_kh)) { await post({ action: "ar", rows: lot }); tick(); }
+          const L = lots(f.ar || [], (r) => r.ma_kh, 500);
+          for (let i = 0; i < L.length; i++) { buoc.current = `ghi công nợ phải thu lô ${i + 1}/${L.length} (${f.name})`; await post({ action: "ar", rows: L[i] }); tick(); }
         } else if (f.kind === "kh_hotel" || f.kind === "kh_flight" || f.kind === "kh_be") {
           const loai = f.kind === "kh_hotel" ? "hotel" : f.kind === "kh_flight" ? "flight" : "transport";
-          for (const lot of lots(f.kh || [], (r) => r.ma_gd || r.so_ve || `${r.ngay}|${r.ten_cong_ty}|${r.gmv}`)) { await post({ action: "kh", loai, rows: lot, fileName: f.name }); tick(); }
+          const L = lots(f.kh || [], (r) => r.ma_gd || r.so_ve || `${r.ngay}|${r.ten_cong_ty}|${r.gmv}`);
+          for (let i = 0; i < L.length; i++) { buoc.current = `ghi bảng kê lô ${i + 1}/${L.length} (${f.name})`; await post({ action: "kh", loai, rows: L[i], fileName: f.name }); tick(); }
         } else if (f.kind === "ncc" || f.kind === "b1" || f.kind === "ht_hotel" || f.kind === "ht_flight") {
-          let dau = true;
-          for (const lot of lots(f.ncc || [], (r) => r.ma_booking || r.so_ve || "")) { await post({ action: "ncc", fileKey: f.fileKey, fileName: f.name, rows: lot, first: dau }); dau = false; tick(); }
+          const L = lots(f.ncc || [], (r) => r.ma_booking || r.so_ve || "");
+          for (let i = 0; i < L.length; i++) { buoc.current = `ghi nguồn giá vốn lô ${i + 1}/${L.length} (${f.name})`; await post({ action: "ncc", fileKey: f.fileKey, fileName: f.name, rows: L[i], first: i === 0 }); tick(); }
         }
       }
       setBusy("Đang dựng lại GMV & giá vốn theo ngày…");
+      buoc.current = "dựng lại GMV & giá vốn (các file đã ghi xong — bấm \"Dựng lại GMV & giá vốn từ file đã nạp\" để chạy lại bước này)";
       const rb = (await post({ action: "rebuild" })) as Rebuild; tick();
       setRes(rb);
       await fetch("/api/dashboard/upload", { method: "POST", headers: { "Content-Type": "application/json" },
@@ -81,7 +90,7 @@ export default function SourceUpload({ data, canEdit, onDone, toast }: { data: D
       setFiles([]);
       await onDone();
     } catch (e) {
-      toast((e instanceof Error ? e.message : String(e)) + " — các file trước đó đã ghi; sửa lỗi rồi nạp lại file lỗi.", true);
+      toast((e instanceof Error ? e.message : String(e)) + ". Các file / lô trước đó đã ghi; nạp lại file lỗi là đủ (chỉ thay phần trùng).", true);
     } finally { setBusy(""); }
   }
 
@@ -89,6 +98,7 @@ export default function SourceUpload({ data, canEdit, onDone, toast }: { data: D
   async function rebuildOnly() {
     if (busy) return;
     setBusy("Đang dựng lại GMV & giá vốn theo ngày…"); setRes(null);
+    buoc.current = "dựng lại GMV & giá vốn";
     try { const rb = (await post({ action: "rebuild" })) as Rebuild; setRes(rb); toast(`Đã dựng lại GMV ${rb.kys?.join(", ") || ""}`); await onDone(); }
     catch (e) { toast(e instanceof Error ? e.message : String(e), true); }
     finally { setBusy(""); }
