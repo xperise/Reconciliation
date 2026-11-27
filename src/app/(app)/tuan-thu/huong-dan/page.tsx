@@ -3,10 +3,12 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { PageHeader } from '@/components/PageHeader';
 import { nguoiTT } from '@/lib/tuan-thu/db';
 import { toChucHienTai } from '@/lib/tuan-thu/to-chuc-server';
+import { LamLai } from './lam-lai';
+import type { BuocLamLai } from './reset-actions';
 
 export const dynamic = 'force-dynamic';
 
-type Buoc = { ten: string; vai: string; lam: string; kq: string; link: string; xong: boolean; ghiChu?: string };
+type Buoc = { ten: string; vai: string; lam: string; kq: string; link: string; xong: boolean; ghiChu?: string; lamLai?: { buoc: BuocLamLai; cau: string } };
 
 /**
  * Hướng dẫn A → Z cho một khách: từ hợp đồng gốc đến bảng kê đã rà soát, dừng trước khi gửi.
@@ -39,16 +41,16 @@ export default async function Page() {
     { phan: 'B · Lấy hợp đồng và tạo khách', buoc: [
       { ten: 'Tải hợp đồng khách từ admin.uts.network', vai: 'Kế toán', lam: 'Mở admin.uts.network, tìm khách, tải về hợp đồng PDF và đầy đủ phụ lục đang hiệu lực. Kiểm tra số hợp đồng và ngày áp dụng trước khi tải lên.', kq: 'Có sẵn file PDF hợp đồng và các phụ lục trên máy.', link: 'https://admin.uts.network', xong: false, ghiChu: 'Làm ngoài hệ thống Tuân thủ.' },
       { ten: 'Tạo hợp đồng khách mới và upload PDF', vai: 'Kế toán', lam: 'Hợp đồng & quy tắc → Thêm hợp đồng / khách mới: nhập mã khách, tên công ty, số hợp đồng, tháng áp dụng, nhóm Master Data; chọn file PDF hợp đồng và các phụ lục. Agent đọc ngay và tạo bộ quy tắc nháp.', kq: 'Hợp đồng ở trạng thái đang chốt, có bộ quy tắc nháp theo từng phòng.', link: '/tuan-thu/hop-dong/moi', xong: !!hd },
-      { ten: 'Upload mẫu bảng kê của khách', vai: 'Kế toán', lam: 'Hợp đồng & quy tắc → chọn khách → Mẫu bảng kê: upload file bảng kê mẫu khách đã nhận trước đó. Kiểm bảng ghép cột mẫu với cột raw, sửa chỗ chưa đúng, rồi bấm Duyệt mẫu.', kq: 'Mẫu bảng kê của khách đang hiệu lực; lần chạy sau sẽ ra đúng mẫu (đầu trang, cột, dòng tổng, chữ ký).', link: '/tuan-thu/quy-tac', xong: (mau ?? []).length > 0 },
+      { ten: 'Upload mẫu bảng kê của khách', vai: 'Kế toán', lam: 'Hợp đồng & quy tắc → chọn khách → Mẫu bảng kê: upload file bảng kê mẫu khách đã nhận trước đó. Kiểm bảng ghép cột mẫu với cột raw, sửa chỗ chưa đúng, rồi bấm Duyệt mẫu.', kq: 'Mẫu bảng kê của khách đang hiệu lực; lần chạy sau sẽ ra đúng mẫu (đầu trang, cột, dòng tổng, chữ ký).', link: '/tuan-thu/quy-tac', xong: (mau ?? []).length > 0, lamLai: { buoc: 'mau', cau: 'Đưa mẫu bảng kê đang hiệu lực về trạng thái thay thế? Mẫu cũ vẫn còn trong lịch sử.' } },
     ] },
     { phan: 'C · Rà soát hợp đồng và quy tắc', buoc: [
       { ten: 'Xem agent đọc hợp đồng', vai: 'Kế toán, head', lam: 'Mở hợp đồng: đọc tóm tắt điều khoản, tham số máy (chiết khấu, phí, kỳ, định mức), và các điểm còn mở agent nêu. Nếu agent đọc sai, sửa tham số bản nháp.', kq: 'Tóm tắt và tham số khớp với hợp đồng gốc; điểm còn mở được ghi lại.', link: '/tuan-thu/quy-tac', xong: false, ghiChu: 'Cần người đọc đối chiếu; app không tự xác nhận.' },
-      { ten: 'Rà quy tắc của từng phòng với hợp đồng', vai: 'Kế toán, Demand, Supply, CEO', lam: 'Mỗi phòng đọc quy tắc của mình, đối chiếu cột Căn cứ với điều khoản trong hợp đồng. Có thể hỏi agent của phòng: "quy tắc này có đúng theo hợp đồng không?". Sai thì bấm Cần sửa; đúng thì Đồng ý.', kq: 'Mọi quy tắc của mọi phòng ở trạng thái Đồng ý.', link: '/tuan-thu/quy-tac', xong: daChotHet },
-      { ten: 'Kích hoạt hợp đồng', vai: 'CEO hoặc người được cấp quyền kích hoạt', lam: 'Khi các điểm còn mở đã quyết và quy tắc đã chốt, bấm Kích hoạt hợp đồng.', kq: 'Hợp đồng Đang hiệu lực; xuất hiện khi tạo lần chạy.', link: '/tuan-thu/quy-tac', xong: hd?.trang_thai === 'hieu_luc' },
+      { ten: 'Rà quy tắc của từng phòng với hợp đồng', vai: 'Kế toán, Demand, Supply, CEO', lam: 'Mỗi phòng đọc quy tắc của mình, đối chiếu cột Căn cứ với điều khoản trong hợp đồng. Có thể hỏi agent của phòng: "quy tắc này có đúng theo hợp đồng không?". Sai thì bấm Cần sửa; đúng thì Đồng ý.', kq: 'Mọi quy tắc của mọi phòng ở trạng thái Đồng ý.', link: '/tuan-thu/quy-tac', xong: daChotHet, lamLai: { buoc: 'chot', cau: 'Đưa mọi quy tắc về Chờ và hợp đồng về Chờ chốt? Chỉ làm được khi chưa có lần chạy.' } },
+      { ten: 'Kích hoạt hợp đồng', vai: 'CEO hoặc người được cấp quyền kích hoạt', lam: 'Khi các điểm còn mở đã quyết và quy tắc đã chốt, bấm Kích hoạt hợp đồng.', kq: 'Hợp đồng Đang hiệu lực; xuất hiện khi tạo lần chạy.', link: '/tuan-thu/quy-tac', xong: hd?.trang_thai === 'hieu_luc', lamLai: { buoc: 'chot', cau: 'Đưa hợp đồng về Chờ chốt? Chỉ làm được khi chưa có lần chạy.' } },
     ] },
     { phan: 'D · Lấy bảng kê hotel và flight, đưa vào app', buoc: [
       { ten: 'Tải bảng kê hotel và flight từ Beautiful', vai: 'Kế toán', lam: 'Mở Beautiful, xuất bảng kê khách sạn (hotel) và vé máy bay (flight) đúng kỳ của khách. Kiểm tra đủ hai file và đúng tháng.', kq: 'Có hai file .xlsx: hotel và flight.', link: '/tuan-thu', xong: false, ghiChu: 'Làm ngoài hệ thống Tuân thủ, mở Beautiful bằng đường dẫn nội bộ của công ty.' },
-      { ten: 'Tạo lần chạy và upload hai file', vai: 'Kế toán', lam: 'Lần chạy bảng kê → chọn khách, tháng, đợt (cả tháng hoặc đợt 1, 2); chọn hai file raw (hotel, flight); bấm Upload & xử lý.', kq: 'Lần chạy ở trạng thái chờ kế toán, có tổng tiền và cảnh báo.', link: '/tuan-thu', xong: R.length > 0 },
+      { ten: 'Tạo lần chạy và upload hai file', vai: 'Kế toán', lam: 'Lần chạy bảng kê → chọn khách, tháng, đợt (cả tháng hoặc đợt 1, 2); chọn hai file raw (hotel, flight); bấm Upload & xử lý.', kq: 'Lần chạy ở trạng thái chờ kế toán, có tổng tiền và cảnh báo.', link: '/tuan-thu', xong: R.length > 0, lamLai: { buoc: 'chay', cau: 'Xoá các lần chạy chưa gửi của hợp đồng này? Lần đã gửi khách vẫn được giữ.' } },
       { ten: 'Rà soát kết quả app tạo ra', vai: 'Kế toán', lam: 'Xem các ô app tự sửa theo quy tắc, các cảnh báo, và giải trình cần điền. Bấm Agent AI rà soát để agent đối chiếu bảng kê với quy tắc. Xác nhận ô đúng; sửa raw nếu cần rồi tải lại.', kq: 'Không còn cảnh báo chưa giải trình; agent nêu các điểm cần người xem.', link: '/tuan-thu', xong: R.some((r) => r.buoc !== 'cho_ke_toan') },
     ] },
     { phan: 'E · Rà soát bảng kê với mẫu khách và điều khoản', buoc: [
@@ -78,7 +80,7 @@ export default async function Page() {
               <tr key={n}><td>{n}</td>
                 <td className="font-semibold">{b.ten}{b.ghiChu && <div className="text-[11px] font-normal text-[var(--ink-2)]">{b.ghiChu}</div>}</td>
                 <td className="text-[12px]">{b.vai}</td><td className="text-[12px]">{b.lam}</td><td className="text-[12px]">{b.kq}</td>
-                <td>{b.xong ? <span className="pill pill-stable">Đã xong</span>
+                <td>{b.xong ? <div className="space-y-1"><span className="pill pill-stable">Đã xong</span>{b.lamLai && hd && <LamLai buoc={b.lamLai.buoc} hopDongId={hd.id} cauHoi={b.lamLai.cau} />}</div>
                   : b.link.startsWith('http') ? <a className="btn btn-sm" href={b.link} target="_blank" rel="noreferrer">Mở</a>
                   : <Link className="btn btn-sm btn-primary" href={b.link}>Đi tới</Link>}</td></tr>); })}</tbody></table>
         </section>
