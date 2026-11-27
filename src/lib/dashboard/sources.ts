@@ -275,6 +275,10 @@ function readHt(f: SrcFile, rows: Cell[][], H: Hdr, loai: "hotel" | "flight"): S
     ? { bk: H.col("Booking code"), bk2: -1, ncc: H.col("Booking supplier"), khach: H.col("Traveler name"), ngay: H.col("Check in"), bd: H.col("Booking date"), cty: H.col("Company name"), mo: H.col("Hotel name") }
     : { bk: H.col("Departure: Booking code"), bk2: H.col("Return: Booking code"), ncc: H.col("Supplier"), khach: H.col("Traveler name"), ngay: -1, bd: H.col("Booking date"), cty: H.col("Company name"), mo: H.col("Airline name") };
   const tt = H.col("Booking status"), sup = H.col("Supplier total amount"), uts = H.col("UTS total amount");
+  // Hotel: "Booking supplier" ghi XPERISE cho cả booking đặt qua Agoda / VN Travel — NCC thật ở cột "Booking source"
+  const srcCol = loai === "hotel" ? H.col("Booking source") : -1;
+  const SRC_NCC: Record<string, string> = { agoda: "AGODA", agoda_ta: "AGODA", vn_travel: "VN_TRAVEL", vntravel: "VN_TRAVEL" };
+  const theoSource: Record<string, number> = {};
   const g = (r: Cell[], k: number) => (k >= 0 ? r[k] : null);
   const out: NccRow[] = [];
   const bds: string[] = [];
@@ -284,9 +288,12 @@ function readHt(f: SrcFile, rows: Cell[][], H: Hdr, loai: "hotel" | "flight"): S
     const bk2 = txt(g(r, c.bk2)), st = txt(g(r, tt)) || "";
     const d = iso(g(r, c.ngay)) || iso(g(r, c.bd)), bd = iso(g(r, c.bd));
     if (bd) bds.push(bd);
-    out.push({ ncc: `${loai}:${txt(g(r, c.ncc)) || "?"}`, nganh: loai === "hotel" ? "Hotel" : "Flight",
+    const source = (txt(g(r, srcCol)) || "").toLowerCase();
+    const nccSrc = SRC_NCC[source];
+    if (nccSrc) theoSource[nccSrc] = (theoSource[nccSrc] || 0) + 1;
+    out.push({ ncc: `${loai}:${nccSrc || txt(g(r, c.ncc)) || "?"}`, nganh: loai === "hotel" ? "Hotel" : "Flight",
       ma_booking: bk2 && !/^null$/i.test(bk2) && bk2 !== bk ? `${bk} / ${bk2}` : bk, so_ve: null, khach: txt(g(r, c.khach)), ngay_dv: d, ky: d ? kyOf(d) : null,
-      bang_ke: amt, ledger: money(g(r, uts)), khop: `HT: ${st}`, xu_ly: st || null, mo_ta: [txt(g(r, c.cty)), txt(g(r, c.mo))].filter(Boolean).join(" · "), dong: null });
+      bang_ke: amt, ledger: money(g(r, uts)), khop: `HT: ${st}`, xu_ly: st || null, mo_ta: [txt(g(r, c.cty)), txt(g(r, c.mo)), source ? `source ${source}` : ""].filter(Boolean).join(" · "), dong: null });
   });
   f.ncc = out; f.rows = out.length;
   summarize(f, bds, out.reduce((s, r) => s + (r.bang_ke || 0), 0));
@@ -295,6 +302,7 @@ function readHt(f: SrcFile, rows: Cell[][], H: Hdr, loai: "hotel" | "flight"): S
   const huy = out.filter((r) => /cancel/i.test(r.xu_ly || ""));
   f.totalL = `Supplier total ${fmtTien(f.total)} · UTS total ${fmtTien(out.reduce((s, r) => s + (r.ledger || 0), 0))} · ${Array.from(new Set(out.map((r) => r.ncc?.split(":")[1]))).join(", ")}`;
   f.notes.push("Chỉ dùng làm giá vốn cho dòng bảng kê chưa có số từ đối soát NCC / B1; mã booking không có trên bảng kê thì không tính vào đâu");
+  if (Object.keys(theoSource).length) f.notes.push(`NCC theo cột "Booking source": ${Object.entries(theoSource).map(([k, v]) => `${k} ${v} booking`).join(", ")} (cột Booking supplier ghi XPERISE)`);
   if (huy.length) f.notes.push(`${huy.length} booking đã hủy: giá vốn tính theo phần khách vẫn bị thu trên bảng kê (hủy hoàn tiền thì giá vốn = 0)`);
   return f;
 }
