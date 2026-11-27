@@ -19,8 +19,8 @@ const KET_THUC = ['da_gui', 'huy'];
  * Tổng quan một kỳ cho CEO: số bảng kê, đã gửi, đang chờ theo bước, chặn đang mở, trả về,
  * và danh sách lần chạy đang chờ quyết định. Chỉ đọc; không thay đổi dữ liệu.
  */
-export async function tomTatKy(thang: string): Promise<TomTatKy> {
-  const org = await toChucHienTai();
+export async function tomTatKy(thang: string, orgTuyChon?: string): Promise<TomTatKy> {
+  const org = orgTuyChon ?? await toChucHienTai();
   const sb = supabaseAdmin();
   const { data: runs } = await sb.from('tt_lan_chay')
     .select('id, thang, dot, buoc, vong, tong_hop, tt_hop_dong(ma_khach)')
@@ -37,11 +37,12 @@ export async function tomTatKy(thang: string): Promise<TomTatKy> {
   const canQuyet: TomTatKy['canQuyet'] = [];
   for (const r of rows) {
     if (r.vong && r.vong > 1) soTraVe++;
-    if (r.buoc === 'da_gui') { soDaGui++; tongTienDaGui += Number(r.tong_hop ?? 0); continue; }
+    const tien = Number(r.tong_hop?.tong_cong ?? 0);
+    if (r.buoc === 'da_gui') { soDaGui++; tongTienDaGui += tien; continue; }
     if (KET_THUC.includes(r.buoc)) continue;
     soDangCho++;
     choTheoBuoc[r.buoc] = (choTheoBuoc[r.buoc] ?? 0) + 1;
-    canQuyet.push({ id: r.id, ma_khach: r.tt_hop_dong?.ma_khach ?? '', dot: r.dot ?? null, buoc: r.buoc, tong_hop: r.tong_hop ?? null });
+    canQuyet.push({ id: r.id, ma_khach: r.tt_hop_dong?.ma_khach ?? '', dot: r.dot ?? null, buoc: r.buoc, tong_hop: r.tong_hop?.tong_cong ?? null });
   }
   return {
     thang, soLanChay: rows.length, soDaGui, tongTienDaGui, soDangCho, choTheoBuoc,
@@ -63,4 +64,44 @@ export function moTaTomTat(t: TomTatKy): string {
 export function thangHienTai(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+export type BaoCaoDinhKy = {
+  loai: 'ngay' | 'tuan';
+  tu: string; den: string;            // YYYY-MM-DD
+  kyHienTai: TomTatKy;                // trạng thái kỳ đang mở (tháng hiện tại)
+  guiTrongKy: number; tienGuiTrongKy: number;
+  lanChayMoi: number; chanMoi: number;
+};
+
+const ngayYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/** Báo cáo định kỳ cho CEO: số liệu trong ngày hoặc tuần (7 ngày) kết thúc tại `moc`, kèm trạng thái kỳ hiện tại. */
+export async function baoCaoDinhKy(org: string, loai: 'ngay' | 'tuan', moc: Date): Promise<BaoCaoDinhKy> {
+  const soNgay = loai === 'ngay' ? 1 : 7;
+  const tu = new Date(moc); tu.setDate(tu.getDate() - (soNgay - 1)); tu.setHours(0, 0, 0, 0);
+  const den = new Date(moc); den.setHours(23, 59, 59, 999);
+  const sb = supabaseAdmin();
+  const [{ data: gui }, { data: lanMoi }, { data: chanM }] = await Promise.all([
+    sb.from('tt_lan_chay').select('tong_hop').eq('org_id', org).eq('buoc', 'da_gui').gte('gui_luc', tu.toISOString()).lte('gui_luc', den.toISOString()),
+    sb.from('tt_lan_chay').select('id').eq('org_id', org).gte('created_at', tu.toISOString()).lte('created_at', den.toISOString()),
+    sb.from('tt_chan').select('id').eq('org_id', org).gte('luc', tu.toISOString()).lte('luc', den.toISOString()),
+  ]);
+  const kyHienTai = await tomTatKy(thangHienTai(), org);
+  return {
+    loai, tu: ngayYMD(tu), den: ngayYMD(moc), kyHienTai,
+    guiTrongKy: (gui ?? []).length,
+    tienGuiTrongKy: (gui ?? []).reduce((a: number, r: any) => a + Number(r.tong_hop?.tong_cong ?? 0), 0),
+    lanChayMoi: (lanMoi ?? []).length, chanMoi: (chanM ?? []).length,
+  };
+}
+
+export function moTaBaoCaoDinhKy(b: BaoCaoDinhKy): string {
+  const nhan = b.loai === 'ngay' ? `Ngày ${b.den}` : `Tuần ${b.tu} – ${b.den}`;
+  return [
+    `${nhan}`,
+    `Đã gửi khách: ${b.guiTrongKy} bảng kê, tổng ${b.tienGuiTrongKy.toLocaleString('vi-VN')}đ.`,
+    `Lần chạy mới: ${b.lanChayMoi}. Chặn mới: ${b.chanMoi}.`,
+    `Kỳ đang mở: ${b.kyHienTai.soDangCho} lần chạy đang chờ, ${b.kyHienTai.soChanDangMo} chặn đang mở, ${b.kyHienTai.canQuyet.length} việc cần CEO quyết.`,
+  ].join('\n');
 }

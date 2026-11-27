@@ -1,1 +1,6 @@
-{}
+{
+  "crons": [
+    { "path": "/api/cron/tuan-thu-tom-tat?loai=ngay", "schedule": "0 1 * * *" },
+    { "path": "/api/cron/tuan-thu-tom-tat?loai=tuan", "schedule": "0 1 * * 1" }
+  ]
+}

@@ -44,7 +44,7 @@ export async function baoChoPhongBan(lanId: string, pbs: PhongBan[], suKien: 'xu
     if (canBaoCeo) {
       const daBao = new Set((tv ?? []).map((t: any) => t.user_id));
       const [{ data: ceo }, { data: qs }] = await Promise.all([
-        sb.from('tt_thanh_vien').select('user_id').eq('org_id', lc.org_id).eq('phong_ban', 'ceo'),
+        sb.from('tt_thanh_vien').select('user_id, profiles(email)').eq('org_id', lc.org_id).eq('phong_ban', 'ceo'),
         sb.from('tt_quyen').select('user_id').eq('org_id', lc.org_id).in('quyen', ['xem_bao_cao', 'quan_tri']),
       ]);
       const tieuDeCeo = suKien === 'xu_ly' ? `Bảng kê ${ky} có cảnh báo chặn gửi`
@@ -54,6 +54,16 @@ export async function baoChoPhongBan(lanId: string, pbs: PhongBan[], suKien: 'xu
         if (daBao.has(r.user_id)) continue;
         daBao.add(r.user_id);
         await pushNotify({ tieuDe: tieuDeCeo, noiDung: ghiChu ?? '', muc: suKien === 'xu_ly' ? 'canh_bao' : (suKien === 'chan' ? 'canh_bao' : 'info'), lienKet: link, userId: r.user_id, entity: 'tt_lan_chay', entityId: lanId });
+      }
+      // Email cho CEO (chức vụ) khi có việc cần quyết; các trường hợp khác chỉ có chuông trong app
+      if (suKien === 'cho_ceo' || suKien === 'chan' || suKien === 'go_chan') {
+        const daGuiEmail = new Set((tv ?? []).filter((t: any) => t.profiles?.email).map((t: any) => t.user_id));
+        for (const r of (ceo ?? []) as any[]) {
+          const email = r.profiles?.email;
+          if (!email || daGuiEmail.has(r.user_id)) continue;
+          await sendMail({ to: email, subject: `[Tuân thủ bảng kê] ${tieuDeCeo}`,
+            html: `<p>${tieuDeCeo}</p><p><a href="${appUrl}${link}">Mở lần chạy</a></p>` }).catch(() => {});
+        }
       }
     }
   } catch (e) { console.error('[tuan-thu thong bao]', e); }
