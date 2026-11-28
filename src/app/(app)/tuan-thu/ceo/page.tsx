@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { PageHeader } from '@/components/PageHeader';
-import { nguoiTT, coQuyen, fmtVnd, TEN_BUOC } from '@/lib/tuan-thu/db';
+import { nguoiTT, coQuyen, fmtVnd, TEN_BUOC, nhanBuoc } from '@/lib/tuan-thu/db';
 import { tomTatKy, thangHienTai } from '@/lib/tuan-thu/bao-cao-ceo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { toChucHienTai } from '@/lib/tuan-thu/to-chuc-server';
@@ -60,7 +60,7 @@ export default async function Page({ searchParams }: { searchParams: { thang?: s
         <h2 className="card-title mb-2">Đang chờ theo bước</h2>
         {Object.keys(t.choTheoBuoc).length === 0 ? <p className="text-[var(--ink-2)]">Không có lần chạy đang chờ.</p> : (
           <ul className="text-[13px] space-y-1">
-            {Object.entries(t.choTheoBuoc).map(([b, c]) => <li key={b}>{TEN_BUOC[b] ?? b}: <b>{c}</b></li>)}
+            {Object.entries(t.choTheoBuoc).map(([b, c]) => <li key={b}>{nhanBuoc(b)}: <b>{c}</b></li>)}
           </ul>
         )}
       </section>
@@ -71,7 +71,7 @@ export default async function Page({ searchParams }: { searchParams: { thang?: s
             {t.canQuyet.map((c) => (
               <li key={c.id}>
                 <Link className="underline" href={`/tuan-thu/chay/${c.id}`}>{c.ma_khach}{c.dot ? ` · đợt ${c.dot}` : ''}</Link>
-                {' '}— {TEN_BUOC[c.buoc] ?? c.buoc}{c.tong_hop != null ? ` · ${fmtVnd(c.tong_hop)}` : ''}
+                {' '}— {nhanBuoc(c.buoc)}{c.tong_hop != null ? ` · ${fmtVnd(c.tong_hop)}` : ''}
               </li>
             ))}
           </ul>

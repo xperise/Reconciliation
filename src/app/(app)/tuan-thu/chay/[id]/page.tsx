@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { PageHeader } from '@/components/PageHeader';
-import { duocLam, fmtVnd, nguoiTT, nhanThang, TEN_BUOC } from '@/lib/tuan-thu/db';
+import { duocLam, fmtVnd, nguoiTT, nhanThang, TEN_BUOC, nhanBuoc } from '@/lib/tuan-thu/db';
 import { deXuatBuoc, DeXuat } from '@/lib/tuan-thu/de-xuat';
 import { laBuocCuoiDuyet } from '@/lib/tuan-thu/cau-hinh';
 import { docCauHinhQuyTrinh } from '@/lib/tuan-thu/cau-hinh-db';
@@ -110,7 +110,7 @@ export default async function Page({ params }: { params: { id: string } }) {
         {[['Vé máy bay', th.tong?.ve_may_bay], ['Khách sạn', th.tong?.khach_san], ['Tổng gửi khách', th.tong_cong],
           ['Bước hiện tại', null]].map(([k, v], i) => (
           <div key={i} className="kpi card card-pad"><div className="kpi-label">{k as string}</div>
-            <div className="kpi-num">{i === 3 ? (TEN_BUOC[lc.buoc] ?? lc.buoc) : fmtVnd(v as number)}</div></div>
+            <div className="kpi-num">{i === 3 ? (nhanBuoc(lc.buoc)) : fmtVnd(v as number)}</div></div>
         ))}
       </div>
 

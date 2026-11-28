@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { PageHeader } from '@/components/PageHeader';
-import { fmtVnd, nhanThang, TEN_BUOC } from '@/lib/tuan-thu/db';
+import { fmtVnd, nhanThang, TEN_BUOC, nhanBuoc } from '@/lib/tuan-thu/db';
 import { TaoLanChay } from './tao-lan-chay';
 import { xoaLanChay } from './actions';
 import { XoaNut } from './xoa-nut';
@@ -37,7 +37,7 @@ export default async function Page() {
                 <td>{nhanThang(r.thang, r.dot)}{r.che_do === 'da_format' && <div className="text-[11px] text-[var(--ink-3)]">bảng kê đã format</div>}</td>
                 <td>v{r.phien_ban_quy_tac}</td>
                 <td>{r.loi ? <span className="pill pill-critical">Lỗi xử lý</span>
-                  : <span className={`pill ${r.buoc === 'da_gui' ? 'pill-stable' : 'pill-watch'}`}>{TEN_BUOC[r.buoc] ?? r.buoc}</span>}
+                  : <span className={`pill ${r.buoc === 'da_gui' ? 'pill-stable' : 'pill-watch'}`}>{nhanBuoc(r.buoc)}</span>}
                   {biChan.has(r.id) && r.buoc !== 'da_gui' && <span className="pill pill-critical ml-1">Đang chặn</span>}
                   {r.vong > 1 && <span className="text-[11px] text-[var(--ink-3)] ml-1">vòng {r.vong}</span>}</td>
                 <td className="text-right mono">{fmtVnd(r.tong_hop?.tong_cong)}</td>

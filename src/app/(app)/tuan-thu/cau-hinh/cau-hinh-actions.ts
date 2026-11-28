@@ -10,7 +10,7 @@ import { writeAudit } from '@/lib/audit';
 
 type KQ = { ok: true; thongBao?: string } | { ok: false; loi: string[] };
 export type RoleNhap = { key: string; ten: string; kichHoat: boolean };
-export type BuocNhap = { key: string; thuTu: number; roleKey: string; ketQua: KetQuaBuoc[] };
+export type BuocNhap = { key: string; nhom: number; roleKey: string; che_do: 'any' | 'all' | 'quorum'; ketQua: KetQuaBuoc[]; nguoi?: string | null };
 export type CauHinhNhap = { roles: RoleNhap[]; buoc: BuocNhap[] };
 
 const KET_QUA_HOP_LE: KetQuaBuoc[] = ['duyet', 'tra_ve', 'chan'];
@@ -24,15 +24,13 @@ export async function luuCauHinh(nhap: CauHinhNhap): Promise<KQ> {
   if (!n || !coQuyen(n, 'quan_tri')) return { ok: false, loi: ['Chỉ admin hoặc người được cấp quyền quản trị mới sửa được cấu hình.'] };
 
   const roles = nhap.roles.map((r) => ({ key: chuanHoaMa(r.key || r.ten), ten: r.ten.trim(), thuTu: 0, kichHoat: !!r.kichHoat }));
-  const buoc = nhap.buoc.map((b) => ({ key: chuanHoaMa(b.key), thuTu: Number(b.thuTu), roleKey: chuanHoaMa(b.roleKey), mode: 'any' as const, ketQua: b.ketQua.filter((k) => KET_QUA_HOP_LE.includes(k)) }));
+  const buoc = nhap.buoc.map((b) => ({ key: chuanHoaMa(b.key), thuTu: Number(b.nhom), roleKey: chuanHoaMa(b.roleKey), mode: b.che_do, ketQua: b.ketQua.filter((k) => KET_QUA_HOP_LE.includes(k)), nguoi: b.nguoi || null }));
   // thứ tự role theo thứ tự bước đầu tiên có role đó
   roles.forEach((r, i) => { r.thuTu = i + 1; });
   const cau: QuyTrinhCauHinh = { roles: roles.map((r) => ({ key: r.key, ten: r.ten, thuTu: r.thuTu, kichHoat: r.kichHoat })), buoc, quorumSuaDoi: 'all' };
 
   const loi = kiemTraCauHinh(cau);
-  // Ràng buộc của máy trạng thái hiện tại
-  const mucs = [...new Set(buoc.map((b) => b.thuTu))];
-  if (mucs.length > 2) loi.push('Máy trạng thái hiện chỉ hỗ trợ tối đa hai mức bước (đầu và cuối). Hãy gộp các bước vào hai mức.');
+  for (const b of buoc) if (!Number.isInteger(b.thuTu) || b.thuTu < 1) loi.push(`Bước "${b.key}": nhóm phải là số nguyên từ 1 trở lên.`);
   for (const r of roles) if (!buoc.some((b) => b.roleKey === r.key)) loi.push(`Role "${r.ten || r.key}" chưa có bước nào. Mọi role phải có bước, vì sửa đổi quy tắc cần đồng ý của tất cả role.`);
   for (const b of buoc) if (b.ketQua.length === 0) loi.push(`Bước "${b.key}" chưa chọn kết quả nào.`);
   if (loi.length) return { ok: false, loi };
@@ -44,7 +42,7 @@ export async function luuCauHinh(nhap: CauHinhNhap): Promise<KQ> {
 
   const { error: e1 } = await sb.from('tt_role').upsert(roles.map((r) => themOrg({ key: r.key, ten: r.ten, thu_tu: r.thuTu, kich_hoat: r.kichHoat }, toChuc)), { onConflict: 'org_id,key' });
   if (e1) return { ok: false, loi: [e1.message] };
-  const { error: e2 } = await sb.from('tt_buoc_quy_trinh').upsert(buoc.map((b) => themOrg({ key: b.key, thu_tu: b.thuTu, role_key: b.roleKey, mode: b.mode, ket_qua: b.ketQua }, toChuc)), { onConflict: 'org_id,key' });
+  const { error: e2 } = await sb.from('tt_buoc_quy_trinh').upsert(buoc.map((b) => themOrg({ key: b.key, thu_tu: b.thuTu, nhom: b.thuTu, role_key: b.roleKey, mode: b.mode, ket_qua: b.ketQua, nguoi: b.nguoi }, toChuc)), { onConflict: 'org_id,key' });
   if (e2) return { ok: false, loi: [e2.message] };
 
   const boBuoc = (cuBuoc ?? []).map((x: any) => x.key).filter((k: string) => !buoc.some((b) => b.key === k));

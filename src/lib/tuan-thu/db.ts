@@ -8,6 +8,8 @@ export type BuocDuyet = string; // mã role, lấy từ cấu hình
 export const TEN_BUOC: Record<string, string> = {
   cho_ke_toan: 'Chờ kế toán', cho_scope: 'Chờ CEO duyệt', cho_ceo: 'Chờ CEO duyệt', da_gui: 'Đã gửi khách', huy: 'Đã hủy',
 };
+/** Nhãn trạng thái, kể cả trạng thái nhóm mới (cho_nhom_k) */
+export const nhanBuoc = (b: string) => TEN_BUOC[b] ?? (/^cho_nhom_(\d+)$/.exec(b) ? `Chờ nhóm ${/^cho_nhom_(\d+)$/.exec(b)![1]}` : b);
 
 export type QuyenTT = 'quan_tri' | 'kich_hoat' | 'xem_bao_cao';
 
