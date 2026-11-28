@@ -16,9 +16,13 @@ export async function docCauHinhQuyTrinh(org?: string): Promise<QuyTrinhCauHinh>
       sb.from('tt_buoc_quy_trinh').select('key, thu_tu, role_key, mode, ket_qua').eq('org_id', o).order('thu_tu'),
     ]);
     if (r1.error || r2.error || !r1.data?.length || !r2.data?.length) return CAU_HINH_MAC_DINH;
+    // Nhóm và người duyệt (SQL 58). Chưa chạy SQL 58 thì bỏ qua: nhóm = thu_tu, không người cụ thể.
+    const nhomCua: Record<string, number> = {}, nguoiCua: Record<string, string | null> = {};
+    const { data: ext, error: eExt } = await sb.from('tt_buoc_quy_trinh').select('key, nhom, nguoi').eq('org_id', o);
+    if (!eExt) for (const x of (ext ?? []) as any[]) { nhomCua[chuanHoaMa(x.key)] = x.nhom; nguoiCua[chuanHoaMa(x.key)] = x.nguoi ?? null; }
     const c: QuyTrinhCauHinh = {
       roles: r1.data.map((r: any) => ({ key: chuanHoaMa(r.key), ten: r.ten, thuTu: r.thu_tu, kichHoat: !!r.kich_hoat })),
-      buoc: r2.data.map((b: any) => ({ key: chuanHoaMa(b.key), thuTu: b.thu_tu, roleKey: chuanHoaMa(b.role_key), mode: b.mode, ketQua: b.ket_qua })),
+      buoc: r2.data.map((b: any) => ({ key: chuanHoaMa(b.key), thuTu: b.thu_tu, roleKey: chuanHoaMa(b.role_key), mode: b.mode, ketQua: b.ket_qua, nhom: nhomCua[b.key] ?? b.thu_tu, nguoi: nguoiCua[b.key] ?? null })),
       quorumSuaDoi: 'all',
     };
     const loi = kiemTraCauHinh(c);
