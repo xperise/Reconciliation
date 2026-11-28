@@ -307,6 +307,20 @@ export async function chotQuyTac(id: string, chot: 'dong_y' | 'can_sua' | 'cho',
   });
 }
 
+/** Ngưỡng tiền của khách (dùng cho điều kiện "chạy khi vượt ngưỡng"). Để trống = chưa đặt. Admin hoặc CEO. */
+export async function capNhatNguongTien(id: string, nguong: string): Promise<KQ> {
+  return lam(async () => {
+    const n = await batBuoc();
+    if (!n.laAdmin && n.phong_ban !== 'ceo') throw new Error('Chỉ admin hoặc CEO đặt ngưỡng tiền.');
+    const v = nguong.trim() === '' ? null : Number(nguong.replace(/[.\s]/g, '').replace(',', '.'));
+    if (v !== null && (!Number.isFinite(v) || v < 0)) throw new Error('Ngưỡng tiền phải là số không âm.');
+    const { error } = await supabaseAdmin().from('tt_hop_dong').update({ nguong_tien: v }).eq('org_id', await toChucHienTai()).eq('id', id);
+    if (error) throw new Error(error.message);
+    revalidatePath('/tuan-thu/quy-tac', 'layout');
+    return { ok: true, thongBao: v === null ? 'Đã bỏ ngưỡng tiền.' : `Đã đặt ngưỡng ${v.toLocaleString('vi-VN')} đ.` };
+  });
+}
+
 export async function capNhatHopDong(id: string, groupId: string | null, ccThem: string): Promise<KQ> {
   return lam(async () => {
     const n = await batBuoc();

@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Nut } from '../ui';
-import { capNhatHopDong, chotQuyTac, chotTatCaQuyTac, kichHoatHopDong, suaThamSoNhap } from '../actions';
+import { capNhatHopDong, capNhatNguongTien, chotQuyTac, chotTatCaQuyTac, kichHoatHopDong, suaThamSoNhap } from '../actions';
 import type { PhongBan } from '@/lib/tuan-thu/types';
 
 export function ChotQuyTac({ id, chot, yKien, hopDongId, ma }: { id: string; chot: string; yKien: string; hopDongId: string; ma: string }) {
@@ -15,6 +15,17 @@ export function ChotQuyTac({ id, chot, yKien, hopDongId, ma }: { id: string; cho
         {chot !== 'can_sua' && <Nut chay={() => chotQuyTac(id, 'can_sua', y)} nhan="Cần sửa" />}
         <Link className="btn btn-sm" href={`/tuan-thu/quy-tac/${hopDongId}?ma=${ma}#sua-doi`}>Đề xuất sửa</Link>
       </div>
+    </div>
+  );
+}
+
+export function NguongTien({ id, nguong }: { id: string; nguong: number | null }) {
+  const [v, setV] = useState(nguong != null ? String(nguong) : '');
+  return (
+    <div className="grid gap-2 md:grid-cols-[1fr_auto] items-end">
+      <label className="flex flex-col gap-1 text-[12px]">Ngưỡng tiền của khách (đ) — bước "chạy khi vượt ngưỡng" dùng số này. Để trống nếu chưa đặt.
+        <input className="field" inputMode="numeric" placeholder="ví dụ 500000000" value={v} onChange={(e) => setV(e.target.value)} /></label>
+      <Nut chay={() => capNhatNguongTien(id, v)} nhan="Lưu ngưỡng" kieu="btn-primary" />
     </div>
   );
 }
