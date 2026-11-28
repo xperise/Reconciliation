@@ -154,15 +154,37 @@ export default function MasterDataGrid() {
   // Khách bị nhập nhiều dòng: cùng mã HĐ / cùng mã KH / cùng tên (đã chuẩn hoá)
   const dups = useMemo(() => findDupes(rows.filter((r) => !isBlank(r)), (r) => r._k).filter((g) => g.strong || !weakOk.includes([...g.ids].sort().join('|'))), [rows, weakOk]);
   const dupOf = useMemo(() => { const m = new Map<string, number>(); dups.forEach((g, i) => g.ids.forEach((k) => m.set(k, i))); return m; }, [dups]);
-  /** gộp 1 nhóm trùng: giữ 1 dòng, điền các ô trống từ dòng khác, bỏ các dòng còn lại */
-  function gopNhom(ids: string[], keepK: string) {
+  /** gộp 1 nhóm trùng: giữ 1 dòng, điền các ô trống từ dòng khác, bỏ các dòng còn lại — LƯU NGAY (không cần bấm Lưu thay đổi) */
+  const [merging, setMerging] = useState('');
+  async function gopNhom(ids: string[], keepK: string) {
     const keep = rows.find((r) => r._k === keepK); if (!keep) return;
     const others = rows.filter((r) => ids.includes(r._k) && r._k !== keepK);
     const merged = { ...keep } as GridRow;
     for (const o of others) for (const f of FIELDS) if (!merged[f.key].trim() && o[f.key].trim()) merged[f.key] = o[f.key];
     if (!merged.pct_cu && others.some((o) => o.pct_cu)) merged.pct_cu = others.find((o) => o.pct_cu)!.pct_cu;
-    setMergedTo((m) => [...m, ...others.filter((o) => o.id && keep.id).map((o) => ({ from: o.id!, to: keep.id!, name: o.ten_cong_ty }))]);
-    setRows((prev) => prev.filter((r) => !others.some((o) => o._k === r._k)).map((r) => (r._k === keepK ? merged : r)));
+    const applyLocal = () => setRows((prev) => prev.filter((r) => !others.some((o) => o._k === r._k)).map((r) => (r._k === keepK ? merged : r)));
+    // dòng chưa lưu (chưa có id): gộp trên bảng, lưu cùng lúc bấm Lưu thay đổi
+    if (!keep.id || others.some((o) => !o.id)) {
+      setMergedTo((m) => [...m, ...others.filter((o) => o.id && keep.id).map((o) => ({ from: o.id!, to: keep.id!, name: o.ten_cong_ty }))]);
+      applyLocal(); return;
+    }
+    setMerging(keepK); setMsg(null);
+    try {
+      // chuyển phần ghi nhớ tên của dòng bị bỏ sang dòng giữ lại (trước khi xoá)
+      for (const o of others) { try { await getSupabase().from('mlx_alias').update({ customer_id: keep.id }).eq('customer_id', o.id!); await saveAlias(o.ten_cong_ty, keep.id); } catch { /* chưa có bảng ghi nhớ */ } }
+      const c = ckOf(merged.chiet_khau);
+      await saveCustomers([{ id: merged.id, ma_khach_hang: merged.ma_khach_hang, ma_hop_dong: merged.ma_hop_dong, ten_cong_ty: merged.ten_cong_ty, ten_viet_tat: merged.ten_viet_tat, dia_chi: merged.dia_chi, mst: merged.mst,
+        chiet_khau: c.kind === 'DB' ? parsePct(c.x) || 0 : c.kind === '' ? merged.pct_cu : 0, loai_ck: merged.chiet_khau.trim() }], [keep.id, ...others.map((o) => o.id!)]);
+      applyLocal();
+      // cập nhật bản gốc: bỏ dòng đã xoá, dòng giữ lại = bản vừa lưu → các thay đổi khác chưa lưu vẫn được giữ
+      const gone = new Set(others.map((o) => o.id));
+      setOriginal((og) => { let arr: Record<string, unknown>[] = []; try { arr = JSON.parse(og.snap); } catch { /* */ }
+        const { _k, ...rest } = merged; void _k;
+        arr = arr.filter((x) => !gone.has(x.id as string)).map((x) => (x.id === merged.id ? rest : x));
+        return { ids: og.ids.filter((id) => !gone.has(id)), snap: JSON.stringify(arr) }; });
+      setMsg({ type: 'ok', text: `Đã gộp và lưu: giữ “${merged.ten_cong_ty}”, xoá ${others.length} dòng trùng.` });
+    } catch (e) { setMsg({ type: 'err', text: `Chưa gộp được: ${(e as Error).message}` }); }
+    finally { setMerging(''); }
   }
   const [keepSel, setKeepSel] = useState<Record<string, string>>({});
 
@@ -428,12 +450,12 @@ export default function MasterDataGrid() {
                     <select className={s.input} style={{ width: 'auto', maxWidth: 520 }} value={keepK} onChange={(e) => setKeepSel((m) => ({ ...m, [gid]: e.target.value }))}>
                       {R.map((r) => <option key={r._k} value={r._k}>{[r.ma_hop_dong, r.ma_khach_hang, r.ten_cong_ty].filter(Boolean).join(' · ')}</option>)}
                     </select>
-                    <button className={`${s.btn} ${s.btnPrimary}`} onClick={() => gopNhom(g.ids, keepK)}>Gộp, giữ 1 dòng</button>
+                    <button className={`${s.btn} ${s.btnPrimary}`} disabled={!!merging} onClick={() => gopNhom(g.ids, keepK)}>{merging === keepK ? 'Đang gộp…' : 'Gộp, giữ 1 dòng'}</button>
                     {!g.strong && <button className={s.btn} onClick={() => { const n = [...weakOk, gid]; setWeakOk(n); try { localStorage.setItem('mlx_dup_ok', JSON.stringify(n)); } catch { /* */ } }}>Không phải trùng</button>}
                     <button className={s.iconBtn} style={{ width: 'auto', textDecoration: 'underline' }} onClick={() => { setFData('dup'); setSearch(''); }}>Xem các dòng</button>
                   </div>); })}
             </div>
-            <div style={{ fontSize: 12, marginTop: 6 }}>Gộp: giữ dòng được chọn, các ô trống được điền từ dòng còn lại, tên của dòng bị bỏ được ghi nhớ để file upload sau vẫn khớp vào dòng giữ lại. Bấm Lưu thay đổi để ghi.</div>
+            <div style={{ fontSize: 12, marginTop: 6 }}>Gộp: giữ dòng được chọn, các ô trống được điền từ dòng còn lại, tên của dòng bị bỏ được ghi nhớ để file upload sau vẫn khớp vào dòng giữ lại. Bấm Gộp là lưu ngay, không cần bấm Lưu thay đổi.</div>
           </div>
         )}
         {upMsg && (
