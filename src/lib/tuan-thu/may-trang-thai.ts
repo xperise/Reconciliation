@@ -93,3 +93,14 @@ export function coTheKiemSoat(c: QuyTrinhCauHinh, buoc: string, roleKey: string,
   if (nhomHienTai(c, buoc) === null) return false;
   return c.buoc.some((b) => b.roleKey === roleKey && b.ketQua.includes(kq));
 }
+
+/**
+ * Quorum sửa đổi quy tắc theo phạm vi: chỉ các bước được chọn (sua_doi) mới tham gia.
+ * Mỗi bước được chọn phải đạt theo chế độ của bước. Không bước nào được chọn thì không thông qua được.
+ */
+export function quorumSuaDoiDat(c: QuyTrinhCauHinh, dongY: { roleKey: string; nguoi?: string | null }[], thanhVien: ThanhVienRole): boolean {
+  const buoc = c.buoc.filter((b) => b.suaDoi !== false);
+  if (!buoc.length) return false;
+  const quyet: Quyet[] = dongY.map((d) => ({ roleKey: d.roleKey, quyet_dinh: 'duyet', nguoi: d.nguoi ?? null }));
+  return buoc.every((b) => buocDaDuyet(b, quyet, thanhVien));
+}

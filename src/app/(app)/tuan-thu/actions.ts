@@ -17,7 +17,7 @@ import { goiYGhepCot } from '@/lib/tuan-thu/mau-ai';
 import { chuanHoaMa, coChan, coDuyet, coQuyenKichHoat, trangThaiDuocDuyet, TRANG_THAI_CHO, vaiTroChiKiemSoat, vaiTroCoDuyet, vaiTroTheoTrangThai } from '@/lib/tuan-thu/cau-hinh';
 import { docCauHinhQuyTrinh } from '@/lib/tuan-thu/cau-hinh-db';
 import { skillHienHanh } from '@/lib/tuan-thu/agent';
-import { buocTiep, coTheDuyet, coTheKiemSoat, DA_GUI, nhomCho, nhomHienTai, trangThaiNhom } from '@/lib/tuan-thu/may-trang-thai';
+import { buocTiep, coTheDuyet, coTheKiemSoat, DA_GUI, nhomCho, nhomHienTai, quorumSuaDoiDat, trangThaiNhom } from '@/lib/tuan-thu/may-trang-thai';
 import { themOrg } from '@/lib/tuan-thu/to-chuc';
 import { toChucHienTai } from '@/lib/tuan-thu/to-chuc-server';
 import { coQuyenTepCuaToChuc, duongDanTepTo } from '@/lib/tuan-thu/to-chuc';
@@ -347,6 +347,14 @@ export async function deXuatSuaDoi(fd: FormData): Promise<KQ> {
   });
 }
 
+/** Thành viên của mỗi role trong tổ chức hiện tại (cho quorum theo chế độ "tất cả" và "đa số"). */
+async function thanhVienTheoRole(sb: ReturnType<typeof supabaseAdmin>): Promise<Record<string, string[]>> {
+  const { data } = await sb.from('tt_thanh_vien').select('user_id, phong_ban').eq('org_id', await toChucHienTai());
+  const out: Record<string, string[]> = {};
+  for (const t of (data ?? []) as any[]) (out[t.phong_ban] ??= []).push(t.user_id);
+  return out;
+}
+
 export async function duyetSuaDoi(id: string, pb: PhongBan, quyetDinh: 'dong_y' | 'khong_dong_y', yKien: string): Promise<KQ> {
   return lam(async () => {
     const n = await batBuoc(pb);
@@ -356,12 +364,12 @@ export async function duyetSuaDoi(id: string, pb: PhongBan, quyetDinh: 'dong_y' 
     if (sd.trang_thai !== 'cho_duyet') throw new Error('Đề xuất đã chốt.');
     if (quyetDinh === 'khong_dong_y' && !yKien.trim()) throw new Error('Không đồng ý phải ghi lý do.');
     await sb.from('tt_sua_doi_duyet').upsert(themOrg({ sua_doi_id: id, phong_ban: pb, quyet_dinh: quyetDinh, y_kien: yKien.trim() || null, nguoi: n.id, luc: new Date().toISOString() }, await toChucHienTai()));
-    const { data: ds } = await sb.from('tt_sua_doi_duyet').select('phong_ban, quyet_dinh').eq('org_id', await toChucHienTai()).eq('sua_doi_id', id);
+    const { data: ds } = await sb.from('tt_sua_doi_duyet').select('phong_ban, quyet_dinh, nguoi').eq('org_id', await toChucHienTai()).eq('sua_doi_id', id);
     let thongBao: string | undefined;
     if ((ds ?? []).some((d: any) => d.quyet_dinh === 'khong_dong_y')) {
       await sb.from('tt_sua_doi').update({ trang_thai: 'tu_choi' }).eq('org_id', await toChucHienTai()).eq('id', id);
       thongBao = 'Đề xuất bị từ chối.';
-    } else if ((await docCauHinhQuyTrinh()).roles.every((r) => (ds ?? []).some((d: any) => d.phong_ban === r.key && d.quyet_dinh === 'dong_y'))) {
+    } else if (quorumSuaDoiDat(await docCauHinhQuyTrinh(), ((ds ?? []) as any[]).filter((d) => d.quyet_dinh === 'dong_y').map((d) => ({ roleKey: d.phong_ban, nguoi: d.nguoi })), await thanhVienTheoRole(sb)) ) {
       // Đủ quorum (mọi role trong cấu hình đồng ý; mặc định 4/4): áp lên bộ tham số (phiên bản mới) và cập nhật quy tắc dạng chữ
       const { data: cuoi } = await sb.from('tt_bo_quy_tac').select('*').eq('org_id', await toChucHienTai()).eq('hop_dong_id', sd.hop_dong_id).order('phien_ban', { ascending: false }).limit(1).single();
       if (sd.thay_doi_tham_so) {

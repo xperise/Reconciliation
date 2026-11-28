@@ -20,6 +20,8 @@ export interface BuocCauHinh {
   nhom?: number;
   /** người duyệt cụ thể của bước; null = theo role */
   nguoi?: string | null;
+  /** bước có tham gia quorum sửa đổi quy tắc không (SQL 59); mặc định true */
+  suaDoi?: boolean;
 }
 export interface QuyTrinhCauHinh {
   roles: RoleCauHinh[];

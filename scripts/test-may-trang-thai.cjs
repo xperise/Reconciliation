@@ -38,3 +38,21 @@ const c4=JSON.parse(JSON.stringify(cfg)); c4.buoc.find(b=>b.key==="ceo_duyet").n
 ok(M.buocTiep(c4,"cho_ceo",[{roleKey:"ceo",quyet_dinh:"duyet",nguoi:"u4"}],tv)==="cho_ceo","bước có người cụ thể: người khác duyệt không tính");
 ok(M.buocTiep(c4,"cho_ceo",[{roleKey:"ceo",quyet_dinh:"duyet",nguoi:"u9"}],tv)==="da_gui","bước có người cụ thể: đúng người duyệt → xong");
 console.log(fails?`\n${fails} FAIL`:"\nALL PASS");
+
+// --- Quorum sửa đổi theo bước ---
+{
+  const q=(n,c)=>{ if(!c){console.log("FAIL",n); process.exitCode=1;} else console.log("OK  ",n); };
+  const cfg2=JSON.parse(JSON.stringify(C.CAU_HINH_MAC_DINH));
+  const tv2={ke_toan:["u1"],demand:["u2"],supply:["u3"],ceo:["u4"]};
+  const all=[{roleKey:"ke_toan",nguoi:"u1"},{roleKey:"demand",nguoi:"u2"},{roleKey:"supply",nguoi:"u3"},{roleKey:"ceo",nguoi:"u4"}];
+  q("mặc định: cần đủ bốn role như trước", M.quorumSuaDoiDat(cfg2, all, tv2) && !M.quorumSuaDoiDat(cfg2, all.slice(0,3), tv2));
+  const c5=JSON.parse(JSON.stringify(cfg2));
+  c5.buoc.find(b=>b.key==="demand_kiem_soat").suaDoi=false; c5.buoc.find(b=>b.key==="supply_kiem_soat").suaDoi=false;
+  q("chỉ chọn kế toán và CEO: hai người là đủ", M.quorumSuaDoiDat(c5, [all[0], all[3]], tv2));
+  q("chỉ chọn kế toán và CEO: thiếu CEO thì chưa", !M.quorumSuaDoiDat(c5, [all[0]], tv2));
+  const c6=JSON.parse(JSON.stringify(cfg2)); c6.buoc.forEach(b=>b.suaDoi=false);
+  q("không bước nào được chọn: không thông qua", !M.quorumSuaDoiDat(c6, all, tv2));
+  const c7=JSON.parse(JSON.stringify(c5)); c7.buoc.find(b=>b.key==="ke_toan_duyet").mode="all";
+  const tv7={...tv2, ke_toan:["u1","u5"]};
+  q("chế độ tất cả trong bước: thiếu một thành viên thì chưa", !M.quorumSuaDoiDat(c7, [all[0], all[3]], tv7));
+}

@@ -5,12 +5,12 @@ import type { KetQuaBuoc } from '@/lib/tuan-thu/cau-hinh';
 
 const KQ_NHAN: Record<KetQuaBuoc, string> = { duyet: 'Duyệt', tra_ve: 'Trả về', chan: 'Chặn' };
 
-type BuocDong = { key: string; nhom: number; roleKey: string; che_do: 'any' | 'all' | 'quorum'; ketQua: KetQuaBuoc[]; nguoi?: string | null };
+type BuocDong = { key: string; nhom: number; roleKey: string; che_do: 'any' | 'all' | 'quorum'; ketQua: KetQuaBuoc[]; nguoi?: string | null; suaDoi: boolean };
 const CHE_DO_NHAN: Record<BuocDong['che_do'], string> = { any: 'Một người bất kỳ', all: 'Tất cả thành viên', quorum: 'Đa số thành viên' };
 
-export function CauHinhEditor({ roles: r0, buoc: b0, thanhVien }: { roles: { key: string; ten: string; kichHoat: boolean }[]; buoc: { key: string; thuTu: number; roleKey: string; mode?: string; nhom?: number; nguoi?: string | null; ketQua: KetQuaBuoc[] }[]; thanhVien: { id: string; role: string; ten: string }[] }) {
+export function CauHinhEditor({ roles: r0, buoc: b0, thanhVien }: { roles: { key: string; ten: string; kichHoat: boolean }[]; buoc: { key: string; thuTu: number; roleKey: string; mode?: string; nhom?: number; nguoi?: string | null; suaDoi?: boolean; ketQua: KetQuaBuoc[] }[]; thanhVien: { id: string; role: string; ten: string }[] }) {
   const [roles, setRoles] = useState<RoleNhap[]>(r0.map((r) => ({ key: r.key, ten: r.ten, kichHoat: r.kichHoat })));
-  const [buoc, setBuoc] = useState<BuocDong[]>(b0.map((b) => ({ key: b.key, nhom: b.nhom ?? b.thuTu, roleKey: b.roleKey, che_do: (b.mode as BuocDong['che_do']) ?? 'any', ketQua: b.ketQua, nguoi: b.nguoi ?? null })));
+  const [buoc, setBuoc] = useState<BuocDong[]>(b0.map((b) => ({ key: b.key, nhom: b.nhom ?? b.thuTu, roleKey: b.roleKey, che_do: (b.mode as BuocDong['che_do']) ?? 'any', ketQua: b.ketQua, nguoi: b.nguoi ?? null, suaDoi: b.suaDoi !== false })));
   const [tenMoi, setTenMoi] = useState('');
   const [loi, setLoi] = useState<string[]>([]);
   const [ok, setOk] = useState('');
@@ -18,7 +18,7 @@ export function CauHinhEditor({ roles: r0, buoc: b0, thanhVien }: { roles: { key
 
   const sua = (fn: () => void) => { setOk(''); setLoi([]); fn(); };
   const themRole = () => { const t = tenMoi.trim(); if (!t) return; sua(() => { setRoles([...roles, { key: t, ten: t, kichHoat: false }]); setTenMoi(''); }); };
-  const themBuoc = () => sua(() => setBuoc([...buoc, { key: `buoc_${buoc.length + 1}`, nhom: (Math.max(0, ...buoc.map((b) => b.nhom)) || 0) + 1, roleKey: roles[0]?.key ?? '', che_do: 'any', ketQua: ['duyet'] }]));
+  const themBuoc = () => sua(() => setBuoc([...buoc, { key: `buoc_${buoc.length + 1}`, nhom: (Math.max(0, ...buoc.map((b) => b.nhom)) || 0) + 1, roleKey: roles[0]?.key ?? '', che_do: 'any', ketQua: ['duyet'], suaDoi: true }]));
   const boKq = (i: number, kq: KetQuaBuoc) => sua(() => setBuoc(buoc.map((b, j) => j !== i ? b : { ...b, ketQua: b.ketQua.includes(kq) ? b.ketQua.filter((x) => x !== kq) : [...b.ketQua, kq] })));
 
   return (
@@ -41,8 +41,8 @@ export function CauHinhEditor({ roles: r0, buoc: b0, thanhVien }: { roles: { key
 
       <section className="card card-pad">
         <h2 className="card-title mb-2">Chuỗi bước duyệt</h2>
-        <p className="text-[12px] text-[var(--ink-2)] mb-2">Nhóm có số nhỏ hơn duyệt trước. Các bước cùng nhóm chạy song song và nhóm xong khi mọi bước duyệt trong nhóm đã đủ. Bước kiểm soát chỉ có Chặn hoặc Trả về, không có Duyệt.</p>
-        <table className="tbl text-[13px]"><thead><tr><th>Mã bước</th><th>Nhóm</th><th>Role</th><th>Ai duyệt trong bước</th><th>Kết quả được phép</th><th></th></tr></thead>
+        <p className="text-[12px] text-[var(--ink-2)] mb-2">Quorum sửa đổi quy tắc: đề xuất chỉ được thông qua khi mọi bước đánh dấu "Tham gia" đã đạt theo chế độ của bước. Nhóm có số nhỏ hơn duyệt trước. Các bước cùng nhóm chạy song song và nhóm xong khi mọi bước duyệt trong nhóm đã đủ. Bước kiểm soát chỉ có Chặn hoặc Trả về, không có Duyệt.</p>
+        <table className="tbl text-[13px]"><thead><tr><th>Mã bước</th><th>Nhóm</th><th>Role</th><th>Ai duyệt trong bước</th><th>Kết quả được phép</th><th>Quorum sửa đổi</th><th></th></tr></thead>
           <tbody>{buoc.map((b, i) => (
             <tr key={i}>
               <td><input className="field !py-1" value={b.key} onChange={(e) => sua(() => setBuoc(buoc.map((x, j) => j === i ? { ...x, key: e.target.value } : x)))} /></td>
@@ -62,6 +62,7 @@ export function CauHinhEditor({ roles: r0, buoc: b0, thanhVien }: { roles: { key
               </select></td>
               <td>{(['duyet', 'tra_ve', 'chan'] as KetQuaBuoc[]).map((kq) => (
                 <label key={kq} className="mr-3 text-[12px]"><input type="checkbox" checked={b.ketQua.includes(kq)} onChange={() => boKq(i, kq)} /> {KQ_NHAN[kq]}</label>))}</td>
+              <td><label className="text-[12px]"><input type="checkbox" checked={b.suaDoi} onChange={(e) => sua(() => setBuoc(buoc.map((x, j) => j === i ? { ...x, suaDoi: e.target.checked } : x)))} /> Tham gia</label></td>
               <td><button className="text-[12px] underline" onClick={() => sua(() => setBuoc(buoc.filter((_, j) => j !== i)))}>Xoá</button></td>
             </tr>))}</tbody></table>
         <button className="btn btn-sm mt-3" onClick={themBuoc}>+ Thêm bước</button>
