@@ -9,6 +9,7 @@ import { saveAlias } from '@/lib/mlx/aliases';
 import { getSupabase } from '@/lib/mlx/supabase';
 import { loadLoaiCk, makeLookup, parseLoaiCkFile, saveLoaiCk, type LoaiCkRow } from '@/lib/mlx/loaiCk';
 import { loadExcelJS } from '@/lib/mlx/download';
+import MobilitySync from './MobilitySync';
 import { companyKey } from '@/lib/mlx/normalize';
 import type { MlxCustomer } from '@/lib/mlx/types';
 
@@ -351,6 +352,8 @@ export default function MasterDataGrid() {
         {thieuCotLoaiCk && <div className={`${s.banner} ${s.bannerErr}`}>Chưa lưu được loại CK vào master data: chạy file supabase/migrations/27_mlx_loai_ck_khach.sql trong SQL Editor của Supabase.</div>}
         {nKhac > 0 && <div className={`${s.banner} ${s.bannerErr}`}>{nKhac} khách chọn <b>Rule khác</b>: cần define cách tính và báo Vân để cập nhật hệ thống. Bảng kê của các khách này chưa xuất được.</div>}
       </div>
+
+      <MobilitySync onApplied={reload} />
 
       <div className={s.card}>
         <div className={s.cardHead}>
