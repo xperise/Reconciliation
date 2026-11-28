@@ -23,10 +23,15 @@ export function nhomCho(c: QuyTrinhCauHinh): number[] {
   return [...co].sort((a, b) => a - b);
 }
 
-/** Trạng thái chờ tương ứng với một nhóm chờ. */
+/**
+ * Tên trạng thái chờ của một nhóm chờ. Cấu hình có tối đa hai nhóm chờ dùng đúng tên cũ
+ * (cho_ke_toan / cho_ceo) để dữ liệu và giao diện hiện có không đổi; nhiều hơn thì cho_nhom_<k>.
+ */
 export function trangThaiNhom(c: QuyTrinhCauHinh, nhomSo: number): string {
   const ds = nhomCho(c);
-  return `cho_nhom_${ds.indexOf(nhomSo) + 1}`;
+  const i = ds.indexOf(nhomSo);
+  if (ds.length <= 2) return ['cho_ke_toan', 'cho_ceo'][i] ?? 'cho_ke_toan';
+  return `cho_nhom_${i + 1}`;
 }
 
 /** Đọc trạng thái (kể cả trạng thái cũ) → nhóm chờ hiện tại, hoặc null nếu đã gửi/huỷ/không hợp lệ. */

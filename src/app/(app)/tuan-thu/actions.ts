@@ -17,6 +17,7 @@ import { goiYGhepCot } from '@/lib/tuan-thu/mau-ai';
 import { chuanHoaMa, coChan, coDuyet, coQuyenKichHoat, trangThaiDuocDuyet, TRANG_THAI_CHO, vaiTroChiKiemSoat, vaiTroCoDuyet, vaiTroTheoTrangThai } from '@/lib/tuan-thu/cau-hinh';
 import { docCauHinhQuyTrinh } from '@/lib/tuan-thu/cau-hinh-db';
 import { skillHienHanh } from '@/lib/tuan-thu/agent';
+import { buocTiep, coTheDuyet, coTheKiemSoat, DA_GUI, nhomCho, nhomHienTai, trangThaiNhom } from '@/lib/tuan-thu/may-trang-thai';
 import { themOrg } from '@/lib/tuan-thu/to-chuc';
 import { toChucHienTai } from '@/lib/tuan-thu/to-chuc-server';
 import { coQuyenTepCuaToChuc, duongDanTepTo } from '@/lib/tuan-thu/to-chuc';
@@ -155,7 +156,9 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
     if (!lc) throw new Error('Không tìm thấy lần chạy.');
     if (lc.loi) throw new Error('Lần chạy đang lỗi xử lý raw, hãy tải lại raw.');
     const cauHinh = await docCauHinhQuyTrinh();
-    if (!trangThaiDuocDuyet(cauHinh, buoc).includes(lc.buoc)) throw new Error('Lần chạy không ở bước này.');
+    if (nhomHienTai(cauHinh, lc.buoc) === null) throw new Error('Lần chạy không ở bước chờ.');
+    const duocLamBuoc = quyetDinh === 'duyet' ? coTheDuyet(cauHinh, lc.buoc, buoc) : coTheKiemSoat(cauHinh, lc.buoc, buoc, 'tra_ve');
+    if (!duocLamBuoc) throw new Error('Lần chạy không ở bước này.');
     if (quyetDinh === 'duyet' && !coDuyet(cauHinh, buoc)) throw new Error('Demand và Supply không duyệt bảng kê — chỉ chặn hoặc trả về khi cần.');
     if (quyetDinh === 'tra_ve' && !yKien.trim()) throw new Error('Trả về phải ghi lý do.');
 
@@ -194,10 +197,19 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
         noi_dung: `Tình huống: ${dx.ly_do.join(' ')} — head đã duyệt với lý do: ${yKien.trim()}. Lần sau coi là ngoại lệ hợp lệ nếu cùng điều kiện.` }, await toChucHienTai()));
     }
 
+    let daGui = false;
     if (quyetDinh === 'tra_ve') {
-      await sb.from('tt_lan_chay').update({ buoc: 'cho_ke_toan', vong: lc.vong + 1 }).eq('org_id', await toChucHienTai()).eq('id', lanId);
-    } else if (buoc === 'ceo') {
-      try { await guiBangKe(lanId); }
+      await sb.from('tt_lan_chay').update({ buoc: trangThaiNhom(cauHinh, nhomCho(cauHinh)[0]), vong: lc.vong + 1 }).eq('org_id', await toChucHienTai()).eq('id', lanId);
+    } else {
+      // Máy trạng thái theo nhóm: quyết định của vòng này + thành viên từng role → trạng thái kế tiếp
+      const { data: dyVong } = await sb.from('tt_duyet').select('buoc, quyet_dinh, nguoi').eq('org_id', await toChucHienTai()).eq('lan_chay_id', lanId).eq('vong', lc.vong);
+      const { data: tvRows } = await sb.from('tt_thanh_vien').select('user_id, phong_ban').eq('org_id', await toChucHienTai());
+      const thanhVien: Record<string, string[]> = {};
+      for (const t of (tvRows ?? []) as any[]) (thanhVien[t.phong_ban] ??= []).push(t.user_id);
+      const quyet = ((dyVong ?? []) as any[]).map((d) => ({ roleKey: d.buoc, quyet_dinh: d.quyet_dinh, nguoi: d.nguoi }));
+      const tiep = buocTiep(cauHinh, lc.buoc, quyet, thanhVien);
+      if (tiep === DA_GUI) daGui = true;
+      if (daGui) try { await guiBangKe(lanId); }
       catch (e) {
         // Gửi thất bại: bỏ dòng duyệt vừa ghi để CEO bấm lại sau khi sửa nguyên nhân
         if (ins.data?.id) await sb.from('tt_duyet').delete().eq('org_id', await toChucHienTai()).eq('id', ins.data.id);
@@ -205,13 +217,17 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
         if (/invalid_grant/i.test(m)) throw new Error('Chưa gửi được: kết nối Gmail của hệ thống đã hết hiệu lực (invalid_grant). Admin vào Cài đặt → Kết nối lại Google bằng hộp thư gửi (cs@uts.network), rồi CEO bấm duyệt lại. Bảng kê vẫn đang chờ CEO.');
         throw new Error(`Chưa gửi được bảng kê: ${m}. Bảng kê vẫn đang chờ CEO.`);
       }
-    } else {
-      await sb.from('tt_lan_chay').update({ buoc: 'cho_ceo' }).eq('org_id', await toChucHienTai()).eq('id', lanId);
-      await baoChoPhongBan(lanId, vaiTroTheoTrangThai(cauHinh, TRANG_THAI_CHO.sau) as PhongBan[], 'cho_ceo');
+      else {
+        await sb.from('tt_lan_chay').update({ buoc: tiep }).eq('org_id', await toChucHienTai()).eq('id', lanId);
+        const nhomMoi = nhomHienTai(cauHinh, tiep);
+        const vai = [...new Set(cauHinh.buoc.filter((b) => (b.nhom ?? b.thuTu) === nhomMoi || b.ketQua.some((k) => k !== 'duyet')).map((b) => b.roleKey))];
+        const laCuoi = tiep === trangThaiNhom(cauHinh, nhomCho(cauHinh)[nhomCho(cauHinh).length - 1]);
+        await baoChoPhongBan(lanId, vai as PhongBan[], laCuoi ? 'cho_ceo' : 'xu_ly');
+      }
     }
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: `tuan_thu.${quyetDinh}`, entity: 'tt_lan_chay', entityId: lanId, after: { buoc, yKien } });
     revalidatePath(`/tuan-thu/chay/${lanId}`); revalidatePath('/tuan-thu');
-    return { ok: true, thongBao: buoc === 'ceo' && quyetDinh === 'duyet' ? 'Đã duyệt và gửi bảng kê cho khách.' : undefined };
+    return { ok: true, thongBao: daGui ? 'Đã duyệt và gửi bảng kê cho khách.' : undefined };
   });
 }
 

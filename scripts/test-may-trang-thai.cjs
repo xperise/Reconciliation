@@ -11,7 +11,7 @@ ok(M.nhomCho(cfg).join()==="1,3","nhóm chờ mặc định = 1 và 3 (demand/su
 let s="cho_ke_toan";
 ok(M.coTheDuyet(cfg,s,"ke_toan") && !M.coTheDuyet(cfg,s,"ceo"),"ở chờ kế toán: kế toán duyệt, CEO không");
 ok(M.coTheKiemSoat(cfg,s,"demand","chan") && !M.coTheKiemSoat(cfg,s,"ke_toan","chan"),"demand chặn được, kế toán không");
-s=M.buocTiep(cfg,s,[{roleKey:"ke_toan",quyet_dinh:"duyet",nguoi:"u1"}],tv); ok(s==="cho_nhom_2","kế toán duyệt → chờ CEO (cho_nhom_2)");
+s=M.buocTiep(cfg,s,[{roleKey:"ke_toan",quyet_dinh:"duyet",nguoi:"u1"}],tv); ok(s==="cho_ceo","kế toán duyệt → chờ CEO (cho_nhom_2)");
 ok(M.coTheDuyet(cfg,s,"ceo") && !M.coTheDuyet(cfg,s,"ke_toan"),"ở chờ CEO: CEO duyệt, kế toán không");
 s=M.buocTiep(cfg,s,[{roleKey:"ceo",quyet_dinh:"duyet",nguoi:"u4"}],tv); ok(s==="da_gui","CEO duyệt → đã gửi");
 // Trạng thái cũ vẫn đọc được
@@ -31,10 +31,10 @@ ok(M.buocTiep(c2,s3,[{roleKey:"demand",quyet_dinh:"duyet",nguoi:"u2"},{roleKey:"
 // Chế độ "tất cả": mọi thành viên của role phải duyệt
 const c3=JSON.parse(JSON.stringify(cfg)); c3.buoc.find(b=>b.key==="ke_toan_duyet").mode="all";
 const tv3={...tv, ke_toan:["u1","u5"]};
-ok(M.buocTiep(c3,"cho_ke_toan",[{roleKey:"ke_toan",quyet_dinh:"duyet",nguoi:"u1"}],tv3)==="cho_nhom_1","chế độ tất cả: thiếu một người thì chưa xong");
-ok(M.buocTiep(c3,"cho_ke_toan",[{roleKey:"ke_toan",quyet_dinh:"duyet",nguoi:"u1"},{roleKey:"ke_toan",quyet_dinh:"duyet",nguoi:"u5"}],tv3)==="cho_nhom_2","chế độ tất cả: đủ người thì xong");
+ok(M.buocTiep(c3,"cho_ke_toan",[{roleKey:"ke_toan",quyet_dinh:"duyet",nguoi:"u1"}],tv3)==="cho_ke_toan","chế độ tất cả: thiếu một người thì chưa xong");
+ok(M.buocTiep(c3,"cho_ke_toan",[{roleKey:"ke_toan",quyet_dinh:"duyet",nguoi:"u1"},{roleKey:"ke_toan",quyet_dinh:"duyet",nguoi:"u5"}],tv3)==="cho_ceo","chế độ tất cả: đủ người thì xong");
 // Người cụ thể
 const c4=JSON.parse(JSON.stringify(cfg)); c4.buoc.find(b=>b.key==="ceo_duyet").nguoi="u9";
-ok(M.buocTiep(c4,"cho_nhom_2",[{roleKey:"ceo",quyet_dinh:"duyet",nguoi:"u4"}],tv)==="cho_nhom_2","bước có người cụ thể: người khác duyệt không tính");
-ok(M.buocTiep(c4,"cho_nhom_2",[{roleKey:"ceo",quyet_dinh:"duyet",nguoi:"u9"}],tv)==="da_gui","bước có người cụ thể: đúng người duyệt → xong");
+ok(M.buocTiep(c4,"cho_ceo",[{roleKey:"ceo",quyet_dinh:"duyet",nguoi:"u4"}],tv)==="cho_ceo","bước có người cụ thể: người khác duyệt không tính");
+ok(M.buocTiep(c4,"cho_ceo",[{roleKey:"ceo",quyet_dinh:"duyet",nguoi:"u9"}],tv)==="da_gui","bước có người cụ thể: đúng người duyệt → xong");
 console.log(fails?`\n${fails} FAIL`:"\nALL PASS");
