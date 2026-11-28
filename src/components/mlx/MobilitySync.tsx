@@ -94,13 +94,22 @@ export default function MobilitySync({ onApplied }: { onApplied: () => void }) {
           if (v === 'mob') { if (f === 'ten') c.ten_cong_ty = d.mob; if (f === 'mst') c.mst = d.mob; if (f === 'dc') c.dia_chi = d.mob; ch = true; }
           else { if (f === 'ten' && d.mlx) names.push({ key: p.m.key, name: d.mlx }); if (f === 'mst' && d.mlx) co.mst = d.mlx; if (f === 'dc' && d.mlx) co.address = d.mlx; } }
         if (ch) upd.push(c); if (co.mst || co.address) comp.push(co); }
-      const news: MlxCustomer[] = R.mobOnly.filter((m) => add[m.key]).map((m) => ({ ma_khach_hang: '', ma_hop_dong: /^(XPAY-|MOI-)/.test(m.key) ? '' : m.key, ten_cong_ty: m.name.trim(), ten_viet_tat: '', dia_chi: m.address || '', mst: m.mst || '', chiet_khau: 0, loai_ck: '' }));
-      if (upd.length) await saveCustomers(upd, []);
+      let news: MlxCustomer[] = R.mobOnly.filter((m) => add[m.key]).map((m) => ({ ma_khach_hang: '', ma_hop_dong: /^(XPAY-|MOI-)/.test(m.key) ? '' : m.key, ten_cong_ty: m.name.trim(), ten_viet_tat: '', dia_chi: m.address || '', mst: m.mst || '', chiet_khau: 0, loai_ck: '' }));
+      // MLX không cho 2 khách cùng tên: kiểm tra trước với toàn bộ master data hiện tại (đọc lại để có số mới nhất)
+      const nk = (v: string) => v.normalize('NFC').trim().replace(/\s+/g, ' ').toLowerCase();
+      const C0 = await loadCustomers(), finalName = new Map(C0.map((c) => [c.id as string, c.ten_cong_ty]));
+      const conflicts: string[] = [];
+      for (const c of upd) { const old = finalName.get(c.id as string) || ''; if (nk(old) === nk(c.ten_cong_ty)) continue;
+        const clash = [...finalName.entries()].some(([id, n]) => id !== c.id && nk(n) === nk(c.ten_cong_ty));
+        if (clash) { conflicts.push(`đổi tên “${old}” → “${c.ten_cong_ty}”`); c.ten_cong_ty = old; } else finalName.set(c.id as string, c.ten_cong_ty); }
+      const taken = new Set([...finalName.values()].map(nk));
+      news = news.filter((c) => { const k = nk(c.ten_cong_ty); if (taken.has(k)) { conflicts.push(`thêm “${c.ten_cong_ty}”`); return false; } taken.add(k); return true; });
+      for (let i = 0; i < upd.length; i += 500) { setBusy(`Đang cập nhật MLX ${Math.min(i + 500, upd.length)}/${upd.length}…`); await saveCustomers(upd.slice(i, i + 500), []); }
       for (let i = 0; i < news.length; i += 500) { setBusy(`Đang thêm khách vào MLX ${Math.min(i + 500, news.length)}/${news.length}…`); await saveCustomers(news.slice(i, i + 500), []); }
       if (comp.length) { const r = await J('/api/dashboard/mobility/cards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ companies: comp, cards: [], deletes: [], dry: false }) }); if ((r.errors || []).length) throw new Error('Mobility: ' + r.errors.join('; ')); }
       const byB: Record<string, Record<string, { name: string }>> = {}; names.forEach((n) => { (byB[bucketOf(n.key)] = byB[bucketOf(n.key)] || {})[n.key] = { name: n.name }; });
       for (const [b, data] of Object.entries(byB)) await J('/api/dashboard/mobility/db', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'update', path: 'crm/' + b, data }) });
-      setMsg(`Đã cập nhật ${upd.length} khách và thêm ${news.length} khách vào MLX; cập nhật ${comp.length + names.length} hồ sơ ở Mobility.`);
+      setMsg(`Đã cập nhật ${upd.length} khách và thêm ${news.length} khách vào MLX; cập nhật ${comp.length + names.length} hồ sơ ở Mobility.${conflicts.length ? ` Bỏ qua ${conflicts.length} thay đổi vì trùng tên với khách khác đã có ở MLX: ${conflicts.slice(0, 6).join('; ')}${conflicts.length > 6 ? '…' : ''}` : ''}`);
       onApplied(); await run();
     } catch (e) { setErr((e as Error).message); setBusy(''); }
   }
