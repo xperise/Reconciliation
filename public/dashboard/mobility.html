@@ -2381,7 +2381,13 @@ async function crmWrite(k, patch) {
   const run = async () => { const ref = db.doc('crm/' + bucketOf(k));
     try { await ref.update({[k]: patch}); }
     catch (e) { if (e && (e.code === 'not_writer' || e.code === 'not_granted' || e.code === 'not_signed_in')) throw e; await new Promise(r => setTimeout(r, 1500)); await ref.update({[k]: patch}); } };
-  DBQ = DBQ.then(run, run); return DBQ;
+  // Sau khi ghi dashboard thành công: đồng bộ tên, MST, địa chỉ sang master data MLX (lỗi đồng bộ không làm hỏng việc ghi)
+  const mlxSync = () => {
+    const body = {key: k}; if (patch.name) body.name = patch.name; if (patch.mst !== undefined) body.mst = patch.mst; if (patch.addr !== undefined) body.addr = patch.addr;
+    if (Object.keys(body).length <= 1) return Promise.resolve();
+    return fetch('/api/dashboard/mobility/mlx-sync', {method: 'POST', headers: {'content-type': 'application/json'}, credentials: 'same-origin', body: JSON.stringify(body)}).catch(() => {});
+  };
+  DBQ = DBQ.then(run, run).then(mlxSync); return DBQ;
 }
 function crmInit() {
   (async () => {
