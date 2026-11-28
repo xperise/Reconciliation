@@ -171,7 +171,7 @@ export async function buildStatement(
   for (let c = 1; c <= LAST_COL; c++) ws.getCell(totalRow, c).border = BORDER;
 
   // ---- Bảng tổng hợp (nhãn G:H, giá trị I:J) ----
-  const D = dsc ?? computeDiscount(rows.map((r) => r.soTien ?? 0), null, Number(customer.chiet_khau) || 0);
+  const D = dsc ?? computeDiscount(rows.map((r) => r.soTien ?? 0), null, 0); // khách chưa có loại CK: chiết khấu 0%
   const discount = D.discount;
   const beforeVat = Math.round((total - discount) / (1 + VAT_RATE));
   const vat = total - discount - beforeVat;

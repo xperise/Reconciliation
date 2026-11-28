@@ -41,12 +41,12 @@ export function tiered(total: number, widths: [number, number][]): { tiers: Tier
 
 /**
  * amounts: số tiền từng cuốc (đã gộp phụ phí Be theo Session ID).
- * fallbackPct: % chiết khấu cũ trong master data — chỉ dùng khi khách chưa có loại CK.
+ * fallbackPct: % chiết khấu khi khách chưa có loại CK; mặc định 0 (không tính chiết khấu).
  */
 export function computeDiscount(amounts: number[], rule: Rule | null, fallbackPct = 0): DiscountResult {
   const total = amounts.reduce((s, x) => s + (x || 0), 0);
   if (!rule) {
-    const r: Rule = { kind: 'FLAT', pct: fallbackPct, label: `${String(+fallbackPct.toFixed(3)).replace('.', ',')}% (master data — chưa có loại CK)`, raw: '' };
+    const r: Rule = { kind: 'FLAT', pct: fallbackPct, label: fallbackPct ? `${String(+fallbackPct.toFixed(3)).replace('.', ',')}% (chưa có loại CK)` : '0% (chưa có loại CK)', raw: '' };
     return { rule: r, total, discount: Math.round(total * fallbackPct / 100) };
   }
   if (rule.kind === 'CK4' || rule.kind === 'CK5') { const t = tiered(total, rule.kind === 'CK4' ? W4 : W5); return { rule, total, ...t }; }

@@ -319,7 +319,7 @@ export default function ConverterView() {
       // Chiết khấu trên TỔNG cả 3 nguồn theo loại CK; chưa có loại CK thì dùng % cũ trong master data
       const cus = byId.get(g.customerId);
       // loại CK chọn trong master data được ưu tiên; chưa chọn thì tra bảng phân loại
-      if (cus) { g.ck = cus.loai_ck?.trim() ? { rule: parseRule(cus.loai_ck), row: null, via: null } : ckOf(cus); g.disc = computeDiscount(g.rows.map((r) => r.soTien ?? 0), g.ck.rule, Number(cus.chiet_khau) || 0); }
+      if (cus) { g.ck = cus.loai_ck?.trim() ? { rule: parseRule(cus.loai_ck), row: null, via: null } : ckOf(cus); g.disc = computeDiscount(g.rows.map((r) => r.soTien ?? 0), g.ck.rule, 0); }
       g.total = g.files.reduce((n, f) => n + f.parsed!.total, 0);
       g.zeroRows = g.files.reduce((n, f) => n + f.parsed!.zeroRows, 0);
       g.hash = g.files
