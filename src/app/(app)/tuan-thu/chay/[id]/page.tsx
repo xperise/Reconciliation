@@ -45,6 +45,7 @@ export default async function Page({ params }: { params: { id: string } }) {
     sb.from('tt_sua_tay').select('*').eq('org_id', await toChucHienTai()).eq('lan_chay_id', params.id).order('id'),
   ]);
   const { data: chanAll } = await sb.from('tt_chan').select('*').eq('org_id', await toChucHienTai()).eq('lan_chay_id', params.id).order('luc', { ascending: false });
+  const { data: nhatKy } = await sb.from('tt_nhat_ky_lan_chay').select('luc, vong, loai, noi_dung, nguoi_email').eq('org_id', await toChucHienTai()).eq('lan_chay_id', params.id).order('luc', { ascending: true }).limit(200);
   const [{ data: lichSuTep }, { data: mauDung }] = await Promise.all([
     sb.from('tt_tep_lan_chay').select('*').eq('org_id', await toChucHienTai()).eq('lan_chay_id', params.id).order('luc', { ascending: false }),
     lc.mau_id ? sb.from('tt_mau_bang_ke').select('phien_ban, ten_tep').eq('org_id', await toChucHienTai()).eq('id', lc.mau_id).maybeSingle() : Promise.resolve({ data: null } as any),
@@ -263,6 +264,16 @@ export default async function Page({ params }: { params: { id: string } }) {
               <tr key={d.id}><td className="text-xs">{new Date(d.luc).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</td><td>{d.vong}</td>
                 <td>{TEN_PHONG_BAN[d.buoc as PhongBan]}</td><td>{d.quyet_dinh === 'duyet' ? 'Duyệt' : 'Trả về'}</td>
                 <td className="text-xs">{d.nguoi_email}</td><td className="text-[12px]">{d.y_kien}</td><td className="text-[11px]">{d.de_xuat_agent}</td><td className="text-[11px]">{d.skill_phien_ban ? `v${d.skill_phien_ban}` : ''}</td></tr>))}</tbody></table>
+        )}
+      </section>
+      <section className="card card-pad mt-4">
+        <h2 className="card-title mb-2">Nhật ký lần chạy</h2>
+        {(nhatKy ?? []).length === 0 ? <p className="text-[var(--ink-2)] text-[13px]">Chưa có sự kiện nào được ghi.</p> : (
+          <ul className="text-[13px] space-y-1">
+            {(nhatKy ?? []).map((x: any, i: number) => (
+              <li key={i}><span className="text-[var(--ink-3)]">{new Date(x.luc).toLocaleString('vi-VN')}</span>{' · '}{x.vong ? `vòng ${x.vong} · ` : ''}{x.noi_dung}{x.nguoi_email ? ` (${x.nguoi_email})` : ''}</li>
+            ))}
+          </ul>
         )}
       </section>
       <p className="mt-4"><Link href="/tuan-thu" className="text-[12px] underline">← Danh sách lần chạy</Link></p>

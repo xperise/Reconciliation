@@ -143,3 +143,14 @@ export function chuanHoaBuoc(c: QuyTrinhCauHinh, buoc: string, ctx?: NgCanh): st
   const sau = dang.filter((n) => n > cur);
   return sau.length ? trangThaiNhom(c, sau[0]) : DA_GUI;
 }
+
+/**
+ * Các bước bị bỏ qua giữa hai nhóm (không tính hai nhóm đầu/cuối): bước có yêu cầu duyệt nhưng không chạy.
+ * Trả về mô tả để ghi vào nhật ký, ví dụ "Demand: chạy khi có cảnh báo chặn gửi — không đủ điều kiện".
+ */
+export function buocBoQua(c: QuyTrinhCauHinh, tuNhom: number, denNhom: number | null, ctx?: NgCanh): string[] {
+  const ketThuc = denNhom ?? Infinity;
+  return c.buoc
+    .filter((b) => laBuocDuyet(b) && nhomCua(b) > tuNhom && nhomCua(b) < ketThuc && !buocChay(b, ctx))
+    .map((b) => `${b.key} (${b.roleKey}): không đủ điều kiện "${b.chayKhi ?? 'luon'}"`);
+}

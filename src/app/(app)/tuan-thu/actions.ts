@@ -17,7 +17,7 @@ import { goiYGhepCot } from '@/lib/tuan-thu/mau-ai';
 import { chuanHoaMa, coChan, coDuyet, coQuyenKichHoat, trangThaiDuocDuyet, TRANG_THAI_CHO, vaiTroChiKiemSoat, vaiTroCoDuyet, vaiTroTheoTrangThai } from '@/lib/tuan-thu/cau-hinh';
 import { docCauHinhQuyTrinh } from '@/lib/tuan-thu/cau-hinh-db';
 import { skillHienHanh } from '@/lib/tuan-thu/agent';
-import { buocTiep, chuanHoaBuoc, coTheDuyet, coTheKiemSoat, DA_GUI, nhomCho, nhomHienTai, quorumSuaDoiDat, trangThaiBatDau, trangThaiNhom, type NgCanh } from '@/lib/tuan-thu/may-trang-thai';
+import { buocBoQua, buocTiep, chuanHoaBuoc, coTheDuyet, coTheKiemSoat, DA_GUI, nhomCho, nhomHienTai, quorumSuaDoiDat, trangThaiBatDau, trangThaiNhom, type NgCanh } from '@/lib/tuan-thu/may-trang-thai';
 import { themOrg } from '@/lib/tuan-thu/to-chuc';
 import { toChucHienTai } from '@/lib/tuan-thu/to-chuc-server';
 import { coQuyenTepCuaToChuc, duongDanTepTo } from '@/lib/tuan-thu/to-chuc';
@@ -159,7 +159,12 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
     const ngCanh = await ngCanhLanChay(sb, lanId, lc);
     // Đưa về nhóm đang chạy (nhóm không còn bước nào chạy thì bỏ qua)
     const buocDung = chuanHoaBuoc(cauHinh, lc.buoc, ngCanh);
-    if (buocDung !== lc.buoc) await sb.from('tt_lan_chay').update({ buoc: buocDung }).eq('org_id', await toChucHienTai()).eq('id', lanId);
+    if (buocDung !== lc.buoc) {
+      await sb.from('tt_lan_chay').update({ buoc: buocDung }).eq('org_id', await toChucHienTai()).eq('id', lanId);
+      const tuN = nhomHienTai(cauHinh, lc.buoc) ?? 0;
+      const denN = nhomHienTai(cauHinh, buocDung);
+      for (const t of buocBoQua(cauHinh, tuN, denN, ngCanh)) await ghiNhatKy(sb, lanId, lc.vong, 'bo_qua', `Bỏ qua bước ${t}`, n.email);
+    }
     lc.buoc = buocDung;
     if (nhomHienTai(cauHinh, lc.buoc) === null) throw new Error('Lần chạy không ở bước chờ.');
     const duocLamBuoc = quyetDinh === 'duyet' ? coTheDuyet(cauHinh, lc.buoc, buoc, ngCanh) : coTheKiemSoat(cauHinh, lc.buoc, buoc, 'tra_ve', ngCanh);
@@ -213,6 +218,10 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
       for (const t of (tvRows ?? []) as any[]) (thanhVien[t.phong_ban] ??= []).push(t.user_id);
       const quyet = ((dyVong ?? []) as any[]).map((d) => ({ roleKey: d.buoc, quyet_dinh: d.quyet_dinh, nguoi: d.nguoi }));
       const tiep = buocTiep(cauHinh, lc.buoc, quyet, thanhVien, ngCanh);
+      const cur = nhomHienTai(cauHinh, lc.buoc) ?? 0;
+      const den = tiep === DA_GUI ? null : nhomHienTai(cauHinh, tiep);
+      for (const t of buocBoQua(cauHinh, cur, den, ngCanh)) await ghiNhatKy(sb, lanId, lc.vong, 'bo_qua', `Bỏ qua bước ${t}`, n.email);
+      await ghiNhatKy(sb, lanId, lc.vong, 'chuyen', tiep === DA_GUI ? 'Hết các bước duyệt, bảng kê được gửi' : `${quyetDinh === 'duyet' ? 'Duyệt' : 'Quyết định'} bởi ${buoc}, chuyển sang ${tiep}`, n.email);
       if (tiep === DA_GUI) daGui = true;
       if (daGui) try { await guiBangKe(lanId); }
       catch (e) {
@@ -355,6 +364,13 @@ export async function deXuatSuaDoi(fd: FormData): Promise<KQ> {
     revalidatePath('/tuan-thu/sua-doi');
     return { ok: true, id: sd.id };
   });
+}
+
+/** Ghi một dòng nhật ký của lần chạy (không làm hỏng thao tác nếu lỗi). */
+async function ghiNhatKy(sb: ReturnType<typeof supabaseAdmin>, lanId: string, vong: number | null, loai: string, noi: string, email: string | null) {
+  try {
+    await sb.from('tt_nhat_ky_lan_chay').insert(themOrg({ lan_chay_id: lanId, vong, loai, noi_dung: noi, nguoi_email: email }, await toChucHienTai()));
+  } catch (e) { console.error('[nhat ky]', e); }
 }
 
 /** Điều kiện của lần chạy để quyết định bước nào chạy: cảnh báo chặn, ngoại lệ, tổng tiền so với ngưỡng khách. */
