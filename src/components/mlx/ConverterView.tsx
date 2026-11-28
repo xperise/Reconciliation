@@ -368,6 +368,19 @@ export default function ConverterView() {
   const daXuLyTotal = daXuLy.reduce((n, i) => n + (i.parsed?.total ?? 0), 0);
   const blocking = active.filter((i) => i.status !== 'ready' || !i.customerId || !byId.has(i.customerId)).length;
   const ckLa = sapXuat.filter((g) => g.ck?.rule?.kind === 'UNKNOWN');
+  /** khách chưa có loại chiết khấu → chiết khấu 0%: vẫn cho xuất, gắn nhãn riêng */
+  const ck0 = (g?: (typeof groups)[number]) => !!g && !g.ck?.rule && (g.disc?.discount ?? 0) === 0;
+  /** thứ tự hiển thị: 0 cần xử lý · 1 chiết khấu 0% · 2 trùng master data · 3 mới đã ổn · 4 bỏ qua / đang đọc */
+  const rankOf = (it: Item) => {
+    if (it.status === 'error') return 0;
+    if (it.status !== 'ready') return 4;
+    const g = groupOf(it.uid);
+    if (!byId.get(it.customerId) || g?.ck?.rule?.kind === 'UNKNOWN') return 0;
+    if (trungTrongLo.get(it.uid) || g?.kind?.type === 'duplicate') return 4;
+    if (ck0(g)) return 1;
+    if (g && dupRep.has(g.customerId)) return 2;
+    return 3;
+  };
   const ckChua = sapXuat.filter((g) => g.ck && !g.ck.rule);
   const ckTotal = sapXuat.reduce((n, g) => n + (g.disc?.discount ?? 0), 0);
   const canConfirm = sapXuat.length > 0 && blocking === 0 && ckLa.length === 0 && !busy && !checking && !historyError;
@@ -577,7 +590,7 @@ export default function ConverterView() {
           </div>
           <div className={s.row}>
             {checking && <span className={s.chip}>Đang kiểm tra lịch sử…</span>}
-            {blocking > 0 && <span className={`${s.chip} ${s.chipWarn}`}>{blocking} file cần xử lý</span>}
+            {blocking > 0 && <span className={`${s.chip} ${s.chipErr}`}>{blocking} file cần xử lý</span>}
             {(() => { const n = new Set(sapXuat.filter((g) => dupRep.has(g.customerId)).map((g) => g.customerId)).size; return n ? <span className={`${s.chip} ${s.chipWarn}`}>{n} khách bị trùng trong master data — đã gộp 1 bảng kê/khách</span> : null; })()}
             {ckLa.length > 0 && <span className={`${s.chip} ${s.chipWarn}`}>{ckLa.length} khách thuộc rule khác — cần define</span>}
             <button className={s.btn} onClick={() => setItems([])} disabled={!items.length || busy}>
@@ -615,7 +628,7 @@ export default function ConverterView() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((it, idx) => {
+                {items.map((it, idx) => ({ it, idx })).sort((a, b) => rankOf(a.it) - rankOf(b.it) || a.idx - b.idx).map(({ it, idx }) => {
                   const customer = byId.get(it.customerId);
                   const period = it.period ?? defaultPeriod;
                   const g = groupOf(it.uid);
@@ -703,7 +716,7 @@ export default function ConverterView() {
                           </span>
                         )}
                         {it.status === 'ready' && !customer && (
-                          <span className={`${s.chip} ${s.chipWarn}`}>Chưa khớp khách</span>
+                          <span className={`${s.chip} ${s.chipErr}`}>Cần xử lý · chưa khớp khách</span>
                         )}
                         {it.status === 'ready' && customer && trungLo && (
                           <>
@@ -711,15 +724,21 @@ export default function ConverterView() {
                             <div className={s.note}>{trungLo}</div>
                           </>
                         )}
-                        {it.status === 'ready' && customer && !trungLo && kind?.type === 'new' && (
-                          <span className={`${s.chip} ${s.chipOk}`}>Mới</span>
+                        {it.status === 'ready' && customer && !trungLo && g?.ck?.rule?.kind === 'UNKNOWN' && (
+                          <span className={`${s.chip} ${s.chipErr}`}>Cần xử lý · rule chiết khấu khác</span>
+                        )}
+                        {it.status === 'ready' && customer && !trungLo && kind?.type === 'new' && g?.ck?.rule?.kind !== 'UNKNOWN' && (
+                          ck0(g)
+                            ? <span className={s.chip} style={{ background: 'var(--stable)', color: '#fff' }} title="Khách chưa có loại chiết khấu — xuất với chiết khấu 0%">Mới · Chiết khấu 0%</span>
+                            : <span className={`${s.chip} ${s.chipOk}`}>Mới</span>
                         )}
                         {it.status === 'ready' && customer && !trungLo && kind?.type === 'replace' && (
                           <span
-                            className={`${s.chip} ${s.chipWarn}`}
+                            className={`${s.chip} ${ck0(g) ? '' : s.chipOk}`}
+                            style={ck0(g) ? { background: 'var(--stable)', color: '#fff' } : undefined}
                             title="Kỳ này đã có bảng kê cho khách này từ bộ file khác"
                           >
-                            Mới · thay bản cũ
+                            Mới · thay bản cũ{ck0(g) ? ' · Chiết khấu 0%' : ''}
                           </span>
                         )}
                         {it.status === 'ready' && customer && !trungLo && kind?.type === 'duplicate' && (
