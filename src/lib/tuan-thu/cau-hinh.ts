@@ -22,6 +22,10 @@ export interface BuocCauHinh {
   nguoi?: string | null;
   /** bước có tham gia quorum sửa đổi quy tắc không (SQL 59); mặc định true */
   suaDoi?: boolean;
+  /** bước có yêu cầu duyệt không (SQL 61); mặc định true. Không duyệt = tự qua bước, chỉ chặn/trả về */
+  yeuCauDuyet?: boolean;
+  /** bước chạy khi nào (SQL 61); mặc định 'luon' */
+  chayKhi?: 'luon' | 'canh_bao_chan' | 'vuot_nguong' | 'ngoai_le';
 }
 export interface QuyTrinhCauHinh {
   roles: RoleCauHinh[];

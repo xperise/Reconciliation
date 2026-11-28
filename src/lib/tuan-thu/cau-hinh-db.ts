@@ -18,11 +18,16 @@ export async function docCauHinhQuyTrinh(org?: string): Promise<QuyTrinhCauHinh>
     if (r1.error || r2.error || !r1.data?.length || !r2.data?.length) return CAU_HINH_MAC_DINH;
     // Nhóm và người duyệt (SQL 58). Chưa chạy SQL 58 thì bỏ qua: nhóm = thu_tu, không người cụ thể.
     const nhomCua: Record<string, number> = {}, nguoiCua: Record<string, string | null> = {}, suaDoiCua: Record<string, boolean> = {};
-    const { data: ext, error: eExt } = await sb.from('tt_buoc_quy_trinh').select('key, nhom, nguoi, sua_doi').eq('org_id', o);
-    if (!eExt) for (const x of (ext ?? []) as any[]) { nhomCua[chuanHoaMa(x.key)] = x.nhom; nguoiCua[chuanHoaMa(x.key)] = x.nguoi ?? null; suaDoiCua[chuanHoaMa(x.key)] = x.sua_doi !== false; }
+    const ycCua: Record<string, boolean> = {}, ckCua: Record<string, string> = {};
+    const { data: ext, error: eExt } = await sb.from('tt_buoc_quy_trinh').select('key, nhom, nguoi, sua_doi, yeu_cau_duyet, chay_khi').eq('org_id', o);
+    if (!eExt) for (const x of (ext ?? []) as any[]) { nhomCua[chuanHoaMa(x.key)] = x.nhom; nguoiCua[chuanHoaMa(x.key)] = x.nguoi ?? null; suaDoiCua[chuanHoaMa(x.key)] = x.sua_doi !== false; ycCua[chuanHoaMa(x.key)] = x.yeu_cau_duyet !== false; ckCua[chuanHoaMa(x.key)] = x.chay_khi ?? 'luon'; }
+    else { // chưa chạy SQL 61: không có hai cột mới, giữ nguyên hành vi
+      const { data: ext2 } = await sb.from('tt_buoc_quy_trinh').select('key, nhom, nguoi, sua_doi').eq('org_id', o);
+      for (const x of (ext2 ?? []) as any[]) { nhomCua[chuanHoaMa(x.key)] = x.nhom; nguoiCua[chuanHoaMa(x.key)] = x.nguoi ?? null; suaDoiCua[chuanHoaMa(x.key)] = x.sua_doi !== false; }
+    }
     const c: QuyTrinhCauHinh = {
       roles: r1.data.map((r: any) => ({ key: chuanHoaMa(r.key), ten: r.ten, thuTu: r.thu_tu, kichHoat: !!r.kich_hoat })),
-      buoc: r2.data.map((b: any) => ({ key: chuanHoaMa(b.key), thuTu: b.thu_tu, roleKey: chuanHoaMa(b.role_key), mode: b.mode, ketQua: b.ket_qua, nhom: nhomCua[b.key] ?? b.thu_tu, nguoi: nguoiCua[b.key] ?? null, suaDoi: suaDoiCua[b.key] ?? true })),
+      buoc: r2.data.map((b: any) => ({ key: chuanHoaMa(b.key), thuTu: b.thu_tu, roleKey: chuanHoaMa(b.role_key), mode: b.mode, ketQua: b.ket_qua, nhom: nhomCua[b.key] ?? b.thu_tu, nguoi: nguoiCua[b.key] ?? null, suaDoi: suaDoiCua[b.key] ?? true, yeuCauDuyet: ycCua[b.key] ?? true, chayKhi: (ckCua[b.key] ?? 'luon') as any })),
       quorumSuaDoi: 'all',
     };
     const loi = kiemTraCauHinh(c);

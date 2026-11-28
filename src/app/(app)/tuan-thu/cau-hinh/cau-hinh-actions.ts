@@ -10,7 +10,7 @@ import { writeAudit } from '@/lib/audit';
 
 type KQ = { ok: true; thongBao?: string } | { ok: false; loi: string[] };
 export type RoleNhap = { key: string; ten: string; kichHoat: boolean };
-export type BuocNhap = { key: string; nhom: number; roleKey: string; che_do: 'any' | 'all' | 'quorum'; ketQua: KetQuaBuoc[]; nguoi?: string | null; suaDoi?: boolean };
+export type BuocNhap = { key: string; nhom: number; roleKey: string; che_do: 'any' | 'all' | 'quorum'; ketQua: KetQuaBuoc[]; nguoi?: string | null; suaDoi?: boolean; yeuCauDuyet?: boolean; chayKhi?: 'luon' | 'canh_bao_chan' | 'vuot_nguong' | 'ngoai_le' };
 export type CauHinhNhap = { roles: RoleNhap[]; buoc: BuocNhap[] };
 
 const KET_QUA_HOP_LE: KetQuaBuoc[] = ['duyet', 'tra_ve', 'chan'];
@@ -24,7 +24,7 @@ export async function luuCauHinh(nhap: CauHinhNhap): Promise<KQ> {
   if (!n || !coQuyen(n, 'quan_tri')) return { ok: false, loi: ['Chỉ admin hoặc người được cấp quyền quản trị mới sửa được cấu hình.'] };
 
   const roles = nhap.roles.map((r) => ({ key: chuanHoaMa(r.key || r.ten), ten: r.ten.trim(), thuTu: 0, kichHoat: !!r.kichHoat }));
-  const buoc = nhap.buoc.map((b) => ({ key: chuanHoaMa(b.key), thuTu: Number(b.nhom), roleKey: chuanHoaMa(b.roleKey), mode: b.che_do, ketQua: b.ketQua.filter((k) => KET_QUA_HOP_LE.includes(k)), nguoi: b.nguoi || null, suaDoi: b.suaDoi !== false }));
+  const buoc = nhap.buoc.map((b) => ({ key: chuanHoaMa(b.key), thuTu: Number(b.nhom), roleKey: chuanHoaMa(b.roleKey), mode: b.che_do, ketQua: b.ketQua.filter((k) => KET_QUA_HOP_LE.includes(k)), nguoi: b.nguoi || null, suaDoi: b.suaDoi !== false, yeuCauDuyet: b.yeuCauDuyet !== false, chayKhi: b.chayKhi ?? 'luon' }));
   // thứ tự role theo thứ tự bước đầu tiên có role đó
   roles.forEach((r, i) => { r.thuTu = i + 1; });
   const cau: QuyTrinhCauHinh = { roles: roles.map((r) => ({ key: r.key, ten: r.ten, thuTu: r.thuTu, kichHoat: r.kichHoat })), buoc, quorumSuaDoi: 'all' };
@@ -51,7 +51,7 @@ export async function luuCauHinh(nhap: CauHinhNhap): Promise<KQ> {
 
   const { error: e1 } = await sb.from('tt_role').upsert(roles.map((r) => themOrg({ key: r.key, ten: r.ten, thu_tu: r.thuTu, kich_hoat: r.kichHoat }, toChuc)), { onConflict: 'org_id,key' });
   if (e1) return { ok: false, loi: [e1.message] };
-  const { error: e2 } = await sb.from('tt_buoc_quy_trinh').upsert(buoc.map((b) => themOrg({ key: b.key, thu_tu: b.thuTu, nhom: b.thuTu, role_key: b.roleKey, mode: b.mode, ket_qua: b.ketQua, nguoi: b.nguoi, sua_doi: b.suaDoi }, toChuc)), { onConflict: 'org_id,key' });
+  const { error: e2 } = await sb.from('tt_buoc_quy_trinh').upsert(buoc.map((b) => themOrg({ key: b.key, thu_tu: b.thuTu, nhom: b.thuTu, role_key: b.roleKey, mode: b.mode, ket_qua: b.ketQua, nguoi: b.nguoi, sua_doi: b.suaDoi, yeu_cau_duyet: b.yeuCauDuyet, chay_khi: b.chayKhi }, toChuc)), { onConflict: 'org_id,key' });
   if (e2) return { ok: false, loi: [e2.message] };
 
   const boBuoc = (cuBuoc ?? []).map((x: any) => x.key).filter((k: string) => !buoc.some((b) => b.key === k));

@@ -17,7 +17,7 @@ import { goiYGhepCot } from '@/lib/tuan-thu/mau-ai';
 import { chuanHoaMa, coChan, coDuyet, coQuyenKichHoat, trangThaiDuocDuyet, TRANG_THAI_CHO, vaiTroChiKiemSoat, vaiTroCoDuyet, vaiTroTheoTrangThai } from '@/lib/tuan-thu/cau-hinh';
 import { docCauHinhQuyTrinh } from '@/lib/tuan-thu/cau-hinh-db';
 import { skillHienHanh } from '@/lib/tuan-thu/agent';
-import { buocTiep, coTheDuyet, coTheKiemSoat, DA_GUI, nhomCho, nhomHienTai, quorumSuaDoiDat, trangThaiNhom } from '@/lib/tuan-thu/may-trang-thai';
+import { buocTiep, chuanHoaBuoc, coTheDuyet, coTheKiemSoat, DA_GUI, nhomCho, nhomHienTai, quorumSuaDoiDat, trangThaiBatDau, trangThaiNhom, type NgCanh } from '@/lib/tuan-thu/may-trang-thai';
 import { themOrg } from '@/lib/tuan-thu/to-chuc';
 import { toChucHienTai } from '@/lib/tuan-thu/to-chuc-server';
 import { coQuyenTepCuaToChuc, duongDanTepTo } from '@/lib/tuan-thu/to-chuc';
@@ -156,8 +156,13 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
     if (!lc) throw new Error('Không tìm thấy lần chạy.');
     if (lc.loi) throw new Error('Lần chạy đang lỗi xử lý raw, hãy tải lại raw.');
     const cauHinh = await docCauHinhQuyTrinh();
+    const ngCanh = await ngCanhLanChay(sb, lanId, lc);
+    // Đưa về nhóm đang chạy (nhóm không còn bước nào chạy thì bỏ qua)
+    const buocDung = chuanHoaBuoc(cauHinh, lc.buoc, ngCanh);
+    if (buocDung !== lc.buoc) await sb.from('tt_lan_chay').update({ buoc: buocDung }).eq('org_id', await toChucHienTai()).eq('id', lanId);
+    lc.buoc = buocDung;
     if (nhomHienTai(cauHinh, lc.buoc) === null) throw new Error('Lần chạy không ở bước chờ.');
-    const duocLamBuoc = quyetDinh === 'duyet' ? coTheDuyet(cauHinh, lc.buoc, buoc) : coTheKiemSoat(cauHinh, lc.buoc, buoc, 'tra_ve');
+    const duocLamBuoc = quyetDinh === 'duyet' ? coTheDuyet(cauHinh, lc.buoc, buoc, ngCanh) : coTheKiemSoat(cauHinh, lc.buoc, buoc, 'tra_ve', ngCanh);
     if (!duocLamBuoc) throw new Error('Lần chạy không ở bước này.');
     if (quyetDinh === 'duyet' && !coDuyet(cauHinh, buoc)) throw new Error('Demand và Supply không duyệt bảng kê — chỉ chặn hoặc trả về khi cần.');
     if (quyetDinh === 'tra_ve' && !yKien.trim()) throw new Error('Trả về phải ghi lý do.');
@@ -199,7 +204,7 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
 
     let daGui = false;
     if (quyetDinh === 'tra_ve') {
-      await sb.from('tt_lan_chay').update({ buoc: trangThaiNhom(cauHinh, nhomCho(cauHinh)[0]), vong: lc.vong + 1 }).eq('org_id', await toChucHienTai()).eq('id', lanId);
+      await sb.from('tt_lan_chay').update({ buoc: trangThaiBatDau(cauHinh, ngCanh), vong: lc.vong + 1 }).eq('org_id', await toChucHienTai()).eq('id', lanId);
     } else {
       // Máy trạng thái theo nhóm: quyết định của vòng này + thành viên từng role → trạng thái kế tiếp
       const { data: dyVong } = await sb.from('tt_duyet').select('buoc, quyet_dinh, nguoi').eq('org_id', await toChucHienTai()).eq('lan_chay_id', lanId).eq('vong', lc.vong);
@@ -207,7 +212,7 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
       const thanhVien: Record<string, string[]> = {};
       for (const t of (tvRows ?? []) as any[]) (thanhVien[t.phong_ban] ??= []).push(t.user_id);
       const quyet = ((dyVong ?? []) as any[]).map((d) => ({ roleKey: d.buoc, quyet_dinh: d.quyet_dinh, nguoi: d.nguoi }));
-      const tiep = buocTiep(cauHinh, lc.buoc, quyet, thanhVien);
+      const tiep = buocTiep(cauHinh, lc.buoc, quyet, thanhVien, ngCanh);
       if (tiep === DA_GUI) daGui = true;
       if (daGui) try { await guiBangKe(lanId); }
       catch (e) {
@@ -352,6 +357,23 @@ export async function deXuatSuaDoi(fd: FormData): Promise<KQ> {
   });
 }
 
+/** Điều kiện của lần chạy để quyết định bước nào chạy: cảnh báo chặn, ngoại lệ, tổng tiền so với ngưỡng khách. */
+async function ngCanhLanChay(sb: ReturnType<typeof supabaseAdmin>, lanId: string, lc: any): Promise<NgCanh> {
+  const org = await toChucHienTai();
+  const [{ data: cb }, { data: hd }] = await Promise.all([
+    sb.from('tt_canh_bao').select('muc_do').eq('org_id', org).eq('lan_chay_id', lanId),
+    sb.from('tt_hop_dong').select('nguong_tien').eq('org_id', org).eq('id', lc.hop_dong_id).maybeSingle(),
+  ]);
+  const muc = new Set(((cb ?? []) as any[]).map((x) => x.muc_do));
+  const nguong = hd?.nguong_tien != null ? Number(hd.nguong_tien) : null;
+  return {
+    coCanhBaoChan: muc.has('chan_gui'),
+    coNgoaiLe: muc.has('giai_trinh'),
+    tongTien: Number(lc.tong_hop?.tong_cong ?? 0),
+    nguongTien: nguong,
+  };
+}
+
 /** Thành viên của mỗi role trong tổ chức hiện tại (cho quorum theo chế độ "tất cả" và "đa số"). */
 async function thanhVienTheoRole(sb: ReturnType<typeof supabaseAdmin>): Promise<Record<string, string[]>> {
   const { data } = await sb.from('tt_thanh_vien').select('user_id, phong_ban').eq('org_id', await toChucHienTai());
@@ -452,6 +474,9 @@ export async function chanLanChay(lanId: string, pb: PhongBan, lyDo: string): Pr
     const { data: lc } = await sb.from('tt_lan_chay').select('buoc').eq('org_id', await toChucHienTai()).eq('id', lanId).single();
     if (!lc) throw new Error('Không tìm thấy lần chạy.');
     if (lc.buoc === 'da_gui') throw new Error('Bảng kê đã gửi, không chặn được nữa.');
+    // Chỉ chặn được khi bước của role đang chạy trong lần chạy này (theo điều kiện "chạy khi")
+    const ngCanhChan = await ngCanhLanChay(sb, lanId, lc);
+    if (!coTheKiemSoat(cauHinh, chuanHoaBuoc(cauHinh, lc.buoc, ngCanhChan), pb, 'chan', ngCanhChan)) throw new Error('Bước kiểm soát của bạn không chạy trong lần chạy này.');
     const { error } = await sb.from('tt_chan').insert(themOrg({ lan_chay_id: lanId, phong_ban: pb, ly_do: lyDo.trim(), nguoi: n.id, nguoi_email: n.email }, await toChucHienTai()));
     if (error) throw new Error(/tt_chan/.test(error.message) ? 'Cần chạy supabase/migrations/40_tuan_thu_chan.sql.' : error.message);
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.chan', entity: 'tt_lan_chay', entityId: lanId, after: { pb, lyDo } });

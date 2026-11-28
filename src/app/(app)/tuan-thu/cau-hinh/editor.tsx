@@ -5,12 +5,13 @@ import type { KetQuaBuoc } from '@/lib/tuan-thu/cau-hinh';
 
 const KQ_NHAN: Record<KetQuaBuoc, string> = { duyet: 'Duyệt', tra_ve: 'Trả về', chan: 'Chặn' };
 
-type BuocDong = { key: string; nhom: number; roleKey: string; che_do: 'any' | 'all' | 'quorum'; ketQua: KetQuaBuoc[]; nguoi?: string | null; suaDoi: boolean };
+type BuocDong = { key: string; nhom: number; roleKey: string; che_do: 'any' | 'all' | 'quorum'; ketQua: KetQuaBuoc[]; nguoi?: string | null; suaDoi: boolean; yeuCauDuyet: boolean; chayKhi: 'luon' | 'canh_bao_chan' | 'vuot_nguong' | 'ngoai_le' };
+const CHAY_KHI_NHAN: Record<BuocDong['chayKhi'], string> = { luon: 'Luôn luôn', canh_bao_chan: 'Khi có cảnh báo chặn gửi', vuot_nguong: 'Khi tổng tiền vượt ngưỡng khách', ngoai_le: 'Khi có ngoại lệ' };
 const CHE_DO_NHAN: Record<BuocDong['che_do'], string> = { any: 'Một người bất kỳ', all: 'Tất cả thành viên', quorum: 'Đa số thành viên' };
 
-export function CauHinhEditor({ roles: r0, buoc: b0, thanhVien }: { roles: { key: string; ten: string; kichHoat: boolean }[]; buoc: { key: string; thuTu: number; roleKey: string; mode?: string; nhom?: number; nguoi?: string | null; suaDoi?: boolean; ketQua: KetQuaBuoc[] }[]; thanhVien: { id: string; role: string; ten: string }[] }) {
+export function CauHinhEditor({ roles: r0, buoc: b0, thanhVien }: { roles: { key: string; ten: string; kichHoat: boolean }[]; buoc: { key: string; thuTu: number; roleKey: string; mode?: string; nhom?: number; nguoi?: string | null; suaDoi?: boolean; yeuCauDuyet?: boolean; chayKhi?: BuocDong['chayKhi']; ketQua: KetQuaBuoc[] }[]; thanhVien: { id: string; role: string; ten: string }[] }) {
   const [roles, setRoles] = useState<RoleNhap[]>(r0.map((r) => ({ key: r.key, ten: r.ten, kichHoat: r.kichHoat })));
-  const [buoc, setBuoc] = useState<BuocDong[]>(b0.map((b) => ({ key: b.key, nhom: b.nhom ?? b.thuTu, roleKey: b.roleKey, che_do: (b.mode as BuocDong['che_do']) ?? 'any', ketQua: b.ketQua, nguoi: b.nguoi ?? null, suaDoi: b.suaDoi !== false })));
+  const [buoc, setBuoc] = useState<BuocDong[]>(b0.map((b) => ({ key: b.key, nhom: b.nhom ?? b.thuTu, roleKey: b.roleKey, che_do: (b.mode as BuocDong['che_do']) ?? 'any', ketQua: b.ketQua, nguoi: b.nguoi ?? null, suaDoi: b.suaDoi !== false, yeuCauDuyet: b.yeuCauDuyet !== false, chayKhi: b.chayKhi ?? 'luon' })));
   const [tenMoi, setTenMoi] = useState('');
   const [loi, setLoi] = useState<string[]>([]);
   const [ok, setOk] = useState('');
@@ -18,7 +19,7 @@ export function CauHinhEditor({ roles: r0, buoc: b0, thanhVien }: { roles: { key
 
   const sua = (fn: () => void) => { setOk(''); setLoi([]); fn(); };
   const themRole = () => { const t = tenMoi.trim(); if (!t) return; sua(() => { setRoles([...roles, { key: t, ten: t, kichHoat: false }]); setTenMoi(''); }); };
-  const themBuoc = () => sua(() => setBuoc([...buoc, { key: `buoc_${buoc.length + 1}`, nhom: (Math.max(0, ...buoc.map((b) => b.nhom)) || 0) + 1, roleKey: roles[0]?.key ?? '', che_do: 'any', ketQua: ['duyet'], suaDoi: true }]));
+  const themBuoc = () => sua(() => setBuoc([...buoc, { key: `buoc_${buoc.length + 1}`, nhom: (Math.max(0, ...buoc.map((b) => b.nhom)) || 0) + 1, roleKey: roles[0]?.key ?? '', che_do: 'any', ketQua: ['duyet'], suaDoi: true, yeuCauDuyet: true, chayKhi: 'luon' }]));
   const boKq = (i: number, kq: KetQuaBuoc) => sua(() => setBuoc(buoc.map((b, j) => j !== i ? b : { ...b, ketQua: b.ketQua.includes(kq) ? b.ketQua.filter((x) => x !== kq) : [...b.ketQua, kq] })));
 
   return (
@@ -41,14 +42,15 @@ export function CauHinhEditor({ roles: r0, buoc: b0, thanhVien }: { roles: { key
 
       <section className="card card-pad">
         <h2 className="card-title mb-2">Chuỗi bước duyệt</h2>
-        <p className="text-[12px] text-[var(--ink-2)] mb-2">Quorum sửa đổi quy tắc: đề xuất chỉ được thông qua khi mọi bước đánh dấu "Tham gia" đã đạt theo chế độ của bước. Nhóm có số nhỏ hơn duyệt trước. Các bước cùng nhóm chạy song song và nhóm xong khi mọi bước duyệt trong nhóm đã đủ. Bước kiểm soát chỉ có Chặn hoặc Trả về, không có Duyệt.</p>
-        <table className="tbl text-[13px]"><thead><tr><th>Mã bước</th><th>Nhóm</th><th>Role</th><th>Ai duyệt trong bước</th><th>Kết quả được phép</th><th>Quorum sửa đổi</th><th></th></tr></thead>
+        <p className="text-[12px] text-[var(--ink-2)] mb-2">Yêu cầu duyệt: bỏ tick thì bước không dừng lại chờ duyệt, chỉ chặn/trả về. Chạy khi: bước chỉ xuất hiện khi điều kiện đúng; không đúng thì bỏ qua và ghi lý do. Quorum sửa đổi quy tắc: đề xuất chỉ được thông qua khi mọi bước đánh dấu "Tham gia" đã đạt theo chế độ của bước. Nhóm có số nhỏ hơn duyệt trước. Các bước cùng nhóm chạy song song và nhóm xong khi mọi bước duyệt trong nhóm đã đủ. Bước kiểm soát chỉ có Chặn hoặc Trả về, không có Duyệt.</p>
+        <table className="tbl text-[13px]"><thead><tr><th>Mã bước</th><th>Nhóm</th><th>Role</th><th>Yêu cầu duyệt</th><th>Ai duyệt trong bước</th><th>Chạy khi</th><th>Kết quả được phép</th><th>Quorum sửa đổi</th><th></th></tr></thead>
           <tbody>{buoc.map((b, i) => (
             <tr key={i}>
               <td><input className="field !py-1" value={b.key} onChange={(e) => sua(() => setBuoc(buoc.map((x, j) => j === i ? { ...x, key: e.target.value } : x)))} /></td>
               <td><input type="number" min={1} className="field !py-1 w-20" value={b.nhom} onChange={(e) => sua(() => setBuoc(buoc.map((x, j) => j === i ? { ...x, nhom: Number(e.target.value) } : x)))} /></td>
               <td><select className="field !py-1" value={b.roleKey} onChange={(e) => sua(() => setBuoc(buoc.map((x, j) => j === i ? { ...x, roleKey: e.target.value, nguoi: null } : x)))}>
                 {roles.map((r) => <option key={r.key} value={r.key}>{r.ten || r.key}</option>)}</select></td>
+              <td><label className="text-[12px]"><input type="checkbox" checked={b.yeuCauDuyet} onChange={(e) => sua(() => setBuoc(buoc.map((x, j) => j === i ? { ...x, yeuCauDuyet: e.target.checked } : x)))} /> Có</label></td>
               <td><select className="field !py-1" value={b.nguoi ? `nguoi:${b.nguoi}` : `mode:${b.che_do}`}
                 onChange={(e) => sua(() => setBuoc(buoc.map((x, j) => {
                   if (j !== i) return x;
@@ -60,6 +62,8 @@ export function CauHinhEditor({ roles: r0, buoc: b0, thanhVien }: { roles: { key
                   <optgroup label="Người cụ thể (thành viên đã gán)">{thanhVien.filter((t) => t.role === b.roleKey).map((t) => <option key={t.id} value={`nguoi:${t.id}`}>{t.ten}</option>)}</optgroup>
                 )}
               </select></td>
+              <td><select className="field !py-1" value={b.chayKhi} onChange={(e) => sua(() => setBuoc(buoc.map((x, j) => j === i ? { ...x, chayKhi: e.target.value as BuocDong['chayKhi'] } : x)))}>
+                {(Object.keys(CHAY_KHI_NHAN) as BuocDong['chayKhi'][]).map((k) => <option key={k} value={k}>{CHAY_KHI_NHAN[k]}</option>)}</select></td>
               <td>{(['duyet', 'tra_ve', 'chan'] as KetQuaBuoc[]).map((kq) => (
                 <label key={kq} className="mr-3 text-[12px]"><input type="checkbox" checked={b.ketQua.includes(kq)} onChange={() => boKq(i, kq)} /> {KQ_NHAN[kq]}</label>))}</td>
               <td><label className="text-[12px]"><input type="checkbox" checked={b.suaDoi} onChange={(e) => sua(() => setBuoc(buoc.map((x, j) => j === i ? { ...x, suaDoi: e.target.checked } : x)))} /> Tham gia</label></td>

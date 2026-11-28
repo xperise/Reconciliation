@@ -56,3 +56,36 @@ console.log(fails?`\n${fails} FAIL`:"\nALL PASS");
   const tv7={...tv2, ke_toan:["u1","u5"]};
   q("chế độ tất cả trong bước: thiếu một thành viên thì chưa", !M.quorumSuaDoiDat(c7, [all[0], all[3]], tv7));
 }
+
+// --- Yêu cầu duyệt và chạy khi (SQL 61) ---
+{
+  const q=(n,c)=>{ if(!c){console.log("FAIL",n); process.exitCode=1;} else console.log("OK  ",n); };
+  const base=JSON.parse(JSON.stringify(C.CAU_HINH_MAC_DINH));
+  const tv={ke_toan:["u1"],demand:["u2"],supply:["u3"],ceo:["u4"]};
+  const ketThuc=[{roleKey:"ke_toan",quyet_dinh:"duyet",nguoi:"u1"}];
+  const set=(c,key,f)=>{ Object.assign(c.buoc.find(b=>b.key===key),f); return c; };
+  const sach={coCanhBaoChan:false,coNgoaiLe:false,tongTien:100,nguongTien:500};
+  const cot={coCanhBaoChan:true,coNgoaiLe:false,tongTien:100,nguongTien:500};
+  const vuot={coCanhBaoChan:false,coNgoaiLe:false,tongTien:600,nguongTien:500};
+  // Demand chỉ chạy khi có cảnh báo chặn gửi
+  const c1=set(JSON.parse(JSON.stringify(base)),"demand_kiem_soat",{chayKhi:"canh_bao_chan"});
+  q("Demand không chạy khi không có cảnh báo chặn", M.nhomCho(c1,sach).join()==="1,3");
+  q("Demand chạy khi có cảnh báo chặn", M.nhomCho(c1,cot).join()==="1,3");
+  q("không cảnh báo: không chặn được", !M.coTheKiemSoat(c1,"cho_ke_toan","demand","chan",sach));
+  q("có cảnh báo: chặn được", M.coTheKiemSoat(c1,"cho_ke_toan","demand","chan",cot));
+  // CEO chỉ duyệt khi vượt ngưỡng; dưới ngưỡng thì tự gửi sau kế toán
+  const c2=set(JSON.parse(JSON.stringify(base)),"ceo_duyet",{chayKhi:"vuot_nguong"});
+  q("dưới ngưỡng: sau kế toán là đã gửi", M.buocTiep(c2,"cho_ke_toan",ketThuc,tv,sach)==="da_gui");
+  q("vượt ngưỡng: sau kế toán chờ CEO", M.buocTiep(c2,"cho_ke_toan",ketThuc,tv,vuot)==="cho_ceo");
+  q("chưa đặt ngưỡng: không vượt", M.buocTiep(c2,"cho_ke_toan",ketThuc,tv,{...vuot,nguongTien:null})==="da_gui");
+  // Bắt đầu lần chạy: nhóm đầu không chạy thì bắt đầu ở nhóm sau
+  const c3=set(JSON.parse(JSON.stringify(base)),"ke_toan_duyet",{chayKhi:"ngoai_le"});
+  q("kế toán không chạy: bắt đầu từ CEO", M.trangThaiBatDau(c3,sach)==="cho_ceo");
+  q("kế toán chạy: bắt đầu từ kế toán", M.trangThaiBatDau(c3,{...sach,coNgoaiLe:true})==="cho_ke_toan");
+  // Không yêu cầu duyệt: bước tự qua, không gating
+  const c4=set(JSON.parse(JSON.stringify(base)),"ke_toan_duyet",{yeuCauDuyet:false});
+  q("kế toán không yêu cầu duyệt: bắt đầu thẳng ở nhóm CEO", M.trangThaiBatDau(c4,sach)==="cho_nhom_3");
+  q("không yêu cầu duyệt: kế toán không duyệt được", !M.coTheDuyet(c4,"cho_ceo","ke_toan",sach));
+  // Mặc định (không có ctx) vẫn như cũ
+  q("không truyền điều kiện: mọi bước chạy như trước", M.trangThaiBatDau(base)==="cho_ke_toan");
+}
