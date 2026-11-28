@@ -42,18 +42,24 @@ export function CauHinhEditor({ roles: r0, buoc: b0, thanhVien }: { roles: { key
       <section className="card card-pad">
         <h2 className="card-title mb-2">Chuỗi bước duyệt</h2>
         <p className="text-[12px] text-[var(--ink-2)] mb-2">Nhóm có số nhỏ hơn duyệt trước. Các bước cùng nhóm chạy song song và nhóm xong khi mọi bước duyệt trong nhóm đã đủ. Bước kiểm soát chỉ có Chặn hoặc Trả về, không có Duyệt.</p>
-        <table className="tbl text-[13px]"><thead><tr><th>Mã bước</th><th>Nhóm</th><th>Role</th><th>Người cụ thể</th><th>Chế độ</th><th>Kết quả được phép</th><th></th></tr></thead>
+        <table className="tbl text-[13px]"><thead><tr><th>Mã bước</th><th>Nhóm</th><th>Role</th><th>Ai duyệt trong bước</th><th>Kết quả được phép</th><th></th></tr></thead>
           <tbody>{buoc.map((b, i) => (
             <tr key={i}>
               <td><input className="field !py-1" value={b.key} onChange={(e) => sua(() => setBuoc(buoc.map((x, j) => j === i ? { ...x, key: e.target.value } : x)))} /></td>
               <td><input type="number" min={1} className="field !py-1 w-20" value={b.nhom} onChange={(e) => sua(() => setBuoc(buoc.map((x, j) => j === i ? { ...x, nhom: Number(e.target.value) } : x)))} /></td>
               <td><select className="field !py-1" value={b.roleKey} onChange={(e) => sua(() => setBuoc(buoc.map((x, j) => j === i ? { ...x, roleKey: e.target.value, nguoi: null } : x)))}>
                 {roles.map((r) => <option key={r.key} value={r.key}>{r.ten || r.key}</option>)}</select></td>
-              <td><select className="field !py-1" value={b.nguoi ?? ''} onChange={(e) => sua(() => setBuoc(buoc.map((x, j) => j === i ? { ...x, nguoi: e.target.value || null } : x)))}>
-                <option value="">Theo role (mọi thành viên của role)</option>
-                {thanhVien.filter((t) => t.role === b.roleKey).map((t) => <option key={t.id} value={t.id}>{t.ten}</option>)}</select></td>
-              <td><select className="field !py-1" value={b.che_do} onChange={(e) => sua(() => setBuoc(buoc.map((x, j) => j === i ? { ...x, che_do: e.target.value as BuocDong['che_do'] } : x)))}>
-                {(Object.keys(CHE_DO_NHAN) as BuocDong['che_do'][]).map((k) => <option key={k} value={k}>{CHE_DO_NHAN[k]}</option>)}</select></td>
+              <td><select className="field !py-1" value={b.nguoi ? `nguoi:${b.nguoi}` : `mode:${b.che_do}`}
+                onChange={(e) => sua(() => setBuoc(buoc.map((x, j) => {
+                  if (j !== i) return x;
+                  const v = e.target.value;
+                  return v.startsWith('nguoi:') ? { ...x, nguoi: v.slice(6), che_do: 'any' } : { ...x, nguoi: null, che_do: v.slice(5) as BuocDong['che_do'] };
+                })))}>
+                <optgroup label="Theo role">{(Object.keys(CHE_DO_NHAN) as BuocDong['che_do'][]).map((k) => <option key={k} value={`mode:${k}`}>{CHE_DO_NHAN[k]} của role</option>)}</optgroup>
+                {thanhVien.filter((t) => t.role === b.roleKey).length > 0 && (
+                  <optgroup label="Người cụ thể (thành viên đã gán)">{thanhVien.filter((t) => t.role === b.roleKey).map((t) => <option key={t.id} value={`nguoi:${t.id}`}>{t.ten}</option>)}</optgroup>
+                )}
+              </select></td>
               <td>{(['duyet', 'tra_ve', 'chan'] as KetQuaBuoc[]).map((kq) => (
                 <label key={kq} className="mr-3 text-[12px]"><input type="checkbox" checked={b.ketQua.includes(kq)} onChange={() => boKq(i, kq)} /> {KQ_NHAN[kq]}</label>))}</td>
               <td><button className="text-[12px] underline" onClick={() => sua(() => setBuoc(buoc.filter((_, j) => j !== i)))}>Xoá</button></td>
