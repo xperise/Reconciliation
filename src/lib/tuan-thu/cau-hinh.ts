@@ -16,6 +16,10 @@ export interface BuocCauHinh {
   roleKey: string;
   mode: CheDoDuyet;
   ketQua: KetQuaBuoc[];
+  /** nhóm bước: cùng nhóm = song song, khác nhóm = tuần tự (SQL 58). Mặc định = thuTu. */
+  nhom?: number;
+  /** người duyệt cụ thể của bước; null = theo role */
+  nguoi?: string | null;
 }
 export interface QuyTrinhCauHinh {
   roles: RoleCauHinh[];
@@ -86,6 +90,7 @@ export function kiemTraCauHinh(c: QuyTrinhCauHinh): string[] {
     loi.push('Phải có ít nhất một bước duyệt ở vị trí cuối cùng (bước gửi).');
   if (c.quorumSuaDoi !== 'all') loi.push('Quorum sửa đổi không được thấp hơn mức sàn (tất cả).');
   if (!c.roles.some((r) => r.kichHoat)) loi.push('Phải có ít nhất một role được kích hoạt hợp đồng.');
+  for (const b of c.buoc) if (b.nhom !== undefined && (!Number.isInteger(b.nhom) || b.nhom < 1)) loi.push(`Bước ${b.key}: nhóm phải là số nguyên từ 1 trở lên.`);
   return loi;
 }
 
