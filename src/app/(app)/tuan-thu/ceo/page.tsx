@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { PageHeader } from '@/components/PageHeader';
 import { nguoiTT, coQuyen, fmtVnd, TEN_BUOC, nhanBuoc } from '@/lib/tuan-thu/db';
-import { tomTatKy, thangHienTai } from '@/lib/tuan-thu/bao-cao-ceo';
+import { tomTatKy, thangHienTai, baoCaoHoc } from '@/lib/tuan-thu/bao-cao-ceo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { toChucHienTai } from '@/lib/tuan-thu/to-chuc-server';
 
@@ -43,6 +43,19 @@ export default async function Page({ searchParams }: { searchParams: { thang?: s
           </div>
         ))}
       </div>
+      <section className="card card-pad mb-5">
+        <h2 className="card-title mb-2">Báo cáo học từ quyết định</h2>
+        {(await (async () => { const h = await baoCaoHoc(await toChucHienTai()); return (
+          <>
+            <p className="text-[13px] mb-2">Đã nhận: <b>{h.tongDaNhan}</b> · Bỏ qua: <b>{h.tongBoQua}</b>. Gợi ý nhận là quy tắc agent đã học; gợi ý bỏ qua là đề xuất không được dùng.</p>
+            {h.theoPhong.length === 0 ? <p className="text-[var(--ink-2)] text-[13px]">Chưa có gợi ý học nào.</p> : (
+              <table className="tbl text-[13px] mb-2"><thead><tr><th>Phòng</th><th>Chờ xử lý</th><th>Đã nhận</th><th>Bỏ qua</th></tr></thead>
+                <tbody>{h.theoPhong.map((x) => <tr key={x.phong}><td>{x.phong}</td><td>{x.cho}</td><td>{x.daNhan}</td><td>{x.boQua}</td></tr>)}</tbody></table>
+            )}
+            {h.ganNhat.length > 0 && <ul className="text-[12px] list-disc pl-5">{h.ganNhat.map((x, i) => <li key={i}>{x.noi}</li>)}</ul>}
+          </>); })())}
+      </section>
+
       <section className="card card-pad mb-5">
         <h2 className="card-title mb-2">Tóm tắt định kỳ</h2>
         {!ngay && !tuan ? <p className="text-[var(--ink-2)]">Chưa có bản tóm tắt. Bản tóm tắt được tạo mỗi ngày và mỗi thứ Hai.</p> : (

@@ -105,3 +105,29 @@ export function moTaBaoCaoDinhKy(b: BaoCaoDinhKy): string {
     `Kỳ đang mở: ${b.kyHienTai.soDangCho} lần chạy đang chờ, ${b.kyHienTai.soChanDangMo} chặn đang mở, ${b.kyHienTai.canQuyet.length} việc cần CEO quyết.`,
   ].join('\n');
 }
+
+export type BaoCaoHoc = {
+  theoPhong: { phong: string; cho: number; daNhan: number; boQua: number }[];
+  ganNhat: { phong: string; noi: string; luc: string }[];
+  tongDaNhan: number; tongBoQua: number;
+};
+
+/** Báo cáo học: gợi ý học từ quyết định, đã nhận / bỏ qua / đang chờ theo phòng. Chỉ đọc. */
+export async function baoCaoHoc(org: string): Promise<BaoCaoHoc> {
+  const sb = supabaseAdmin();
+  const { data } = await sb.from('tt_skill_goi_y').select('phong_ban, trang_thai, noi_dung, luc').eq('org_id', org).order('luc', { ascending: false }).limit(2000);
+  const rows = (data ?? []) as any[];
+  const map = new Map<string, { phong: string; cho: number; daNhan: number; boQua: number }>();
+  for (const r of rows) {
+    const x = map.get(r.phong_ban) ?? { phong: r.phong_ban, cho: 0, daNhan: 0, boQua: 0 };
+    if (r.trang_thai === 'cho') x.cho++; else if (r.trang_thai === 'da_nhan') x.daNhan++; else if (r.trang_thai === 'bo_qua') x.boQua++;
+    map.set(r.phong_ban, x);
+  }
+  const ganNhat = rows.filter((r) => r.trang_thai === 'da_nhan').slice(0, 5).map((r) => ({ phong: r.phong_ban, noi: r.noi_dung, luc: r.luc }));
+  return {
+    theoPhong: [...map.values()].sort((a, b) => a.phong.localeCompare(b.phong)),
+    ganNhat,
+    tongDaNhan: rows.filter((r) => r.trang_thai === 'da_nhan').length,
+    tongBoQua: rows.filter((r) => r.trang_thai === 'bo_qua').length,
+  };
+}
