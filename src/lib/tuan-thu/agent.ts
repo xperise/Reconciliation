@@ -18,9 +18,10 @@ export async function goiClaude(system: string, messages: Msg[], maxTokens = 150
   return d.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n').trim();
 }
 
-export async function skillHienHanh(pb: PhongBan, org?: string): Promise<{ phien_ban: number; noi_dung: string }> {
-  const { data } = await supabaseAdmin().from('tt_skill').select('phien_ban, noi_dung').eq('org_id', org ?? await toChucHienTai())
-    .eq('phong_ban', pb).order('phien_ban', { ascending: false }).limit(1);
+export async function skillHienHanh(pb: PhongBan, org?: string, phienBan?: number): Promise<{ phien_ban: number; noi_dung: string }> {
+  let q = supabaseAdmin().from('tt_skill').select('phien_ban, noi_dung').eq('org_id', org ?? await toChucHienTai()).eq('phong_ban', pb);
+  q = phienBan ? q.eq('phien_ban', phienBan) : q.order('phien_ban', { ascending: false }).limit(1);
+  const { data } = await q;
   if (!data?.length) throw new Error('Chưa có skill cho phòng ban này — chạy supabase/migrations/39_tuan_thu_agent.sql.');
   return data[0] as any;
 }
@@ -45,9 +46,12 @@ function thamSoChu(t: any): string {
  * tham số đang áp dụng và các sửa đổi — để head hỏi gì cũng trả lời được. Chuyên môn, góc nhìn
  * và cách đề xuất theo skill riêng của phòng.
  */
-export async function heThong(pb: PhongBan, hopDongId: string | null) {
+export async function heThong(pb: PhongBan, hopDongId: string | null, lanChayId?: string | null) {
   const sb = supabaseAdmin();
-  const sk = await skillHienHanh(pb);
+  // Lần chạy đã ghim phiên bản skill thì đọc đúng bản đó; không có ghim thì dùng bản mới nhất
+  let ghim: number | undefined;
+  if (lanChayId) { const { data: lcg } = await sb.from('tt_lan_chay').select('skill_phien_ban').eq('id', lanChayId).maybeSingle(); const v = (lcg?.skill_phien_ban as any)?.[pb]; if (typeof v === 'number') ghim = v; }
+  const sk = await skillHienHanh(pb, undefined, ghim);
   let hopDong = '', quyTac = '', thamSo = '', suaDoi = '';
   if (hopDongId) {
     const [{ data: hd }, { data: qt }, { data: bo }, { data: sd }] = await Promise.all([

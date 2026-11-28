@@ -249,7 +249,7 @@ export async function raSoatBuoc(lanChayId: string, buoc: PhongBan): Promise<KQ>
   return lam(async () => {
     const n = await batBuoc(buoc);
     const b = await boiCanhLanChay(lanChayId);
-    const { system, skill } = await heThong(buoc, b.hopDongId);
+    const { system, skill } = await heThong(buoc, b.hopDongId, lanChayId);
     const tl = await goiClaude(system, [{ role: 'user', content: `${b.text}
 
 ${buoc === 'demand' || buoc === 'supply'
@@ -275,7 +275,7 @@ export async function goiYGiaiTrinh(lanChayId: string): Promise<KQ> {
     const can = (cb ?? []).filter((c: any) => c.muc_do !== 'theo_doi' && !c.giai_trinh?.trim());
     if (!can.length) return { ok: true, thongBao: 'Mọi cảnh báo đã có giải trình.' };
     const b = await boiCanhLanChay(lanChayId);
-    const { system, skill } = await heThong('ke_toan', b.hopDongId);
+    const { system, skill } = await heThong('ke_toan', b.hopDongId, lanChayId);
     const tl = await goiClaude(system, [{ role: 'user', content: `${b.text}
 
 NHIỆM VỤ: Với mỗi cảnh báo dưới đây (chưa có giải trình), soạn MỘT câu gợi ý: hoặc việc kế toán cần làm ("Cần sửa raw: …", "Cần bổ sung hóa đơn cho …"), hoặc lý do ngoại lệ hợp lệ kèm chứng từ cần đính kèm. Không khẳng định điều không có trong dữ liệu.

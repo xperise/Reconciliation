@@ -16,6 +16,7 @@ import { CauTrucMau, hocMau } from '@/lib/tuan-thu/mau-bang-ke';
 import { goiYGhepCot } from '@/lib/tuan-thu/mau-ai';
 import { chuanHoaMa, coChan, coDuyet, coQuyenKichHoat, trangThaiDuocDuyet, TRANG_THAI_CHO, vaiTroChiKiemSoat, vaiTroCoDuyet, vaiTroTheoTrangThai } from '@/lib/tuan-thu/cau-hinh';
 import { docCauHinhQuyTrinh } from '@/lib/tuan-thu/cau-hinh-db';
+import { skillHienHanh } from '@/lib/tuan-thu/agent';
 import { themOrg } from '@/lib/tuan-thu/to-chuc';
 import { toChucHienTai } from '@/lib/tuan-thu/to-chuc-server';
 import { coQuyenTepCuaToChuc, duongDanTepTo } from '@/lib/tuan-thu/to-chuc';
@@ -64,6 +65,10 @@ export async function taoLanChay(fd: FormData): Promise<KQ> {
     }, await toChucHienTai())).select('id').single();
     if (error && /che_do|bk_goc/.test(error.message)) throw new Error('Cần chạy supabase/migrations/45_tuan_thu_bang_ke_da_format.sql.');
     if (error || !lc) throw new Error(error?.message ?? 'Không tạo được lần chạy.');
+    // Ghim phiên bản skill hiện tại của từng phòng vào lần chạy (SQL 57)
+    const pins: Record<string, number> = {};
+    for (const r of (await docCauHinhQuyTrinh()).roles) { try { pins[r.key] = (await skillHienHanh(r.key)).phien_ban; } catch { /* phòng chưa có skill */ } }
+    await sb.from('tt_lan_chay').update({ skill_phien_ban: pins }).eq('org_id', await toChucHienTai()).eq('id', lc.id);
     try {
       const rawFiles = (fd.getAll('raw') as File[]).filter((f) => f && f.size), rawDaTai = tepDaTai(fd, 'raw_json', await toChucHienTai());
       if (cheDo === 'raw' || rawFiles.length || rawDaTai.length) {
