@@ -142,6 +142,14 @@ export default function MasterDataGrid() {
 
   const dirty = snapshot(rows) !== original.snap;
 
+  // Tự lưu khi ngừng sửa
+  useEffect(() => {
+    if (loading || tableMissing || !dirty || saving) return;
+    const t = setTimeout(() => { save(true); }, 800);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, loading, tableMissing]);
+
   // Cảnh báo rời trang khi chưa lưu
   useEffect(() => {
     const h = (e: BeforeUnloadEvent) => {
@@ -191,7 +199,8 @@ export default function MasterDataGrid() {
   // Kiểm tra dữ liệu
   const issues = useMemo(() => {
     const bad = new Set<string>(); // `${_k}:${field}`
-    const list: string[] = [];
+    const list: string[] = [];        // lỗi chặn lưu
+    const cảnh: string[] = [];        // cảnh báo trùng: vẫn lưu được, chỉ tô đỏ để gộp sau
     const seen = new Map<string, number>();
     rows.forEach((r, i) => {
       if (isBlank(r)) return;
@@ -208,12 +217,12 @@ export default function MasterDataGrid() {
       if (key) {
         if (seen.has(key)) {
           bad.add(`${r._k}:ten_cong_ty`);
-          list.push(`Dòng ${i + 1} trùng tên với dòng ${seen.get(key)! + 1}: ${r.ten_cong_ty.trim()}`);
+          cảnh.push(`Dòng ${i + 1} trùng tên với dòng ${seen.get(key)! + 1}: ${r.ten_cong_ty.trim()}`);
         } else seen.set(key, i);
       }
     });
-    dups.filter((g) => g.strong).forEach((g) => { g.ids.forEach((k) => bad.add(`${k}:ten_cong_ty`)); list.push(`Khách bị nhập ${g.ids.length} dòng (${g.label}): ${rows.find((r) => r._k === g.ids[0])?.ten_cong_ty ?? ''} — gộp để chỉ giữ 1 dòng`); });
-    return { bad, list };
+    dups.filter((g) => g.strong).forEach((g) => { g.ids.forEach((k) => bad.add(`${k}:ten_cong_ty`)); cảnh.push(`Khách bị nhập ${g.ids.length} dòng (${g.label}): ${rows.find((r) => r._k === g.ids[0])?.ten_cong_ty ?? ''} — gộp để chỉ giữ 1 dòng`); });
+    return { bad, list, canh: cảnh };
   }, [rows, dups]);
 
   const setCell = (k: string, field: Field, value: string) =>
@@ -245,10 +254,11 @@ export default function MasterDataGrid() {
     });
   }
 
-  async function save() {
+  /** Lưu tự động: chạy sau khi ngừng sửa ~0,8 giây. Dòng lỗi chặn lưu (thiếu tên, CK đặc biệt sai) được giữ lại, không ghi. */
+  async function save(auto = false) {
     if (saving || !dirty) return;
     if (issues.list.length) {
-      setMsg({ type: 'err', text: 'Còn lỗi dữ liệu, sửa các ô tô đỏ trước khi lưu.' });
+      if (!auto) setMsg({ type: 'err', text: 'Còn lỗi dữ liệu, sửa các ô tô đỏ trước khi lưu.' });
       return;
     }
     setSaving(true);
@@ -280,7 +290,7 @@ export default function MasterDataGrid() {
         .join(' · ');
       setMsg({
         type: 'ok',
-        text: `Đã lưu ${payload.length} khách hàng${chiTiet ? ` (${chiTiet})` : ''}.`,
+        text: `${auto ? 'Đã tự lưu' : 'Đã lưu'} ${payload.length} khách hàng${chiTiet ? ` (${chiTiet})` : ''} lúc ${new Date().toLocaleTimeString('vi-VN')}.`,
       });
     } catch (e) {
       setMsg({ type: 'err', text: `Lưu thất bại: ${(e as Error).message}` });
@@ -427,9 +437,7 @@ export default function MasterDataGrid() {
             <button className={s.btn} onClick={reload} disabled={!dirty || saving}>
               Hoàn tác
             </button>
-            <button className={`${s.btn} ${s.btnPrimary}`} onClick={save} disabled={!dirty || saving || tableMissing}>
-              {saving ? 'Đang lưu…' : dirty ? 'Lưu thay đổi' : 'Đã lưu'}
-            </button>
+            <span className={s.muted} style={{ fontSize: 12, alignSelf: 'center' }}>{saving ? 'Đang lưu…' : dirty ? 'Đang chờ lưu…' : 'Đã lưu tự động'}</span>
           </div>
         </div>
 
@@ -467,6 +475,11 @@ export default function MasterDataGrid() {
           <div className={`${s.banner} ${s.bannerErr}`} style={{ marginBottom: 12, background: '#fff7e6', color: '#8a6200', borderColor: '#f3d48a' }}>
             {nChua} khách chưa chọn chiết khấu (tô vàng bên dưới) — đang dùng % cũ hoặc tra bảng phân loại khi lập bảng kê.{' '}
             <button className={s.iconBtn} style={{ width: 'auto', textDecoration: 'underline' }} onClick={() => setFCk('NONE')}>Chỉ xem khách chưa chọn</button>
+          </div>
+        )}
+        {issues.canh.length > 0 && (
+          <div className={s.banner} style={{ marginBottom: 12 }}>
+            Cảnh báo trùng (vẫn lưu được, nên gộp): {issues.canh.slice(0, 5).join(' · ')}{issues.canh.length > 5 ? ` · và ${issues.canh.length - 5} cảnh báo khác` : ''}
           </div>
         )}
         {issues.list.length > 0 && (
