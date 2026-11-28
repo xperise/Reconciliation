@@ -71,9 +71,12 @@ const ckText = (kind: CkKind, x: string, note: string) => kind === 'CK4' ? 'CK 4
 const snapshot = (rows: GridRow[]) =>
   JSON.stringify(rows.filter((r) => !isBlank(r)).map(({ _k, ...rest }) => rest));
 
+/** Khoá so sánh một dòng (bỏ _k) — dùng để biết dòng nào đã đổi so với lúc tải */
+const rowKey = (r: GridRow) => { const { _k, ...rest } = r; return JSON.stringify(rest); };
+
 export default function MasterDataGrid() {
   const [rows, setRows] = useState<GridRow[]>([]);
-  const [original, setOriginal] = useState<{ ids: string[]; snap: string }>({ ids: [], snap: '[]' });
+  const [original, setOriginal] = useState<{ ids: string[]; snap: string; rowSnap: Record<string, string> }>({ ids: [], snap: '[]', rowSnap: {} });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
@@ -127,7 +130,7 @@ export default function MasterDataGrid() {
       const data = await loadCustomers();
       const grid = data.map(toGrid);
       setRows(grid.length ? grid : [emptyRow()]);
-      setOriginal({ ids: data.map((d) => d.id as string), snap: snapshot(grid) });
+      setOriginal({ ids: data.map((d) => d.id as string), snap: snapshot(grid), rowSnap: Object.fromEntries(grid.filter((g) => g.id).map((g) => [g.id as string, rowKey(g)])) });
       setTableMissing(false);
     } catch (e) {
       if (e instanceof TableMissingError) setTableMissing(true);
@@ -189,7 +192,8 @@ export default function MasterDataGrid() {
       setOriginal((og) => { let arr: Record<string, unknown>[] = []; try { arr = JSON.parse(og.snap); } catch { /* */ }
         const { _k, ...rest } = merged; void _k;
         arr = arr.filter((x) => !gone.has(x.id as string)).map((x) => (x.id === merged.id ? rest : x));
-        return { ids: og.ids.filter((id) => !gone.has(id)), snap: JSON.stringify(arr) }; });
+        const rowSnap = { ...og.rowSnap, [merged.id as string]: rowKey(merged) }; gone.forEach((id) => { if (id) delete rowSnap[id]; });
+        return { ids: og.ids.filter((id) => !gone.has(id)), snap: JSON.stringify(arr), rowSnap }; });
       setMsg({ type: 'ok', text: `Đã gộp và lưu: giữ “${merged.ten_cong_ty}”, xoá ${others.length} dòng trùng.` });
     } catch (e) { setMsg({ type: 'err', text: `Chưa gộp được: ${(e as Error).message}` }); }
     finally { setMerging(''); }
@@ -264,8 +268,13 @@ export default function MasterDataGrid() {
     setSaving(true);
     setMsg(null);
     try {
-      const payload: MlxCustomer[] = rows
-        .filter((r) => !isBlank(r))
+      // Chỉ gửi dòng đã đổi (hoặc mới) và dòng đã bị bỏ khỏi danh sách; các dòng còn lại không đụng tới DB
+      const now = rows.filter((r) => !isBlank(r));
+      const doi = now.filter((r) => !r.id || rowKey(r) !== original.rowSnap[r.id]);
+      const xoaIds = original.ids.filter((id) => !now.some((r) => r.id === id));
+      if (doi.length === 0 && xoaIds.length === 0) { setSaving(false); return; }
+      const snapLuc = snapshot(now);
+      const payload: MlxCustomer[] = doi
         .map((r) => ({
           id: r.id,
           ma_khach_hang: r.ma_khach_hang,
@@ -282,9 +291,16 @@ export default function MasterDataGrid() {
       for (const m of mergedTo) {
         try { await getSupabase().from('mlx_alias').update({ customer_id: m.to }).eq('customer_id', m.from); await saveAlias(m.name, m.to); } catch { /* chưa có bảng ghi nhớ: bỏ qua */ }
       }
-      const kq = await saveCustomers(payload, original.ids);
+      const banDau = [...doi.filter((r) => r.id).map((r) => r.id as string), ...xoaIds];
+      const kq = await saveCustomers(payload, banDau);
       setMergedTo([]);
-      await reload();
+      if (doi.some((r) => !r.id)) { await reload(); }
+      else {
+        const rowSnap = { ...original.rowSnap };
+        doi.forEach((r) => { if (r.id) rowSnap[r.id] = rowKey(r); });
+        xoaIds.forEach((id) => { delete rowSnap[id]; });
+        setOriginal({ ids: original.ids.filter((id) => !xoaIds.includes(id)), snap: snapLuc, rowSnap });
+      }
       const chiTiet = [kq.them && `thêm ${kq.them}`, kq.sua && `cập nhật ${kq.sua}`, kq.xoa && `xoá ${kq.xoa}`]
         .filter(Boolean)
         .join(' · ');
