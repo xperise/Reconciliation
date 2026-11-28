@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Nut } from '../ui';
-import { capNhatHopDong, capNhatNguongTien, chotQuyTac, chotTatCaQuyTac, kichHoatHopDong, suaThamSoNhap } from '../actions';
+import { capNhatHopDong, capNhatNguongTien, capNhatTuGui, chotQuyTac, chotTatCaQuyTac, kichHoatHopDong, suaThamSoNhap } from '../actions';
 import type { PhongBan } from '@/lib/tuan-thu/types';
 
 export function ChotQuyTac({ id, chot, yKien, hopDongId, ma }: { id: string; chot: string; yKien: string; hopDongId: string; ma: string }) {
@@ -15,6 +15,19 @@ export function ChotQuyTac({ id, chot, yKien, hopDongId, ma }: { id: string; cho
         {chot !== 'can_sua' && <Nut chay={() => chotQuyTac(id, 'can_sua', y)} nhan="Cần sửa" />}
         <Link className="btn btn-sm" href={`/tuan-thu/quy-tac/${hopDongId}?ma=${ma}#sua-doi`}>Đề xuất sửa</Link>
       </div>
+    </div>
+  );
+}
+
+export function TuGuiKhach({ id, tuGui, daKiemDinh }: { id: string; tuGui: boolean; daKiemDinh: boolean }) {
+  const [bat, setBat] = useState(tuGui);
+  const [kd, setKd] = useState(daKiemDinh);
+  return (
+    <div className="grid gap-2 text-[12px]">
+      <label className="flex items-center gap-2"><input type="checkbox" checked={bat} onChange={(e) => setBat(e.target.checked)} /> Tự gửi bảng kê cho khách này (không qua bước CEO khi đủ điều kiện)</label>
+      <label className="flex items-center gap-2"><input type="checkbox" checked={kd} onChange={(e) => setKd(e.target.checked)} /> Tôi đã kiểm định: bảng kê tự động khớp với các bảng kê đã duyệt trước đó</label>
+      <div><Nut chay={() => capNhatTuGui(id, bat, kd)} nhan="Lưu tự gửi" kieu="btn-primary" /></div>
+      <p className="text-[var(--ink-3)]">Điều kiện tự gửi: không có cảnh báo chặn gửi, không có ngoại lệ, tổng tiền không vượt ngưỡng của khách. Lần nào không đủ điều kiện thì đi qua bước CEO như bình thường.</p>
     </div>
   );
 }

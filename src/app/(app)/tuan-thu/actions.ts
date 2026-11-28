@@ -17,7 +17,7 @@ import { goiYGhepCot } from '@/lib/tuan-thu/mau-ai';
 import { chuanHoaMa, coChan, coDuyet, coQuyenKichHoat, trangThaiDuocDuyet, TRANG_THAI_CHO, vaiTroChiKiemSoat, vaiTroCoDuyet, vaiTroTheoTrangThai } from '@/lib/tuan-thu/cau-hinh';
 import { docCauHinhQuyTrinh } from '@/lib/tuan-thu/cau-hinh-db';
 import { skillHienHanh } from '@/lib/tuan-thu/agent';
-import { buocBoQua, buocTiep, chuanHoaBuoc, coTheDuyet, coTheKiemSoat, DA_GUI, nhomCho, nhomHienTai, quorumSuaDoiDat, trangThaiBatDau, trangThaiNhom, type NgCanh } from '@/lib/tuan-thu/may-trang-thai';
+import { buocBoQua, buocTiep, chuanHoaBuoc, coTheDuyet, coTheKiemSoat, DA_GUI, duocTuGui, nhomCho, nhomHienTai, quorumSuaDoiDat, trangThaiBatDau, trangThaiNhom, type NgCanh } from '@/lib/tuan-thu/may-trang-thai';
 import { themOrg } from '@/lib/tuan-thu/to-chuc';
 import { toChucHienTai } from '@/lib/tuan-thu/to-chuc-server';
 import { coQuyenTepCuaToChuc, duongDanTepTo } from '@/lib/tuan-thu/to-chuc';
@@ -217,11 +217,17 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
       const thanhVien: Record<string, string[]> = {};
       for (const t of (tvRows ?? []) as any[]) (thanhVien[t.phong_ban] ??= []).push(t.user_id);
       const quyet = ((dyVong ?? []) as any[]).map((d) => ({ roleKey: d.buoc, quyet_dinh: d.quyet_dinh, nguoi: d.nguoi }));
-      const tiep = buocTiep(cauHinh, lc.buoc, quyet, thanhVien, ngCanh);
+      let tiep = buocTiep(cauHinh, lc.buoc, quyet, thanhVien, ngCanh);
+      // Tự gửi theo khách: thay bước duyệt cuối (CEO) bằng gửi trực tiếp khi đủ điều kiện
+      const hdTg = (await sb.from('tt_hop_dong').select('tu_gui, tu_gui_kiem_dinh_luc').eq('org_id', await toChucHienTai()).eq('id', lc.hop_dong_id).maybeSingle()).data;
+      const cuoiNhom = nhomCho(cauHinh, ngCanh).slice(-1)[0];
+      const tuGuiNow = tiep !== DA_GUI && nhomHienTai(cauHinh, tiep) === cuoiNhom && duocTuGui(!!hdTg?.tu_gui, !!hdTg?.tu_gui_kiem_dinh_luc, ngCanh);
+      if (tuGuiNow) tiep = DA_GUI;
       const cur = nhomHienTai(cauHinh, lc.buoc) ?? 0;
       const den = tiep === DA_GUI ? null : nhomHienTai(cauHinh, tiep);
       for (const t of buocBoQua(cauHinh, cur, den, ngCanh)) await ghiNhatKy(sb, lanId, lc.vong, 'bo_qua', `Bỏ qua bước ${t}`, n.email);
-      await ghiNhatKy(sb, lanId, lc.vong, 'chuyen', tiep === DA_GUI ? 'Hết các bước duyệt, bảng kê được gửi' : `${quyetDinh === 'duyet' ? 'Duyệt' : 'Quyết định'} bởi ${buoc}, chuyển sang ${tiep}`, n.email);
+      await ghiNhatKy(sb, lanId, lc.vong, 'chuyen', tuGuiNow ? 'Tự gửi theo điều kiện của khách (không qua bước CEO)' : tiep === DA_GUI ? 'Hết các bước duyệt, bảng kê được gửi' : `${quyetDinh === 'duyet' ? 'Duyệt' : 'Quyết định'} bởi ${buoc}, chuyển sang ${tiep}`, n.email);
+      if (tuGuiNow) await baoChoPhongBan(lanId, ['ceo'] as PhongBan[], 'xu_ly', 'Bảng kê đã được tự gửi theo điều kiện tự gửi của khách.');
       if (tiep === DA_GUI) daGui = true;
       if (daGui) try { await guiBangKe(lanId); }
       catch (e) {
@@ -377,6 +383,26 @@ export async function deXuatSuaDoi(fd: FormData): Promise<KQ> {
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.de_xuat_sua_doi', entity: 'tt_sua_doi', entityId: sd.id });
     revalidatePath('/tuan-thu/sua-doi');
     return { ok: true, id: sd.id };
+  });
+}
+
+/** Bật/tắt tự gửi cho khách và xác nhận đã kiểm định. CEO hoặc người được cấp quyền quản trị. */
+export async function capNhatTuGui(id: string, bat: boolean, daKiemDinh: boolean): Promise<KQ> {
+  return lam(async () => {
+    const n = await batBuoc();
+    if (n.phong_ban !== 'ceo' && !coQuyen(n, 'quan_tri')) throw new Error('Chỉ CEO bật tự gửi cho khách.');
+    const sb = supabaseAdmin();
+    const { data: hd } = await sb.from('tt_hop_dong').select('nguong_tien').eq('org_id', await toChucHienTai()).eq('id', id).maybeSingle();
+    if (bat && hd?.nguong_tien == null) throw new Error('Đặt ngưỡng tiền của khách trước khi bật tự gửi.');
+    if (bat && !daKiemDinh) throw new Error('Phải xác nhận đã kiểm định bảng kê tự động trước khi bật.');
+    const capNhat = bat
+      ? { tu_gui: true, tu_gui_kiem_dinh_luc: new Date().toISOString(), tu_gui_kiem_dinh_boi: n.id }
+      : { tu_gui: false, tu_gui_kiem_dinh_luc: null, tu_gui_kiem_dinh_boi: null };
+    const { error } = await sb.from('tt_hop_dong').update(capNhat).eq('org_id', await toChucHienTai()).eq('id', id);
+    if (error) throw new Error(error.message);
+    await writeAudit({ actorId: n.id, actorEmail: n.email, action: bat ? 'tuan_thu.bat_tu_gui' : 'tuan_thu.tat_tu_gui', entity: 'tt_hop_dong', entityId: id });
+    revalidatePath('/tuan-thu/quy-tac', 'layout');
+    return { ok: true, thongBao: bat ? 'Đã bật tự gửi cho khách.' : 'Đã tắt tự gửi.' };
   });
 }
 

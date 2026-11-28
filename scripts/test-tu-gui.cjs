@@ -1,0 +1,15 @@
+const ts=require("/tmp/node_modules/typescript"),fs=require("fs");
+const tr=(f,o)=>{fs.writeFileSync(o,ts.transpileModule(fs.readFileSync(f,"utf8"),{compilerOptions:{module:1,target:99}}).outputText);};
+tr("/home/claude/Reconciliation/src/lib/tuan-thu/may-trang-thai.ts","/tmp/mt-tests/may-trang-thai.js");
+tr("/home/claude/Reconciliation/src/lib/tuan-thu/cau-hinh.ts","/tmp/mt-tests/cau-hinh.js");
+const M=require("/tmp/mt-tests/may-trang-thai.js");
+const ok=(c,n)=>{console.log(c?"OK  ":"FAIL",n); if(!c) process.exitCode=1;};
+const base={coCanhBaoChan:false,coNgoaiLe:false,tongTien:100,nguongTien:500};
+ok(M.duocTuGui(true,true,base),"bật + đã kiểm định + sạch + dưới ngưỡng → tự gửi");
+ok(!M.duocTuGui(false,true,base),"chưa bật → không tự gửi");
+ok(!M.duocTuGui(true,false,base),"chưa kiểm định → không tự gửi");
+ok(!M.duocTuGui(true,true,{...base,coCanhBaoChan:true}),"có cảnh báo chặn → không tự gửi");
+ok(!M.duocTuGui(true,true,{...base,coNgoaiLe:true}),"có ngoại lệ → không tự gửi");
+ok(!M.duocTuGui(true,true,{...base,tongTien:600}),"vượt ngưỡng → không tự gửi");
+ok(!M.duocTuGui(true,true,{...base,nguongTien:null}),"chưa đặt ngưỡng → không tự gửi");
+ok(M.duocTuGui(true,true,{...base,tongTien:500}),"đúng bằng ngưỡng → tự gửi");

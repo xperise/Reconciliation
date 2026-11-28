@@ -3,7 +3,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { duocLam, fmtVnd, nguoiTT, NguoiTT } from '@/lib/tuan-thu/db';
 import { PhongBan, TEN_MUC_DO, TEN_PHONG_BAN } from '@/lib/tuan-thu/types';
 import Link from 'next/link';
-import { ChotQuyTac, ChotTatCa, DocLai, KichHoat, NguongTien, SuaHopDong, SuaThamSo } from '../client';
+import { ChotQuyTac, ChotTatCa, DocLai, KichHoat, NguongTien, SuaHopDong, SuaThamSo, TuGuiKhach } from '../client';
 import { VanBan } from '../../agent-ui';
 import { KhoiMau, KhoiSuaDoi } from './khoi-them';
 import { toChucHienTai } from '@/lib/tuan-thu/to-chuc-server';
@@ -76,6 +76,7 @@ async function KhoiHopDong({ hd, n, nhomDs }: { hd: any; n: NguoiTT; nhomDs: { i
               <p className="text-[12px] mb-3">Nhóm Master Data: <b>{hd.billing_groups?.ten_nhom ?? 'chưa gắn'}</b> · Email đầu mối: {hd.billing_groups?.email_l1 ?? '—'}</p>
               {n.laAdmin && <SuaHopDong id={hd.id} groupId={hd.group_id} ccThem={hd.cc_them ?? ''} nhom={nhomDs} />}
               {(n.laAdmin || n.phong_ban === 'ceo') && <div className="mt-3"><NguongTien id={hd.id} nguong={hd.nguong_tien != null ? Number(hd.nguong_tien) : null} /></div>}
+              {(n.phong_ban === 'ceo' || n.laAdmin) && <div className="mt-3"><TuGuiKhach id={hd.id} tuGui={!!hd.tu_gui} daKiemDinh={!!hd.tu_gui_kiem_dinh_luc} /></div>}
               <div className="grid gap-4 md:grid-cols-2 mt-4">
                 <div>
                   <p className="label mb-1">Tham số máy đang áp dụng — v{hienHanh?.phien_ban} (từ {hienHanh?.hieu_luc_tu})</p>

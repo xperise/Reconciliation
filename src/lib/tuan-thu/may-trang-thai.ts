@@ -154,3 +154,15 @@ export function buocBoQua(c: QuyTrinhCauHinh, tuNhom: number, denNhom: number | 
     .filter((b) => laBuocDuyet(b) && nhomCua(b) > tuNhom && nhomCua(b) < ketThuc && !buocChay(b, ctx))
     .map((b) => `${b.key} (${b.roleKey}): không đủ điều kiện "${b.chayKhi ?? 'luon'}"`);
 }
+
+/**
+ * Bảng kê được tự gửi (không qua bước CEO) khi: khách bật tự gửi, đã được kiểm định,
+ * không có cảnh báo chặn gửi, không có ngoại lệ, và tổng tiền không vượt ngưỡng của khách.
+ * Thiếu ngưỡng thì không tự gửi (an toàn mặc định).
+ */
+export function duocTuGui(tuGui: boolean, daKiemDinh: boolean, ctx: NgCanh): boolean {
+  if (!tuGui || !daKiemDinh) return false;
+  if (ctx.coCanhBaoChan || ctx.coNgoaiLe) return false;
+  if (ctx.nguongTien == null) return false;
+  return ctx.tongTien <= ctx.nguongTien;
+}
