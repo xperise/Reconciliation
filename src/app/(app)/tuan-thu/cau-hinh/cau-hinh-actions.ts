@@ -37,6 +37,15 @@ export async function luuCauHinh(nhap: CauHinhNhap): Promise<KQ> {
 
   const toChuc = await toChucHienTai();
   const sb = supabaseAdmin();
+  // Người duyệt cụ thể phải là thành viên của đúng role của bước
+  const nguoiCanKiem = buoc.filter((b) => b.nguoi).map((b) => b.nguoi as string);
+  if (nguoiCanKiem.length) {
+    const { data: tvs } = await sb.from('tt_thanh_vien').select('user_id, phong_ban').eq('org_id', toChuc).in('user_id', nguoiCanKiem);
+    for (const b of buoc.filter((x) => x.nguoi)) {
+      if (!(tvs ?? []).some((t: any) => t.user_id === b.nguoi && t.phong_ban === b.roleKey))
+        return { ok: false, loi: [`Bước "${b.key}": người được chọn không thuộc role "${b.roleKey}".`] };
+    }
+  }
   const { data: cuRole } = await sb.from('tt_role').select('key').eq('org_id', toChuc);
   const { data: cuBuoc } = await sb.from('tt_buoc_quy_trinh').select('key').eq('org_id', toChuc);
 
