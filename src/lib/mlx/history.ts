@@ -67,8 +67,10 @@ export async function findRelated(hashes: string[], kys: string[]): Promise<Stat
   const sb = getSupabase();
   const cols = 'id, customer_id, ten_cong_ty, ten_viet_tat, ky, file_name, storage_path, source_file_name, source_hash, row_count, total_amount, payable_amount, created_by_email, created_at';
   const out = new Map<string, StatementRecord>();
-  if (hashes.length) {
-    const { data, error } = await sb.from(TABLE).select(cols).in('source_hash', hashes);
+  // Chia nhỏ danh sách hash: URL quá dài (hàng trăm file) làm máy chủ trả lỗi "Bad Request"
+  const LO = 100;
+  for (let i = 0; i < hashes.length; i += LO) {
+    const { data, error } = await sb.from(TABLE).select(cols).in('source_hash', hashes.slice(i, i + LO));
     check(error);
     (data ?? []).forEach((r: Record<string, unknown>) => out.set(r.id as string, toRecord(r)));
   }
