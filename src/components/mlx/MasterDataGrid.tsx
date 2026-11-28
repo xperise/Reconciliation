@@ -72,6 +72,7 @@ const snapshot = (rows: GridRow[]) =>
   JSON.stringify(rows.filter((r) => !isBlank(r)).map(({ _k, ...rest }) => rest));
 
 /** Khoá so sánh một dòng (bỏ _k) — dùng để biết dòng nào đã đổi so với lúc tải */
+const SHOW_MAX = 200;
 const rowKey = (r: GridRow) => { const { _k, ...rest } = r; return JSON.stringify(rest); };
 
 export default function MasterDataGrid() {
@@ -317,12 +318,14 @@ export default function MasterDataGrid() {
 
   const q = companyKey(search);
   const ORD: Record<CkKind, number> = { '': 0, CK4: 1, CK5: 2, DB: 3, SGS: 4, KHAC: 5 };
-  const visible = rows
+  const visibleAll = rows
     .map((r, i) => ({ r, i, ck: ckOf(r.chiet_khau) }))
     .filter(({ r }) => !q || FIELDS.some((f) => companyKey(r[f.key]).includes(q)))
     .filter(({ r, ck }) => !fCk || (fCk === 'NONE' ? !isBlank(r) && !ck.kind : ck.kind === fCk))
     .filter(({ r }) => !fData || (fData === 'dup' ? dupOf.has(r._k) : fData === 'new' ? !r.id && !isBlank(r) : fData === 'nohd' ? !r.ma_hop_dong.trim() : fData === 'nokh' ? !r.ma_khach_hang.trim() : fData === 'nomst' ? !r.mst.trim() : fData === 'noaddr' ? !r.dia_chi.trim() : fData === 'noshort' ? !r.ten_viet_tat.trim() : true) && !isBlank(r))
     .sort((a, b) => !sortCk ? ((a.r.id ? 1 : 0) - (b.r.id ? 1 : 0) || a.i - b.i) : sortCk * (ORD[a.ck.kind] - ORD[b.ck.kind] || (a.ck.kind === 'DB' ? (parsePct(a.ck.x) || 0) - (parsePct(b.ck.x) || 0) : 0)) || a.i - b.i);
+  // Chỉ vẽ một phần dòng để màn hình không bị nặng; tìm kiếm/lọc để thu hẹp
+  const visible = visibleAll.slice(0, SHOW_MAX);
   const demLoai = (k: CkKind | 'NONE') => rows.filter((r) => !isBlank(r) && (k === 'NONE' ? !ckOf(r.chiet_khau).kind : ckOf(r.chiet_khau).kind === k)).length;
 
   /* ---- Template & upload master data (cùng cột với bảng) ---- */

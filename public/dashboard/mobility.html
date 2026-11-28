@@ -3741,6 +3741,8 @@ function bindDrawer() {
         S.alias[cname(k)] = nk; S.tx.forEach(t => { if (t[2] === k) t[2] = nk; }); for (const [a2, b2] of Object.entries(S.merge)) if (b2 === k) S.merge[a2] = nk;
         const art = window.claude ? await claude.use('artifact') : null; if (!art) throw new Error('Chỉ đổi mã được trong web Reconciliation');
         m('Đang lưu…'); CR.open = nk; S.meta.updated = new Date().toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'}); await art.publish(docHtml());
+        // Đồng bộ mã sang master data MLX (lỗi không chặn việc đổi mã)
+        try { await fetch('/api/dashboard/mobility/mlx-rename', {method: 'POST', headers: {'content-type': 'application/json'}, credentials: 'same-origin', body: JSON.stringify({oldKey: k, newKey: nk})}); } catch (e) {}
         m('Đã đổi số hợp đồng. Dashboard đang tải lại…');
       } catch (e) { b.disabled = false; m('Chưa đổi được số hợp đồng: ' + ((e && (e.message || e.code)) || e)); }
       return;
