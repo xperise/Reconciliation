@@ -21,8 +21,8 @@ export default async function Page({ searchParams }: { searchParams: { tab?: str
   const org = await toChucHienTai();
   const cau = await docCauHinhQuyTrinh(org);
   const { data: tvRows } = await supabaseAdmin().from('tt_thanh_vien').select('user_id, phong_ban, profiles(email, full_name)').eq('org_id', org);
-  const { data: loaiRows } = await supabaseAdmin().from('tt_quorum_loai').select('loai, ten, buoc_keys').eq('org_id', org).order('loai');
-  const loai = ((loaiRows ?? []) as any[]).map((r) => ({ loai: r.loai as string, ten: r.ten as string, buocKeys: (r.buoc_keys ?? []) as string[] }));
+  const { data: loaiRows } = await supabaseAdmin().from('tt_quorum_loai').select('loai, ten, buoc_keys, can_duyet').eq('org_id', org).order('loai');
+  const loai = ((loaiRows ?? []) as any[]).map((r) => ({ loai: r.loai as string, ten: r.ten as string, buocKeys: (r.buoc_keys ?? []) as string[], canDuyet: r.can_duyet !== false }));
   const thanhVien = ((tvRows ?? []) as any[]).map((t) => ({ id: t.user_id as string, role: t.phong_ban as string, ten: (t.profiles?.full_name || t.profiles?.email || t.user_id) as string }));
   const tabs = [['quy-trinh', 'Vai trò và bước duyệt'], ['thu-vien', 'Thư viện mẫu'], ['thanh-vien', 'Thành viên và quyền']] as const;
   return (

@@ -8,7 +8,7 @@ import { laBuocCuoiDuyet } from '@/lib/tuan-thu/cau-hinh';
 import { docCauHinhQuyTrinh } from '@/lib/tuan-thu/cau-hinh-db';
 import { TEN_DICH_VU, TEN_MUC_DO, TEN_PHONG_BAN, PhongBan, LoaiDichVu } from '@/lib/tuan-thu/types';
 import { thongTinGui } from '../../actions';
-import { ChonBan, Duyet, GiaiTrinh, GoChan, KiemSoat, TaiLai, XacNhanMot, XacNhanTatCa } from './panels';
+import { BoQua, ChonBan, Duyet, GiaiTrinh, GoChan, KiemSoat, TaiLai, XacNhanMot, XacNhanTatCa } from './panels';
 import { GoiYGiaiTrinh, RaSoat } from '../../agent-ui';
 import { toChucHienTai } from '@/lib/tuan-thu/to-chuc-server';
 
@@ -160,7 +160,7 @@ export default async function Page({ params }: { params: { id: string } }) {
               <td className="text-[12px]">{c.noi_dung}{c.dong?.length ? <div className="text-[11px] text-[var(--ink-3)]">Dòng raw: {c.dong.slice(0, 40).join(', ')}{c.dong.length > 40 ? '…' : ''}</div> : null}</td>
               <td className="text-right mono">{c.so_tien !== null ? fmtVnd(c.so_tien) : ''}</td>
               <td>{c.muc_do === 'theo_doi' ? <span className="text-[11px] text-[var(--ink-3)]">Không cần</span>
-                : <GiaiTrinh id={c.id} dau={c.giai_trinh ?? ''} sua={suaKeToan} />}</td>
+                : <><GiaiTrinh id={c.id} dau={c.giai_trinh ?? ''} sua={suaKeToan} />{suaKeToan && c.muc_do === 'giai_trinh' && !c.giai_trinh && <div className="mt-1"><BoQua id={c.id} daBoQua={!!c.bo_qua} /></div>}{c.bo_qua && <div className="text-[11px] text-[var(--ink-3)] mt-1">Đã bỏ qua: {c.bo_qua_ly_do}</div>}</>}</td>
             </tr>))}</tbody></table>
       </section>
 

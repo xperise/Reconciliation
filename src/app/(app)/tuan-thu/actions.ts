@@ -178,7 +178,7 @@ export async function duyetBuoc(lanId: string, buoc: BuocDuyet, quyetDinh: 'duye
       sb.from('tt_duyet').select('buoc, quyet_dinh').eq('org_id', await toChucHienTai()).eq('lan_chay_id', lanId).eq('vong', lc.vong),
     ]);
     const chan = await dsDangChan(lanId);
-    const dx = deXuatBuoc(buoc, (cb ?? []) as any, (td ?? []) as any, (dy ?? []) as any, chan,
+    const dx = deXuatBuoc(buoc, ((cb ?? []) as any[]).filter((x) => !x.bo_qua) as any, (td ?? []) as any, (dy ?? []) as any, chan,
       { chuaChonBan: lc.che_do === 'da_format' && !lc.ban_gui, banGui: lc.ban_gui }, cauHinh);
     // Điều kiện cứng: không duyệt được khi còn việc bắt buộc (chỉ cho phép ghi đè ở bước demand/supply bằng ý kiến)
     if (quyetDinh === 'duyet' && dx.ket_luan === 'tra_ve' && coDuyet(cauHinh, buoc))
@@ -381,6 +381,15 @@ export async function deXuatSuaDoi(fd: FormData): Promise<KQ> {
     if (error || !sd) throw new Error(error?.message ?? 'Không lưu được đề xuất.');
     await sb.from('tt_sua_doi_duyet').insert(themOrg({ sua_doi_id: sd.id, phong_ban: pb, quyet_dinh: 'dong_y', y_kien: 'Phòng đề xuất', nguoi: n.id }, await toChucHienTai()));
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.de_xuat_sua_doi', entity: 'tt_sua_doi', entityId: sd.id });
+    // Loại không cần duyệt: áp dụng ngay, không qua quorum (người sửa đã là người có quyền ở phòng này)
+    const { data: loaiCan } = await sb.from('tt_quorum_loai').select('can_duyet').eq('org_id', await toChucHienTai()).eq('loai', loaiChon).maybeSingle();
+    if (loaiCan && loaiCan.can_duyet === false) {
+      const { data: sdFull } = await sb.from('tt_sua_doi').select('*').eq('org_id', await toChucHienTai()).eq('id', sd.id).single();
+      if (sdFull) await apDungSuaDoi(sb, sd.id, sdFull);
+      await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.sua_truc_tiep', entity: 'tt_sua_doi', entityId: sd.id, after: { loai: loaiChon, ma_quy_tac: ma } });
+      revalidatePath('/tuan-thu/sua-doi'); revalidatePath('/tuan-thu/quy-tac', 'layout');
+      return { ok: true, id: sd.id, thongBao: 'Loại thay đổi này không cần duyệt: đã áp dụng ngay.' };
+    }
     revalidatePath('/tuan-thu/sua-doi');
     return { ok: true, id: sd.id };
   });
@@ -403,6 +412,25 @@ export async function capNhatTuGui(id: string, bat: boolean, daKiemDinh: boolean
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: bat ? 'tuan_thu.bat_tu_gui' : 'tuan_thu.tat_tu_gui', entity: 'tt_hop_dong', entityId: id });
     revalidatePath('/tuan-thu/quy-tac', 'layout');
     return { ok: true, thongBao: bat ? 'Đã bật tự gửi cho khách.' : 'Đã tắt tự gửi.' };
+  });
+}
+
+/** Kế toán bỏ qua một cảnh báo mức giải trình, có lý do. Cảnh báo chặn gửi không bỏ qua được. */
+export async function boQuaCanhBao(canhBaoId: number, lyDo: string): Promise<KQ> {
+  return lam(async () => {
+    const n = await batBuoc('ke_toan');
+    if (!lyDo.trim()) throw new Error('Bỏ qua phải ghi lý do.');
+    const sb = supabaseAdmin();
+    const org = await toChucHienTai();
+    const { data: cb } = await sb.from('tt_canh_bao').select('lan_chay_id, muc_do, ma_quy_tac, noi_dung').eq('org_id', org).eq('id', canhBaoId).single();
+    if (!cb) throw new Error('Không tìm thấy cảnh báo.');
+    if (cb.muc_do === 'chan_gui') throw new Error('Cảnh báo chặn gửi không bỏ qua được: sửa dữ liệu, giải trình, hoặc nhờ người chặn gỡ.');
+    if (cb.muc_do !== 'giai_trinh') throw new Error('Cảnh báo này không cần bỏ qua.');
+    await sb.from('tt_canh_bao').update({ bo_qua: true, bo_qua_ly_do: lyDo.trim(), bo_qua_boi: n.id, bo_qua_luc: new Date().toISOString() }).eq('org_id', org).eq('id', canhBaoId);
+    await ghiNhatKy(sb, cb.lan_chay_id, null, 'bo_qua_canh_bao', `Bỏ qua cảnh báo ${cb.ma_quy_tac}: ${lyDo.trim()}`, n.email);
+    await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.bo_qua_canh_bao', entity: 'tt_canh_bao', entityId: String(canhBaoId), after: { ly_do: lyDo.trim() } });
+    revalidatePath(`/tuan-thu/chay/${cb.lan_chay_id}`);
+    return { ok: true, thongBao: 'Đã bỏ qua cảnh báo, ghi nhật ký.' };
   });
 }
 
@@ -430,6 +458,21 @@ async function ngCanhLanChay(sb: ReturnType<typeof supabaseAdmin>, lanId: string
   };
 }
 
+/** Áp dụng một sửa đổi đã được duyệt (hoặc sửa trực tiếp không cần duyệt): ghi phiên bản tham số và cập nhật quy tắc. */
+async function apDungSuaDoi(sb: ReturnType<typeof supabaseAdmin>, id: string, sd: any) {
+  const org = await toChucHienTai();
+  const { data: cuoi } = await sb.from('tt_bo_quy_tac').select('*').eq('org_id', org).eq('hop_dong_id', sd.hop_dong_id).order('phien_ban', { ascending: false }).limit(1).single();
+  if (sd.thay_doi_tham_so) {
+    await sb.from('tt_bo_quy_tac').insert(themOrg({ hop_dong_id: sd.hop_dong_id, phien_ban: (cuoi?.phien_ban ?? 0) + 1,
+      tham_so: gopSau(cuoi?.tham_so ?? {}, sd.thay_doi_tham_so), hieu_luc_tu: sd.hieu_luc_tu,
+      ghi_chu: `SĐ-${String(sd.so).padStart(2, '0')} (${sd.ma_quy_tac}): ${sd.noi_dung_moi}` }, org));
+  }
+  await sb.from('tt_quy_tac').update({ noi_dung: sd.noi_dung_moi, ...(sd.gia_tri_moi ? { gia_tri: sd.gia_tri_moi } : {}),
+    can_cu: `SĐ-${String(sd.so).padStart(2, '0')} hiệu lực từ ${sd.hieu_luc_tu}${sd.can_cu ? ` — ${sd.can_cu}` : ''}`, chot: 'dong_y' }).eq('org_id', org)
+    .eq('hop_dong_id', sd.hop_dong_id).eq('ma', sd.ma_quy_tac);
+  await sb.from('tt_sua_doi').update({ trang_thai: 'hieu_luc' }).eq('org_id', org).eq('id', id);
+}
+
 /** Thành viên của mỗi role trong tổ chức hiện tại (cho quorum theo chế độ "tất cả" và "đa số"). */
 async function thanhVienTheoRole(sb: ReturnType<typeof supabaseAdmin>): Promise<Record<string, string[]>> {
   const { data } = await sb.from('tt_thanh_vien').select('user_id, phong_ban').eq('org_id', await toChucHienTai());
@@ -455,17 +498,7 @@ export async function duyetSuaDoi(id: string, pb: PhongBan, quyetDinh: 'dong_y' 
       await sb.from('tt_sua_doi').update({ trang_thai: 'tu_choi' }).eq('org_id', await toChucHienTai()).eq('id', id);
       thongBao = 'Đề xuất bị từ chối.';
     } else if (quorumSuaDoiDat(await docCauHinhQuyTrinh(), ((ds ?? []) as any[]).filter((d) => d.quyet_dinh === 'dong_y').map((d) => ({ roleKey: d.phong_ban, nguoi: d.nguoi })), await thanhVienTheoRole(sb), buocKeys)) {
-      // Đủ quorum (mọi role trong cấu hình đồng ý; mặc định 4/4): áp lên bộ tham số (phiên bản mới) và cập nhật quy tắc dạng chữ
-      const { data: cuoi } = await sb.from('tt_bo_quy_tac').select('*').eq('org_id', await toChucHienTai()).eq('hop_dong_id', sd.hop_dong_id).order('phien_ban', { ascending: false }).limit(1).single();
-      if (sd.thay_doi_tham_so) {
-        await sb.from('tt_bo_quy_tac').insert(themOrg({ hop_dong_id: sd.hop_dong_id, phien_ban: (cuoi?.phien_ban ?? 0) + 1,
-          tham_so: gopSau(cuoi?.tham_so ?? {}, sd.thay_doi_tham_so), hieu_luc_tu: sd.hieu_luc_tu,
-          ghi_chu: `SĐ-${String(sd.so).padStart(2, '0')} (${sd.ma_quy_tac}): ${sd.noi_dung_moi}` }, await toChucHienTai()));
-      }
-      await sb.from('tt_quy_tac').update({ noi_dung: sd.noi_dung_moi, ...(sd.gia_tri_moi ? { gia_tri: sd.gia_tri_moi } : {}),
-        can_cu: `SĐ-${String(sd.so).padStart(2, '0')} hiệu lực từ ${sd.hieu_luc_tu}${sd.can_cu ? ` — ${sd.can_cu}` : ''}`, chot: 'dong_y' }).eq('org_id', await toChucHienTai())
-        .eq('hop_dong_id', sd.hop_dong_id).eq('ma', sd.ma_quy_tac);
-      await sb.from('tt_sua_doi').update({ trang_thai: 'hieu_luc' }).eq('org_id', await toChucHienTai()).eq('id', id);
+      await apDungSuaDoi(sb, id, sd);
       thongBao = 'Đủ quorum head đồng ý — sửa đổi đã có hiệu lực.';
     }
     await writeAudit({ actorId: n.id, actorEmail: n.email, action: `tuan_thu.sua_doi_${quyetDinh}`, entity: 'tt_sua_doi', entityId: id, after: { pb, yKien } });

@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { FormHanhDong, KhoiDuyet, Nut, OGhi } from '../../ui';
-import { chanLanChay, chonBanGui, duyetBuoc, goChan, luuGiaiTrinh, taiLaiRaw, xacNhanThayDoi } from '../../actions';
+import { boQuaCanhBao, chanLanChay, chonBanGui, duyetBuoc, goChan, luuGiaiTrinh, taiLaiRaw, xacNhanThayDoi } from '../../actions';
 import { taiLenTrucTiep } from '../../tai-len';
 
 async function taiLaiQuaStorage(fd: FormData) {
@@ -21,6 +21,10 @@ export function XacNhanMot({ lanId, id }: { lanId: string; id: number }) {
 export function GiaiTrinh({ id, dau, sua }: { id: number; dau: string; sua: boolean }) {
   if (!sua) return <span className="text-[12px]">{dau || <i className="text-[var(--ink-3)]">Chưa có giải trình</i>}</span>;
   return <OGhi dau={dau} luu={(t) => luuGiaiTrinh(id, t)} placeholder="Giải trình của kế toán (hoặc: đã sửa raw và tải lại)" />;
+}
+export function BoQua({ id, daBoQua }: { id: number; daBoQua: boolean }) {
+  if (daBoQua) return <span className="text-[12px] text-[var(--ink-3)]">Đã bỏ qua</span>;
+  return <OGhi dau="" luu={(t) => boQuaCanhBao(id, t)} nhan="Bỏ qua" placeholder="Lý do bỏ qua (bắt buộc)" />;
 }
 export function TaiLai({ lanId, daFormat }: { lanId: string; daFormat?: boolean }) {
   return (

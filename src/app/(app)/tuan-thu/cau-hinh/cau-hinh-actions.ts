@@ -66,7 +66,7 @@ export async function luuCauHinh(nhap: CauHinhNhap): Promise<KQ> {
 }
 
 /** Lưu quorum sửa đổi theo loại thay đổi: mỗi loại chọn những bước tham gia. */
-export async function luuQuorumLoai(rows: { loai: string; buocKeys: string[] }[]): Promise<KQ> {
+export async function luuQuorumLoai(rows: { loai: string; buocKeys: string[]; canDuyet: boolean }[]): Promise<KQ> {
   const n = await nguoiTT();
   if (!n || !coQuyen(n, 'quan_tri')) return { ok: false, loi: ['Chỉ admin hoặc người được cấp quyền quản trị mới sửa quorum.'] };
   const toChuc = await toChucHienTai();
@@ -74,10 +74,10 @@ export async function luuQuorumLoai(rows: { loai: string; buocKeys: string[] }[]
   const { data: buoc } = await sb.from('tt_buoc_quy_trinh').select('key').eq('org_id', toChuc);
   const cacBuoc = new Set((buoc ?? []).map((b: any) => b.key));
   for (const r of rows) {
-    if (!r.buocKeys.length) return { ok: false, loi: [`Loại "${r.loai}" chưa chọn bước nào tham gia quorum. Không ai có thể thông qua đề xuất loại này.`] };
+    if (r.canDuyet && !r.buocKeys.length) return { ok: false, loi: [`Loại "${r.loai}" chưa chọn bước nào tham gia quorum. Không ai có thể thông qua đề xuất loại này.`] };
     for (const k of r.buocKeys) if (!cacBuoc.has(k)) return { ok: false, loi: [`Bước "${k}" không còn trong cấu hình.`] };
   }
-  const { error } = await sb.from('tt_quorum_loai').upsert(rows.map((r) => themOrg({ loai: r.loai, buoc_keys: r.buocKeys }, toChuc)), { onConflict: 'org_id,loai' });
+  const { error } = await sb.from('tt_quorum_loai').upsert(rows.map((r) => themOrg({ loai: r.loai, buoc_keys: r.buocKeys, can_duyet: r.canDuyet }, toChuc)), { onConflict: 'org_id,loai' });
   if (error) return { ok: false, loi: [error.message] };
   await writeAudit({ actorId: n.id, actorEmail: n.email, action: 'tuan_thu.luu_quorum_loai', entity: 'tt_quorum_loai', entityId: toChuc, after: { rows } });
   revalidatePath('/tuan-thu/cau-hinh');
