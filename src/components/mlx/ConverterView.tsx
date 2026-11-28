@@ -395,8 +395,24 @@ export default function ConverterView() {
       const ExcelJS = await loadExcelJS();
       const outputs: { fileName: string; buffer: ArrayBuffer }[] = [];
 
+      // Bổ sung MST / địa chỉ còn trống trong master data từ file CMS (dùng luôn cho bảng kê và lưu ngược về master data)
+      const fill = new Map<string, MlxCustomer>();
       for (const g of sapXuat) {
-        const customer = byId.get(g.customerId)!;
+        const c = byId.get(g.customerId); if (!c) continue;
+        const cms = g.files.map((f) => f.parsed).filter((p) => p && p.source === 'CMS');
+        const mst = cms.map((p) => (p!.mstFromFile || '').trim()).find(Boolean) || '', addr = cms.map((p) => (p!.addrFromFile || '').trim()).find(Boolean) || '';
+        const need = { mst: !c.mst.trim() && mst, dc: !c.dia_chi.trim() && addr };
+        if (need.mst || need.dc) fill.set(c.id as string, { ...c, mst: need.mst ? mst : c.mst, dia_chi: need.dc ? addr : c.dia_chi });
+      }
+      let fillMsg = '';
+      if (fill.size) {
+        try { await saveCustomers([...fill.values()], []); setCustomers((cs) => cs.map((c) => fill.get(c.id as string) || c));
+          fillMsg = ` Đã bổ sung MST / địa chỉ còn thiếu cho ${fill.size} khách vào master data (lấy từ file CMS).`; }
+        catch (e) { fillMsg = ` Chưa bổ sung được MST / địa chỉ vào master data: ${(e as Error).message}`; }
+      }
+
+      for (const g of sapXuat) {
+        const customer = fill.get(g.customerId) || byId.get(g.customerId)!;
         const out = await buildStatement(ExcelJS, { customer, period: g.period, rows: g.rows, sources: g.sources, discount: g.disc });
         try {
           await saveStatement(
@@ -452,9 +468,9 @@ export default function ConverterView() {
         saveErrors.length
           ? {
               type: 'err',
-              text: `Đã tải ${outputs.length} bảng kê nhưng ${saveErrors.length} bảng chưa lưu được vào lịch sử: ${saveErrors.join(' · ')}`,
+              text: `Đã tải ${outputs.length} bảng kê nhưng ${saveErrors.length} bảng chưa lưu được vào lịch sử: ${saveErrors.join(' · ')}.${fillMsg}`,
             }
-          : { type: 'ok', text: `Đã tải ${outputs.length} bảng kê và lưu vào Lịch sử bảng kê (${kyText}).` },
+          : { type: 'ok', text: `Đã tải ${outputs.length} bảng kê và lưu vào Lịch sử bảng kê (${kyText}).${fillMsg}` },
       );
     } catch (e) {
       setMessage({ type: 'err', text: `Lỗi khi tạo file: ${(e as Error).message}` });

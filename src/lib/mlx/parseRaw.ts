@@ -113,6 +113,7 @@ function readCmsHeader(ws: ExcelJS.Worksheet, headerRow: number) {
   let code = '';
   let name = '';
   let mst = '';
+  let addr = '';
 
   let dongKy = 0;
   for (let r = 1; r < headerRow; r++) {
@@ -141,11 +142,13 @@ function readCmsHeader(ws: ExcelJS.Worksheet, headerRow: number) {
       const m = /MST\s*:?\s*([0-9][0-9-]*)/i.exec(t);
       if (m) {
         mst = m[1];
+        // phần trước "MST" là địa chỉ: bỏ nhãn "Địa chỉ:" và dấu nối cuối
+        addr = t.slice(0, m.index).replace(/^\s*(địa chỉ|dia chi|address)\s*:?\s*/i, '').replace(/[\s,;\-–|]+$/, '').trim();
         break;
       }
     }
   }
-  return { period, code, name, mst };
+  return { period, code, name, mst, addr };
 }
 
 /**
@@ -280,6 +283,7 @@ export async function parseRawFile(
       companyFromFile: cms.name || dauTenFile?.[2] || tenTuFile,
       codeFromFile: cms.code || dauTenFile?.[1] || '',
       mstFromFile: cms.mst,
+      addrFromFile: cms.addr,
       periodFromFile: cms.period ?? kyTuFile,
       rows: giuLai,
       zeroRows,

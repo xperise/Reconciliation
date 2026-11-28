@@ -57,6 +57,8 @@ export interface ParsedRawFile {
   codeFromFile: string;
   /** MST đọc được trong file CMS */
   mstFromFile: string;
+  /** Địa chỉ khách đọc được trong file CMS (dòng địa chỉ kèm MST) */
+  addrFromFile?: string;
   /** Kỳ đọc được (null nếu không xác định được) */
   periodFromFile: Period | null;
   rows: RawRow[];
