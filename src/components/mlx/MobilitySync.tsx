@@ -42,7 +42,7 @@ export async function loadMobility(): Promise<Mob[]> {
 
 export default function MobilitySync({ onApplied }: { onApplied: () => void }) {
   const [busy, setBusy] = useState(''), [err, setErr] = useState(''), [msg, setMsg] = useState('');
-  const [R, setR] = useState<{ same: number; pairs: Pair[]; mobOnly: Mob[]; mlxOnly: MlxCustomer[] } | null>(null);
+  const [R, setR] = useState<{ same: number; pairs: Pair[]; mobOnly: Mob[]; mlxOnly: MlxCustomer[]; skipped: Mob[] } | null>(null);
   const [pick, setPick] = useState<Record<string, 'mlx' | 'mob'>>({});   // `${id}|${fld}` → bên được chọn
   const [add, setAdd] = useState<Record<string, boolean>>({});
   const [show, setShow] = useState<'diff' | 'mob' | 'mlx'>('diff');
@@ -67,11 +67,15 @@ export default function MobilitySync({ onApplied }: { onApplied: () => void }) {
         if ((m.address || '').trim() !== (c.dia_chi || '').trim() && (m.address || c.dia_chi)) diff.dc = { mlx: c.dia_chi, mob: m.address };
         if (Object.keys(diff).length) pairs.push({ c, m, by, diff }); else same++;
       }
-      const mobOnly = M.filter((m) => !used.has(m.key) && (m.tx > 0 || m.cards > 0 || m.signed)).sort((a, b) => b.tx - a.tx || a.name.localeCompare(b.name, 'vi'));
+      // toàn bộ khách Mobility chưa có ở MLX (không phân biệt đã có giao dịch); trùng tên với khách MLX hoặc với nhau thì chỉ lấy 1 (MLX không cho 2 khách cùng tên)
+      const mlxNames = new Set(C.map((c) => c.ten_cong_ty.trim().toLowerCase())), seenN = new Set<string>();
+      const mobAll = M.filter((m) => !used.has(m.key)).sort((a, b) => b.tx - a.tx || b.cards - a.cards || a.name.localeCompare(b.name, 'vi'));
+      const mobOnly: Mob[] = [], skipped: Mob[] = [];
+      for (const m of mobAll) { const n = m.name.trim().toLowerCase(); if (mlxNames.has(n) || seenN.has(n)) { skipped.push(m); continue; } seenN.add(n); mobOnly.push(m); }
       // mặc định: MLX là chuẩn; ô MLX trống thì lấy Mobility
       const P: Record<string, 'mlx' | 'mob'> = {};
       pairs.forEach((p) => (Object.keys(p.diff) as Fld[]).forEach((f) => { P[`${p.c.id}|${f}`] = p.diff[f]!.mlx.trim() ? 'mlx' : 'mob'; }));
-      setPick(P); setAdd(Object.fromEntries(mobOnly.map((m) => [m.key, m.tx > 0]))); setR({ same, pairs, mobOnly, mlxOnly });
+      setPick(P); setAdd(Object.fromEntries(mobOnly.map((m) => [m.key, true]))); setR({ same, pairs, mobOnly, mlxOnly, skipped });
     } catch (e) { setErr((e as Error).message); } finally { setBusy(''); }
   }
 
@@ -91,7 +95,8 @@ export default function MobilitySync({ onApplied }: { onApplied: () => void }) {
           else { if (f === 'ten' && d.mlx) names.push({ key: p.m.key, name: d.mlx }); if (f === 'mst' && d.mlx) co.mst = d.mlx; if (f === 'dc' && d.mlx) co.address = d.mlx; } }
         if (ch) upd.push(c); if (co.mst || co.address) comp.push(co); }
       const news: MlxCustomer[] = R.mobOnly.filter((m) => add[m.key]).map((m) => ({ ma_khach_hang: '', ma_hop_dong: /^(XPAY-|MOI-)/.test(m.key) ? '' : m.key, ten_cong_ty: m.name.trim(), ten_viet_tat: '', dia_chi: m.address || '', mst: m.mst || '', chiet_khau: 0, loai_ck: '' }));
-      if (upd.length || news.length) await saveCustomers([...upd, ...news], []);
+      if (upd.length) await saveCustomers(upd, []);
+      for (let i = 0; i < news.length; i += 500) { setBusy(`Đang thêm khách vào MLX ${Math.min(i + 500, news.length)}/${news.length}…`); await saveCustomers(news.slice(i, i + 500), []); }
       if (comp.length) { const r = await J('/api/dashboard/mobility/cards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ companies: comp, cards: [], deletes: [], dry: false }) }); if ((r.errors || []).length) throw new Error('Mobility: ' + r.errors.join('; ')); }
       const byB: Record<string, Record<string, { name: string }>> = {}; names.forEach((n) => { (byB[bucketOf(n.key)] = byB[bucketOf(n.key)] || {})[n.key] = { name: n.name }; });
       for (const [b, data] of Object.entries(byB)) await J('/api/dashboard/mobility/db', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'update', path: 'crm/' + b, data }) });
@@ -135,8 +140,8 @@ export default function MobilitySync({ onApplied }: { onApplied: () => void }) {
           <tbody>{R.pairs.map((p) => <tr key={p.c.id}><td style={{ minWidth: 200 }}><b>{p.c.ten_viet_tat || p.c.ten_cong_ty}</b><div className={s.note}>HĐ {p.c.ma_hop_dong || '—'} · Mobility {p.m.key}</div></td><td>{p.by}</td>{(['ten', 'mst', 'dc'] as Fld[]).map((f) => <Fragment key={f}>{cell(p, f)}</Fragment>)}</tr>)}</tbody></table></div>
           : <div className={s.note}>Không có khách nào lệch thông tin.</div>)}
         {show === 'mob' && (R.mobOnly.length ? <div className={s.tableWrap} style={{ maxHeight: 520, overflow: 'auto' }}><table className={s.table}><thead><tr><th><input type="checkbox" checked={R.mobOnly.every((m) => add[m.key])} onChange={(e) => setAdd(Object.fromEntries(R.mobOnly.map((m) => [m.key, e.target.checked])))} /></th><th>Mã HĐ (Mobility)</th><th>Tên</th><th>MST</th><th>Địa chỉ</th><th>Giao dịch XPAY</th><th>Thẻ</th><th>Đã ký</th></tr></thead>
-          <tbody>{R.mobOnly.map((m) => <tr key={m.key}><td><input type="checkbox" checked={!!add[m.key]} onChange={(e) => setAdd((x) => ({ ...x, [m.key]: e.target.checked }))} /></td><td>{m.key}</td><td>{m.name}</td><td>{m.mst || '—'}</td><td style={{ maxWidth: 260 }}>{m.address || '—'}</td><td>{m.tx || '—'}</td><td>{m.cards || '—'}</td><td>{m.signed ? '✓' : '—'}</td></tr>)}</tbody></table>
-          <div className={s.note} style={{ padding: 8 }}>Chỉ liệt kê khách đã có giao dịch XPAY, có thẻ hoặc đã ký. Mặc định tick sẵn khách đã có giao dịch. Mã tạm XPAY- / MOI- thêm vào MLX với mã hợp đồng trống.</div></div>
+          <tbody>{R.mobOnly.slice(0, 500).map((m) => <tr key={m.key}><td><input type="checkbox" checked={!!add[m.key]} onChange={(e) => setAdd((x) => ({ ...x, [m.key]: e.target.checked }))} /></td><td>{m.key}</td><td>{m.name}</td><td>{m.mst || '—'}</td><td style={{ maxWidth: 260 }}>{m.address || '—'}</td><td>{m.tx || '—'}</td><td>{m.cards || '—'}</td><td>{m.signed ? '✓' : '—'}</td></tr>)}</tbody></table>
+          <div className={s.note} style={{ padding: 8 }}>Toàn bộ khách ở Mobility chưa có ở MLX (kể cả chưa có giao dịch), mặc định tick hết — đã chọn <b>{Object.values(add).filter(Boolean).length}</b>/{R.mobOnly.length}. {R.mobOnly.length > 500 ? `Bảng chỉ hiện 500 dòng đầu (xếp theo số giao dịch); các dòng còn lại vẫn được thêm theo ô tick ở đầu bảng. ` : ''}Mã tạm XPAY- / MOI- thêm vào MLX với mã hợp đồng trống.{R.skipped.length ? ` Bỏ qua ${R.skipped.length} khách trùng tên với khách đã có ở MLX hoặc trùng tên nhau (MLX không cho 2 khách cùng tên): ${R.skipped.slice(0, 8).map((m) => m.name + ' (' + m.key + ')').join('; ')}${R.skipped.length > 8 ? '…' : ''}` : ''}</div></div>
           : <div className={s.note}>Không có khách nào cần thêm.</div>)}
         {show === 'mlx' && (R.mlxOnly.length ? <div className={s.tableWrap} style={{ maxHeight: 520, overflow: 'auto' }}><table className={s.table}><thead><tr><th>Mã HĐ</th><th>Tên công ty</th><th>MST</th><th>Loại CK</th></tr></thead>
           <tbody>{R.mlxOnly.map((c) => <tr key={c.id}><td>{c.ma_hop_dong || '—'}</td><td>{c.ten_cong_ty}</td><td>{c.mst || '—'}</td><td>{c.loai_ck || '—'}</td></tr>)}</tbody></table>

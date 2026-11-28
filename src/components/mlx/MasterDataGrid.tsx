@@ -83,6 +83,8 @@ export default function MasterDataGrid() {
   const [sortCk, setSortCk] = useState<0 | 1 | -1>(0);
   const [upMsg, setUpMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [fData, setFData] = useState('');
+  /** số dòng hiển thị (master data có thể hàng nghìn khách) */
+  const [lim, setLim] = useState(300);
   /** dòng đã gộp (bị xoá) → dòng giữ lại: chuyển phần ghi nhớ tên sang dòng giữ lại khi lưu */
   const [mergedTo, setMergedTo] = useState<{ from: string; to: string; name: string }[]>([]);
   const [weakOk, setWeakOk] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem('mlx_dup_ok') || '[]'); } catch { return []; } });
@@ -272,7 +274,7 @@ export default function MasterDataGrid() {
     .filter(({ r }) => !q || FIELDS.some((f) => companyKey(r[f.key]).includes(q)))
     .filter(({ r, ck }) => !fCk || (fCk === 'NONE' ? !isBlank(r) && !ck.kind : ck.kind === fCk))
     .filter(({ r }) => !fData || (fData === 'dup' ? dupOf.has(r._k) : fData === 'new' ? !r.id && !isBlank(r) : fData === 'nohd' ? !r.ma_hop_dong.trim() : fData === 'nokh' ? !r.ma_khach_hang.trim() : fData === 'nomst' ? !r.mst.trim() : fData === 'noaddr' ? !r.dia_chi.trim() : fData === 'noshort' ? !r.ten_viet_tat.trim() : true) && !isBlank(r))
-    .sort((a, b) => !sortCk ? a.i - b.i : sortCk * (ORD[a.ck.kind] - ORD[b.ck.kind] || (a.ck.kind === 'DB' ? (parsePct(a.ck.x) || 0) - (parsePct(b.ck.x) || 0) : 0)) || a.i - b.i);
+    .sort((a, b) => !sortCk ? ((a.r.id ? 1 : 0) - (b.r.id ? 1 : 0) || a.i - b.i) : sortCk * (ORD[a.ck.kind] - ORD[b.ck.kind] || (a.ck.kind === 'DB' ? (parsePct(a.ck.x) || 0) - (parsePct(b.ck.x) || 0) : 0)) || a.i - b.i);
   const demLoai = (k: CkKind | 'NONE') => rows.filter((r) => !isBlank(r) && (k === 'NONE' ? !ckOf(r.chiet_khau).kind : ckOf(r.chiet_khau).kind === k)).length;
 
   /* ---- Template & upload master data (cùng cột với bảng) ---- */
@@ -473,7 +475,7 @@ export default function MasterDataGrid() {
                 </tr>
               </thead>
               <tbody>
-                {visible.map(({ r, i, ck }) => (
+                {visible.slice(0, lim).map(({ r, i, ck }) => (
                   <tr key={r._k} style={dupOf.has(r._k) ? { background: dups[dupOf.get(r._k)!].strong ? '#fdecec' : '#fff4e5', boxShadow: `inset 3px 0 0 ${dups[dupOf.get(r._k)!].strong ? '#e83c3f' : '#e8a600'}` } : !isBlank(r) && !ck.kind ? { background: '#fff7e6', boxShadow: 'inset 3px 0 0 #e8a600' } : undefined}>
                     <td className={s.rowNo}>{i + 1}</td>
                     {FIELDS.map((f, fi) => f.key === 'chiet_khau' ? (
@@ -525,6 +527,13 @@ export default function MasterDataGrid() {
                 ))}
               </tbody>
             </table>
+            {visible.length > lim && (
+              <div className={s.row} style={{ justifyContent: 'center', padding: 10 }}>
+                <span className={s.note}>Đang hiện {lim} / {visible.length} dòng — dùng ô tìm hoặc bộ lọc để thu hẹp</span>
+                <button className={s.btn} onClick={() => setLim((x) => x + 500)}>Hiện thêm 500</button>
+                <button className={s.btn} onClick={() => setLim(visible.length)}>Hiện hết</button>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -25,11 +25,18 @@ function check(error: PgError) {
 }
 
 export async function loadCustomers(): Promise<MlxCustomer[]> {
-  let { data, error } = await getSupabase().from(TABLE).select(COLS).order('ten_cong_ty').range(0, MAX_ROWS - 1);
+  // Supabase trả tối đa 1.000 dòng mỗi lần → đọc theo trang 1.000 cho đến hết
+  const page = async (cols: string) => { const out: MlxCustomer[] = [];
+    for (let from = 0; from < MAX_ROWS; from += 1000) {
+      const { data, error } = await getSupabase().from(TABLE).select(cols).order('ten_cong_ty').order('id').range(from, from + 999);
+      if (error) return { data: null as MlxCustomer[] | null, error };
+      out.push(...((data ?? []) as unknown as MlxCustomer[])); if (!data || data.length < 1000) break; }
+    return { data: out, error: null }; };
+  let { data, error } = await page(COLS);
   thieuCotLoaiCk = false;
   if (error && /loai_ck/.test(error.message)) {
     thieuCotLoaiCk = true;
-    ({ data, error } = await getSupabase().from(TABLE).select(COLS_CU).order('ten_cong_ty').range(0, MAX_ROWS - 1));
+    ({ data, error } = await page(COLS_CU));
   }
   check(error);
   return (data ?? []).map((r: MlxCustomer) => ({
